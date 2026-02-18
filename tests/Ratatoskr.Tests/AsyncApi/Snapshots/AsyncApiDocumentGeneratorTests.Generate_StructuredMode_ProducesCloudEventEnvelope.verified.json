@@ -1,0 +1,165 @@
+﻿{
+  "asyncapi": "3.0.0",
+  "info": {
+    "title": "Test Service",
+    "version": "1.0.0"
+  },
+  "servers": {
+    "rabbitmq": {
+      "host": "localhost",
+      "protocol": "amqp",
+      "description": "RabbitMQ server for message exchange."
+    }
+  },
+  "channels": {
+    "orders.events": {
+      "address": "orders.events",
+      "messages": {
+        "order.created": {
+          "$ref": "#/components/messages/order.created"
+        }
+      },
+      "bindings": {
+        "amqp": {
+          "is": "routingKey",
+          "exchange": {
+            "name": "orders.events",
+            "type": "topic",
+            "durable": true,
+            "autoDelete": false,
+            "vhost": "/"
+          },
+          "bindingVersion": "0.3.0"
+        }
+      }
+    }
+  },
+  "operations": {
+    "orders.events": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/orders.events"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/orders.events/messages/order.created"
+        }
+      ],
+      "bindings": {
+        "amqp": {
+          "deliveryMode": 2,
+          "mandatory": false,
+          "timestamp": true,
+          "ack": false,
+          "bindingVersion": "0.3.0"
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "OrderCreatedEvent": {
+        "type": "object",
+        "required": [
+          "orderId",
+          "amount"
+        ],
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 999999.99
+          },
+          "customerEmail": {
+            "type": "string",
+            "format": "email",
+            "nullable": true
+          },
+          "callbackUrl": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500,
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "messages": {
+      "order.created": {
+        "name": "order.created",
+        "title": "Order Created Event",
+        "contentType": "application/cloudevents\u002Bjson",
+        "payload": {
+          "type": "object",
+          "description": "CloudEvent envelope (structured content mode).",
+          "required": [
+            "specversion",
+            "id",
+            "source",
+            "type"
+          ],
+          "properties": {
+            "specversion": {
+              "type": "string",
+              "description": "CloudEvents specification version.",
+              "enum": [
+                "1.0"
+              ]
+            },
+            "id": {
+              "type": "string",
+              "description": "Unique identifier for the event."
+            },
+            "source": {
+              "type": "string",
+              "format": "uri-reference",
+              "description": "Identifies the context in which an event happened."
+            },
+            "type": {
+              "type": "string",
+              "description": "CloudEvent type identifier."
+            },
+            "time": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Timestamp of when the occurrence happened.",
+              "nullable": true
+            },
+            "datacontenttype": {
+              "type": "string",
+              "description": "Content type of the data value.",
+              "nullable": true
+            },
+            "subject": {
+              "type": "string",
+              "description": "Describes the subject of the event.",
+              "nullable": true
+            },
+            "data": {
+              "$ref": "#/components/schemas/OrderCreatedEvent"
+            }
+          }
+        },
+        "bindings": {
+          "amqp": {
+            "contentEncoding": "application/cloudevents\u002Bjson",
+            "messageType": "order.created",
+            "bindingVersion": "0.3.0"
+          }
+        },
+        "x-eventcatalog-message-type": "event",
+        "x-eventcatalog-role": "provider",
+        "x-eventcatalog-message-version": "1.0.0"
+      }
+    }
+  }
+}

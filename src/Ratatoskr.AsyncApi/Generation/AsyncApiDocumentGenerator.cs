@@ -1,0 +1,212 @@
+using System.Reflection;
+using System.Text.Json;
+using Ratatoskr.AsyncApi.Attributes;
+using Ratatoskr.AsyncApi.Config;
+using Ratatoskr.AsyncApi.Extensions;
+using Ratatoskr.AsyncApi.Model;
+using Ratatoskr.AsyncApi.Schema;
+using Ratatoskr.CloudEvents;
+using Ratatoskr.Core;
+
+namespace Ratatoskr.AsyncApi.Generation;
+
+/// <summary>
+/// Generates an AsyncAPI v3 document from the Ratatoskr channel registry and configuration.
+/// Transport-agnostic: transport-specific bindings are applied by registered <see cref="IAsyncApiTransportBindingProvider"/> implementations.
+/// </summary>
+public class AsyncApiDocumentGenerator(
+    AsyncApiOptions options,
+    ChannelRegistry channelRegistry,
+    CloudEventsOptions cloudEventsOptions,
+    IEnumerable<IAsyncApiTransportBindingProvider> bindingProviders)
+{
+    private readonly JsonSchemaGenerator _schemaGenerator = new();
+
+    public AsyncApiDocument Generate()
+    {
+        var schemas = new Dictionary<string, JsonSchema>();
+        var messages = new Dictionary<string, AsyncApiMessage>();
+
+        var document = new AsyncApiDocument
+        {
+            Info = options.Info,
+            Components = new AsyncApiComponents
+            {
+                Schemas = schemas,
+                Messages = messages,
+            },
+        };
+
+        var allChannels = channelRegistry.GetAllChannels().ToList();
+
+        // Let transport providers add server definitions
+        foreach (var provider in bindingProviders)
+            provider.ConfigureServers(document, allChannels);
+
+        // Generate channels, operations, messages, and schemas
+        foreach (var channel in allChannels)
+        {
+            BuildChannel(channel, document, schemas, messages);
+        }
+
+        // Clean up empty component collections
+        if (document.Components!.Schemas?.Count == 0) document.Components.Schemas = null;
+        if (document.Components!.Messages?.Count == 0) document.Components.Messages = null;
+        if (document.Components!.Schemas == null && document.Components.Messages == null)
+            document.Components = null;
+
+        return document;
+    }
+
+    private void BuildChannel(
+        ChannelRegistration channel,
+        AsyncApiDocument document,
+        Dictionary<string, JsonSchema> schemas,
+        Dictionary<string, AsyncApiMessage> componentMessages)
+    {
+        var asyncApiChannel = new AsyncApiChannel
+        {
+            Address = channel.ChannelName,
+            Messages = new Dictionary<string, AsyncApiReference>(),
+        };
+
+        var channelOpts = channel.GetAsyncApiChannelOptions();
+        asyncApiChannel.Title = channelOpts?.Title;
+        asyncApiChannel.Summary = channelOpts?.Summary;
+        asyncApiChannel.Description = channelOpts?.Description;
+
+        // Build message definitions and link them to the channel
+        foreach (var msg in channel.Messages)
+        {
+            var asyncApiMessage = BuildMessage(msg, channel, schemas);
+            componentMessages[msg.MessageTypeName] = asyncApiMessage;
+            asyncApiChannel.Messages[msg.MessageTypeName] = AsyncApiReference.ToComponentMessage(msg.MessageTypeName);
+        }
+
+        if (asyncApiChannel.Messages.Count == 0)
+            asyncApiChannel.Messages = null;
+
+        document.Channels[channel.ChannelName] = asyncApiChannel;
+
+        // Build the operation for this channel
+        BuildOperation(channel, asyncApiChannel, document);
+
+        // Allow transport providers to add bindings and additional channels
+        foreach (var provider in bindingProviders)
+            provider.ConfigureChannel(channel, document);
+    }
+
+    private AsyncApiMessage BuildMessage(
+        MessageRegistration msg,
+        ChannelRegistration channel,
+        Dictionary<string, JsonSchema> schemas)
+    {
+        var msgAttr = msg.MessageType.GetCustomAttribute<AsyncApiMessageAttribute>();
+        var msgOpts = msg.GetAsyncApiMessageOptions();
+
+        // Resolve metadata: attribute takes precedence over options, which takes precedence over defaults
+        var title = msgAttr?.Title ?? msgOpts?.Title ?? SentenceCaseName(msg.MessageType.Name);
+        var description = msgAttr?.Description ?? msgOpts?.Description;
+        var version = msgAttr?.Version ?? msgOpts?.Version ?? "1.0.0";
+        // Infer message type and role from channel intent
+        var defaultMessageType = channel.Intent is ChannelType.CommandPublish or ChannelType.CommandConsume
+            ? EventCatalogMessageType.Command
+            : EventCatalogMessageType.Event;
+        var messageType = msgOpts?.MessageType ?? defaultMessageType;
+
+        // Role defaults: publish channels → provider, consume channels → client
+        var defaultRole = channel.Intent is ChannelType.EventPublish or ChannelType.CommandPublish
+            ? EventCatalogRole.Provider
+            : EventCatalogRole.Client;
+        var role = msgAttr?.Role ?? msgOpts?.Role ?? defaultRole;
+
+        // Generate the payload schema for the CLR type
+        var dataSchema = _schemaGenerator.GenerateAndRegister(msg.MessageType, schemas);
+
+        JsonSchema payloadSchema;
+        string contentType;
+
+        if (cloudEventsOptions.ContentMode == CloudEventsContentMode.Structured)
+        {
+            payloadSchema = CloudEventsSchemaHelper.BuildStructuredModePayloadSchema(dataSchema);
+            contentType = "application/cloudevents+json";
+        }
+        else
+        {
+            payloadSchema = dataSchema;
+            contentType = "application/json";
+        }
+
+        var asyncApiMessage = new AsyncApiMessage
+        {
+            Name = msg.MessageTypeName,
+            Title = title,
+            Description = description,
+            ContentType = contentType,
+            Payload = payloadSchema,
+        };
+
+        // Add CloudEvents headers schema for binary mode
+        if (cloudEventsOptions.ContentMode == CloudEventsContentMode.Binary)
+        {
+            asyncApiMessage.Headers = CloudEventsSchemaHelper.BuildBinaryModeHeadersSchema();
+        }
+
+        // Add EventCatalog extension properties
+        asyncApiMessage.Extensions = new Dictionary<string, JsonElement>
+        {
+            ["x-eventcatalog-message-type"] = JsonSerializer.SerializeToElement(messageType.ToString().ToLowerInvariant()),
+            ["x-eventcatalog-role"] = JsonSerializer.SerializeToElement(role.ToString().ToLowerInvariant()),
+            ["x-eventcatalog-message-version"] = JsonSerializer.SerializeToElement(version),
+        };
+
+        // Apply transport message bindings
+        foreach (var provider in bindingProviders)
+            provider.ConfigureMessage(msg, channel, asyncApiMessage);
+
+        return asyncApiMessage;
+    }
+
+    private void BuildOperation(
+        ChannelRegistration channel,
+        AsyncApiChannel asyncApiChannel,
+        AsyncApiDocument document)
+    {
+        var channelOpts = channel.GetAsyncApiChannelOptions();
+        var operationId = channelOpts?.OperationId ?? channel.ChannelName;
+
+        var action = channel.Intent is ChannelType.EventPublish or ChannelType.CommandPublish
+            ? "send"
+            : "receive";
+
+        var operation = new AsyncApiOperation
+        {
+            Action = action,
+            Channel = AsyncApiReference.ToChannel(channel.ChannelName),
+            Title = channelOpts?.OperationTitle,
+            Summary = channelOpts?.OperationSummary,
+            Description = channelOpts?.OperationDescription,
+        };
+
+        // Reference all messages handled by this operation
+        if (channel.Messages.Count > 0)
+        {
+            operation.Messages = channel.Messages
+                .Select(m => AsyncApiReference.ToChannelMessage(channel.ChannelName, m.MessageTypeName))
+                .ToList();
+        }
+
+        document.Operations[operationId] = operation;
+
+        // Apply transport operation bindings
+        foreach (var provider in bindingProviders)
+            provider.ConfigureOperation(channel, operation);
+    }
+
+    private static string SentenceCaseName(string typeName)
+    {
+        // "NoteAddedEvent" → "Note Added Event"
+        var result = System.Text.RegularExpressions.Regex.Replace(typeName, "([A-Z])", " $1").Trim();
+        return result;
+    }
+}

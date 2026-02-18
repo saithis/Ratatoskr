@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <Description>AsyncAPI documentation generation for Ratatoskr CloudEventBus.</Description>
+        <PackageTags>cloudevents;eventbus;asyncapi;messaging</PackageTags>
+        <IsPackable>true</IsPackable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Ratatoskr\Ratatoskr.csproj" />
+        <ProjectReference Include="..\Ratatoskr.RabbitMq\Ratatoskr.RabbitMq.csproj" />
+    </ItemGroup>
+
+</Project>

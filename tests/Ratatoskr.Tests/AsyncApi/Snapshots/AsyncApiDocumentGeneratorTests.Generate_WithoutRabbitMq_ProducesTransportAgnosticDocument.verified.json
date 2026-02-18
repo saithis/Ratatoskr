@@ -1,0 +1,139 @@
+﻿{
+  "asyncapi": "3.0.0",
+  "info": {
+    "title": "Test Service",
+    "version": "1.0.0"
+  },
+  "channels": {
+    "events": {
+      "address": "events",
+      "messages": {
+        "order.created": {
+          "$ref": "#/components/messages/order.created"
+        }
+      }
+    }
+  },
+  "operations": {
+    "events": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/events"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/events/messages/order.created"
+        }
+      ]
+    }
+  },
+  "components": {
+    "schemas": {
+      "OrderCreatedEvent": {
+        "type": "object",
+        "required": [
+          "orderId",
+          "amount"
+        ],
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 999999.99
+          },
+          "customerEmail": {
+            "type": "string",
+            "format": "email",
+            "nullable": true
+          },
+          "callbackUrl": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500,
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "messages": {
+      "order.created": {
+        "name": "order.created",
+        "title": "Order Created Event",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/OrderCreatedEvent"
+        },
+        "headers": {
+          "type": "object",
+          "description": "AMQP application-properties carrying CloudEvents attributes (binary content mode).",
+          "required": [
+            "cloudEvents_specversion",
+            "cloudEvents_id",
+            "cloudEvents_type",
+            "cloudEvents_source"
+          ],
+          "properties": {
+            "cloudEvents_specversion": {
+              "type": "string",
+              "description": "CloudEvents specification version.",
+              "enum": [
+                "1.0"
+              ]
+            },
+            "cloudEvents_id": {
+              "type": "string",
+              "description": "Unique identifier for the event."
+            },
+            "cloudEvents_type": {
+              "type": "string",
+              "description": "CloudEvent type identifier (e.g. com.example.order.created)."
+            },
+            "cloudEvents_source": {
+              "type": "string",
+              "format": "uri-reference",
+              "description": "Identifies the context in which an event happened."
+            },
+            "cloudEvents_time": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Timestamp of when the occurrence happened.",
+              "nullable": true
+            },
+            "cloudEvents_datacontenttype": {
+              "type": "string",
+              "description": "Content type of the data value (e.g. application/json).",
+              "nullable": true
+            },
+            "cloudEvents_subject": {
+              "type": "string",
+              "description": "Describes the subject of the event in the context of the event producer.",
+              "nullable": true
+            },
+            "traceparent": {
+              "type": "string",
+              "description": "W3C Trace Context traceparent header for distributed tracing.",
+              "nullable": true
+            },
+            "tracestate": {
+              "type": "string",
+              "description": "W3C Trace Context tracestate header.",
+              "nullable": true
+            }
+          }
+        },
+        "x-eventcatalog-message-type": "event",
+        "x-eventcatalog-role": "provider",
+        "x-eventcatalog-message-version": "1.0.0"
+      }
+    }
+  }
+}

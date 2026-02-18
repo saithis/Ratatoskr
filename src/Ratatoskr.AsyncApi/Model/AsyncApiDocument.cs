@@ -1,0 +1,26 @@
+using System.Text.Json.Serialization;
+
+namespace Ratatoskr.AsyncApi.Model;
+
+public class AsyncApiDocument
+{
+    [JsonPropertyName("asyncapi")]
+    public string AsyncApi { get; set; } = "3.0.0";
+
+    [JsonPropertyName("info")]
+    public AsyncApiInfo Info { get; set; } = new();
+
+    [JsonPropertyName("servers")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, AsyncApiServer>? Servers { get; set; }
+
+    [JsonPropertyName("channels")]
+    public Dictionary<string, AsyncApiChannel> Channels { get; set; } = new();
+
+    [JsonPropertyName("operations")]
+    public Dictionary<string, AsyncApiOperation> Operations { get; set; } = new();
+
+    [JsonPropertyName("components")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public AsyncApiComponents? Components { get; set; }
+}

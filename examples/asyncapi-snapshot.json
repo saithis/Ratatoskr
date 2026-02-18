@@ -1,0 +1,330 @@
+{
+  asyncapi: 3.0.0,
+  info: {
+    title: Zvoove ApiKey Service,
+    version: 0.0.0,
+    description: AsyncAPI documentation for the Zvoove ApiKey service.,
+    contact: {
+      name: zvoove Core Team,
+      url: https://teams.microsoft.com/l/channel/19%3A6c4626f99ec240fd94747be4f0254aad%40thread.tacv2/Core?groupId=f431fdc9-1418-41a6-8ee3-69a1671871c9&tenantId=9ebf3ba3-dc20-407c-9369-b23945d5ed14
+    }
+  },
+  servers: {
+    rabbitmq: {
+      host: <host>,
+      protocol: amqp,
+      description: RabbitMQ server for message exchange
+    }
+  },
+  channels: {
+    apikey.events: {
+      address: apikey.events,
+      messages: {
+        api-key-revoked: {
+          $ref: #/components/messages/api-key-revoked
+        }
+      },
+      description: Channel for api key related events.,
+      servers: [
+        {
+          $ref: #/servers/rabbitmq
+        }
+      ],
+      bindings: {
+        amqp: {
+          is: routingKey,
+          exchange: {
+            name: apikey.events,
+            type: topic,
+            durable: true,
+            autoDelete: false,
+            vhost: /
+          },
+          bindingVersion: 0.3.0
+        }
+      }
+    },
+    apikey.subscriptions: {
+      address: apikey.subscriptions,
+      description: Queue for receiving events from sso.authz.events exchange. Handles authorization-related events for API key management.,
+      servers: [
+        {
+          $ref: #/servers/rabbitmq
+        }
+      ],
+      bindings: {
+        amqp: {
+          is: queue,
+          queue: {
+            name: apikey.subscriptions,
+            durable: true,
+            exclusive: false,
+            autoDelete: false,
+            vhost: /
+          },
+          bindingVersion: 0.3.0
+        }
+      }
+    },
+    sso.authz.events: {
+      address: sso.authz.events,
+      messages: {
+        user-roles-changed: {
+          $ref: #/components/messages/user-roles-changed
+        }
+      },
+      description: Channel for authz related events owned by the SSO service.,
+      servers: [
+        {
+          $ref: #/servers/rabbitmq
+        }
+      ],
+      bindings: {
+        amqp: {
+          is: routingKey,
+          exchange: {
+            name: sso.authz.events,
+            type: fanout,
+            durable: true,
+            autoDelete: false,
+            vhost: /
+          },
+          bindingVersion: 0.3.0
+        }
+      }
+    }
+  },
+  operations: {
+    api-key-revoked: {
+      action: send,
+      channel: {
+        $ref: #/channels/apikey.events
+      },
+      summary: API Key Revoked,
+      description: An API key has been revoked. Note: API key expiration does NOT trigger this event.,
+      bindings: {
+        amqp: {
+          expiration: 0,
+          userId: ,
+          cc: [
+            api-key-revoked
+          ],
+          priority: 0,
+          deliveryMode: 2,
+          mandatory: false,
+          timestamp: true,
+          ack: false,
+          bindingVersion: 0.3.0
+        }
+      },
+      messages: [
+        {
+          $ref: #/channels/apikey.events/messages/api-key-revoked
+        }
+      ]
+    },
+    partner-api-key-revoke: {
+      action: receive,
+      channel: {
+        $ref: #/channels/sso.authz.events
+      },
+      summary: Revokes api keys when partners lose their access.,
+      description: When a partner looses their access to a customer, the api keys for this customer are revoked. When the partner looses partner status, all their api keys are revoked.,
+      bindings: {
+        amqp: {
+          expiration: 0,
+          userId: ,
+          cc: [
+            user-roles-changed
+          ],
+          priority: 0,
+          deliveryMode: 2,
+          mandatory: false,
+          timestamp: true,
+          ack: false,
+          bindingVersion: 0.3.0
+        }
+      },
+      messages: [
+        {
+          $ref: #/channels/sso.authz.events/messages/user-roles-changed
+        }
+      ]
+    }
+  },
+  components: {
+    schemas: {
+      ApiKeyRevoked: {
+        type: object,
+        description: An API key has been revoked. This event contains information about the revoked key. Note: API key expiration does NOT trigger this event.,
+        required: [
+          apiKeyId,
+          type,
+          zvoovePartnerId,
+          zvooveCustomerId,
+          zvooveMandantId,
+          scopes,
+          revokedAt
+        ],
+        properties: {
+          apiKeyId: {
+            type: string,
+            format: uuid,
+            description: The ID of the revoked API key.
+          },
+          type: {
+            type: string,
+            description: The type of the API key (Partner or Mandant).
+          },
+          zvoovePartnerId: {
+            type: string,
+            description: The Zvoove Partner ID associated with the API key (null if Type is Mandant).,
+            nullable: true
+          },
+          zvooveCustomerId: {
+            type: string,
+            description: The Zvoove Customer ID associated with the API key.
+          },
+          zvooveMandantId: {
+            type: string,
+            description: The Zvoove Mandant ID associated with the API key.
+          },
+          scopes: {
+            type: array,
+            description: The scopes that were assigned to this API key.,
+            items: {
+              type: string,
+              nullable: true
+            }
+          },
+          revokedAt: {
+            type: string,
+            format: date-time,
+            description: The timestamp when the API key was revoked.
+          }
+        },
+        nullable: true
+      },
+      AuthzUserRolesChangedEvent: {
+        type: object,
+        description: The roles of the user specified in the event have changed. This event contains information about the added and removed roles.,
+        required: [
+          zvooveUserId,
+          addedRoles,
+          removedRoles
+        ],
+        properties: {
+          zvooveUserId: {
+            type: string,
+            description: The ID of the user whose roles have changed.
+          },
+          addedRoles: {
+            type: array,
+            description: The roles that were added to the user including their assignment level and target ID if applicable.,
+            items: {
+              type: object,
+              required: [
+                roleInternalName,
+                level,
+                targetId
+              ],
+              properties: {
+                roleInternalName: {
+                  type: string,
+                  description: The internal name of the role. This is locale independent and can be treated as an ID.
+                },
+                level: {
+                  description: The level at which the role is assigned (Global, Customer, or Mandant).,
+                  enum: [
+                    Customer,
+                    Global,
+                    Mandant
+                  ]
+                },
+                targetId: {
+                  type: string,
+                  description: The ID of the target (customer or mandant) if the role is assigned at a non-global level. Null for global roles.,
+                  nullable: true
+                }
+              },
+              nullable: true
+            }
+          },
+          removedRoles: {
+            type: array,
+            description: The roles that were removed from the user including their assignment level and target ID if applicable.,
+            items: {
+              type: object,
+              required: [
+                roleInternalName,
+                level,
+                targetId
+              ],
+              properties: {
+                roleInternalName: {
+                  type: string,
+                  description: The internal name of the role. This is locale independent and can be treated as an ID.
+                },
+                level: {
+                  description: The level at which the role is assigned (Global, Customer, or Mandant).,
+                  enum: [
+                    Customer,
+                    Global,
+                    Mandant
+                  ]
+                },
+                targetId: {
+                  type: string,
+                  description: The ID of the target (customer or mandant) if the role is assigned at a non-global level. Null for global roles.,
+                  nullable: true
+                }
+              },
+              nullable: true
+            }
+          }
+        },
+        nullable: true
+      }
+    },
+    messages: {
+      api-key-revoked: {
+        payload: {
+          $ref: #/components/schemas/ApiKeyRevoked
+        },
+        contentType: application/json,
+        name: api-key-revoked,
+        title: API Key Revoked,
+        description: An API key has been revoked. This event contains information about the revoked key. Note: API key expiration does NOT trigger this event.,
+        bindings: {
+          amqp: {
+            contentEncoding: application/json,
+            messageType: api-key-revoked,
+            bindingVersion: 0.3.0
+          }
+        },
+        x-eventcatalog-message-type: event,
+        x-eventcatalog-role: provider,
+        x-eventcatalog-message-version: 1.0.0
+      },
+      user-roles-changed: {
+        payload: {
+          $ref: #/components/schemas/AuthzUserRolesChangedEvent
+        },
+        contentType: application/json,
+        name: user-roles-changed,
+        title: Roles of a user changed,
+        description: The roles of the user specified in the event have changed. This event contains information about the added and removed roles.,
+        bindings: {
+          amqp: {
+            contentEncoding: application/json,
+            messageType: user-roles-changed,
+            bindingVersion: 0.3.0
+          }
+        },
+        x-eventcatalog-message-type: event,
+        x-eventcatalog-role: client,
+        x-eventcatalog-message-version: 1.0.0
+      }
+    }
+  }
+}

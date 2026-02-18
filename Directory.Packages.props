@@ -35,6 +35,7 @@
     <PackageVersion Include="RabbitMQ.Client" Version="7.2.0" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.10.0" />
     <PackageVersion Include="Testcontainers.RabbitMq" Version="4.10.0" />
-    <PackageVersion Include="TUnit" Version="1.12.53" />
+    <PackageVersion Include="TUnit" Version="1.15.0" />
+    <PackageVersion Include="Verify.TUnit" Version="31.13.0" />
   </ItemGroup>
 </Project>

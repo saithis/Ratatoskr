@@ -11,6 +11,7 @@
         <PackageReference Include="Microsoft.AspNetCore.TestHost" />
         <PackageReference Include="TUnit" />
         <PackageReference Include="AwesomeAssertions" />
+        <PackageReference Include="Verify.TUnit" />
         <PackageReference Include="Testcontainers.PostgreSql" />
         <PackageReference Include="Testcontainers.RabbitMq" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
@@ -26,6 +27,7 @@
         <ProjectReference Include="..\..\src\Ratatoskr\Ratatoskr.csproj" />
         <ProjectReference Include="..\..\src\Ratatoskr.EfCore\Ratatoskr.EfCore.csproj" />
         <ProjectReference Include="..\..\src\Ratatoskr.RabbitMq\Ratatoskr.RabbitMq.csproj" />
+        <ProjectReference Include="..\..\src\Ratatoskr.AsyncApi\Ratatoskr.AsyncApi.csproj" />
         <ProjectReference Include="..\Ratatoskr.TestHost\Ratatoskr.TestHost.csproj" />
     </ItemGroup>
 

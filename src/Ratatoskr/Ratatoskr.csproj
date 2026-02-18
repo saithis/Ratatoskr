@@ -21,5 +21,6 @@
     <ItemGroup>
         <InternalsVisibleTo Include="Ratatoskr.Tests" />
         <InternalsVisibleTo Include="Ratatoskr.RabbitMq" />
+        <InternalsVisibleTo Include="Ratatoskr.AsyncApi" />
     </ItemGroup>
 </Project>
