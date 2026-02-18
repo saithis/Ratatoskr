@@ -202,13 +202,29 @@
             "maxLength": 100
           },
           "assignmentLevel": {
-            "type": "string"
+            "$ref": "#/components/schemas/AssignmentLevel"
           },
           "targetId": {
             "type": "string",
             "nullable": true
           }
         }
+      },
+      "AssignmentLevel": {
+        "type": "integer",
+        "format": "int32",
+        "enum": [
+          0,
+          1
+        ],
+        "x-enumNames": [
+          "Global",
+          "Tenant"
+        ],
+        "x-enum-varnames": [
+          "Global",
+          "Tenant"
+        ]
       }
     },
     "messages": {

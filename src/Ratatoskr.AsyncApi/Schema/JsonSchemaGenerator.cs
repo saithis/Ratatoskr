@@ -57,11 +57,7 @@ public class JsonSchemaGenerator
     {
         if (type.IsEnum)
         {
-            return new JsonSchema
-            {
-                Type = "string",
-                Enum = System.Enum.GetNames(type).ToList(),
-            };
+            return BuildEnumSchema(type);
         }
 
         var properties = new Dictionary<string, JsonSchema>();
@@ -162,6 +158,27 @@ public class JsonSchemaGenerator
         return schema;
     }
 
+    private static JsonSchema BuildEnumSchema(Type type)
+    {
+        var underlyingType = System.Enum.GetUnderlyingType(type);
+        var names = System.Enum.GetNames(type);
+        var values = System.Enum.GetValues(type);
+        var enumValues = new List<object>(values.Length);
+        foreach (var v in values)
+            enumValues.Add(Convert.ChangeType(v, underlyingType));
+
+        var format = underlyingType == typeof(long) || underlyingType == typeof(ulong) ? "int64" : "int32";
+
+        return new JsonSchema
+        {
+            Type = "integer",
+            Format = format,
+            Enum = enumValues,
+            XEnumNames = names.ToList(),
+            XEnumVarnames = names.ToList(),
+        };
+    }
+
     private static void ApplyDataAnnotations(PropertyInfo prop, JsonSchema schema)
     {
         if (prop.GetCustomAttribute<MaxLengthAttribute>() is { } maxLen)
@@ -236,7 +253,7 @@ public class JsonSchemaGenerator
         return false;
     }
 
-    private static bool IsPrimitive(Type type) => _primitiveTypes.Contains(type) || type.IsEnum;
+    private static bool IsPrimitive(Type type) => _primitiveTypes.Contains(type);
 
     private static Type UnwrapNullable(Type type) => Nullable.GetUnderlyingType(type) ?? type;
 

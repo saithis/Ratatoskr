@@ -4,7 +4,8 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(dotnet build:*)",
       "Bash(dotnet test:*)",
-      "Bash(dotnet list:*)"
+      "Bash(dotnet list:*)",
+      "Bash(ls:*)"
     ]
   }
 }

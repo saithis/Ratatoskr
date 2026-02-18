@@ -46,7 +46,17 @@ public class JsonSchema
 
     [JsonPropertyName("enum")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public List<string>? Enum { get; set; }
+    public List<object>? Enum { get; set; }
+
+    /// <summary>Human-readable names for enum values (OpenAPI extension).</summary>
+    [JsonPropertyName("x-enumNames")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? XEnumNames { get; set; }
+
+    /// <summary>Variable names for enum values used by code generators (OpenAPI extension).</summary>
+    [JsonPropertyName("x-enum-varnames")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? XEnumVarnames { get; set; }
 
     [JsonPropertyName("maxLength")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
