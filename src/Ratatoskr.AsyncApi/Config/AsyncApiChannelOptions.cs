@@ -1,7 +1,7 @@
 namespace Ratatoskr.AsyncApi.Config;
 
 /// <summary>
-/// AsyncAPI documentation options for a channel and its operation.
+/// AsyncAPI documentation options for a channel.
 /// Configure via <c>.WithAsyncApi(x => x.WithDescription("..."))</c> on a ChannelBuilder.
 /// </summary>
 public class AsyncApiChannelOptions
@@ -12,13 +12,13 @@ public class AsyncApiChannelOptions
     public string? Summary { get; private set; }
     public string? Description { get; private set; }
 
-    // --- Operation metadata ---
+    // --- Channel-level operation (opt-in grouping) ---
 
-    /// <summary>Custom identifier for the AsyncAPI operation. Defaults to the channel name.</summary>
-    public string? OperationId { get; private set; }
-    public string? OperationTitle { get; private set; }
-    public string? OperationSummary { get; private set; }
-    public string? OperationDescription { get; private set; }
+    /// <summary>
+    /// When set, all messages on this channel are grouped into a single operation.
+    /// When not set, each message gets its own operation (default).
+    /// </summary>
+    public AsyncApiOperationOptions? Operation { get; private set; }
 
     public AsyncApiChannelOptions WithTitle(string title)
     {
@@ -38,27 +38,14 @@ public class AsyncApiChannelOptions
         return this;
     }
 
-    public AsyncApiChannelOptions WithOperationId(string operationId)
+    /// <summary>
+    /// Configures a channel-level operation, grouping all messages into one operation.
+    /// The operationId defaults to the channel name unless overridden with <c>WithId()</c>.
+    /// </summary>
+    public AsyncApiChannelOptions WithOperation(Action<AsyncApiOperationOptions> configure)
     {
-        OperationId = operationId;
-        return this;
-    }
-
-    public AsyncApiChannelOptions WithOperationTitle(string title)
-    {
-        OperationTitle = title;
-        return this;
-    }
-
-    public AsyncApiChannelOptions WithOperationSummary(string summary)
-    {
-        OperationSummary = summary;
-        return this;
-    }
-
-    public AsyncApiChannelOptions WithOperationDescription(string description)
-    {
-        OperationDescription = description;
+        Operation = new AsyncApiOperationOptions();
+        configure(Operation);
         return this;
     }
 }

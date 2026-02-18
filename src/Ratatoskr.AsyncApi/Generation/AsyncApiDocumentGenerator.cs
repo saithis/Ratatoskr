@@ -88,8 +88,8 @@ public class AsyncApiDocumentGenerator(
 
         document.Channels[channel.ChannelName] = asyncApiChannel;
 
-        // Build the operation for this channel
-        BuildOperation(channel, asyncApiChannel, document);
+        // Build operations for this channel
+        BuildOperations(channel, document);
 
         // Allow transport providers to add bindings and additional channels
         foreach (var provider in bindingProviders)
@@ -167,28 +167,40 @@ public class AsyncApiDocumentGenerator(
         return asyncApiMessage;
     }
 
-    private void BuildOperation(
+    private void BuildOperations(
         ChannelRegistration channel,
-        AsyncApiChannel asyncApiChannel,
         AsyncApiDocument document)
     {
         var channelOpts = channel.GetAsyncApiChannelOptions();
-        var operationId = channelOpts?.OperationId ?? channel.ChannelName;
 
-        var action = channel.Intent is ChannelType.EventPublish or ChannelType.CommandPublish
-            ? "send"
-            : "receive";
+        if (channelOpts?.Operation != null)
+        {
+            BuildGroupedOperation(channel, channelOpts.Operation, document);
+        }
+        else
+        {
+            BuildPerMessageOperations(channel, document);
+        }
+    }
+
+    private void BuildGroupedOperation(
+        ChannelRegistration channel,
+        AsyncApiOperationOptions opOpts,
+        AsyncApiDocument document)
+    {
+        var action = GetAction(channel);
+        var operationId = opOpts.Id ?? channel.ChannelName;
 
         var operation = new AsyncApiOperation
         {
             Action = action,
             Channel = AsyncApiReference.ToChannel(channel.ChannelName),
-            Title = channelOpts?.OperationTitle,
-            Summary = channelOpts?.OperationSummary,
-            Description = channelOpts?.OperationDescription,
+            Title = opOpts.Title,
+            Summary = opOpts.Summary,
+            Description = opOpts.Description,
+            Tags = opOpts.Tags?.Select(t => new AsyncApiTag { Name = t }).ToList(),
         };
 
-        // Reference all messages handled by this operation
         if (channel.Messages.Count > 0)
         {
             operation.Messages = channel.Messages
@@ -196,12 +208,87 @@ public class AsyncApiDocumentGenerator(
                 .ToList();
         }
 
+        AddOperation(operationId, operation, channel, document);
+    }
+
+    private void BuildPerMessageOperations(
+        ChannelRegistration channel,
+        AsyncApiDocument document)
+    {
+        var action = GetAction(channel);
+
+        // Phase 1: Group messages by operationId (messages sharing an ID are merged)
+        var groups = new Dictionary<string, (AsyncApiOperationOptions? Opts, List<MessageRegistration> Messages)>();
+
+        foreach (var msg in channel.Messages)
+        {
+            var msgOpts = msg.GetAsyncApiMessageOptions();
+            var opOpts = msgOpts?.Operation;
+            var operationId = opOpts?.Id ?? $"{action}{msg.MessageType.Name}";
+
+            if (groups.TryGetValue(operationId, out var group))
+            {
+                group.Messages.Add(msg);
+
+                // Merge: first non-null value wins
+                if (opOpts != null && group.Opts != null)
+                {
+                    // Keep existing group opts, they already have first-wins values
+                }
+                else if (opOpts != null)
+                {
+                    groups[operationId] = (opOpts, group.Messages);
+                }
+            }
+            else
+            {
+                groups[operationId] = (opOpts, [msg]);
+            }
+        }
+
+        // Phase 2: Create operations
+        foreach (var (operationId, (opOpts, messages)) in groups)
+        {
+            var operation = new AsyncApiOperation
+            {
+                Action = action,
+                Channel = AsyncApiReference.ToChannel(channel.ChannelName),
+                Title = opOpts?.Title,
+                Summary = opOpts?.Summary,
+                Description = opOpts?.Description,
+                Tags = opOpts?.Tags?.Select(t => new AsyncApiTag { Name = t }).ToList(),
+                Messages = messages
+                    .Select(m => AsyncApiReference.ToChannelMessage(channel.ChannelName, m.MessageTypeName))
+                    .ToList(),
+            };
+
+            AddOperation(operationId, operation, channel, document);
+        }
+    }
+
+    private void AddOperation(
+        string operationId,
+        AsyncApiOperation operation,
+        ChannelRegistration channel,
+        AsyncApiDocument document)
+    {
+        if (document.Operations.ContainsKey(operationId))
+        {
+            throw new InvalidOperationException(
+                $"Duplicate AsyncAPI operationId '{operationId}'. " +
+                $"Use WithOperation(o => o.WithId(\"...\")) to set a unique ID.");
+        }
+
         document.Operations[operationId] = operation;
 
-        // Apply transport operation bindings
         foreach (var provider in bindingProviders)
             provider.ConfigureOperation(channel, operation);
     }
+
+    private static string GetAction(ChannelRegistration channel) =>
+        channel.Intent is ChannelType.EventPublish or ChannelType.CommandPublish
+            ? "send"
+            : "receive";
 
     private static string SentenceCaseName(string typeName)
     {

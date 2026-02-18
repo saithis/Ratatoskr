@@ -34,4 +34,8 @@ public class AsyncApiOperation
     [JsonPropertyName("bindings")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public OperationBindings? Bindings { get; set; }
+
+    [JsonPropertyName("tags")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<AsyncApiTag>? Tags { get; set; }
 }

@@ -15,7 +15,7 @@
     }
   },
   "operations": {
-    "events": {
+    "sendOrderCreatedEvent": {
       "action": "send",
       "channel": {
         "$ref": "#/channels/events"

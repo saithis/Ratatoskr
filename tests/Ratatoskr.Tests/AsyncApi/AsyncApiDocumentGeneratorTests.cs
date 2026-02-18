@@ -56,7 +56,7 @@ public class AsyncApiDocumentGeneratorTests
                 .AddEventPublishChannel("apikey.events", c => c
                     .WithAsyncApi(a => a
                         .WithDescription("Channel for API key related events.")
-                        .WithOperationDescription("Publishes API key lifecycle events.")) // TODO: put operation on the Produces?
+                        .WithOperation(o => o.WithDescription("Publishes API key lifecycle events.")))
                     .WithRabbitMq(r => r.ExchangeTypeTopic())
                     .Produces<ApiKeyRevokedEvent>())
                 .AddEventConsumeChannel("user.events", c => c
@@ -67,8 +67,8 @@ public class AsyncApiDocumentGeneratorTests
                         .QueueName("apikey.subscriptions"))
                     .Consumes<UserRolesChangedEvent>(m => m
                         .WithAsyncApi(a => a
-                            .WithVersion("2.0.0") 
-                            .WithRole(EventCatalogRole.Client)))), // TODO: infer the EventCatalogRole and EventCatalogMessageType
+                            .WithVersion("2.0.0")
+                            .WithRole(EventCatalogRole.Client)))),
             asyncApiConfig: opts => opts
                 .WithDescription("AsyncAPI documentation for the API Key service."),
             rabbitMqOptions: new RabbitMqOptions { HostName = "rabbitmq.example.com" });
@@ -169,7 +169,7 @@ public class AsyncApiDocumentGeneratorTests
     }
 
     [Test]
-    public async Task Generate_MultipleMessagesOnChannel_AllInDocument()
+    public async Task Generate_MultipleMessagesOnChannel_DefaultPerMessageOperations()
     {
         var generator = BuildGenerator(
             bus => bus
@@ -180,10 +180,17 @@ public class AsyncApiDocumentGeneratorTests
 
         var document = generator.Generate();
 
+        // Channel still has both messages
         await Assert.That(document.Channels["events"].Messages!.Count).IsEqualTo(2);
         await Assert.That(document.Components!.Messages).ContainsKey("api-key.revoked");
         await Assert.That(document.Components!.Messages).ContainsKey("order.created");
-        await Assert.That(document.Operations["events"].Messages!.Count).IsEqualTo(2);
+
+        // But now there are two separate operations (one per message)
+        await Assert.That(document.Operations.Count).IsEqualTo(2);
+        await Assert.That(document.Operations).ContainsKey("sendApiKeyRevokedEvent");
+        await Assert.That(document.Operations).ContainsKey("sendOrderCreatedEvent");
+        await Assert.That(document.Operations["sendApiKeyRevokedEvent"].Messages!.Count).IsEqualTo(1);
+        await Assert.That(document.Operations["sendOrderCreatedEvent"].Messages!.Count).IsEqualTo(1);
     }
 
     [Test]
@@ -209,17 +216,115 @@ public class AsyncApiDocumentGeneratorTests
     }
 
     [Test]
-    public async Task Generate_ChannelOperationId_CanBeOverridden()
+    public async Task Generate_ChannelLevelOperation_GroupsAllMessages()
+    {
+        var generator = BuildGenerator(
+            bus => bus
+                .AddEventPublishChannel("order.events", c => c
+                    .WithAsyncApi(a => a.WithOperation(o => o.WithTitle("Publish Order Events")))
+                    .Produces<OrderCreatedEvent>()
+                    .Produces<ApiKeyRevokedEvent>()));
+
+        var document = generator.Generate();
+
+        // Single grouped operation using channel name as key
+        await Assert.That(document.Operations.Count).IsEqualTo(1);
+        await Assert.That(document.Operations).ContainsKey("order.events");
+        await Assert.That(document.Operations["order.events"].Title).IsEqualTo("Publish Order Events");
+        await Assert.That(document.Operations["order.events"].Messages!.Count).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task Generate_ChannelLevelOperationId_CanBeOverridden()
     {
         var generator = BuildGenerator(
             bus => bus
                 .AddEventConsumeChannel("user.events", c => c
-                    .WithAsyncApi(a => a.WithOperationId("partner-api-key-revoke"))
+                    .WithAsyncApi(a => a.WithOperation(o => o.WithId("partner-api-key-revoke")))
                     .Consumes<UserRolesChangedEvent>()));
 
         var document = generator.Generate();
 
         await Assert.That(document.Operations).ContainsKey("partner-api-key-revoke");
         await Assert.That(document.Operations.ContainsKey("user.events")).IsFalse();
+    }
+
+    [Test]
+    public async Task Generate_SharedOperationId_MergesMessagesIntoOneOperation()
+    {
+        var generator = BuildGenerator(
+            bus => bus
+                .AddEventConsumeChannel("order.events", c => c
+                    .Consumes<OrderCreatedEvent>(m => m
+                        .WithAsyncApi(a => a.WithOperation(o => o
+                            .WithId("consumeOrderLifecycle")
+                            .WithTitle("Consume Order Lifecycle"))))
+                    .Consumes<ApiKeyRevokedEvent>(m => m
+                        .WithAsyncApi(a => a.WithOperation(o => o
+                            .WithId("consumeOrderLifecycle"))))
+                    .Consumes<UserRolesChangedEvent>()));
+
+        var document = generator.Generate();
+
+        // Two messages with same operationId merged into one operation
+        await Assert.That(document.Operations).ContainsKey("consumeOrderLifecycle");
+        await Assert.That(document.Operations["consumeOrderLifecycle"].Messages!.Count).IsEqualTo(2);
+        await Assert.That(document.Operations["consumeOrderLifecycle"].Title).IsEqualTo("Consume Order Lifecycle");
+
+        // Third message gets its own operation
+        await Assert.That(document.Operations).ContainsKey("receiveUserRolesChangedEvent");
+        await Assert.That(document.Operations["receiveUserRolesChangedEvent"].Messages!.Count).IsEqualTo(1);
+
+        await Assert.That(document.Operations.Count).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task Generate_PerMessageOperationCustomization()
+    {
+        var generator = BuildGenerator(
+            bus => bus
+                .AddEventPublishChannel("order.events", c => c
+                    .Produces<OrderCreatedEvent>(m => m
+                        .WithAsyncApi(a => a.WithOperation(o => o
+                            .WithDescription("Emitted when a new order is placed."))))));
+
+        var document = generator.Generate();
+
+        await Assert.That(document.Operations).ContainsKey("sendOrderCreatedEvent");
+        await Assert.That(document.Operations["sendOrderCreatedEvent"].Description)
+            .IsEqualTo("Emitted when a new order is placed.");
+    }
+
+    [Test]
+    public async Task Generate_DuplicateOperationId_AcrossChannels_Throws()
+    {
+        var generator = BuildGenerator(
+            bus => bus
+                .AddEventPublishChannel("channel1", c => c
+                    .Produces<OrderCreatedEvent>())
+                .AddEventPublishChannel("channel2", c => c
+                    .Produces<OrderCreatedEvent>()));
+
+        // Same message type on two channels → both default to "sendOrderCreatedEvent"
+        Assert.Throws<InvalidOperationException>(() => generator.Generate());
+    }
+
+    [Test]
+    public async Task Generate_OperationTags_IncludedInOutput()
+    {
+        var generator = BuildGenerator(
+            bus => bus
+                .AddEventPublishChannel("order.events", c => c
+                    .Produces<OrderCreatedEvent>(m => m
+                        .WithAsyncApi(a => a.WithOperation(o => o
+                            .WithTags("orders", "lifecycle"))))));
+
+        var document = generator.Generate();
+
+        var op = document.Operations["sendOrderCreatedEvent"];
+        await Assert.That(op.Tags).IsNotNull();
+        await Assert.That(op.Tags!.Count).IsEqualTo(2);
+        await Assert.That(op.Tags[0].Name).IsEqualTo("orders");
+        await Assert.That(op.Tags[1].Name).IsEqualTo("lifecycle");
     }
 }

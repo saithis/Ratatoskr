@@ -63,6 +63,26 @@ public class AsyncApiMessageOptions
         MessageType = messageType;
         return this;
     }
+
+    // --- Operation metadata ---
+
+    /// <summary>
+    /// Operation options for this specific message. Only applies when the channel
+    /// does not have a channel-level operation configured (per-message mode).
+    /// Messages sharing the same operationId are merged into a single operation.
+    /// </summary>
+    public AsyncApiOperationOptions? Operation { get; private set; }
+
+    /// <summary>
+    /// Customizes the operation generated for this message.
+    /// Ignored if the channel has a channel-level <c>WithOperation()</c> configured.
+    /// </summary>
+    public AsyncApiMessageOptions WithOperation(Action<AsyncApiOperationOptions> configure)
+    {
+        Operation = new AsyncApiOperationOptions();
+        configure(Operation);
+        return this;
+    }
 }
 
 public enum EventCatalogRole
