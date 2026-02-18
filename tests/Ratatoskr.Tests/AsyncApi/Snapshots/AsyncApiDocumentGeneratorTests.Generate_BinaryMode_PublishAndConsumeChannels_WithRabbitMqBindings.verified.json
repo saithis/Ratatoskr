@@ -94,10 +94,12 @@
       ],
       "bindings": {
         "amqp": {
+          "cc": [
+            "api-key.revoked"
+          ],
           "deliveryMode": 2,
           "mandatory": false,
           "timestamp": true,
-          "ack": false,
           "bindingVersion": "0.3.0"
         }
       }
@@ -114,6 +116,9 @@
       ],
       "bindings": {
         "amqp": {
+          "cc": [
+            "user-roles-changed"
+          ],
           "deliveryMode": 2,
           "mandatory": false,
           "timestamp": true,

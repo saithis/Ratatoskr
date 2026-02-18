@@ -272,14 +272,12 @@ public class AsyncApiDocumentGenerator(
         ChannelRegistration channel,
         AsyncApiDocument document)
     {
-        if (document.Operations.ContainsKey(operationId))
+        if (!document.Operations.TryAdd(operationId, operation))
         {
             throw new InvalidOperationException(
                 $"Duplicate AsyncAPI operationId '{operationId}'. " +
                 $"Use WithOperation(o => o.WithId(\"...\")) to set a unique ID.");
         }
-
-        document.Operations[operationId] = operation;
 
         foreach (var provider in bindingProviders)
             provider.ConfigureOperation(channel, operation);

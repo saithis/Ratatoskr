@@ -114,7 +114,7 @@ public class ConsumeTests(
 
     private void ConfigureBus(RatatoskrBuilder bus, string queueName)
     {
-        bus.UseRabbitMq(o => o.ConnectionString = RabbitMqConnectionString);
+        bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
         bus.AddCommandConsumeChannel(queueName, c => c
             .WithRabbitMq(o => o.QueueName(queueName).AutoAck(false).QueueOptions(durable: false, autoDelete: true)
                 .WithQueueType(QueueType.Classic))

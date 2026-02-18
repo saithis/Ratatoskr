@@ -46,19 +46,7 @@ public class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposab
     
     private ConnectionFactory CreateConnectionFactory()
     {
-        if (!string.IsNullOrEmpty(options.ConnectionString))
-        {
-            return new ConnectionFactory { Uri = new Uri(options.ConnectionString) };
-        }
-        
-        return new ConnectionFactory
-        {
-            HostName = options.HostName,
-            Port = options.Port,
-            UserName = options.UserName,
-            Password = options.Password,
-            VirtualHost = options.VirtualHost,
-        };
+        return new ConnectionFactory { Uri = options.ConnectionString };
     }
     
     public async ValueTask DisposeAsync()

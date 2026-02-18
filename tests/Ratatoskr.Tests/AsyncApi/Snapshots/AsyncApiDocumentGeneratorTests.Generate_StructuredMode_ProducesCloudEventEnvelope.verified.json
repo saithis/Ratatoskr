@@ -47,10 +47,12 @@
       ],
       "bindings": {
         "amqp": {
+          "cc": [
+            "order.created"
+          ],
           "deliveryMode": 2,
           "mandatory": false,
           "timestamp": true,
-          "ack": false,
           "bindingVersion": "0.3.0"
         }
       }
@@ -97,7 +99,7 @@
       "order.created": {
         "name": "order.created",
         "title": "Order Created Event",
-        "contentType": "application/cloudevents\u002Bjson",
+        "contentType": "application/cloudevents+json",
         "payload": {
           "type": "object",
           "description": "CloudEvent envelope (structured content mode).",
@@ -151,7 +153,7 @@
         },
         "bindings": {
           "amqp": {
-            "contentEncoding": "application/cloudevents\u002Bjson",
+            "contentEncoding": "application/cloudevents+json",
             "messageType": "order.created",
             "bindingVersion": "0.3.0"
           }

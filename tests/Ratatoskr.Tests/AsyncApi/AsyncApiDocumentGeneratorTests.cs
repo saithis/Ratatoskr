@@ -17,6 +17,7 @@ public class AsyncApiDocumentGeneratorTests
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         PropertyNamingPolicy = null,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
     private static AsyncApiDocumentGenerator BuildGenerator(
@@ -71,7 +72,7 @@ public class AsyncApiDocumentGeneratorTests
                             .WithRole(EventCatalogRole.Client)))),
             asyncApiConfig: opts => opts
                 .WithDescription("AsyncAPI documentation for the API Key service."),
-            rabbitMqOptions: new RabbitMqOptions { HostName = "rabbitmq.example.com" });
+            rabbitMqOptions: new RabbitMqOptions { ConnectionString = new Uri("amqp://a:b@rabbitmq.example.com/") });
 
         var document = generator.Generate();
         var json = JsonSerializer.Serialize(document, JsonOptions);
@@ -85,8 +86,9 @@ public class AsyncApiDocumentGeneratorTests
         var generator = BuildGenerator(
             bus => bus
                 .AddEventPublishChannel("orders.events", c => c
+                    .WithRabbitMq(r => r.ExchangeTypeTopic())
                     .Produces<OrderCreatedEvent>()),
-            rabbitMqOptions: new RabbitMqOptions { HostName = "localhost" },
+            rabbitMqOptions: new RabbitMqOptions { ConnectionString = new Uri("amqp://a:b@localhost/") },
             contentMode: CloudEventsContentMode.Structured);
 
         var document = generator.Generate();
@@ -145,7 +147,7 @@ public class AsyncApiDocumentGeneratorTests
                 .AddEventConsumeChannel("user.events", c => c
                     .WithRabbitMq(r => r.QueueName("my.queue"))
                     .Consumes<UserRolesChangedEvent>()),
-            rabbitMqOptions: new RabbitMqOptions { HostName = "localhost" });
+            rabbitMqOptions: new RabbitMqOptions { ConnectionString = new Uri("amqp://a:b@localhost/") });
 
         var document = generator.Generate();
 
@@ -176,7 +178,7 @@ public class AsyncApiDocumentGeneratorTests
                 .AddEventPublishChannel("events", c => c
                     .Produces<ApiKeyRevokedEvent>()
                     .Produces<OrderCreatedEvent>()),
-            rabbitMqOptions: new RabbitMqOptions { HostName = "localhost" });
+            rabbitMqOptions: new RabbitMqOptions { ConnectionString = new Uri("amqp://a:b@localhost/") });
 
         var document = generator.Generate();
 
@@ -203,7 +205,7 @@ public class AsyncApiDocumentGeneratorTests
                         .ExchangeType("fanout")
                         .QueueName("apikey.subscriptions"))
                     .Consumes<UserRolesChangedEvent>()),
-            rabbitMqOptions: new RabbitMqOptions { HostName = "localhost" });
+            rabbitMqOptions: new RabbitMqOptions { ConnectionString = new Uri("amqp://a:b@localhost/") });
 
         var document = generator.Generate();
 

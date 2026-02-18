@@ -6,11 +6,14 @@ namespace Ratatoskr.RabbitMq.Extensions;
 
 public static class RabbitMqChannelExtensions
 {
+    private const string TransportKey = "RabbitMqTransport";
     private const string ChannelOptionsKey = "RabbitMqChannelOptions";
     private const string ConsumerOptionsKey = "RabbitMqConsumerOptions";
-    
+
     extension(ChannelRegistration registration)
     {
+        public bool IsRabbitMqChannel() => registration.Metadata.ContainsKey(TransportKey);
+
         public RabbitMqConsumerOptions? GetRabbitMqConsumerOptions() => registration.Metadata.GetValueOrDefault(ConsumerOptionsKey) as RabbitMqConsumerOptions;
 
         public RabbitMqChannelOptions? GetRabbitMqChannelOptions() => registration.Metadata.GetValueOrDefault(ChannelOptionsKey) as RabbitMqChannelOptions;
@@ -23,10 +26,11 @@ public static class RabbitMqChannelExtensions
             // This is typically for Exchange settings (Producers and Consumers both care about Exchange type)
             // But mainly for declaration (EventPublish / CommandConsume).
             // For CommandPublish / EventConsume, we might just be validating.
-        
+
             var options = new RabbitMqChannelOptions();
             configure(options);
-        
+
+            builder.WithMetadata(TransportKey, true);
             builder.WithMetadata(ChannelOptionsKey, options);
             return builder;
         }
@@ -40,7 +44,8 @@ public static class RabbitMqChannelExtensions
             // Valid for CommandConsume and EventConsume
             var options = new RabbitMqConsumerOptions();
             configure(options);
-        
+
+            builder.WithMetadata(TransportKey, true);
             builder.WithMetadata(ConsumerOptionsKey, options);
             return builder;
         }
@@ -67,13 +72,15 @@ public static class RabbitMqChannelExtensions
         {
             var options = new RabbitMqCombinedOptions();
             configure(options);
-        
+
+            builder.WithMetadata(TransportKey, true);
+
             if (options.ChannelOptions != null)
                 builder.WithMetadata(ChannelOptionsKey, options.ChannelOptions);
-             
+
             if (options.ConsumerOptions != null)
                 builder.WithMetadata(ConsumerOptionsKey, options.ConsumerOptions);
-             
+
             return builder;
         }
     }

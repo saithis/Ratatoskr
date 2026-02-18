@@ -375,7 +375,7 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
     {
         services.AddRatatoskr(bus =>
         {
-            bus.UseRabbitMq(o => o.ConnectionString = RabbitMqConnectionString);
+            bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
             
             bus.AddEventPublishChannel(ExchangeName, c => c
                 .WithRabbitMq(r => r.ExchangeTypeTopic())

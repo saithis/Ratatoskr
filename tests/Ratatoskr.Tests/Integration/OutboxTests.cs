@@ -35,7 +35,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
         {
             services.AddRatatoskr(bus => 
             {
-                bus.UseRabbitMq(o => o.ConnectionString = RabbitMqConnectionString);
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
                 bus.AddEventPublishChannel(ExchangeName, c => c.Produces<TestEvent>());
             });
             
@@ -86,7 +86,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
         {
             services.AddRatatoskr(bus => 
             {
-                bus.UseRabbitMq(o => o.ConnectionString = RabbitMqConnectionString);
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
                 bus.AddCommandConsumeChannel(QueueName, c => c
                     .WithRabbitMq(o => o.QueueName(QueueName).AutoAck(false).QueueOptions(durable: false, autoDelete: true)
                         .WithQueueType(QueueType.Classic))

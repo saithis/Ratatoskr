@@ -30,7 +30,7 @@ builder.Services.AddRatatoskr(bus =>
     bus
         .UseRabbitMq(c =>
         {
-            c.ConnectionString = rabbitMqConnectionString;
+            c.ConnectionString = new Uri(rabbitMqConnectionString);
             c.DefaultExchange = "events.topic"; // Use topic exchange for event routing
         });
     

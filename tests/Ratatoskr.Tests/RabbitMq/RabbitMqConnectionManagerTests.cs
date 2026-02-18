@@ -14,7 +14,7 @@ public class RabbitMqConnectionManagerTests(RabbitMqContainerFixture rabbitMq)
         // Arrange
         var options = new RabbitMqOptions
         {
-            ConnectionString = rabbitMq.ConnectionString
+            ConnectionString = new Uri(rabbitMq.ConnectionString)
         };
         var manager = new RabbitMqConnectionManager(options);
         
@@ -33,7 +33,7 @@ public class RabbitMqConnectionManagerTests(RabbitMqContainerFixture rabbitMq)
         // Arrange
         var options = new RabbitMqOptions
         {
-            ConnectionString = rabbitMq.ConnectionString
+            ConnectionString = new Uri(rabbitMq.ConnectionString)
         };
         var manager = new RabbitMqConnectionManager(options);
         
@@ -60,7 +60,7 @@ public class RabbitMqConnectionManagerTests(RabbitMqContainerFixture rabbitMq)
         // Arrange
         var options = new RabbitMqOptions
         {
-            ConnectionString = rabbitMq.ConnectionString
+            ConnectionString = new Uri(rabbitMq.ConnectionString)
         };
         var manager = new RabbitMqConnectionManager(options);
         
@@ -77,7 +77,7 @@ public class RabbitMqConnectionManagerTests(RabbitMqContainerFixture rabbitMq)
         // Arrange
         var options = new RabbitMqOptions
         {
-            ConnectionString = rabbitMq.ConnectionString
+            ConnectionString = new Uri(rabbitMq.ConnectionString)
         };
         var manager = new RabbitMqConnectionManager(options);
         
@@ -90,27 +90,5 @@ public class RabbitMqConnectionManagerTests(RabbitMqContainerFixture rabbitMq)
         
         // Assert - Channel should be closed after manager disposal
         channel.IsOpen.Should().BeFalse();
-    }
-
-    [Test]
-    public async Task CreateChannelAsync_WithHostNameAndPort_Connects()
-    {
-        // Arrange
-        var uri = new Uri(rabbitMq.ConnectionString);
-        var userInfoParts = !string.IsNullOrEmpty(uri.UserInfo) ? uri.UserInfo.Split(':') : Array.Empty<string>();
-        var options = new RabbitMqOptions
-        {
-            HostName = uri.Host,
-            Port = uri.Port,
-            UserName = userInfoParts.Length > 0 ? userInfoParts[0] : "guest",
-            Password = userInfoParts.Length > 1 ? userInfoParts[1] : "guest"
-        };
-        var manager = new RabbitMqConnectionManager(options);
-        
-        // Act
-        await using var channel = await manager.CreateChannelAsync(enablePublisherConfirms: false);
-        
-        // Assert
-        channel.IsOpen.Should().BeTrue();
     }
 }

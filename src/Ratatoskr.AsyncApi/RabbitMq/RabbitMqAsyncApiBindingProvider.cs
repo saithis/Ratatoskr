@@ -21,34 +21,15 @@ public class RabbitMqAsyncApiBindingProvider(RabbitMqOptions rabbitMqOptions) : 
     {
         document.Servers ??= new Dictionary<string, AsyncApiServer>();
 
-        string host;
-        if (!string.IsNullOrEmpty(rabbitMqOptions.ConnectionString))
-        {
-            // Parse host from connection string (amqp://user:pass@host:port/vhost)
-            var uri = new Uri(rabbitMqOptions.ConnectionString);
-            host = uri.Port is 5672 or -1
-                ? uri.Host
-                : $"{uri.Host}:{uri.Port}";
-        }
-        else
-        {
-            host = rabbitMqOptions.Port == 5672
-                ? rabbitMqOptions.HostName
-                : $"{rabbitMqOptions.HostName}:{rabbitMqOptions.Port}";
-        }
-
-        if (!string.IsNullOrEmpty(rabbitMqOptions.VirtualHost) && rabbitMqOptions.VirtualHost != "/")
-            host += rabbitMqOptions.VirtualHost;
-
         document.Servers[ServerName] = new AsyncApiServer
         {
-            Host = host,
-            Protocol = "amqp",
+            Host = rabbitMqOptions.ConnectionString.Host,
+            Protocol = rabbitMqOptions.ConnectionString.Scheme,
             Description = "RabbitMQ server for message exchange.",
         };
 
-        // Add server reference to all channels that have been added so far
-        foreach (var channel in channels)
+        // Add server reference to all RabbitMQ channels that have been added so far
+        foreach (var channel in channels.Where(c => c.IsRabbitMqChannel()))
         {
             if (document.Channels.TryGetValue(channel.ChannelName, out var asyncApiChannel))
             {
@@ -60,6 +41,9 @@ public class RabbitMqAsyncApiBindingProvider(RabbitMqOptions rabbitMqOptions) : 
 
     public void ConfigureChannel(ChannelRegistration channel, AsyncApiDocument document)
     {
+        if (!channel.IsRabbitMqChannel())
+            return;
+
         if (!document.Channels.TryGetValue(channel.ChannelName, out var asyncApiChannel))
             return;
 
@@ -77,7 +61,7 @@ public class RabbitMqAsyncApiBindingProvider(RabbitMqOptions rabbitMqOptions) : 
                     Type = channelOpts.ExchangeType,
                     Durable = channelOpts.Durable,
                     AutoDelete = channelOpts.AutoDelete,
-                    VHost = "/",
+                    VHost = rabbitMqOptions.ConnectionString.AbsolutePath,
                 },
             },
         };
@@ -92,24 +76,37 @@ public class RabbitMqAsyncApiBindingProvider(RabbitMqOptions rabbitMqOptions) : 
 
     public void ConfigureOperation(ChannelRegistration channel, AsyncApiOperation operation)
     {
-        // Use persistent delivery mode for all messages; consumer ack mode from options
-        var consumerOpts = channel.GetRabbitMqConsumerOptions();
+        if (!channel.IsRabbitMqChannel())
+            return;
 
-        operation.Bindings = new OperationBindings
+        var binding = new AmqpOperationBinding
         {
-            Amqp = new AmqpOperationBinding
-            {
-                DeliveryMode = 2, // persistent
-                Mandatory = false,
-                Timestamp = true,
-                Ack = consumerOpts != null && !consumerOpts.AutoAck,
-            },
+            DeliveryMode = 2, // persistent
+            Mandatory = false,
+            Timestamp = true,
         };
+
+        // Document routing keys used by messages on this channel
+        var routingKeys = channel.Messages
+            .Select(m => m.GetRabbitMqOptions()?.RoutingKey ?? m.MessageTypeName)
+            .Distinct()
+            .ToList();
+
+        if (routingKeys.Count > 0)
+            binding.Cc = routingKeys;
+
+        // Consumer-specific: acknowledge mode
+        var consumerOpts = channel.GetRabbitMqConsumerOptions();
+        if (consumerOpts != null)
+            binding.Ack = !consumerOpts.AutoAck;
+
+        operation.Bindings = new OperationBindings { Amqp = binding };
     }
 
     public void ConfigureMessage(MessageRegistration message, ChannelRegistration channel, AsyncApiMessage asyncApiMessage)
     {
-        var routingKey = message.GetRabbitMqOptions()?.RoutingKey ?? message.MessageTypeName;
+        if (!channel.IsRabbitMqChannel())
+            return;
 
         asyncApiMessage.Bindings = new MessageBindings
         {
@@ -119,10 +116,6 @@ public class RabbitMqAsyncApiBindingProvider(RabbitMqOptions rabbitMqOptions) : 
                 MessageType = message.MessageTypeName,
             },
         };
-
-        // Add routing key as CC binding on the operation level is preferred,
-        // but per-message we document it via the message binding messageType.
-        // The routing key is also captured in the operation's cc list if needed.
     }
 
     private void AddQueueChannel(
@@ -140,7 +133,7 @@ public class RabbitMqAsyncApiBindingProvider(RabbitMqOptions rabbitMqOptions) : 
         {
             Address = queueName,
             Description = $"Subscription queue for {channel.ChannelName} channel events.",
-            Servers = new List<AsyncApiReference> { AsyncApiReference.ToServer(ServerName) },
+            Servers = [AsyncApiReference.ToServer(ServerName)],
             Bindings = new ChannelBindings
             {
                 Amqp = new AmqpChannelBinding

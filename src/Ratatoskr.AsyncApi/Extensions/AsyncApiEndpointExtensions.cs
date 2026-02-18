@@ -25,9 +25,8 @@ public static class AsyncApiEndpointExtensions
         this IEndpointRouteBuilder endpoints,
         string routePattern = "/asyncapi.json")
     {
-        endpoints.MapGet(routePattern, (IServiceProvider sp) =>
+        endpoints.MapGet(routePattern, (AsyncApiDocumentGenerator generator) =>
         {
-            var generator = sp.GetRequiredService<AsyncApiDocumentGenerator>();
             var document = generator.Generate();
             var json = JsonSerializer.Serialize(document, _serializerOptions);
             return Results.Content(json, "application/json");
