@@ -143,18 +143,24 @@
             "format": "uuid"
           },
           "type": {
-            "type": "string",
-            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ],
             "maxLength": 50
           },
           "userId": {
-            "type": "string",
-            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ],
             "maxLength": 100
           },
           "tenantId": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "revokedAt": {
             "type": "string",
@@ -175,21 +181,35 @@
         ],
         "properties": {
           "userId": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "addedRoles": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/RoleAssignment",
-              "nullable": true
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/RoleAssignment"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "removedRoles": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/RoleAssignment",
-              "nullable": true
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/RoleAssignment"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           }
         }
@@ -202,16 +222,20 @@
         ],
         "properties": {
           "roleInternalName": {
-            "type": "string",
-            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ],
             "maxLength": 100
           },
           "assignmentLevel": {
             "$ref": "#/components/schemas/AssignmentLevel"
           },
           "targetId": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -272,36 +296,45 @@
               "description": "Identifies the context in which an event happened."
             },
             "cloudEvents_time": {
-              "type": "string",
+              "type": [
+                "string",
+                "null"
+              ],
               "format": "date-time",
-              "description": "Timestamp of when the occurrence happened.",
-              "nullable": true
+              "description": "Timestamp of when the occurrence happened."
             },
             "cloudEvents_datacontenttype": {
-              "type": "string",
-              "description": "Content type of the data value (e.g. application/json).",
-              "nullable": true
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Content type of the data value (e.g. application/json)."
             },
             "cloudEvents_subject": {
-              "type": "string",
-              "description": "Describes the subject of the event in the context of the event producer.",
-              "nullable": true
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Describes the subject of the event in the context of the event producer."
             },
             "traceparent": {
-              "type": "string",
-              "description": "W3C Trace Context traceparent header for distributed tracing.",
-              "nullable": true
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "W3C Trace Context traceparent header for distributed tracing."
             },
             "tracestate": {
-              "type": "string",
-              "description": "W3C Trace Context tracestate header.",
-              "nullable": true
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "W3C Trace Context tracestate header."
             }
           }
         },
         "bindings": {
           "amqp": {
-            "contentEncoding": "application/json",
             "messageType": "api-key.revoked",
             "bindingVersion": "0.3.0"
           }
@@ -348,36 +381,45 @@
               "description": "Identifies the context in which an event happened."
             },
             "cloudEvents_time": {
-              "type": "string",
+              "type": [
+                "string",
+                "null"
+              ],
               "format": "date-time",
-              "description": "Timestamp of when the occurrence happened.",
-              "nullable": true
+              "description": "Timestamp of when the occurrence happened."
             },
             "cloudEvents_datacontenttype": {
-              "type": "string",
-              "description": "Content type of the data value (e.g. application/json).",
-              "nullable": true
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Content type of the data value (e.g. application/json)."
             },
             "cloudEvents_subject": {
-              "type": "string",
-              "description": "Describes the subject of the event in the context of the event producer.",
-              "nullable": true
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Describes the subject of the event in the context of the event producer."
             },
             "traceparent": {
-              "type": "string",
-              "description": "W3C Trace Context traceparent header for distributed tracing.",
-              "nullable": true
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "W3C Trace Context traceparent header for distributed tracing."
             },
             "tracestate": {
-              "type": "string",
-              "description": "W3C Trace Context tracestate header.",
-              "nullable": true
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "W3C Trace Context tracestate header."
             }
           }
         },
         "bindings": {
           "amqp": {
-            "contentEncoding": "application/json",
             "messageType": "user-roles-changed",
             "bindingVersion": "0.3.0"
           }

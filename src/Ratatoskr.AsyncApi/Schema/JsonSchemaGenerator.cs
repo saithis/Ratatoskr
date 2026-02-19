@@ -115,9 +115,8 @@ public class JsonSchemaGenerator
             GenerateObject(underlying, name, components);
 
         var refSchema = JsonSchema.RefTo(name);
-        // Wrap in nullable if needed (JSON Schema draft-07 style)
         if (isNullable)
-            refSchema.Nullable = true;
+            return new JsonSchema { OneOf = [refSchema, new JsonSchema { Type = "null" }] };
         return refSchema;
     }
 
@@ -152,8 +151,8 @@ public class JsonSchemaGenerator
             _ => new JsonSchema { Type = "string" },
         };
 
-        if (nullable)
-            schema.Nullable = true;
+        if (nullable && schema.Type is string typeName)
+            schema.Type = new[] { typeName, "null" };
 
         return schema;
     }

@@ -12,9 +12,13 @@ public class JsonSchema
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Ref { get; set; }
 
+    /// <summary>
+    /// JSON Schema type. A single type string (e.g. "string") or an array of types
+    /// (e.g. ["string", "null"]) for nullable values per JSON Schema Draft-07.
+    /// </summary>
     [JsonPropertyName("type")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? Type { get; set; }
+    public object? Type { get; set; }
 
     [JsonPropertyName("format")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -24,9 +28,10 @@ public class JsonSchema
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Description { get; set; }
 
-    [JsonPropertyName("nullable")]
+    /// <summary>Combines multiple schemas (used for nullable $ref types in JSON Schema Draft-07).</summary>
+    [JsonPropertyName("oneOf")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public bool? Nullable { get; set; }
+    public List<JsonSchema>? OneOf { get; set; }
 
     [JsonPropertyName("required")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

@@ -47,34 +47,29 @@ internal static class CloudEventsSchemaHelper
                 },
                 [$"{prefix}time"] = new JsonSchema
                 {
-                    Type = "string",
+                    Type = new[] { "string", "null" },
                     Format = "date-time",
                     Description = "Timestamp of when the occurrence happened.",
-                    Nullable = true,
                 },
                 [$"{prefix}datacontenttype"] = new JsonSchema
                 {
-                    Type = "string",
+                    Type = new[] { "string", "null" },
                     Description = "Content type of the data value (e.g. application/json).",
-                    Nullable = true,
                 },
                 [$"{prefix}subject"] = new JsonSchema
                 {
-                    Type = "string",
+                    Type = new[] { "string", "null" },
                     Description = "Describes the subject of the event in the context of the event producer.",
-                    Nullable = true,
                 },
                 ["traceparent"] = new JsonSchema
                 {
-                    Type = "string",
+                    Type = new[] { "string", "null" },
                     Description = "W3C Trace Context traceparent header for distributed tracing.",
-                    Nullable = true,
                 },
                 ["tracestate"] = new JsonSchema
                 {
-                    Type = "string",
+                    Type = new[] { "string", "null" },
                     Description = "W3C Trace Context tracestate header.",
-                    Nullable = true,
                 },
             },
             Required = [$"{prefix}specversion", $"{prefix}id", $"{prefix}type", $"{prefix}source"],
@@ -117,22 +112,19 @@ internal static class CloudEventsSchemaHelper
                 },
                 ["time"] = new JsonSchema
                 {
-                    Type = "string",
+                    Type = new[] { "string", "null" },
                     Format = "date-time",
                     Description = "Timestamp of when the occurrence happened.",
-                    Nullable = true,
                 },
                 ["datacontenttype"] = new JsonSchema
                 {
-                    Type = "string",
+                    Type = new[] { "string", "null" },
                     Description = "Content type of the data value.",
-                    Nullable = true,
                 },
                 ["subject"] = new JsonSchema
                 {
-                    Type = "string",
+                    Type = new[] { "string", "null" },
                     Description = "Describes the subject of the event.",
-                    Nullable = true,
                 },
                 ["data"] = dataSchema,
             },

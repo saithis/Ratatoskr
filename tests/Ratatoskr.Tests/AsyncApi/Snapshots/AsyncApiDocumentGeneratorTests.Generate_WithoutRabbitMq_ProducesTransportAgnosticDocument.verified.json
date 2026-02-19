@@ -46,18 +46,24 @@
             "maximum": 999999.99
           },
           "customerEmail": {
-            "type": "string",
-            "format": "email",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "email"
           },
           "callbackUrl": {
-            "type": "string",
-            "format": "uri",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
           },
           "notes": {
-            "type": "string",
-            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ],
             "maxLength": 500,
             "minLength": 1
           }
@@ -103,30 +109,40 @@
               "description": "Identifies the context in which an event happened."
             },
             "cloudEvents_time": {
-              "type": "string",
+              "type": [
+                "string",
+                "null"
+              ],
               "format": "date-time",
-              "description": "Timestamp of when the occurrence happened.",
-              "nullable": true
+              "description": "Timestamp of when the occurrence happened."
             },
             "cloudEvents_datacontenttype": {
-              "type": "string",
-              "description": "Content type of the data value (e.g. application/json).",
-              "nullable": true
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Content type of the data value (e.g. application/json)."
             },
             "cloudEvents_subject": {
-              "type": "string",
-              "description": "Describes the subject of the event in the context of the event producer.",
-              "nullable": true
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Describes the subject of the event in the context of the event producer."
             },
             "traceparent": {
-              "type": "string",
-              "description": "W3C Trace Context traceparent header for distributed tracing.",
-              "nullable": true
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "W3C Trace Context traceparent header for distributed tracing."
             },
             "tracestate": {
-              "type": "string",
-              "description": "W3C Trace Context tracestate header.",
-              "nullable": true
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "W3C Trace Context tracestate header."
             }
           }
         },
