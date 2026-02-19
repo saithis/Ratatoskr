@@ -112,7 +112,7 @@ public class RabbitMqAsyncApiBindingProvider(RabbitMqOptions rabbitMqOptions) : 
         {
             Amqp = new AmqpMessageBinding
             {
-                ContentEncoding = asyncApiMessage.ContentType ?? "application/json",
+                ContentEncoding = null, // transport encoding like 'gzip', etc.
                 MessageType = message.MessageTypeName,
             },
         };

@@ -10,6 +10,7 @@ public static class AsyncApiMessageBuilderExtensions
 
     public static MessageBuilder WithAsyncApi(this MessageBuilder builder, Action<AsyncApiMessageOptions> configure)
     {
+        ArgumentNullException.ThrowIfNull(configure);
         var opts = new AsyncApiMessageOptions();
         configure(opts);
         builder.MessageRegistration.Metadata[MetadataKey] = opts;
