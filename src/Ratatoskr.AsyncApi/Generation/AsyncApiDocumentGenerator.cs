@@ -109,16 +109,14 @@ public class AsyncApiDocumentGenerator(
         var description = msgAttr?.Description ?? msgOpts?.Description;
         var version = msgAttr?.Version ?? msgOpts?.Version ?? "1.0.0";
         // Infer message type and role from channel intent
-        var defaultMessageType = channel.Intent is ChannelType.CommandPublish or ChannelType.CommandConsume
+        var messageType = channel.Intent is ChannelType.CommandPublish or ChannelType.CommandConsume
             ? EventCatalogMessageType.Command
             : EventCatalogMessageType.Event;
-        var messageType = msgOpts?.MessageType ?? defaultMessageType;
 
         // Role defaults: publish channels → provider, consume channels → client
-        var defaultRole = channel.Intent is ChannelType.EventPublish or ChannelType.CommandPublish
+        var role = channel.Intent is ChannelType.EventPublish or ChannelType.CommandPublish
             ? EventCatalogRole.Provider
             : EventCatalogRole.Client;
-        var role = msgAttr?.Role ?? msgOpts?.Role ?? defaultRole;
 
         // Generate the payload schema for the CLR type
         var dataSchema = _schemaGenerator.GenerateAndRegister(msg.MessageType, schemas);

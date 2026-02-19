@@ -16,18 +16,6 @@ public class AsyncApiMessageOptions
     /// </summary>
     public string? Version { get; private set; }
 
-    /// <summary>
-    /// EventCatalog role override (x-eventcatalog-role).
-    /// When not set, derived from the channel type (publish → provider, consume → client).
-    /// </summary>
-    public EventCatalogRole? Role { get; private set; }
-
-    /// <summary>
-    /// EventCatalog message type (x-eventcatalog-message-type).
-    /// Defaults to Event.
-    /// </summary>
-    public EventCatalogMessageType? MessageType { get; private set; }
-
     public AsyncApiMessageOptions WithTitle(string title)
     {
         Title = title;
@@ -52,18 +40,6 @@ public class AsyncApiMessageOptions
         return this;
     }
 
-    public AsyncApiMessageOptions WithRole(EventCatalogRole role)
-    {
-        Role = role;
-        return this;
-    }
-
-    public AsyncApiMessageOptions WithMessageType(EventCatalogMessageType messageType)
-    {
-        MessageType = messageType;
-        return this;
-    }
-
     // --- Operation metadata ---
 
     /// <summary>
@@ -83,17 +59,4 @@ public class AsyncApiMessageOptions
         configure(Operation);
         return this;
     }
-}
-
-public enum EventCatalogRole
-{
-    Provider,
-    Client,
-}
-
-public enum EventCatalogMessageType
-{
-    Event,
-    Command,
-    Query,
 }

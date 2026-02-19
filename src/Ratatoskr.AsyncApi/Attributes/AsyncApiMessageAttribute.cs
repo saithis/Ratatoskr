@@ -19,10 +19,4 @@ public sealed class AsyncApiMessageAttribute : Attribute
 
     /// <summary>Short description of the message.</summary>
     public string? Description { get; set; }
-
-    /// <summary>
-    /// EventCatalog role (x-eventcatalog-role).
-    /// Overrides the channel-derived default (publish → provider, consume → client).
-    /// </summary>
-    public EventCatalogRole? Role { get; set; }
 }

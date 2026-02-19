@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.AsyncApi.Config;
 using Ratatoskr.AsyncApi.Extensions;
 using Ratatoskr.AsyncApi.Generation;
+using Ratatoskr.AsyncApi.Model;
 using Ratatoskr.CloudEvents;
 using Ratatoskr.RabbitMq;
 using Ratatoskr.RabbitMq.Extensions;
@@ -68,8 +69,7 @@ public class AsyncApiDocumentGeneratorTests
                         .QueueName("apikey.subscriptions"))
                     .Consumes<UserRolesChangedEvent>(m => m
                         .WithAsyncApi(a => a
-                            .WithVersion("2.0.0")
-                            .WithRole(EventCatalogRole.Client)))),
+                            .WithVersion("2.0.0")))),
             asyncApiConfig: opts => opts
                 .WithDescription("AsyncAPI documentation for the API Key service."),
             rabbitMqOptions: new RabbitMqOptions { ConnectionString = new Uri("amqp://a:b@rabbitmq.example.com/") });
