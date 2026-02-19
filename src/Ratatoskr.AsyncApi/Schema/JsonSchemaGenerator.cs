@@ -66,7 +66,7 @@ public class JsonSchemaGenerator
         foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
             if (!prop.CanRead) continue;
-            if (prop.GetCustomAttribute<JsonIgnoreAttribute>() != null) continue;
+            if (prop.GetCustomAttribute<JsonIgnoreAttribute>() is { Condition: JsonIgnoreCondition.Always }) continue;
 
             var propName = GetPropertyName(prop);
             var propSchema = BuildPropertySchema(prop, components);
