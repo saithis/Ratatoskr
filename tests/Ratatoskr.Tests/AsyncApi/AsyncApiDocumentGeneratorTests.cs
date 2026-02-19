@@ -7,6 +7,7 @@ using Ratatoskr.AsyncApi.Generation;
 using Ratatoskr.AsyncApi.Model;
 using Ratatoskr.CloudEvents;
 using Ratatoskr.RabbitMq;
+using Ratatoskr.RabbitMq.AsyncApi;
 using Ratatoskr.RabbitMq.Extensions;
 
 namespace Ratatoskr.Tests.AsyncApi;
@@ -32,19 +33,18 @@ public class AsyncApiDocumentGeneratorTests
         services.AddRatatoskr(bus =>
         {
             bus.ConfigureCloudEvents(ce => ce.ContentMode = contentMode);
+            bus.ConfigureAsyncApi(opts =>
+            {
+                opts.WithTitle("Test Service").WithVersion("1.0.0");
+                asyncApiConfig?.Invoke(opts);
+            });
             busConfig(bus);
-        });
-
-        services.AddAsyncApiDocumentation(opts =>
-        {
-            opts.WithTitle("Test Service").WithVersion("1.0.0");
-            asyncApiConfig?.Invoke(opts);
         });
 
         if (rabbitMqOptions != null)
         {
             services.AddSingleton(rabbitMqOptions);
-            services.AddRabbitMqAsyncApiBindings();
+            services.AddSingleton<IAsyncApiTransportBindingProvider, RabbitMqAsyncApiBindingProvider>();
         }
 
         return services.BuildServiceProvider().GetRequiredService<AsyncApiDocumentGenerator>();

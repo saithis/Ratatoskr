@@ -1,19 +1,21 @@
 using Ratatoskr.AsyncApi.Generation;
 using Ratatoskr.AsyncApi.Model;
 using Ratatoskr.AsyncApi.Model.Bindings;
+using Ratatoskr.CloudEvents;
 using Ratatoskr.Core;
-using Ratatoskr.RabbitMq;
 using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 
-namespace Ratatoskr.AsyncApi.RabbitMq;
+namespace Ratatoskr.RabbitMq.AsyncApi;
 
 /// <summary>
 /// Adds AMQP/RabbitMQ-specific bindings to the AsyncAPI document.
 /// Reads configuration from <see cref="RabbitMqOptions"/>, <see cref="RabbitMqChannelOptions"/>,
 /// and <see cref="RabbitMqConsumerOptions"/> already registered on each channel.
 /// </summary>
-public class RabbitMqAsyncApiBindingProvider(RabbitMqOptions rabbitMqOptions) : IAsyncApiTransportBindingProvider
+public class RabbitMqAsyncApiBindingProvider(
+    RabbitMqOptions rabbitMqOptions,
+    CloudEventsOptions cloudEventsOptions) : IAsyncApiTransportBindingProvider
 {
     private const string ServerName = "rabbitmq";
 
@@ -108,6 +110,12 @@ public class RabbitMqAsyncApiBindingProvider(RabbitMqOptions rabbitMqOptions) : 
         if (!channel.IsRabbitMqChannel())
             return;
 
+        // Add CloudEvents binary mode headers schema (AMQP application-properties)
+        if (cloudEventsOptions.ContentMode == CloudEventsContentMode.Binary)
+        {
+            asyncApiMessage.Headers = BuildBinaryModeHeadersSchema();
+        }
+
         asyncApiMessage.Bindings = new MessageBindings
         {
             Amqp = new AmqpMessageBinding
@@ -115,6 +123,74 @@ public class RabbitMqAsyncApiBindingProvider(RabbitMqOptions rabbitMqOptions) : 
                 ContentEncoding = null, // transport encoding like 'gzip', etc.
                 MessageType = message.MessageTypeName,
             },
+        };
+    }
+
+    /// <summary>
+    /// Returns the AMQP application-properties schema documenting the CloudEvents attributes
+    /// sent in binary content mode. Uses the <c>cloudEvents_</c> prefix as per the implementation
+    /// in <see cref="CloudEventsAmqpConstants"/>.
+    /// </summary>
+    private static JsonSchema BuildBinaryModeHeadersSchema()
+    {
+        var prefix = CloudEventsAmqpConstants.HeaderPrefix; // "cloudEvents_"
+
+        return new JsonSchema
+        {
+            Type = "object",
+            Description = "AMQP application-properties carrying CloudEvents attributes (binary content mode).",
+            Properties = new Dictionary<string, JsonSchema>
+            {
+                [$"{prefix}specversion"] = new JsonSchema
+                {
+                    Type = "string",
+                    Description = "CloudEvents specification version.",
+                    Enum = ["1.0"],
+                },
+                [$"{prefix}id"] = new JsonSchema
+                {
+                    Type = "string",
+                    Description = "Unique identifier for the event.",
+                },
+                [$"{prefix}type"] = new JsonSchema
+                {
+                    Type = "string",
+                    Description = "CloudEvent type identifier (e.g. com.example.order.created).",
+                },
+                [$"{prefix}source"] = new JsonSchema
+                {
+                    Type = "string",
+                    Format = "uri-reference",
+                    Description = "Identifies the context in which an event happened.",
+                },
+                [$"{prefix}time"] = new JsonSchema
+                {
+                    Type = new[] { "string", "null" },
+                    Format = "date-time",
+                    Description = "Timestamp of when the occurrence happened.",
+                },
+                [$"{prefix}datacontenttype"] = new JsonSchema
+                {
+                    Type = new[] { "string", "null" },
+                    Description = "Content type of the data value (e.g. application/json).",
+                },
+                [$"{prefix}subject"] = new JsonSchema
+                {
+                    Type = new[] { "string", "null" },
+                    Description = "Describes the subject of the event in the context of the event producer.",
+                },
+                ["traceparent"] = new JsonSchema
+                {
+                    Type = new[] { "string", "null" },
+                    Description = "W3C Trace Context traceparent header for distributed tracing.",
+                },
+                ["tracestate"] = new JsonSchema
+                {
+                    Type = new[] { "string", "null" },
+                    Description = "W3C Trace Context tracestate header.",
+                },
+            },
+            Required = [$"{prefix}specversion", $"{prefix}id", $"{prefix}type", $"{prefix}source"],
         };
     }
 

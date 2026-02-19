@@ -144,12 +144,6 @@ public class AsyncApiDocumentGenerator(
             Payload = payloadSchema,
         };
 
-        // Add CloudEvents headers schema for binary mode
-        if (cloudEventsOptions.ContentMode == CloudEventsContentMode.Binary)
-        {
-            asyncApiMessage.Headers = CloudEventsSchemaHelper.BuildBinaryModeHeadersSchema();
-        }
-
         // Add EventCatalog extension properties
         asyncApiMessage.Extensions = new Dictionary<string, JsonElement>
         {
@@ -158,7 +152,7 @@ public class AsyncApiDocumentGenerator(
             ["x-eventcatalog-message-version"] = JsonSerializer.SerializeToElement(version),
         };
 
-        // Apply transport message bindings
+        // Apply transport message bindings (including binary mode headers)
         foreach (var provider in bindingProviders)
             provider.ConfigureMessage(msg, channel, asyncApiMessage);
 
