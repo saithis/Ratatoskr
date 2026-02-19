@@ -19,6 +19,11 @@
           "$ref": "#/components/messages/order.created"
         }
       },
+      "servers": [
+        {
+          "$ref": "#/servers/rabbitmq"
+        }
+      ],
       "bindings": {
         "amqp": {
           "is": "routingKey",

@@ -21,6 +21,11 @@
         }
       },
       "description": "Channel for API key related events.",
+      "servers": [
+        {
+          "$ref": "#/servers/rabbitmq"
+        }
+      ],
       "bindings": {
         "amqp": {
           "is": "routingKey",
@@ -43,6 +48,11 @@
         }
       },
       "description": "Channel for authorization events owned by the user service.",
+      "servers": [
+        {
+          "$ref": "#/servers/rabbitmq"
+        }
+      ],
       "bindings": {
         "amqp": {
           "is": "routingKey",

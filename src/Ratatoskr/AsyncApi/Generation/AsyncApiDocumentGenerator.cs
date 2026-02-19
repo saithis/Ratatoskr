@@ -39,15 +39,16 @@ public class AsyncApiDocumentGenerator(
 
         var allChannels = channelRegistry.GetAllChannels().ToList();
 
-        // Let transport providers add server definitions
-        foreach (var provider in bindingProviders)
-            provider.ConfigureServers(document, allChannels);
-
         // Generate channels, operations, messages, and schemas
         foreach (var channel in allChannels)
         {
             BuildChannel(channel, document, schemas, messages);
         }
+
+        // Let transport providers add server definitions and references
+        // (must run after BuildChannel so document.Channels is populated)
+        foreach (var provider in bindingProviders)
+            provider.ConfigureServers(document, allChannels);
 
         // Clean up empty component collections
         if (document.Components!.Schemas?.Count == 0) document.Components.Schemas = null;
