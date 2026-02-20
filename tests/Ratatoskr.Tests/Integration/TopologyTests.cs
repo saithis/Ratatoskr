@@ -101,6 +101,42 @@ public class TopologyTests(
 
 
 
+    [Test]
+    public async Task Topology_CommandPublishAndConsumeSameExchange_ProvisioningSucceeds()
+    {
+        // Arrange & Act - If provisioning order is wrong, CommandPublish will
+        // passive-declare the exchange before CommandConsume has declared it,
+        // causing a 404 NOT_FOUND error.
+        var exchangeName = $"cmd-exchange-{TestId}";
+
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+
+                bus.AddCommandConsumeChannel(exchangeName, c => c
+                    .WithRabbitMq(o => o
+                        .WithDirectExchange()
+                        .WithQueueName(QueueName))
+                    .Consumes<TestEvent>());
+
+                bus.AddCommandPublishChannel(exchangeName, c => c
+                    .WithRabbitMq(o => o
+                        .WithDirectExchange())
+                    .Produces<TestEvent>());
+            });
+        });
+
+        // Assert - exchange was created by CommandConsume before CommandPublish validated it
+        var factory = new ConnectionFactory { Uri = new Uri(RabbitMqConnectionString) };
+        await using var connection = await factory.CreateConnectionAsync();
+        await using var channel = await connection.CreateChannelAsync();
+
+        // Passive declare should succeed since the exchange exists
+        await channel.ExchangeDeclarePassiveAsync(exchangeName);
+    }
+
     public class PermanentErrorHandler : IMessageHandler<TestEvent>
     {
         public Task HandleAsync(TestEvent message, MessageProperties properties, CancellationToken cancellationToken)

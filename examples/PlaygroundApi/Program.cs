@@ -8,6 +8,7 @@ using PlaygroundApi.Database;
 using PlaygroundApi.Database.Entities;
 using PlaygroundApi.Events;
 using Ratatoskr;
+using Ratatoskr.AsyncApi.Extensions;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.RabbitMq.Extensions;
@@ -38,21 +39,33 @@ builder.Services.AddRatatoskr(bus =>
     bus.AddHandler<NoteAddedEvent, NoteAddedEventHandler>();
     bus.AddHandler<NoteDto, NoteDtoHandler>();
     bus.AddHandler<FailEvent, FailEventHandler>();
+    bus.AddHandler<AddNoteCommand, AddNoteCommandHandler>();
     
     bus
         .AddEventPublishChannel("events.topic", c => c
-            .WithRabbitMq(r => r.WithTopicExchange())
+            .WithRabbitMq(r => r
+                .WithTopicExchange())
             .Produces<NoteAddedEvent>()
             .Produces<NoteDto>(m => m.WithType("notes"))
             .Produces<FailEvent>());
     
     bus.AddEventConsumeChannel("events.topic", c =>
-        c.WithRabbitMq(r => r.WithQueueName("events.subscriptions"))
+        c.WithRabbitMq(r => r
+                .WithQueueName("events.subscriptions"))
             .Consumes<NoteDto>(m => m.WithType("notes"))
             .Consumes<NoteAddedEvent>()
             .Consumes<FailEvent>());
+
+    bus.AddCommandConsumeChannel("commands.topic", c =>
+        c.WithRabbitMq(r => r
+                .WithDirectExchange()
+                .WithQueueName("commands.subscriptions"))
+            .Consumes<AddNoteCommand>());
     
-    // TODO: test the other channel types
+    bus.AddCommandPublishChannel("commands.topic", c =>
+        c.WithRabbitMq(r => r
+                .WithDirectExchange())
+            .Produces<AddNoteCommand>());
 });
 
 // Use PostgreSQL when connection string is available (Aspire), otherwise use InMemory
@@ -130,6 +143,8 @@ app.MapGet("/notes", async ([FromServices] NotesDbContext db) =>
     return TypedResults.Ok(notes);
 });
 
+app.MapAsyncApi();
+
 app.Run();
 
 namespace PlaygroundApi
@@ -159,6 +174,20 @@ namespace PlaygroundApi
         {
             logger.LogInformation("Received and will throw: {EventType} {Body} {Props}", message, JsonSerializer.Serialize(message), JsonSerializer.Serialize(properties));
             throw new NotImplementedException("this event will fail, so we can test retry strategy and dlx");
+        }
+    }
+
+    public class AddNoteCommandHandler(NotesDbContext dbContext, TimeProvider timeProvider, ILogger<AddNoteCommandHandler> logger) : IMessageHandler<AddNoteCommand>
+    {
+        public async Task HandleAsync(AddNoteCommand message, MessageProperties properties, CancellationToken cancellationToken)
+        {
+            dbContext.Notes.Add(new Note
+            {
+                Text = message.Text,
+                CreatedAt = timeProvider.GetUtcNow().DateTime,
+            });
+            await dbContext.SaveChangesAsync(cancellationToken);
+            logger.LogInformation("Received and handled: {EventType} {Body} {Props}", message, JsonSerializer.Serialize(message), JsonSerializer.Serialize(properties));
         }
     }
 }

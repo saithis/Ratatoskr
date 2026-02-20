@@ -35,12 +35,14 @@ public class RabbitMqAsyncApiBindingProvider(
         };
 
         // Add server reference to all RabbitMQ channels that have been added so far
+        var serverRef = AsyncApiReference.ToServer(ServerName);
         foreach (var channel in channels.Where(c => c.IsRabbitMqChannel()))
         {
             if (document.Channels.TryGetValue(channel.ChannelName, out var asyncApiChannel))
             {
                 asyncApiChannel.Servers ??= new List<AsyncApiReference>();
-                asyncApiChannel.Servers.Add(AsyncApiReference.ToServer(ServerName));
+                if (asyncApiChannel.Servers.All(s => s.Ref != serverRef.Ref))
+                    asyncApiChannel.Servers.Add(serverRef);
             }
         }
     }

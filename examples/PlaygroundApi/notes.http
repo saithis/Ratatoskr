@@ -24,3 +24,8 @@ Content-Type: application/json
 {
   "text":"This is my failure event"
 }
+
+
+### GET asyncapi.json
+GET http://localhost:5000/asyncapi.json
+

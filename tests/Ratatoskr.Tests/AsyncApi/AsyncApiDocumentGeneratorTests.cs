@@ -313,6 +313,27 @@ public class AsyncApiDocumentGeneratorTests
     }
 
     [Test]
+    public async Task Generate_PublishAndConsumeOnSameChannel_NoDuplicateServerRefs()
+    {
+        var generator = BuildGenerator(
+            bus => bus
+                .AddEventPublishChannel("events.topic", c => c
+                    .WithRabbitMq(r => r.WithTopicExchange())
+                    .Produces<OrderCreatedEvent>())
+                .AddEventConsumeChannel("events.topic", c => c
+                    .WithRabbitMq(r => r
+                        .WithQueueName("events.subscriptions"))
+                    .Consumes<OrderCreatedEvent>()),
+            rabbitMqOptions: new RabbitMqOptions { ConnectionString = new Uri("amqp://a:b@localhost/") });
+
+        var document = generator.Generate();
+
+        var channel = document.Channels["events.topic"];
+        await Assert.That(channel.Servers).IsNotNull();
+        await Assert.That(channel.Servers!.Count).IsEqualTo(1);
+    }
+
+    [Test]
     public async Task Generate_OperationTags_IncludedInOutput()
     {
         var generator = BuildGenerator(
