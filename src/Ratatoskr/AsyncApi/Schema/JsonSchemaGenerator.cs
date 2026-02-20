@@ -11,6 +11,8 @@ namespace Ratatoskr.AsyncApi.Schema;
 /// </summary>
 public class JsonSchemaGenerator
 {
+    private readonly NullabilityInfoContext _nullabilityContext = new();
+
     private static readonly HashSet<Type> _primitiveTypes = new()
     {
         typeof(bool),
@@ -86,21 +88,36 @@ public class JsonSchemaGenerator
 
     private JsonSchema BuildPropertySchema(PropertyInfo prop, Dictionary<string, JsonSchema> components)
     {
-        var schema = BuildTypeSchema(prop.PropertyType, components);
+        var schema = BuildTypeSchema(prop.PropertyType, components, prop);
         ApplyDataAnnotations(prop, schema);
         return schema;
     }
 
-    private JsonSchema BuildTypeSchema(Type type, Dictionary<string, JsonSchema> components)
+    private JsonSchema BuildTypeSchema(Type type, Dictionary<string, JsonSchema> components, PropertyInfo? propertyInfo = null)
     {
         var underlying = UnwrapNullable(type);
-        bool isNullable = underlying != type || IsReferenceTypeNullable(type);
+        bool isNullable = propertyInfo != null
+            ? IsPropertyNullable(propertyInfo)
+            : underlying != type || !type.IsValueType;
+
+        // Dictionaries (before enumerable check since Dictionary<,> implements IEnumerable<KeyValuePair<,>>)
+        if (TryGetDictionaryValueType(underlying, out var valueType))
+        {
+            var valueSchema = BuildTypeSchemaRef(valueType!, components);
+            var dictSchema = new JsonSchema { Type = "object", AdditionalProperties = valueSchema };
+            if (isNullable)
+                return new JsonSchema { OneOf = [dictSchema, new JsonSchema { Type = "null" }] };
+            return dictSchema;
+        }
 
         // Enumerables (except string)
         if (underlying != typeof(string) && TryGetEnumerableElementType(underlying, out var elementType))
         {
             var itemSchema = BuildTypeSchemaRef(elementType!, components);
-            return new JsonSchema { Type = "array", Items = itemSchema };
+            var arraySchema = new JsonSchema { Type = "array", Items = itemSchema };
+            if (isNullable)
+                return new JsonSchema { OneOf = [arraySchema, new JsonSchema { Type = "null" }] };
+            return arraySchema;
         }
 
         if (IsPrimitive(underlying))
@@ -195,10 +212,8 @@ public class JsonSchemaGenerator
 
         if (prop.GetCustomAttribute<RangeAttribute>() is { } range)
         {
-            if (range.Minimum is double minVal) schema.Minimum = minVal;
-            else if (range.Minimum is int minInt) schema.Minimum = minInt;
-            if (range.Maximum is double maxVal) schema.Maximum = maxVal;
-            else if (range.Maximum is int maxInt) schema.Maximum = maxInt;
+            if (range.Minimum is not null) schema.Minimum = Convert.ToDouble(range.Minimum);
+            if (range.Maximum is not null) schema.Maximum = Convert.ToDouble(range.Maximum);
         }
 
         if (prop.GetCustomAttribute<EmailAddressAttribute>() != null)
@@ -209,6 +224,36 @@ public class JsonSchemaGenerator
 
         if (prop.GetCustomAttribute<RegularExpressionAttribute>() is { } regex)
             schema.Pattern = regex.Pattern;
+    }
+
+    private static bool TryGetDictionaryValueType(Type type, out Type? valueType)
+    {
+        if (type.IsGenericType)
+        {
+            var def = type.GetGenericTypeDefinition();
+            if (def == typeof(Dictionary<,>) || def == typeof(IDictionary<,>) ||
+                def == typeof(IReadOnlyDictionary<,>))
+            {
+                valueType = type.GetGenericArguments()[1];
+                return true;
+            }
+        }
+
+        foreach (var iface in type.GetInterfaces())
+        {
+            if (iface.IsGenericType)
+            {
+                var def = iface.GetGenericTypeDefinition();
+                if (def == typeof(IDictionary<,>) || def == typeof(IReadOnlyDictionary<,>))
+                {
+                    valueType = iface.GetGenericArguments()[1];
+                    return true;
+                }
+            }
+        }
+
+        valueType = null;
+        return false;
     }
 
     private static bool TryGetEnumerableElementType(Type type, out Type? elementType)
@@ -256,7 +301,16 @@ public class JsonSchemaGenerator
 
     private static Type UnwrapNullable(Type type) => Nullable.GetUnderlyingType(type) ?? type;
 
-    private static bool IsReferenceTypeNullable(Type type) => !type.IsValueType;
+    private bool IsPropertyNullable(PropertyInfo prop)
+    {
+        var type = prop.PropertyType;
+        if (Nullable.GetUnderlyingType(type) != null)
+            return true;
+        if (type.IsValueType)
+            return false;
+        var info = _nullabilityContext.Create(prop);
+        return info.ReadState != NullabilityState.NotNull;
+    }
 
     private static string GetSchemaName(Type type)
     {

@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Ratatoskr.AsyncApi.Attributes;
 using Ratatoskr.AsyncApi.Config;
 using Ratatoskr.AsyncApi.Extensions;
@@ -21,6 +22,8 @@ public class AsyncApiDocumentGenerator(
     IEnumerable<IAsyncApiTransportBindingProvider> bindingProviders)
 {
     private readonly JsonSchemaGenerator _schemaGenerator = new();
+    private static readonly Regex SentenceCasePattern =
+        new(@"(?<=[a-z])([A-Z])|(?<=[A-Z])([A-Z][a-z])", RegexOptions.Compiled);
 
     public AsyncApiDocument Generate()
     {
@@ -223,12 +226,8 @@ public class AsyncApiDocumentGenerator(
             {
                 group.Messages.Add(msg);
 
-                // Merge: first non-null value wins
-                if (opOpts != null && group.Opts != null)
-                {
-                    // Keep existing group opts, they already have first-wins values
-                }
-                else if (opOpts != null)
+                // Merge: keep first non-null opts
+                if (opOpts != null && group.Opts == null)
                 {
                     groups[operationId] = (opOpts, group.Messages);
                 }
@@ -281,10 +280,6 @@ public class AsyncApiDocumentGenerator(
             ? "send"
             : "receive";
 
-    private static string SentenceCaseName(string typeName)
-    {
-        // "NoteAddedEvent" → "Note Added Event"
-        var result = System.Text.RegularExpressions.Regex.Replace(typeName, "([A-Z])", " $1").Trim();
-        return result;
-    }
+    private static string SentenceCaseName(string typeName) =>
+        SentenceCasePattern.Replace(typeName, " $1$2").Trim();
 }

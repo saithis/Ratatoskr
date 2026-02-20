@@ -153,10 +153,7 @@
             "format": "uuid"
           },
           "type": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "maxLength": 50
           },
           "userId": {
@@ -167,10 +164,7 @@
             "maxLength": 100
           },
           "tenantId": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string"
           },
           "revokedAt": {
             "type": "string",
@@ -191,10 +185,7 @@
         ],
         "properties": {
           "userId": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string"
           },
           "addedRoles": {
             "type": "array",
@@ -232,10 +223,7 @@
         ],
         "properties": {
           "roleInternalName": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "maxLength": 100
           },
           "assignmentLevel": {

@@ -6,8 +6,13 @@ namespace Ratatoskr.AsyncApi.Config;
 /// </summary>
 public class AsyncApiMessageOptions
 {
+    /// <summary>Optional title for the message in the AsyncAPI document.</summary>
     public string? Title { get; private set; }
+
+    /// <summary>Optional short summary of the message.</summary>
     public string? Summary { get; private set; }
+
+    /// <summary>Optional detailed description of the message.</summary>
     public string? Description { get; private set; }
 
     /// <summary>
@@ -16,24 +21,28 @@ public class AsyncApiMessageOptions
     /// </summary>
     public string? Version { get; private set; }
 
+    /// <summary>Sets the message title and returns this instance for chaining.</summary>
     public AsyncApiMessageOptions WithTitle(string title)
     {
         Title = title;
         return this;
     }
 
+    /// <summary>Sets the message summary and returns this instance for chaining.</summary>
     public AsyncApiMessageOptions WithSummary(string summary)
     {
         Summary = summary;
         return this;
     }
 
+    /// <summary>Sets the message description and returns this instance for chaining.</summary>
     public AsyncApiMessageOptions WithDescription(string description)
     {
         Description = description;
         return this;
     }
 
+    /// <summary>Sets the EventCatalog message version and returns this instance for chaining.</summary>
     public AsyncApiMessageOptions WithVersion(string version)
     {
         Version = version;
@@ -55,6 +64,7 @@ public class AsyncApiMessageOptions
     /// </summary>
     public AsyncApiMessageOptions WithOperation(Action<AsyncApiOperationOptions> configure)
     {
+        ArgumentNullException.ThrowIfNull(configure);
         Operation = new AsyncApiOperationOptions();
         configure(Operation);
         return this;

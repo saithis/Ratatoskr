@@ -46,6 +46,10 @@ public class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposab
     
     private ConnectionFactory CreateConnectionFactory()
     {
+        if (options.ConnectionString is null)
+            throw new InvalidOperationException(
+                "RabbitMQ connection string is not configured. Set RabbitMqOptions.ConnectionString.");
+
         return new ConnectionFactory { Uri = options.ConnectionString };
     }
     

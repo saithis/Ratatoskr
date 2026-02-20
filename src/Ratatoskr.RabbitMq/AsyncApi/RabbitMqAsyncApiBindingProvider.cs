@@ -21,6 +21,10 @@ public class RabbitMqAsyncApiBindingProvider(
 
     public void ConfigureServers(AsyncApiDocument document, IEnumerable<ChannelRegistration> channels)
     {
+        if (rabbitMqOptions.ConnectionString is null)
+            throw new InvalidOperationException(
+                "RabbitMQ connection string is not configured. Set RabbitMqOptions.ConnectionString.");
+
         document.Servers ??= new Dictionary<string, AsyncApiServer>();
 
         document.Servers[ServerName] = new AsyncApiServer
@@ -56,14 +60,14 @@ public class RabbitMqAsyncApiBindingProvider(
         {
             Amqp = new AmqpChannelBinding
             {
-                Is = "routingKey",
+                Is = AmqpChannelType.RoutingKey,
                 Exchange = new AmqpExchangeDefinition
                 {
                     Name = channel.ChannelName,
-                    Type = channelOpts.ExchangeType,
+                    Type = Enum.TryParse<AmqpExchangeType>(channelOpts.ExchangeType, ignoreCase: true, out var exchangeType) ? exchangeType : null,
                     Durable = channelOpts.Durable,
                     AutoDelete = channelOpts.AutoDelete,
-                    VHost = rabbitMqOptions.ConnectionString.AbsolutePath,
+                    VHost = NormalizeVHost(),
                 },
             },
         };
@@ -83,7 +87,7 @@ public class RabbitMqAsyncApiBindingProvider(
 
         var binding = new AmqpOperationBinding
         {
-            DeliveryMode = 2, // persistent
+            DeliveryMode = AmqpDeliveryMode.Persistent,
             Mandatory = false,
             Timestamp = true,
         };
@@ -214,19 +218,29 @@ public class RabbitMqAsyncApiBindingProvider(
             {
                 Amqp = new AmqpChannelBinding
                 {
-                    Is = "queue",
+                    Is = AmqpChannelType.Queue,
                     Queue = new AmqpQueueDefinition
                     {
                         Name = queueName,
                         Durable = consumerOpts.Durable,
                         Exclusive = consumerOpts.Exclusive,
                         AutoDelete = consumerOpts.AutoDelete,
-                        VHost = "/",
+                        VHost = NormalizeVHost(),
                     },
                 },
             },
         };
 
         document.Channels[queueName] = queueChannel;
+    }
+
+    private string NormalizeVHost()
+    {
+        if (rabbitMqOptions.ConnectionString is null)
+            throw new InvalidOperationException(
+                "RabbitMQ connection string is not configured. Set RabbitMqOptions.ConnectionString.");
+
+        var path = rabbitMqOptions.ConnectionString.AbsolutePath.TrimStart('/');
+        return string.IsNullOrEmpty(path) ? "/" : path;
     }
 }

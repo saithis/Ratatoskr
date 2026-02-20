@@ -42,8 +42,8 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// No-op binding provider used as a fallback when no transport-specific provider is registered.
-    /// Ensures <c>IEnumerable&lt;IAsyncApiTransportBindingProvider&gt;</c> always resolves.
+    /// No-op binding provider registered as a default sentinel.
+    /// Has no effect at runtime; exists so that transport providers remain optional.
     /// </summary>
     private sealed class NullTransportBindingProvider : IAsyncApiTransportBindingProvider
     {

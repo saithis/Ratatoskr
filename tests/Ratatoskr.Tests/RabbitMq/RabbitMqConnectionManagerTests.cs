@@ -16,8 +16,8 @@ public class RabbitMqConnectionManagerTests(RabbitMqContainerFixture rabbitMq)
         {
             ConnectionString = new Uri(rabbitMq.ConnectionString)
         };
-        var manager = new RabbitMqConnectionManager(options);
-        
+        await using var manager = new RabbitMqConnectionManager(options);
+
         // Act
         await using var channel1 = await manager.CreateChannelAsync(enablePublisherConfirms: false);
         await using var channel2 = await manager.CreateChannelAsync(enablePublisherConfirms: false);
@@ -35,8 +35,8 @@ public class RabbitMqConnectionManagerTests(RabbitMqContainerFixture rabbitMq)
         {
             ConnectionString = new Uri(rabbitMq.ConnectionString)
         };
-        var manager = new RabbitMqConnectionManager(options);
-        
+        await using var manager = new RabbitMqConnectionManager(options);
+
         // Act
         await using var channel = await manager.CreateChannelAsync(enablePublisherConfirms: true);
         
@@ -62,11 +62,11 @@ public class RabbitMqConnectionManagerTests(RabbitMqContainerFixture rabbitMq)
         {
             ConnectionString = new Uri(rabbitMq.ConnectionString)
         };
-        var manager = new RabbitMqConnectionManager(options);
-        
+        await using var manager = new RabbitMqConnectionManager(options);
+
         // Act
         await using var channel = await manager.CreateChannelAsync(enablePublisherConfirms: false);
-        
+
         // Assert
         channel.IsOpen.Should().BeTrue();
     }

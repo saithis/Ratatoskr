@@ -36,6 +36,13 @@ public class AmqpOperationBinding
     public List<string>? Cc { get; set; }
 
     /// <summary>
+    /// Like cc but consumers will not receive this information.
+    /// </summary>
+    [JsonPropertyName("bcc")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? Bcc { get; set; }
+
+    /// <summary>
     /// A priority for the message.
     /// </summary>
     [JsonPropertyName("priority")]
@@ -47,7 +54,7 @@ public class AmqpOperationBinding
     /// </summary>
     [JsonPropertyName("deliveryMode")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? DeliveryMode { get; set; }
+    public AmqpDeliveryMode? DeliveryMode { get; set; }
 
     /// <summary>
     /// Whether the message is mandatory or not.
@@ -75,4 +82,16 @@ public class AmqpOperationBinding
     /// </summary>
     [JsonPropertyName("bindingVersion")]
     public string BindingVersion { get; set; } = "0.3.0";
+}
+
+/// <summary>
+/// AMQP delivery mode. Transient (1) or persistent (2).
+/// </summary>
+public enum AmqpDeliveryMode
+{
+    /// <summary>Transient delivery mode (1). Messages may be lost on broker restart.</summary>
+    Transient = 1,
+
+    /// <summary>Persistent delivery mode (2). Messages survive broker restarts.</summary>
+    Persistent = 2,
 }

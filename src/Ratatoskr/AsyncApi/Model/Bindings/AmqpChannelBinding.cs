@@ -18,7 +18,7 @@ public class AmqpChannelBinding
     /// Defines what type of channel is it. Can be either <c>queue</c> or <c>routingKey</c> (default).
     /// </summary>
     [JsonPropertyName("is")]
-    public string Is { get; set; } = "routingKey";
+    public AmqpChannelType Is { get; set; } = AmqpChannelType.RoutingKey;
 
     /// <summary>
     /// When <c>is</c>=<c>routingKey</c>, this object defines the exchange properties.
@@ -55,7 +55,7 @@ public class AmqpExchangeDefinition
     /// </summary>
     [JsonPropertyName("type")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? Type { get; set; }
+    public AmqpExchangeType? Type { get; set; }
 
     /// <summary>
     /// Whether the exchange should survive broker restarts or not.
@@ -115,4 +115,46 @@ public class AmqpQueueDefinition
     [JsonPropertyName("vhost")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? VHost { get; set; }
+}
+
+/// <summary>
+/// AMQP channel type. Can be either <c>queue</c> or <c>routingKey</c>.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<AmqpChannelType>))]
+public enum AmqpChannelType
+{
+    /// <summary>Channel represents a queue.</summary>
+    [JsonStringEnumMemberName("queue")]
+    Queue,
+
+    /// <summary>Channel represents a routing key (exchange-based).</summary>
+    [JsonStringEnumMemberName("routingKey")]
+    RoutingKey,
+}
+
+/// <summary>
+/// AMQP exchange type.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<AmqpExchangeType>))]
+public enum AmqpExchangeType
+{
+    /// <summary>Topic exchange with pattern-based routing.</summary>
+    [JsonStringEnumMemberName("topic")]
+    Topic,
+
+    /// <summary>Direct exchange with exact routing key matching.</summary>
+    [JsonStringEnumMemberName("direct")]
+    Direct,
+
+    /// <summary>Fanout exchange that broadcasts to all bound queues.</summary>
+    [JsonStringEnumMemberName("fanout")]
+    Fanout,
+
+    /// <summary>The default (nameless) exchange.</summary>
+    [JsonStringEnumMemberName("default")]
+    Default,
+
+    /// <summary>Headers exchange that routes based on message headers.</summary>
+    [JsonStringEnumMemberName("headers")]
+    Headers,
 }

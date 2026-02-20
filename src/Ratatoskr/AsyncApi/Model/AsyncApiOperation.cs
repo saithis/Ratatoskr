@@ -10,7 +10,8 @@ public class AsyncApiOperation
     public string Action { get; set; } = "send";
 
     [JsonPropertyName("channel")]
-    public AsyncApiReference Channel { get; set; } = new("");
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public AsyncApiReference? Channel { get; set; }
 
     [JsonPropertyName("title")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

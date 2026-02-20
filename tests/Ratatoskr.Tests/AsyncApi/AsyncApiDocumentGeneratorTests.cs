@@ -5,6 +5,7 @@ using Ratatoskr.AsyncApi.Config;
 using Ratatoskr.AsyncApi.Extensions;
 using Ratatoskr.AsyncApi.Generation;
 using Ratatoskr.AsyncApi.Model;
+using Ratatoskr.AsyncApi.Model.Bindings;
 using Ratatoskr.CloudEvents;
 using Ratatoskr.RabbitMq;
 using Ratatoskr.RabbitMq.AsyncApi;
@@ -213,7 +214,7 @@ public class AsyncApiDocumentGeneratorTests
         await Assert.That(document.Channels).ContainsKey("apikey.subscriptions");
 
         var queueChannel = document.Channels["apikey.subscriptions"];
-        await Assert.That(queueChannel.Bindings!.Amqp!.Is).IsEqualTo("queue");
+        await Assert.That(queueChannel.Bindings!.Amqp!.Is).IsEqualTo(AmqpChannelType.Queue);
         await Assert.That(queueChannel.Bindings.Amqp.Queue!.Name).IsEqualTo("apikey.subscriptions");
     }
 
