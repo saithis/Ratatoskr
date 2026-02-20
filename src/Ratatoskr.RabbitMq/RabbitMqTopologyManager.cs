@@ -23,18 +23,18 @@ public class RabbitMqTopologyManager(
         try
         {
             await using var channel = await connectionManager.CreateChannelAsync(true, cancellationToken);
-    
+
             // Publish channels first, to make sure they are declared if consume channels want to bind to them
             foreach (var reg in registry.GetPublishChannels())
             {
                 await ProvisionChannelAsync(channel, reg, cancellationToken);
             }
-            
+
             foreach (var reg in registry.GetConsumeChannels())
             {
                 await ProvisionChannelAsync(channel, reg, cancellationToken);
             }
-            
+
             _provisioningTcs.TrySetResult();
         }
         catch (Exception ex)
@@ -47,7 +47,7 @@ public class RabbitMqTopologyManager(
     private async Task ProvisionChannelAsync(IChannel channel, ChannelRegistration reg, CancellationToken token)
     {
         var channelOpts = reg.GetRabbitMqChannelOptions()
-                          ?? new RabbitMqChannelOptions(); // Default to Topic if missing?
+                          ?? new RabbitMqChannelOptions();
 
         // 1. Exchange Logic
         if (reg.Intent == ChannelType.EventPublish || reg.Intent == ChannelType.CommandConsume)
@@ -55,54 +55,52 @@ public class RabbitMqTopologyManager(
             // We OWN the exchange -> Declare it
             logger.LogInformation("Declaring exchange '{Exchange}' Type: {Type}", reg.ChannelName, channelOpts.ExchangeType);
             await channel.ExchangeDeclareAsync(
-                exchange: reg.ChannelName, 
-                type: channelOpts.ExchangeType, 
-                durable: channelOpts.Durable, 
-                autoDelete: channelOpts.AutoDelete, 
-                arguments: null, 
+                exchange: reg.ChannelName,
+                type: channelOpts.ExchangeType.ToRabbitMqString(),
+                durable: channelOpts.ExchangeDurable,
+                autoDelete: channelOpts.ExchangeAutoDelete,
+                arguments: null,
                 cancellationToken: token);
         }
         else
         {
             // We EXPECT the exchange -> Validate it (Passive Declare)
             logger.LogInformation("Validating exchange '{Exchange}' exists", reg.ChannelName);
-            try 
+            try
             {
                 await channel.ExchangeDeclarePassiveAsync(reg.ChannelName, token);
             }
             catch (Exception ex)
             {
                 logger.LogCritical(ex, "Exchange '{Exchange}' validation failed. It must exist for intent {Intent}.", reg.ChannelName, reg.Intent);
-                throw; 
+                throw;
             }
         }
 
         if (reg.Intent == ChannelType.CommandConsume || reg.Intent == ChannelType.EventConsume)
         {
-            var consumerOpts = reg.GetRabbitMqConsumerOptions();
-            
-            string queueName = consumerOpts?.QueueName ?? throw new InvalidOperationException($"Queue name must be specified for consumer channel '{reg.ChannelName}'");
-            
-            IDictionary<string, object?> queueArgs = new Dictionary<string, object?>(consumerOpts.QueueArguments);
-            if (consumerOpts.QueueType == QueueType.Quorum)
+            string queueName = channelOpts.QueueName ?? throw new InvalidOperationException($"Queue name must be specified for consumer channel '{reg.ChannelName}'");
+
+            IDictionary<string, object?> queueArgs = new Dictionary<string, object?>(channelOpts.QueueArguments);
+            if (channelOpts.QueueType == QueueType.Quorum)
             {
                 queueArgs["x-queue-type"] = "quorum";
             }
 
-            if (consumerOpts.UseManagedRetryTopology)
+            if (channelOpts.Retry.UseManaged)
             {
-                var dlqName = $"{queueName}{consumerOpts.DeadLetterQueueSuffix}";
-                var retryQueueName = $"{queueName}{consumerOpts.RetryQueueSuffix}";
+                var dlqName = $"{queueName}{channelOpts.Retry.DeadLetterSuffix}";
+                var retryQueueName = $"{queueName}{channelOpts.Retry.RetrySuffix}";
 
                 logger.LogInformation("Provisioning retry topology for queue '{Queue}' (DLQ: {Dlq}, Retry: {Retry})", queueName, dlqName, retryQueueName);
 
                 // 1. Declare DLQ Exchange (Fanout)
                 await channel.ExchangeDeclareAsync(
-                    exchange: dlqName, 
-                    type: ExchangeType.Fanout, 
-                    durable: true, 
-                    autoDelete: false, 
-                    arguments: null, 
+                    exchange: dlqName,
+                    type: RabbitMQ.Client.ExchangeType.Fanout,
+                    durable: true,
+                    autoDelete: false,
+                    arguments: null,
                     cancellationToken: token);
 
                 // 2. Declare DLQ Queue
@@ -116,7 +114,7 @@ public class RabbitMqTopologyManager(
                     autoDelete: false,
                     arguments: dlqArgs, // Use same type/args as main queue
                     cancellationToken: token);
-                
+
                 // 3. Bind DLQ Queue to DLQ Exchange
                 await channel.QueueBindAsync(
                     queue: dlqName,
@@ -129,9 +127,9 @@ public class RabbitMqTopologyManager(
                 {
                     ["x-dead-letter-exchange"] = "",
                     ["x-dead-letter-routing-key"] = queueName,
-                    ["x-message-ttl"] = (long)consumerOpts.RetryDelay.TotalMilliseconds
+                    ["x-message-ttl"] = (long)channelOpts.Retry.Delay.TotalMilliseconds
                 };
-                
+
                 await channel.QueueDeclareAsync(
                     queue: retryQueueName,
                     durable: true,
@@ -146,12 +144,12 @@ public class RabbitMqTopologyManager(
             }
 
             logger.LogInformation("Declaring queue '{Queue}' for channel '{Channel}'", queueName, reg.ChannelName);
-            
+
             await channel.QueueDeclareAsync(
                 queue: queueName,
-                durable: consumerOpts.Durable,
-                exclusive: consumerOpts.Exclusive,
-                autoDelete: consumerOpts.AutoDelete,
+                durable: channelOpts.QueueDurable,
+                exclusive: channelOpts.QueueExclusive,
+                autoDelete: channelOpts.QueueAutoDelete,
                 arguments: queueArgs,
                 cancellationToken: token);
 
@@ -159,16 +157,16 @@ public class RabbitMqTopologyManager(
             foreach (var msg in reg.Messages)
             {
                 var msgOpts = msg.GetRabbitMqOptions();
-                
+
                 string routingKey = msgOpts?.RoutingKey ?? msg.MessageTypeName;
-                
+
                 logger.LogInformation("Binding queue '{Queue}' to exchange '{Exchange}' with key '{Key}'", queueName, reg.ChannelName, routingKey);
-                
+
                 await channel.QueueBindAsync(
-                    queue: queueName, 
-                    exchange: reg.ChannelName, 
-                    routingKey: routingKey, 
-                    arguments: null, 
+                    queue: queueName,
+                    exchange: reg.ChannelName,
+                    routingKey: routingKey,
+                    arguments: null,
                     cancellationToken: token);
             }
         }

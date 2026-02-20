@@ -19,13 +19,13 @@ internal class RabbitMqRetryHandler(ILogger<RabbitMqRetryHandler> logger)
     public async Task HandleFailureAsync(
         IChannel channel,
         BasicDeliverEventArgs ea,
-        RabbitMqConsumerOptions config, 
+        RabbitMqChannelOptions config,
         string queueName,
         DispatchResult result,
         CancellationToken cancellationToken)
     {
         var messageId = ea.BasicProperties.MessageId ?? "unknown";
-        
+
         // Permanent errors go straight to DLQ
         if (result == DispatchResult.PermanentError || result == DispatchResult.NoHandlers)
         {
@@ -33,27 +33,27 @@ internal class RabbitMqRetryHandler(ILogger<RabbitMqRetryHandler> logger)
             await RejectToDlqAsync(channel, ea, config, queueName, cancellationToken);
             return;
         }
-        
+
         // Check retry count
         var retryCount = GetRetryCount(ea.BasicProperties.Headers);
-        
-        if (retryCount >= config.MaxRetries)
+
+        if (retryCount >= config.Retry.MaxRetries)
         {
             logger.LogError(
                 "Message '{MessageId}' exceeded max retries ({MaxRetries}), sending to DLQ",
-                messageId, config.MaxRetries);
+                messageId, config.Retry.MaxRetries);
             await RejectToDlqAsync(channel, ea, config, queueName, cancellationToken);
         }
         else
         {
             logger.LogInformation(
                 "Message '{MessageId}' will be retried (attempt {RetryCount}/{MaxRetries})",
-                messageId, retryCount + 1, config.MaxRetries);
-            
+                messageId, retryCount + 1, config.Retry.MaxRetries);
+
             var (destinationName, routingKey) = RabbitMqHeaderHelper.GetOriginalDestinationFromHeaders(ea.BasicProperties.Headers);
             destinationName ??= ea.Exchange;
             routingKey ??= ea.RoutingKey;
-                
+
             var tags = new TagList
             {
                 { "messaging.system", "rabbitmq" },
@@ -67,18 +67,18 @@ internal class RabbitMqRetryHandler(ILogger<RabbitMqRetryHandler> logger)
             await channel.BasicNackAsync(ea.DeliveryTag, false, false, cancellationToken);
         }
     }
-    
+
     private async Task RejectToDlqAsync(
         IChannel channel,
         BasicDeliverEventArgs ea,
-        RabbitMqConsumerOptions config,
+        RabbitMqChannelOptions config,
         string queueName,
         CancellationToken cancellationToken)
     {
         var (destinationName, routingKey) = RabbitMqHeaderHelper.GetOriginalDestinationFromHeaders(ea.BasicProperties.Headers);
         destinationName ??= ea.Exchange;
         routingKey ??= ea.RoutingKey;
-            
+
         var tags = new TagList
         {
             { "messaging.system", "rabbitmq" },
@@ -89,10 +89,10 @@ internal class RabbitMqRetryHandler(ILogger<RabbitMqRetryHandler> logger)
         RatatoskrDiagnostics.DeadLetterMessages.Add(1, tags);
 
         // Need to manually publish to DLQ since we can't conditionally route via DLX
-        if (config.UseManagedRetryTopology)
+        if (config.Retry.UseManaged)
         {
-            var dlqName = $"{queueName}{config.DeadLetterQueueSuffix}";
-            
+            var dlqName = $"{queueName}{config.Retry.DeadLetterSuffix}";
+
             // Copy properties and add metadata about failure
             var props = new BasicProperties
             {
@@ -102,10 +102,10 @@ internal class RabbitMqRetryHandler(ILogger<RabbitMqRetryHandler> logger)
                 Type = ea.BasicProperties.Type,
                 Headers = new Dictionary<string, object?>(ea.BasicProperties.Headers ?? new Dictionary<string, object?>())
             };
-            
+
             props.Headers["x-original-queue"] = queueName;
             props.Headers["x-failure-time"] = DateTimeOffset.UtcNow.ToString("O");
-            
+
             // Publish to DLQ Exchange
             await channel.BasicPublishAsync(
                 exchange: dlqName, // Publish to the DLQ Exchange (Fanout)
@@ -114,7 +114,7 @@ internal class RabbitMqRetryHandler(ILogger<RabbitMqRetryHandler> logger)
                 basicProperties: props,
                 body: ea.Body,
                 cancellationToken: cancellationToken);
-            
+
             // ACK original message
             await channel.BasicAckAsync(ea.DeliveryTag, false, cancellationToken);
         }
@@ -124,11 +124,11 @@ internal class RabbitMqRetryHandler(ILogger<RabbitMqRetryHandler> logger)
             await channel.BasicNackAsync(ea.DeliveryTag, false, false, cancellationToken);
         }
     }
-    
+
     private static int GetRetryCount(IDictionary<string, object?>? headers)
     {
         if (headers == null) return 0;
-        
+
         // Use x-death header to track retry attempts (automatically managed by RabbitMQ DLX)
         if (headers.TryGetValue("x-death", out var xDeathObj) && xDeathObj is System.Collections.IEnumerable xDeathList)
         {
@@ -137,7 +137,7 @@ internal class RabbitMqRetryHandler(ILogger<RabbitMqRetryHandler> logger)
             {
                 if (entryObj is IDictionary<string, object> entry)
                 {
-                    if (entry.TryGetValue("count", out var countObj) && 
+                    if (entry.TryGetValue("count", out var countObj) &&
                         entry.TryGetValue("reason", out var reasonObj))
                     {
                         var reason = RabbitMqHeaderHelper.ConvertHeaderToString(reasonObj);
@@ -150,7 +150,7 @@ internal class RabbitMqRetryHandler(ILogger<RabbitMqRetryHandler> logger)
             }
             return (int)totalCount;
         }
-        
+
         return 0;
     }
 }

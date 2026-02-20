@@ -31,7 +31,6 @@ builder.Services.AddRatatoskr(bus =>
         .UseRabbitMq(c =>
         {
             c.ConnectionString = new Uri(rabbitMqConnectionString);
-            c.DefaultExchange = "events.topic"; // Use topic exchange for event routing
         });
     
     bus.AddEfCoreOutbox<NotesDbContext>();
@@ -42,16 +41,13 @@ builder.Services.AddRatatoskr(bus =>
     
     bus
         .AddEventPublishChannel("events.topic", c => c
-            .WithRabbitMq(r =>
-            {
-                r.ExchangeTypeTopic();
-            })
+            .WithRabbitMq(r => r.WithTopicExchange())
             .Produces<NoteAddedEvent>()
             .Produces<NoteDto>(m => m.WithType("notes"))
             .Produces<FailEvent>());
     
     bus.AddEventConsumeChannel("events.topic", c =>
-        c.WithRabbitMqConsumer(r => r.WithQueueName("events.subscriptions")) //TODO: require queue name in consumer
+        c.WithRabbitMq(r => r.WithQueueName("events.subscriptions"))
             .Consumes<NoteDto>(m => m.WithType("notes"))
             .Consumes<NoteAddedEvent>()
             .Consumes<FailEvent>());

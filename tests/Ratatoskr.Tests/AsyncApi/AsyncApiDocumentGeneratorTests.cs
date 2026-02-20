@@ -60,14 +60,14 @@ public class AsyncApiDocumentGeneratorTests
                     .WithAsyncApi(a => a
                         .WithDescription("Channel for API key related events.")
                         .WithOperation(o => o.WithDescription("Publishes API key lifecycle events.")))
-                    .WithRabbitMq(r => r.ExchangeTypeTopic())
+                    .WithRabbitMq(r => r.WithTopicExchange())
                     .Produces<ApiKeyRevokedEvent>())
                 .AddEventConsumeChannel("user.events", c => c
                     .WithAsyncApi(a => a
                         .WithDescription("Channel for authorization events owned by the user service."))
                     .WithRabbitMq(r => r
-                        .ExchangeType("fanout")
-                        .QueueName("apikey.subscriptions"))
+                        .WithFanoutExchange()
+                        .WithQueueName("apikey.subscriptions"))
                     .Consumes<UserRolesChangedEvent>(m => m
                         .WithAsyncApi(a => a
                             .WithVersion("2.0.0")))),
@@ -87,7 +87,7 @@ public class AsyncApiDocumentGeneratorTests
         var generator = BuildGenerator(
             bus => bus
                 .AddEventPublishChannel("orders.events", c => c
-                    .WithRabbitMq(r => r.ExchangeTypeTopic())
+                    .WithRabbitMq(r => r.WithTopicExchange())
                     .Produces<OrderCreatedEvent>()),
             rabbitMqOptions: new RabbitMqOptions { ConnectionString = new Uri("amqp://a:b@localhost/") },
             contentMode: CloudEventsContentMode.Structured);
@@ -146,7 +146,7 @@ public class AsyncApiDocumentGeneratorTests
         var generator = BuildGenerator(
             bus => bus
                 .AddEventConsumeChannel("user.events", c => c
-                    .WithRabbitMq(r => r.QueueName("my.queue"))
+                    .WithRabbitMq(r => r.WithQueueName("my.queue"))
                     .Consumes<UserRolesChangedEvent>()),
             rabbitMqOptions: new RabbitMqOptions { ConnectionString = new Uri("amqp://a:b@localhost/") });
 
@@ -203,8 +203,8 @@ public class AsyncApiDocumentGeneratorTests
             bus => bus
                 .AddEventConsumeChannel("user.events", c => c
                     .WithRabbitMq(r => r
-                        .ExchangeType("fanout")
-                        .QueueName("apikey.subscriptions"))
+                        .WithFanoutExchange()
+                        .WithQueueName("apikey.subscriptions"))
                     .Consumes<UserRolesChangedEvent>()),
             rabbitMqOptions: new RabbitMqOptions { ConnectionString = new Uri("amqp://a:b@localhost/") });
 

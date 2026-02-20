@@ -10,8 +10,8 @@ namespace Ratatoskr.RabbitMq.AsyncApi;
 
 /// <summary>
 /// Adds AMQP/RabbitMQ-specific bindings to the AsyncAPI document.
-/// Reads configuration from <see cref="RabbitMqOptions"/>, <see cref="RabbitMqChannelOptions"/>,
-/// and <see cref="RabbitMqConsumerOptions"/> already registered on each channel.
+/// Reads configuration from <see cref="RabbitMqOptions"/> and <see cref="RabbitMqChannelOptions"/>
+/// already registered on each channel.
 /// </summary>
 public class RabbitMqAsyncApiBindingProvider(
     RabbitMqOptions rabbitMqOptions,
@@ -64,19 +64,18 @@ public class RabbitMqAsyncApiBindingProvider(
                 Exchange = new AmqpExchangeDefinition
                 {
                     Name = channel.ChannelName,
-                    Type = Enum.TryParse<AmqpExchangeType>(channelOpts.ExchangeType, ignoreCase: true, out var exchangeType) ? exchangeType : null,
-                    Durable = channelOpts.Durable,
-                    AutoDelete = channelOpts.AutoDelete,
+                    Type = channelOpts.ExchangeType.ToAmqpExchangeType(),
+                    Durable = channelOpts.ExchangeDurable,
+                    AutoDelete = channelOpts.ExchangeAutoDelete,
                     VHost = NormalizeVHost(),
                 },
             },
         };
 
         // For consumer channels, also add the subscription queue as a separate channel
-        var consumerOpts = channel.GetRabbitMqConsumerOptions();
-        if (consumerOpts?.QueueName != null)
+        if (channelOpts.QueueName != null)
         {
-            AddQueueChannel(channel, consumerOpts, document);
+            AddQueueChannel(channel, channelOpts, document);
         }
     }
 
@@ -102,9 +101,9 @@ public class RabbitMqAsyncApiBindingProvider(
             binding.Cc = routingKeys;
 
         // Consumer-specific: acknowledge mode
-        var consumerOpts = channel.GetRabbitMqConsumerOptions();
-        if (consumerOpts != null)
-            binding.Ack = !consumerOpts.AutoAck;
+        var channelOpts = channel.GetRabbitMqChannelOptions();
+        if (channelOpts != null)
+            binding.Ack = !channelOpts.AutoAck;
 
         operation.Bindings = new OperationBindings { Amqp = binding };
     }
@@ -200,10 +199,10 @@ public class RabbitMqAsyncApiBindingProvider(
 
     private void AddQueueChannel(
         ChannelRegistration channel,
-        RabbitMqConsumerOptions consumerOpts,
+        RabbitMqChannelOptions channelOpts,
         AsyncApiDocument document)
     {
-        var queueName = consumerOpts.QueueName!;
+        var queueName = channelOpts.QueueName!;
 
         // Don't add if already present (e.g. multiple messages on same channel)
         if (document.Channels.ContainsKey(queueName))
@@ -222,9 +221,9 @@ public class RabbitMqAsyncApiBindingProvider(
                     Queue = new AmqpQueueDefinition
                     {
                         Name = queueName,
-                        Durable = consumerOpts.Durable,
-                        Exclusive = consumerOpts.Exclusive,
-                        AutoDelete = consumerOpts.AutoDelete,
+                        Durable = channelOpts.QueueDurable,
+                        Exclusive = channelOpts.QueueExclusive,
+                        AutoDelete = channelOpts.QueueAutoDelete,
                         VHost = NormalizeVHost(),
                     },
                 },

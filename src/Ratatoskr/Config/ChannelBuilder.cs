@@ -6,13 +6,14 @@ namespace Ratatoskr.Config;
 public class ChannelBuilder(ChannelRegistration channel)
 {
     internal ChannelRegistration Channel => channel;
-    
+
     /// <summary>
-    /// Configures transport-specific options for this channel.
+    /// Sets a typed extension on the channel registration.
+    /// Used by transport providers to attach transport-specific configuration.
     /// </summary>
-    public ChannelBuilder WithMetadata(string key, object value)
+    public ChannelBuilder WithExtension<T>(T value) where T : class
     {
-        channel.Metadata[key] = value;
+        channel.SetExtension(value);
         return this;
     }
 
@@ -31,16 +32,6 @@ public class ChannelBuilder(ChannelRegistration channel)
         return this;
     }
 
-    /// <summary>
-    /// Alias for Produces, typically used for CommandPublish channels.
-    /// </summary>
-    public ChannelBuilder Sends<T>(Action<MessageBuilder>? configure = null)
-    {
-        ValidateIntent(ChannelType.CommandPublish);
-        AddMessage<T>(configure);
-        return this;
-    }
-
     #endregion
 
     #region Consumers (CommandConsume / EventConsume)
@@ -55,16 +46,16 @@ public class ChannelBuilder(ChannelRegistration channel)
         AddMessage<T>(configure);
         return this;
     }
-    
+
     #endregion
 
     private void AddMessage<T>(Action<MessageBuilder>? configure, string? typeName = null)
     {
         var type = typeof(T);
         typeName ??= GetMessageTypeName(type);
-        
+
         var registration = new MessageRegistration(type, typeName);
-        
+
         if (configure != null)
         {
             var builder = new MessageBuilder(registration);

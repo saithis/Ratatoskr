@@ -13,9 +13,23 @@ public class RatatoskrBuilder
     internal AsyncApiOptions AsyncApiOptions { get; } = new();
     internal ChannelRegistry ChannelRegistry { get; } = new();
     
+    private readonly List<Action<ChannelRegistry>> _validators = new();
+
     internal RatatoskrBuilder(IServiceCollection services)
     {
         Services = services;
+    }
+
+    /// <summary>
+    /// Registers a validation callback that runs after all channels are configured.
+    /// Used by transport providers to add transport-specific validation rules.
+    /// </summary>
+    internal void AddValidator(Action<ChannelRegistry> validator) => _validators.Add(validator);
+
+    internal void Validate()
+    {
+        foreach (var validator in _validators)
+            validator(ChannelRegistry);
     }
     
     #region New Channel Config

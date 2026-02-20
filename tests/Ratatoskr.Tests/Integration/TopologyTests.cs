@@ -25,7 +25,7 @@ public class TopologyTests(
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
                 bus.AddCommandConsumeChannel(QueueName, c => c
                     .WithRabbitMq(o => o
-                        .QueueName(QueueName)
+                        .WithQueueName(QueueName)
                         .WithQueueType(QueueType.Quorum))
                     .Consumes<TestEvent>());
             });
@@ -60,9 +60,9 @@ public class TopologyTests(
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
                 bus.AddCommandConsumeChannel(QueueName, c => c
                     .WithRabbitMq(o => o
-                        .QueueName(QueueName)
+                        .WithQueueName(QueueName)
                         .WithQueueType(QueueType.Quorum)
-                        .RetryOptions(1, TimeSpan.FromMilliseconds(100))) // Fast retry
+                        .WithRetry(1, TimeSpan.FromMilliseconds(100))) // Fast retry
                     .Consumes<TestEvent>());
                 
                 // Register a handler that always throws permanent error
