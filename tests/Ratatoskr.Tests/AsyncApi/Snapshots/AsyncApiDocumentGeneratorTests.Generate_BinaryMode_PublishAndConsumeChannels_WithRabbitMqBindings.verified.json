@@ -1,0 +1,431 @@
+﻿{
+  "asyncapi": "3.0.0",
+  "info": {
+    "title": "Test Service",
+    "version": "1.0.0",
+    "description": "AsyncAPI documentation for the API Key service."
+  },
+  "servers": {
+    "rabbitmq": {
+      "host": "rabbitmq.example.com",
+      "protocol": "amqp",
+      "description": "RabbitMQ server for message exchange."
+    }
+  },
+  "channels": {
+    "apikey.events": {
+      "address": "apikey.events",
+      "messages": {
+        "api-key.revoked": {
+          "$ref": "#/components/messages/api-key.revoked"
+        }
+      },
+      "description": "Channel for API key related events.",
+      "servers": [
+        {
+          "$ref": "#/servers/rabbitmq"
+        }
+      ],
+      "bindings": {
+        "amqp": {
+          "is": "routingKey",
+          "exchange": {
+            "name": "apikey.events",
+            "type": "topic",
+            "durable": true,
+            "autoDelete": false,
+            "vhost": "/"
+          },
+          "bindingVersion": "0.3.0"
+        }
+      }
+    },
+    "user.events": {
+      "address": "user.events",
+      "messages": {
+        "user-roles-changed": {
+          "$ref": "#/components/messages/user-roles-changed"
+        }
+      },
+      "description": "Channel for authorization events owned by the user service.",
+      "servers": [
+        {
+          "$ref": "#/servers/rabbitmq"
+        }
+      ],
+      "bindings": {
+        "amqp": {
+          "is": "routingKey",
+          "exchange": {
+            "name": "user.events",
+            "type": "fanout",
+            "durable": true,
+            "autoDelete": false,
+            "vhost": "/"
+          },
+          "bindingVersion": "0.3.0"
+        }
+      }
+    },
+    "apikey.subscriptions": {
+      "address": "apikey.subscriptions",
+      "description": "Subscription queue for user.events channel events.",
+      "servers": [
+        {
+          "$ref": "#/servers/rabbitmq"
+        }
+      ],
+      "bindings": {
+        "amqp": {
+          "is": "queue",
+          "queue": {
+            "name": "apikey.subscriptions",
+            "durable": true,
+            "exclusive": false,
+            "autoDelete": false,
+            "vhost": "/"
+          },
+          "bindingVersion": "0.3.0"
+        }
+      }
+    }
+  },
+  "operations": {
+    "apikey.events": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/apikey.events"
+      },
+      "description": "Publishes API key lifecycle events.",
+      "messages": [
+        {
+          "$ref": "#/channels/apikey.events/messages/api-key.revoked"
+        }
+      ],
+      "bindings": {
+        "amqp": {
+          "cc": [
+            "api-key.revoked"
+          ],
+          "deliveryMode": 2,
+          "mandatory": false,
+          "timestamp": true,
+          "bindingVersion": "0.3.0"
+        }
+      }
+    },
+    "receiveUserRolesChangedEvent": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/user.events"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/user.events/messages/user-roles-changed"
+        }
+      ],
+      "bindings": {
+        "amqp": {
+          "cc": [
+            "user-roles-changed"
+          ],
+          "deliveryMode": 2,
+          "mandatory": false,
+          "timestamp": true,
+          "ack": true,
+          "bindingVersion": "0.3.0"
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiKeyRevokedEvent": {
+        "type": "object",
+        "required": [
+          "apiKeyId",
+          "type",
+          "tenantId"
+        ],
+        "properties": {
+          "apiKeyId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "type": "string",
+            "maxLength": 50
+          },
+          "userId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 100
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "revokedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "UserRolesChangedEvent": {
+        "type": "object",
+        "required": [
+          "userId"
+        ],
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "addedRoles": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/RoleAssignment"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "removedRoles": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/RoleAssignment"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "RoleAssignment": {
+        "type": "object",
+        "required": [
+          "roleInternalName",
+          "assignmentLevel"
+        ],
+        "properties": {
+          "roleInternalName": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "assignmentLevel": {
+            "$ref": "#/components/schemas/AssignmentLevel"
+          },
+          "targetId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "AssignmentLevel": {
+        "type": "integer",
+        "format": "int32",
+        "enum": [
+          0,
+          1
+        ],
+        "x-enumNames": [
+          "Global",
+          "Tenant"
+        ],
+        "x-enum-varnames": [
+          "Global",
+          "Tenant"
+        ]
+      }
+    },
+    "messages": {
+      "api-key.revoked": {
+        "name": "api-key.revoked",
+        "title": "API Key Revoked",
+        "description": "An API key has been revoked.",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/ApiKeyRevokedEvent"
+        },
+        "headers": {
+          "type": "object",
+          "description": "AMQP application-properties carrying CloudEvents attributes (binary content mode).",
+          "required": [
+            "cloudEvents_specversion",
+            "cloudEvents_id",
+            "cloudEvents_type",
+            "cloudEvents_source"
+          ],
+          "properties": {
+            "cloudEvents_specversion": {
+              "type": "string",
+              "description": "CloudEvents specification version.",
+              "enum": [
+                "1.0"
+              ]
+            },
+            "cloudEvents_id": {
+              "type": "string",
+              "description": "Unique identifier for the event."
+            },
+            "cloudEvents_type": {
+              "type": "string",
+              "description": "CloudEvent type identifier (e.g. com.example.order.created)."
+            },
+            "cloudEvents_source": {
+              "type": "string",
+              "format": "uri-reference",
+              "description": "Identifies the context in which an event happened."
+            },
+            "cloudEvents_time": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time",
+              "description": "Timestamp of when the occurrence happened."
+            },
+            "cloudEvents_datacontenttype": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Content type of the data value (e.g. application/json)."
+            },
+            "cloudEvents_subject": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Describes the subject of the event in the context of the event producer."
+            },
+            "traceparent": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "W3C Trace Context traceparent header for distributed tracing."
+            },
+            "tracestate": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "W3C Trace Context tracestate header."
+            }
+          }
+        },
+        "bindings": {
+          "amqp": {
+            "messageType": "api-key.revoked",
+            "bindingVersion": "0.3.0"
+          }
+        },
+        "x-eventcatalog-message-type": "event",
+        "x-eventcatalog-role": "provider",
+        "x-eventcatalog-message-version": "1.0.0"
+      },
+      "user-roles-changed": {
+        "name": "user-roles-changed",
+        "title": "User Roles Changed Event",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/UserRolesChangedEvent"
+        },
+        "headers": {
+          "type": "object",
+          "description": "AMQP application-properties carrying CloudEvents attributes (binary content mode).",
+          "required": [
+            "cloudEvents_specversion",
+            "cloudEvents_id",
+            "cloudEvents_type",
+            "cloudEvents_source"
+          ],
+          "properties": {
+            "cloudEvents_specversion": {
+              "type": "string",
+              "description": "CloudEvents specification version.",
+              "enum": [
+                "1.0"
+              ]
+            },
+            "cloudEvents_id": {
+              "type": "string",
+              "description": "Unique identifier for the event."
+            },
+            "cloudEvents_type": {
+              "type": "string",
+              "description": "CloudEvent type identifier (e.g. com.example.order.created)."
+            },
+            "cloudEvents_source": {
+              "type": "string",
+              "format": "uri-reference",
+              "description": "Identifies the context in which an event happened."
+            },
+            "cloudEvents_time": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time",
+              "description": "Timestamp of when the occurrence happened."
+            },
+            "cloudEvents_datacontenttype": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Content type of the data value (e.g. application/json)."
+            },
+            "cloudEvents_subject": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Describes the subject of the event in the context of the event producer."
+            },
+            "traceparent": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "W3C Trace Context traceparent header for distributed tracing."
+            },
+            "tracestate": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "W3C Trace Context tracestate header."
+            }
+          }
+        },
+        "bindings": {
+          "amqp": {
+            "messageType": "user-roles-changed",
+            "bindingVersion": "0.3.0"
+          }
+        },
+        "x-eventcatalog-message-type": "event",
+        "x-eventcatalog-role": "client",
+        "x-eventcatalog-message-version": "2.0.0"
+      }
+    }
+  }
+}

@@ -21,7 +21,7 @@ public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
         {
             services.AddRatatoskr(bus => 
             {
-                bus.UseRabbitMq(o => o.ConnectionString = RabbitMqConnectionString);
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
                 bus.AddEventPublishChannel(ExchangeName, c => c.Produces<TestEvent>());
             });
         });
@@ -55,7 +55,7 @@ public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
         {
             services.AddRatatoskr(bus => 
             {
-                bus.UseRabbitMq(o => o.ConnectionString = RabbitMqConnectionString);
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
                 bus.AddEventPublishChannel(ExchangeName, c => c.Produces<TestEvent>())
                     .ConfigureCloudEvents(ce => ce.ContentMode = CloudEventsContentMode.Binary);
             });
@@ -91,7 +91,7 @@ public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
         {
             services.AddRatatoskr(bus => 
             {
-                bus.UseRabbitMq(o => o.ConnectionString = RabbitMqConnectionString);
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
                 bus.AddEventPublishChannel(ExchangeName, c => c.Produces<TestEvent>())
                     .ConfigureCloudEvents(ce => ce.ContentMode = CloudEventsContentMode.Structured);
             });

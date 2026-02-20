@@ -22,7 +22,7 @@ public class TopologyTests(
         {
             services.AddRatatoskr(bus => 
             {
-                bus.UseRabbitMq(o => o.ConnectionString = RabbitMqConnectionString);
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
                 bus.AddCommandConsumeChannel(QueueName, c => c
                     .WithRabbitMq(o => o
                         .QueueName(QueueName)
@@ -57,7 +57,7 @@ public class TopologyTests(
         {
             services.AddRatatoskr(bus => 
             {
-                bus.UseRabbitMq(o => o.ConnectionString = RabbitMqConnectionString);
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
                 bus.AddCommandConsumeChannel(QueueName, c => c
                     .WithRabbitMq(o => o
                         .QueueName(QueueName)

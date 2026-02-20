@@ -1,0 +1,87 @@
+﻿{
+  "asyncapi": "3.0.0",
+  "info": {
+    "title": "Test Service",
+    "version": "1.0.0"
+  },
+  "channels": {
+    "events": {
+      "address": "events",
+      "messages": {
+        "order.created": {
+          "$ref": "#/components/messages/order.created"
+        }
+      }
+    }
+  },
+  "operations": {
+    "sendOrderCreatedEvent": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/events"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/events/messages/order.created"
+        }
+      ]
+    }
+  },
+  "components": {
+    "schemas": {
+      "OrderCreatedEvent": {
+        "type": "object",
+        "required": [
+          "orderId",
+          "amount"
+        ],
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 999999.99
+          },
+          "customerEmail": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "email"
+          },
+          "callbackUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 500,
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "messages": {
+      "order.created": {
+        "name": "order.created",
+        "title": "Order Created Event",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/OrderCreatedEvent"
+        },
+        "x-eventcatalog-message-type": "event",
+        "x-eventcatalog-role": "provider",
+        "x-eventcatalog-message-version": "1.0.0"
+      }
+    }
+  }
+}

@@ -11,6 +11,7 @@
         <PackageReference Include="Microsoft.AspNetCore.TestHost" />
         <PackageReference Include="TUnit" />
         <PackageReference Include="AwesomeAssertions" />
+        <PackageReference Include="Verify.TUnit" />
         <PackageReference Include="Testcontainers.PostgreSql" />
         <PackageReference Include="Testcontainers.RabbitMq" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Design">

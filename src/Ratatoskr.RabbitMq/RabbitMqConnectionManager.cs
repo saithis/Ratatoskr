@@ -46,19 +46,11 @@ public class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposab
     
     private ConnectionFactory CreateConnectionFactory()
     {
-        if (!string.IsNullOrEmpty(options.ConnectionString))
-        {
-            return new ConnectionFactory { Uri = new Uri(options.ConnectionString) };
-        }
-        
-        return new ConnectionFactory
-        {
-            HostName = options.HostName,
-            Port = options.Port,
-            UserName = options.UserName,
-            Password = options.Password,
-            VirtualHost = options.VirtualHost,
-        };
+        if (options.ConnectionString is null)
+            throw new InvalidOperationException(
+                "RabbitMQ connection string is not configured. Set RabbitMqOptions.ConnectionString.");
+
+        return new ConnectionFactory { Uri = options.ConnectionString };
     }
     
     public async ValueTask DisposeAsync()

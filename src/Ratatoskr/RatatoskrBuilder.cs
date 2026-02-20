@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Ratatoskr.AsyncApi.Config;
 using Ratatoskr.CloudEvents;
 using Ratatoskr.Config;
 using Ratatoskr.Core;
@@ -9,6 +10,7 @@ public class RatatoskrBuilder
 {
     public IServiceCollection Services { get; }
     internal CloudEventsOptions CloudEventsOptions { get; } = new();
+    internal AsyncApiOptions AsyncApiOptions { get; } = new();
     internal ChannelRegistry ChannelRegistry { get; } = new();
     
     internal RatatoskrBuilder(IServiceCollection services)
@@ -47,6 +49,15 @@ public class RatatoskrBuilder
     public RatatoskrBuilder ConfigureCloudEvents(Action<CloudEventsOptions> configure)
     {
         configure(CloudEventsOptions);
+        return this;
+    }
+
+    /// <summary>
+    /// Configures AsyncAPI document generation options.
+    /// </summary>
+    public RatatoskrBuilder ConfigureAsyncApi(Action<AsyncApiOptions> configure)
+    {
+        configure(AsyncApiOptions);
         return this;
     }
     

@@ -74,3 +74,8 @@ CodeCoverage/
 TestResult.xml
 nunit-*.xml
 
+# Verify .NET
+*.received.*
+
+# AI
+.claude/settings.local.json
