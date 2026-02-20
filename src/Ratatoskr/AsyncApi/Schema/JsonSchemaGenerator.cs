@@ -330,6 +330,6 @@ public class JsonSchemaGenerator
 
         // camelCase by default (matches STJ default behavior)
         var name = prop.Name;
-        return char.ToLowerInvariant(name[0]) + name[1..];
+        return System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(name);
     }
 }
