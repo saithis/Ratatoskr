@@ -370,7 +370,7 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
 
     // Helpers
 
-    private void ConfigureRatatoskr<THandler>(IServiceCollection services, THandler handler, bool useOutbox, Action<RabbitMqChannelOptions>? configureConsumer = null)
+    private void ConfigureRatatoskr<THandler>(IServiceCollection services, THandler handler, bool useOutbox, Action<RabbitMqConsumeOptions>? configureConsumer = null)
         where THandler : class, IMessageHandler<TestEvent>
     {
         services.AddRatatoskr(bus =>

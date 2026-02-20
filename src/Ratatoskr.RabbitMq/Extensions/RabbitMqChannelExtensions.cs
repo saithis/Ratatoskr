@@ -13,17 +13,35 @@ public static class RabbitMqChannelExtensions
         public RabbitMqChannelOptions? GetRabbitMqChannelOptions() => registration.GetExtension<RabbitMqChannelOptions>();
     }
 
-    extension(ChannelBuilder builder)
+    extension(PublishChannelBuilder builder)
     {
         /// <summary>
-        /// Configures RabbitMQ-specific options for this channel, including exchange,
-        /// queue, and retry settings.
+        /// Configures RabbitMQ exchange options for this publish channel.
+        /// Only exchange-related settings are available — queue and consumer options
+        /// are restricted to consume channels.
         /// </summary>
-        public ChannelBuilder WithRabbitMq(Action<RabbitMqChannelOptions> configure)
+        public PublishChannelBuilder WithRabbitMq(Action<RabbitMqExchangeOptions> configure)
         {
-            var options = new RabbitMqChannelOptions();
+            var inner = new RabbitMqChannelOptions();
+            var options = new RabbitMqExchangeOptions(inner);
             configure(options);
-            builder.WithExtension(options);
+            builder.WithExtension(inner);
+            return builder;
+        }
+    }
+
+    extension(ConsumeChannelBuilder builder)
+    {
+        /// <summary>
+        /// Configures RabbitMQ options for this consume channel, including exchange,
+        /// queue, consumer, and retry settings.
+        /// </summary>
+        public ConsumeChannelBuilder WithRabbitMq(Action<RabbitMqConsumeOptions> configure)
+        {
+            var inner = new RabbitMqChannelOptions();
+            var options = new RabbitMqConsumeOptions(inner);
+            configure(options);
+            builder.WithExtension(inner);
             return builder;
         }
     }

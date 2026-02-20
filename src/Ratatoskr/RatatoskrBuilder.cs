@@ -34,22 +34,31 @@ public class RatatoskrBuilder
     
     #region New Channel Config
 
-    public RatatoskrBuilder AddEventPublishChannel(string channelName, Action<ChannelBuilder> configure)
-        => AddChannel(channelName, ChannelType.EventPublish, configure);
+    public RatatoskrBuilder AddEventPublishChannel(string channelName, Action<PublishChannelBuilder> configure)
+        => AddPublishChannel(channelName, ChannelType.EventPublish, configure);
 
-    public RatatoskrBuilder AddCommandPublishChannel(string channelName, Action<ChannelBuilder> configure)
-        => AddChannel(channelName, ChannelType.CommandPublish, configure);
+    public RatatoskrBuilder AddCommandPublishChannel(string channelName, Action<PublishChannelBuilder> configure)
+        => AddPublishChannel(channelName, ChannelType.CommandPublish, configure);
 
-    public RatatoskrBuilder AddCommandConsumeChannel(string channelName, Action<ChannelBuilder> configure)
-        => AddChannel(channelName, ChannelType.CommandConsume, configure);
+    public RatatoskrBuilder AddCommandConsumeChannel(string channelName, Action<ConsumeChannelBuilder> configure)
+        => AddConsumeChannel(channelName, ChannelType.CommandConsume, configure);
 
-    public RatatoskrBuilder AddEventConsumeChannel(string channelName, Action<ChannelBuilder> configure)
-        => AddChannel(channelName, ChannelType.EventConsume, configure);
+    public RatatoskrBuilder AddEventConsumeChannel(string channelName, Action<ConsumeChannelBuilder> configure)
+        => AddConsumeChannel(channelName, ChannelType.EventConsume, configure);
 
-    private RatatoskrBuilder AddChannel(string name, ChannelType intent, Action<ChannelBuilder> configure)
+    private RatatoskrBuilder AddPublishChannel(string name, ChannelType intent, Action<PublishChannelBuilder> configure)
     {
         var channel = new ChannelRegistration(name, intent);
-        var builder = new ChannelBuilder(channel);
+        var builder = new PublishChannelBuilder(channel);
+        configure(builder);
+        ChannelRegistry.Register(channel);
+        return this;
+    }
+
+    private RatatoskrBuilder AddConsumeChannel(string name, ChannelType intent, Action<ConsumeChannelBuilder> configure)
+    {
+        var channel = new ChannelRegistration(name, intent);
+        var builder = new ConsumeChannelBuilder(channel);
         configure(builder);
         ChannelRegistry.Register(channel);
         return this;

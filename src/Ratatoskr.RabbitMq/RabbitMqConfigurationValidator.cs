@@ -28,7 +28,6 @@ internal static class RabbitMqConfigurationValidator
 
     private static void ValidateChannel(ChannelRegistration channel, RabbitMqChannelOptions opts)
     {
-        var isPublish = channel.Intent is ChannelType.EventPublish or ChannelType.CommandPublish;
         var isConsume = channel.Intent is ChannelType.CommandConsume or ChannelType.EventConsume;
 
         // Every channel must have at least one message registered
@@ -36,12 +35,6 @@ internal static class RabbitMqConfigurationValidator
             throw new InvalidOperationException(
                 $"Channel '{channel.ChannelName}' has no messages registered. " +
                 $"Add at least one message using Produces<T>() or Consumes<T>().");
-
-        // Publish channels should not have consumer-specific config
-        if (isPublish && opts.QueueName is not null)
-            throw new InvalidOperationException(
-                $"Publish channel '{channel.ChannelName}' has QueueName set to '{opts.QueueName}'. " +
-                $"Queue configuration is only valid for consume channels (AddCommandConsumeChannel / AddEventConsumeChannel).");
 
         // Consume channels must have a queue name
         if (isConsume && string.IsNullOrEmpty(opts.QueueName))

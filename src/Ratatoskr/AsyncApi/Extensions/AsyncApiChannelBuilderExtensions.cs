@@ -6,7 +6,15 @@ namespace Ratatoskr.AsyncApi.Extensions;
 
 public static class AsyncApiChannelBuilderExtensions
 {
-    public static ChannelBuilder WithAsyncApi(this ChannelBuilder builder, Action<AsyncApiChannelOptions> configure)
+    public static PublishChannelBuilder WithAsyncApi(this PublishChannelBuilder builder, Action<AsyncApiChannelOptions> configure)
+    {
+        var opts = new AsyncApiChannelOptions();
+        configure(opts);
+        builder.WithExtension(opts);
+        return builder;
+    }
+
+    public static ConsumeChannelBuilder WithAsyncApi(this ConsumeChannelBuilder builder, Action<AsyncApiChannelOptions> configure)
     {
         var opts = new AsyncApiChannelOptions();
         configure(opts);
