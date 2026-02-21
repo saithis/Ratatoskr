@@ -9,9 +9,9 @@ public class RabbitMqChannelOptions
     // ── Exchange ──────────────────────────────────────────────────────
 
     /// <summary>
-    /// The AMQP exchange type. Default: <see cref="Config.ExchangeType.Topic"/>.
+    /// The AMQP exchange type. Default: <see cref="RabbitMqExchangeType.Topic"/>.
     /// </summary>
-    public ExchangeType ExchangeType { get; private set; } = ExchangeType.Topic;
+    public RabbitMqExchangeType ExchangeType { get; private set; } = RabbitMqExchangeType.Topic;
 
     /// <summary>
     /// Whether the exchange survives broker restarts. Default: true.
@@ -80,26 +80,26 @@ public class RabbitMqChannelOptions
     /// <summary>Configures a topic exchange with pattern-based routing.</summary>
     public RabbitMqChannelOptions WithTopicExchange()
     {
-        ExchangeType = ExchangeType.Topic;
+        ExchangeType = RabbitMqExchangeType.Topic;
         return this;
     }
 
     /// <summary>Configures a direct exchange with exact routing key matching.</summary>
     public RabbitMqChannelOptions WithDirectExchange()
     {
-        ExchangeType = ExchangeType.Direct;
+        ExchangeType = RabbitMqExchangeType.Direct;
         return this;
     }
 
     /// <summary>Configures a fanout exchange that broadcasts to all bound queues.</summary>
     public RabbitMqChannelOptions WithFanoutExchange()
     {
-        ExchangeType = ExchangeType.Fanout;
+        ExchangeType = RabbitMqExchangeType.Fanout;
         return this;
     }
 
     /// <summary>Sets the exchange type.</summary>
-    public RabbitMqChannelOptions WithExchangeType(ExchangeType type)
+    public RabbitMqChannelOptions WithExchangeType(RabbitMqExchangeType type)
     {
         ExchangeType = type;
         return this;

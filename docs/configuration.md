@@ -78,8 +78,9 @@ services.AddRatatoskr(builder =>
     // ==========================================
     builder.AddEventConsumeChannel("users.events")
            .WithRabbitMq(cfg => cfg
-                .WithQueueName("orders.user-handler") // The shared queue for this channel's subscriptions
                 .WithTopicExchange() // We expect this type
+                // The shared queue for this channel's subscriptions
+                .WithQueueName("orders.user-handler")
                 // Optional: Global settings for this consumer (e.g. Prefetch)
             )
            // Binds queue "orders.user-handler" to exchange "users.events" with key "user.registered"

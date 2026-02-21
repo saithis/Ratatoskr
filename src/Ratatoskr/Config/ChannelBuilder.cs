@@ -20,6 +20,10 @@ public class ChannelBuilder(ChannelRegistration channel)
         var type = typeof(T);
         typeName ??= GetMessageTypeName(type);
 
+        if (channel.Messages.Any(r => r.MessageType == type))
+            throw new InvalidOperationException(
+                $"Message type '{type.FullName}' is already registered on this channel.");
+        
         var registration = new MessageRegistration(type, typeName);
 
         if (configure != null)

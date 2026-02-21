@@ -1,12 +1,12 @@
+using RabbitMQ.Client;
 using Ratatoskr.AsyncApi.Model.Bindings;
-using ClientExchangeType = RabbitMQ.Client.ExchangeType;
 
 namespace Ratatoskr.RabbitMq.Config;
 
 /// <summary>
 /// The type of AMQP exchange. Maps to RabbitMQ exchange types.
 /// </summary>
-public enum ExchangeType
+public enum RabbitMqExchangeType
 {
     /// <summary>Topic exchange with pattern-based routing (e.g. "order.*").</summary>
     Topic,
@@ -21,29 +21,29 @@ public enum ExchangeType
     Headers
 }
 
-internal static class ExchangeTypeExtensions
+internal static class RabbitMqExchangeTypeExtensions
 {
     /// <summary>
     /// Converts to the string value expected by the RabbitMQ client library.
     /// </summary>
-    internal static string ToRabbitMqString(this ExchangeType type) => type switch
+    internal static string ToRabbitMqString(this RabbitMqExchangeType type) => type switch
     {
-        ExchangeType.Topic => ClientExchangeType.Topic,
-        ExchangeType.Direct => ClientExchangeType.Direct,
-        ExchangeType.Fanout => ClientExchangeType.Fanout,
-        ExchangeType.Headers => ClientExchangeType.Headers,
+        RabbitMqExchangeType.Topic => ExchangeType.Topic,
+        RabbitMqExchangeType.Direct => ExchangeType.Direct,
+        RabbitMqExchangeType.Fanout => ExchangeType.Fanout,
+        RabbitMqExchangeType.Headers => ExchangeType.Headers,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, null)
     };
 
     /// <summary>
     /// Converts to the AsyncAPI AMQP binding exchange type.
     /// </summary>
-    internal static AmqpExchangeType ToAmqpExchangeType(this ExchangeType type) => type switch
+    internal static AmqpExchangeType ToAmqpExchangeType(this RabbitMqExchangeType type) => type switch
     {
-        ExchangeType.Topic => AmqpExchangeType.Topic,
-        ExchangeType.Direct => AmqpExchangeType.Direct,
-        ExchangeType.Fanout => AmqpExchangeType.Fanout,
-        ExchangeType.Headers => AmqpExchangeType.Headers,
+        RabbitMqExchangeType.Topic => AmqpExchangeType.Topic,
+        RabbitMqExchangeType.Direct => AmqpExchangeType.Direct,
+        RabbitMqExchangeType.Fanout => AmqpExchangeType.Fanout,
+        RabbitMqExchangeType.Headers => AmqpExchangeType.Headers,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, null)
     };
 }

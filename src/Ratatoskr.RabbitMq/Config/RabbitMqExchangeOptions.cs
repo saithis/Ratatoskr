@@ -30,7 +30,7 @@ public class RabbitMqExchangeOptions(RabbitMqChannelOptions inner)
     }
 
     /// <summary>Sets the exchange type.</summary>
-    public RabbitMqExchangeOptions WithExchangeType(ExchangeType type)
+    public RabbitMqExchangeOptions WithExchangeType(RabbitMqExchangeType type)
     {
         inner.WithExchangeType(type);
         return this;
