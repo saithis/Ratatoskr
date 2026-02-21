@@ -546,4 +546,51 @@ public class CloudEventsAmqpMapperTests
             .ToList();
         userCustomHeaders.Should().BeEmpty();
     }
+
+    [Test]
+    public void MapIncoming_NullHeaders_HandlesGracefully()
+    {
+        // Arrange - BasicProperties with no headers set (null)
+        var basicProperties = new BasicProperties
+        {
+            ContentType = "application/json"
+        };
+        var body = Encoding.UTF8.GetBytes("{}");
+        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", basicProperties, body);
+
+        // Act
+        var result = _mapper.MapIncoming(incoming);
+
+        // Assert - should not throw and return valid props with defaults
+        result.props.Should().NotBeNull();
+        result.props.Id.Should().NotBeNullOrEmpty();
+        result.body.Should().NotBeEmpty();
+    }
+
+    [Test]
+    public void MapIncoming_EmptyBody_HandlesGracefully()
+    {
+        // Arrange
+        var headers = new Dictionary<string, object?>
+        {
+            { "cloudEvents_id", "evt-empty" },
+            { "cloudEvents_source", "/test" },
+            { "cloudEvents_type", "test.event" }
+        };
+        var basicProperties = new BasicProperties
+        {
+            Headers = headers,
+            ContentType = "application/json"
+        };
+        var body = Array.Empty<byte>();
+        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", basicProperties, body);
+
+        // Act
+        var result = _mapper.MapIncoming(incoming);
+
+        // Assert - empty body is passed through as-is in binary mode
+        result.body.Should().BeEmpty();
+        result.props.Id.Should().Be("evt-empty");
+        result.props.Type.Should().Be("test.event");
+    }
 }

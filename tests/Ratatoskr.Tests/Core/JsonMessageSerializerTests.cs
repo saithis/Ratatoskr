@@ -119,4 +119,32 @@ public class JsonMessageSerializerTests
         result.Amount.Should().Be(123.45m);
         result.CreatedAt.Should().Be(new DateTimeOffset(2024, 1, 15, 10, 30, 0, TimeSpan.Zero));
     }
+
+    [Test]
+    public void Deserialize_MalformedJson_ThrowsJsonException()
+    {
+        // Arrange
+        var serializer = new JsonMessageSerializer();
+        var malformedBody = Encoding.UTF8.GetBytes("{ not valid json }");
+
+        // Act
+        var act = () => serializer.Deserialize<TestEvent>(malformedBody);
+
+        // Assert
+        act.Should().Throw<JsonException>();
+    }
+
+    [Test]
+    public void Deserialize_WrongType_ThrowsJsonException()
+    {
+        // Arrange
+        var serializer = new JsonMessageSerializer();
+        var body = Encoding.UTF8.GetBytes("[1, 2, 3]");
+
+        // Act
+        var act = () => serializer.Deserialize<TestEvent>(body);
+
+        // Assert
+        act.Should().Throw<JsonException>();
+    }
 }

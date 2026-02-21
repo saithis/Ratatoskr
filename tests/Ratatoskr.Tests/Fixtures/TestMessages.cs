@@ -115,6 +115,18 @@ public class ScopedServiceTestHandler(ScopedService scopedService, ScopedService
 }
 
 /// <summary>
+/// Handler that respects cancellation tokens for testing cancellation behavior.
+/// </summary>
+public class CancellationAwareTestHandler : IMessageHandler<TestEvent>
+{
+    public Task HandleAsync(TestEvent message, MessageProperties context, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>
 /// Handler that captures the MessageProperties context for assertion.
 /// </summary>
 public class ContextCapturingHandler : IMessageHandler<TestEvent>

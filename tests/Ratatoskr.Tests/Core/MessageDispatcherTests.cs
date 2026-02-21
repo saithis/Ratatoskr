@@ -285,7 +285,72 @@ public class MessageDispatcherTests
         handler.CapturedContext.Headers["custom"].Should().Be("header");
     }
 
-    private static (MessageDispatcher dispatcher, ServiceCollection services, ChannelRegistry channelRegistry) 
+    [Test]
+    public async Task DispatchAsync_CancellationRequested_ReturnsRecoverableError()
+    {
+        // Arrange
+        var (dispatcher, _, channelRegistry) = CreateDispatcher(services =>
+        {
+            services.AddScoped<CancellationAwareTestHandler>();
+            services.AddScoped<IMessageHandler<TestEvent>, CancellationAwareTestHandler>();
+        });
+
+        var channel = new ChannelRegistration("test", ChannelType.EventConsume);
+        channel.Messages.Add(new MessageRegistration(typeof(TestEvent), "test.event"));
+        channelRegistry.Register(channel);
+        channelRegistry.Freeze();
+
+        var testEvent = new TestEvent { Id = "123", Data = "test data" };
+        var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testEvent));
+        var context = new MessageProperties
+        {
+            Id = "event-123",
+            Type = "test.event",
+            Source = "/test",
+        };
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        // Act
+        var result = await dispatcher.DispatchAsync(body, context, cts.Token);
+
+        // Assert - OperationCanceledException from handler is treated as RecoverableError
+        result.Should().Be(DispatchResult.RecoverableError);
+    }
+
+    [Test]
+    public async Task DispatchAsync_NullBody_ReturnsPermanentError()
+    {
+        // Arrange
+        var handler = new TestEventHandler();
+        var (dispatcher, _, channelRegistry) = CreateDispatcher(services =>
+        {
+            services.AddScoped<TestEventHandler>(_ => handler);
+            services.AddScoped<IMessageHandler<TestEvent>>(_ => handler);
+        });
+
+        var channel = new ChannelRegistration("test", ChannelType.EventConsume);
+        channel.Messages.Add(new MessageRegistration(typeof(TestEvent), "test.event"));
+        channelRegistry.Register(channel);
+        channelRegistry.Freeze();
+
+        var context = new MessageProperties
+        {
+            Id = "event-123",
+            Type = "test.event",
+            Source = "/test",
+        };
+
+        // Act
+        var result = await dispatcher.DispatchAsync(null!, context, CancellationToken.None);
+
+        // Assert - null body causes deserialization failure → PermanentError
+        result.Should().Be(DispatchResult.PermanentError);
+        handler.HandledMessages.Should().BeEmpty();
+    }
+
+    private static (MessageDispatcher dispatcher, ServiceCollection services, ChannelRegistry channelRegistry)
         CreateDispatcher(Action<ServiceCollection>? configure = null)
     {
         var services = new ServiceCollection();
