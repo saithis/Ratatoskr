@@ -66,3 +66,49 @@ public class ThrowingTestEventHandler : IMessageHandler<TestEvent>
     }
 }
 
+/// <summary>
+/// Scoped service for testing DI scope isolation.
+/// Each scope gets a unique Id.
+/// </summary>
+public class ScopedService
+{
+    public Guid Id { get; } = Guid.NewGuid();
+}
+
+/// <summary>
+/// Collects scoped service IDs across dispatches for assertion.
+/// Register as singleton so it's shared across scopes.
+/// </summary>
+public class ScopedServiceIdCollector
+{
+    public List<Guid> ServiceIds { get; } = [];
+}
+
+/// <summary>
+/// Handler that resolves ScopedService from DI to verify scope isolation.
+/// Each dispatch should get a different ScopedService instance.
+/// </summary>
+public class ScopedServiceTestHandler(ScopedService scopedService, ScopedServiceIdCollector collector)
+    : IMessageHandler<TestEvent>
+{
+    public Task HandleAsync(TestEvent message, MessageProperties context, CancellationToken cancellationToken)
+    {
+        collector.ServiceIds.Add(scopedService.Id);
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>
+/// Handler that captures the MessageProperties context for assertion.
+/// </summary>
+public class ContextCapturingHandler : IMessageHandler<TestEvent>
+{
+    public MessageProperties? CapturedContext { get; private set; }
+
+    public Task HandleAsync(TestEvent message, MessageProperties context, CancellationToken cancellationToken)
+    {
+        CapturedContext = context;
+        return Task.CompletedTask;
+    }
+}
+

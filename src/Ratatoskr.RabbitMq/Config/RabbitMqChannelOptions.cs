@@ -186,6 +186,7 @@ public class RabbitMqChannelOptions
     /// <summary>Configures retry behavior using a builder callback.</summary>
     public RabbitMqChannelOptions WithRetry(Action<RetryOptions> configure)
     {
+        ArgumentNullException.ThrowIfNull(configure);
         configure(Retry);
         return this;
     }

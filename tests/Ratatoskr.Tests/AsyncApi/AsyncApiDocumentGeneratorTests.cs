@@ -1,10 +1,10 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.AsyncApi.Config;
 using Ratatoskr.AsyncApi.Extensions;
 using Ratatoskr.AsyncApi.Generation;
-using Ratatoskr.AsyncApi.Model;
 using Ratatoskr.AsyncApi.Model.Bindings;
 using Ratatoskr.CloudEvents;
 using Ratatoskr.RabbitMq;
@@ -99,7 +99,7 @@ public class AsyncApiDocumentGeneratorTests
     }
 
     [Test]
-    public async Task Generate_WithDataAnnotations_SchemaIncludesConstraints()
+    public void Generate_WithDataAnnotations_SchemaIncludesConstraints()
     {
         var generator = BuildGenerator(
             bus => bus
@@ -110,19 +110,19 @@ public class AsyncApiDocumentGeneratorTests
 
         var orderSchema = document.Components!.Schemas!["OrderCreatedEvent"];
 
-        await Assert.That(orderSchema).IsNotNull();
-        await Assert.That(orderSchema.Properties!["amount"].Minimum).IsEqualTo(0.01);
-        await Assert.That(orderSchema.Properties["amount"].Maximum).IsEqualTo(999999.99);
-        await Assert.That(orderSchema.Properties["customerEmail"].Format).IsEqualTo("email");
-        await Assert.That(orderSchema.Properties["callbackUrl"].Format).IsEqualTo("uri");
-        await Assert.That(orderSchema.Properties["notes"].MaxLength).IsEqualTo(500);
-        await Assert.That(orderSchema.Properties["notes"].MinLength).IsEqualTo(1);
-        await Assert.That(orderSchema.Required).Contains("orderId");
-        await Assert.That(orderSchema.Required).Contains("amount");
+        orderSchema.Should().NotBeNull();
+        orderSchema.Properties!["amount"].Minimum.Should().Be(0.01);
+        orderSchema.Properties["amount"].Maximum.Should().Be(999999.99);
+        orderSchema.Properties["customerEmail"].Format.Should().Be("email");
+        orderSchema.Properties["callbackUrl"].Format.Should().Be("uri");
+        orderSchema.Properties["notes"].MaxLength.Should().Be(500);
+        orderSchema.Properties["notes"].MinLength.Should().Be(1);
+        orderSchema.Required.Should().Contain("orderId");
+        orderSchema.Required.Should().Contain("amount");
     }
 
     [Test]
-    public async Task Generate_WithAsyncApiMessageAttribute_UsesAttributeMetadata()
+    public void Generate_WithAsyncApiMessageAttribute_UsesAttributeMetadata()
     {
         var generator = BuildGenerator(
             bus => bus
@@ -133,15 +133,15 @@ public class AsyncApiDocumentGeneratorTests
 
         var message = document.Components!.Messages!["api-key.revoked"];
 
-        await Assert.That(message.Title).IsEqualTo("API Key Revoked");
-        await Assert.That(message.Description).IsEqualTo("An API key has been revoked.");
-        await Assert.That(message.Extensions!["x-eventcatalog-message-version"].GetString()).IsEqualTo("1.0.0");
-        await Assert.That(message.Extensions["x-eventcatalog-message-type"].GetString()).IsEqualTo("event");
-        await Assert.That(message.Extensions["x-eventcatalog-role"].GetString()).IsEqualTo("provider");
+        message.Title.Should().Be("API Key Revoked");
+        message.Description.Should().Be("An API key has been revoked.");
+        message.Extensions!["x-eventcatalog-message-version"].GetString().Should().Be("1.0.0");
+        message.Extensions["x-eventcatalog-message-type"].GetString().Should().Be("event");
+        message.Extensions["x-eventcatalog-role"].GetString().Should().Be("provider");
     }
 
     [Test]
-    public async Task Generate_ConsumerChannel_RoleIsClient()
+    public void Generate_ConsumerChannel_RoleIsClient()
     {
         var generator = BuildGenerator(
             bus => bus
@@ -153,7 +153,7 @@ public class AsyncApiDocumentGeneratorTests
         var document = generator.Generate();
 
         var message = document.Components!.Messages!["user-roles-changed"];
-        await Assert.That(message.Extensions!["x-eventcatalog-role"].GetString()).IsEqualTo("client");
+        message.Extensions!["x-eventcatalog-role"].GetString().Should().Be("client");
     }
 
     [Test]
@@ -167,12 +167,12 @@ public class AsyncApiDocumentGeneratorTests
         var document = generator.Generate();
         var json = JsonSerializer.Serialize(document, JsonOptions);
 
-        await Assert.That(document.Servers).IsNull();
+        document.Servers.Should().BeNull();
         await Verify(json, extension: "json").UseDirectory("Snapshots");
     }
 
     [Test]
-    public async Task Generate_MultipleMessagesOnChannel_DefaultPerMessageOperations()
+    public void Generate_MultipleMessagesOnChannel_DefaultPerMessageOperations()
     {
         var generator = BuildGenerator(
             bus => bus
@@ -184,20 +184,20 @@ public class AsyncApiDocumentGeneratorTests
         var document = generator.Generate();
 
         // Channel still has both messages
-        await Assert.That(document.Channels["events"].Messages!.Count).IsEqualTo(2);
-        await Assert.That(document.Components!.Messages).ContainsKey("api-key.revoked");
-        await Assert.That(document.Components!.Messages).ContainsKey("order.created");
+        document.Channels["events"].Messages!.Count.Should().Be(2);
+        document.Components!.Messages.Should().ContainKey("api-key.revoked");
+        document.Components!.Messages.Should().ContainKey("order.created");
 
         // But now there are two separate operations (one per message)
-        await Assert.That(document.Operations.Count).IsEqualTo(2);
-        await Assert.That(document.Operations).ContainsKey("sendApiKeyRevokedEvent");
-        await Assert.That(document.Operations).ContainsKey("sendOrderCreatedEvent");
-        await Assert.That(document.Operations["sendApiKeyRevokedEvent"].Messages!.Count).IsEqualTo(1);
-        await Assert.That(document.Operations["sendOrderCreatedEvent"].Messages!.Count).IsEqualTo(1);
+        document.Operations.Count.Should().Be(2);
+        document.Operations.Should().ContainKey("sendApiKeyRevokedEvent");
+        document.Operations.Should().ContainKey("sendOrderCreatedEvent");
+        document.Operations["sendApiKeyRevokedEvent"].Messages!.Count.Should().Be(1);
+        document.Operations["sendOrderCreatedEvent"].Messages!.Count.Should().Be(1);
     }
 
     [Test]
-    public async Task Generate_RabbitMqQueueChannel_IsAddedForConsumeChannels()
+    public void Generate_RabbitMqQueueChannel_IsAddedForConsumeChannels()
     {
         var generator = BuildGenerator(
             bus => bus
@@ -210,16 +210,16 @@ public class AsyncApiDocumentGeneratorTests
 
         var document = generator.Generate();
 
-        await Assert.That(document.Channels).ContainsKey("user.events");
-        await Assert.That(document.Channels).ContainsKey("apikey.subscriptions");
+        document.Channels.Should().ContainKey("user.events");
+        document.Channels.Should().ContainKey("apikey.subscriptions");
 
         var queueChannel = document.Channels["apikey.subscriptions"];
-        await Assert.That(queueChannel.Bindings!.Amqp!.Is).IsEqualTo(AmqpChannelType.Queue);
-        await Assert.That(queueChannel.Bindings.Amqp.Queue!.Name).IsEqualTo("apikey.subscriptions");
+        queueChannel.Bindings!.Amqp!.Is.Should().Be(AmqpChannelType.Queue);
+        queueChannel.Bindings.Amqp.Queue!.Name.Should().Be("apikey.subscriptions");
     }
 
     [Test]
-    public async Task Generate_ChannelLevelOperation_GroupsAllMessages()
+    public void Generate_ChannelLevelOperation_GroupsAllMessages()
     {
         var generator = BuildGenerator(
             bus => bus
@@ -231,14 +231,14 @@ public class AsyncApiDocumentGeneratorTests
         var document = generator.Generate();
 
         // Single grouped operation using channel name as key
-        await Assert.That(document.Operations.Count).IsEqualTo(1);
-        await Assert.That(document.Operations).ContainsKey("order.events");
-        await Assert.That(document.Operations["order.events"].Title).IsEqualTo("Publish Order Events");
-        await Assert.That(document.Operations["order.events"].Messages!.Count).IsEqualTo(2);
+        document.Operations.Count.Should().Be(1);
+        document.Operations.Should().ContainKey("order.events");
+        document.Operations["order.events"].Title.Should().Be("Publish Order Events");
+        document.Operations["order.events"].Messages!.Count.Should().Be(2);
     }
 
     [Test]
-    public async Task Generate_ChannelLevelOperationId_CanBeOverridden()
+    public void Generate_ChannelLevelOperationId_CanBeOverridden()
     {
         var generator = BuildGenerator(
             bus => bus
@@ -248,12 +248,12 @@ public class AsyncApiDocumentGeneratorTests
 
         var document = generator.Generate();
 
-        await Assert.That(document.Operations).ContainsKey("partner-api-key-revoke");
-        await Assert.That(document.Operations.ContainsKey("user.events")).IsFalse();
+        document.Operations.Should().ContainKey("partner-api-key-revoke");
+        document.Operations.Should().NotContainKey("user.events");
     }
 
     [Test]
-    public async Task Generate_SharedOperationId_MergesMessagesIntoOneOperation()
+    public void Generate_SharedOperationId_MergesMessagesIntoOneOperation()
     {
         var generator = BuildGenerator(
             bus => bus
@@ -270,19 +270,19 @@ public class AsyncApiDocumentGeneratorTests
         var document = generator.Generate();
 
         // Two messages with same operationId merged into one operation
-        await Assert.That(document.Operations).ContainsKey("consumeOrderLifecycle");
-        await Assert.That(document.Operations["consumeOrderLifecycle"].Messages!.Count).IsEqualTo(2);
-        await Assert.That(document.Operations["consumeOrderLifecycle"].Title).IsEqualTo("Consume Order Lifecycle");
+        document.Operations.Should().ContainKey("consumeOrderLifecycle");
+        document.Operations["consumeOrderLifecycle"].Messages!.Count.Should().Be(2);
+        document.Operations["consumeOrderLifecycle"].Title.Should().Be("Consume Order Lifecycle");
 
         // Third message gets its own operation
-        await Assert.That(document.Operations).ContainsKey("receiveUserRolesChangedEvent");
-        await Assert.That(document.Operations["receiveUserRolesChangedEvent"].Messages!.Count).IsEqualTo(1);
+        document.Operations.Should().ContainKey("receiveUserRolesChangedEvent");
+        document.Operations["receiveUserRolesChangedEvent"].Messages!.Count.Should().Be(1);
 
-        await Assert.That(document.Operations.Count).IsEqualTo(2);
+        document.Operations.Count.Should().Be(2);
     }
 
     [Test]
-    public async Task Generate_PerMessageOperationCustomization()
+    public void Generate_PerMessageOperationCustomization()
     {
         var generator = BuildGenerator(
             bus => bus
@@ -293,13 +293,13 @@ public class AsyncApiDocumentGeneratorTests
 
         var document = generator.Generate();
 
-        await Assert.That(document.Operations).ContainsKey("sendOrderCreatedEvent");
-        await Assert.That(document.Operations["sendOrderCreatedEvent"].Description)
-            .IsEqualTo("Emitted when a new order is placed.");
+        document.Operations.Should().ContainKey("sendOrderCreatedEvent");
+        document.Operations["sendOrderCreatedEvent"].Description
+            .Should().Be("Emitted when a new order is placed.");
     }
 
     [Test]
-    public async Task Generate_DuplicateOperationId_AcrossChannels_Throws()
+    public void Generate_DuplicateOperationId_AcrossChannels_Throws()
     {
         var generator = BuildGenerator(
             bus => bus
@@ -309,11 +309,12 @@ public class AsyncApiDocumentGeneratorTests
                     .Produces<OrderCreatedEvent>()));
 
         // Same message type on two channels → both default to "sendOrderCreatedEvent"
-        Assert.Throws<InvalidOperationException>(() => generator.Generate());
+        var act = () => generator.Generate();
+        act.Should().Throw<InvalidOperationException>();
     }
 
     [Test]
-    public async Task Generate_PublishAndConsumeOnSameChannel_NoDuplicateServerRefs()
+    public void Generate_PublishAndConsumeOnSameChannel_NoDuplicateServerRefs()
     {
         var generator = BuildGenerator(
             bus => bus
@@ -329,12 +330,12 @@ public class AsyncApiDocumentGeneratorTests
         var document = generator.Generate();
 
         var channel = document.Channels["events.topic"];
-        await Assert.That(channel.Servers).IsNotNull();
-        await Assert.That(channel.Servers!.Count).IsEqualTo(1);
+        channel.Servers.Should().NotBeNull();
+        channel.Servers!.Count.Should().Be(1);
     }
 
     [Test]
-    public async Task Generate_OperationTags_IncludedInOutput()
+    public void Generate_OperationTags_IncludedInOutput()
     {
         var generator = BuildGenerator(
             bus => bus
@@ -346,9 +347,9 @@ public class AsyncApiDocumentGeneratorTests
         var document = generator.Generate();
 
         var op = document.Operations["sendOrderCreatedEvent"];
-        await Assert.That(op.Tags).IsNotNull();
-        await Assert.That(op.Tags!.Count).IsEqualTo(2);
-        await Assert.That(op.Tags[0].Name).IsEqualTo("orders");
-        await Assert.That(op.Tags[1].Name).IsEqualTo("lifecycle");
+        op.Tags.Should().NotBeNull();
+        op.Tags!.Count.Should().Be(2);
+        op.Tags[0].Name.Should().Be("orders");
+        op.Tags[1].Name.Should().Be("lifecycle");
     }
 }

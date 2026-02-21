@@ -77,26 +77,15 @@ public class TopologyTests(
         // Assert
         // Message should end up in DLQ: {QueueName}.dlq
         var dlqName = $"{QueueName}.dlq";
-        
+
         var factory = new ConnectionFactory { Uri = new Uri(RabbitMqConnectionString) };
         await using var connection = await factory.CreateConnectionAsync();
         await using var channel = await connection.CreateChannelAsync();
 
-        var messageFound = false;
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        
-        while (sw.Elapsed < TimeSpan.FromSeconds(5))
-        {
-            var result = await channel.BasicGetAsync(dlqName, true);
-            if (result != null)
-            {
-                messageFound = true;
-                break;
-            }
-            await Task.Delay(50);
-        }
-
-        messageFound.Should().BeTrue("Message should be routed to DLQ via DLQ Exchange");
+        await WaitForConditionAsync(
+            async () => await channel.BasicGetAsync(dlqName, true) != null,
+            TimeSpan.FromSeconds(5),
+            "Message should be routed to DLQ via DLQ Exchange");
     }
 
 

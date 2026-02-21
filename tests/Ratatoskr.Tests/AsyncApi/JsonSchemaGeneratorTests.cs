@@ -1,3 +1,4 @@
+using AwesomeAssertions;
 using Ratatoskr.AsyncApi.Model;
 using Ratatoskr.AsyncApi.Schema;
 
@@ -82,97 +83,97 @@ public class JsonSchemaGeneratorTests
     // ──────────────────────────────
 
     [Test]
-    public async Task NonNullableString_ProducesSingleType()
+    public void NonNullableString_ProducesSingleType()
     {
         var schema = GenerateSchema<PrimitiveNullabilityModel>();
         var prop = schema.Properties!["nonNullableString"];
 
-        await Assert.That(IsSingleType(prop, "string")).IsTrue();
+        IsSingleType(prop, "string").Should().BeTrue();
     }
 
     [Test]
-    public async Task NullableString_ProducesNullableType()
+    public void NullableString_ProducesNullableType()
     {
         var schema = GenerateSchema<PrimitiveNullabilityModel>();
         var prop = schema.Properties!["nullableString"];
 
-        await Assert.That(IsNullableType(prop, "string")).IsTrue();
+        IsNullableType(prop, "string").Should().BeTrue();
     }
 
     [Test]
-    public async Task NonNullableInt_ProducesSingleType()
+    public void NonNullableInt_ProducesSingleType()
     {
         var schema = GenerateSchema<PrimitiveNullabilityModel>();
         var prop = schema.Properties!["nonNullableInt"];
 
-        await Assert.That(IsSingleType(prop, "integer")).IsTrue();
+        IsSingleType(prop, "integer").Should().BeTrue();
     }
 
     [Test]
-    public async Task NullableInt_ProducesNullableType()
+    public void NullableInt_ProducesNullableType()
     {
         var schema = GenerateSchema<PrimitiveNullabilityModel>();
         var prop = schema.Properties!["nullableInt"];
 
-        await Assert.That(IsNullableType(prop, "integer")).IsTrue();
+        IsNullableType(prop, "integer").Should().BeTrue();
     }
 
     [Test]
-    public async Task NonNullableBool_ProducesSingleType()
+    public void NonNullableBool_ProducesSingleType()
     {
         var schema = GenerateSchema<PrimitiveNullabilityModel>();
         var prop = schema.Properties!["nonNullableBool"];
 
-        await Assert.That(IsSingleType(prop, "boolean")).IsTrue();
+        IsSingleType(prop, "boolean").Should().BeTrue();
     }
 
     [Test]
-    public async Task NullableBool_ProducesNullableType()
+    public void NullableBool_ProducesNullableType()
     {
         var schema = GenerateSchema<PrimitiveNullabilityModel>();
         var prop = schema.Properties!["nullableBool"];
 
-        await Assert.That(IsNullableType(prop, "boolean")).IsTrue();
+        IsNullableType(prop, "boolean").Should().BeTrue();
     }
 
     [Test]
-    public async Task NonNullableGuid_ProducesSingleType()
+    public void NonNullableGuid_ProducesSingleType()
     {
         var schema = GenerateSchema<PrimitiveNullabilityModel>();
         var prop = schema.Properties!["nonNullableGuid"];
 
-        await Assert.That(IsSingleType(prop, "string")).IsTrue();
-        await Assert.That(prop.Format).IsEqualTo("uuid");
+        IsSingleType(prop, "string").Should().BeTrue();
+        prop.Format.Should().Be("uuid");
     }
 
     [Test]
-    public async Task NullableGuid_ProducesNullableType()
+    public void NullableGuid_ProducesNullableType()
     {
         var schema = GenerateSchema<PrimitiveNullabilityModel>();
         var prop = schema.Properties!["nullableGuid"];
 
-        await Assert.That(IsNullableType(prop, "string")).IsTrue();
-        await Assert.That(prop.Format).IsEqualTo("uuid");
+        IsNullableType(prop, "string").Should().BeTrue();
+        prop.Format.Should().Be("uuid");
     }
 
     [Test]
-    public async Task NonNullableDateTime_ProducesSingleType()
+    public void NonNullableDateTime_ProducesSingleType()
     {
         var schema = GenerateSchema<PrimitiveNullabilityModel>();
         var prop = schema.Properties!["nonNullableDateTime"];
 
-        await Assert.That(IsSingleType(prop, "string")).IsTrue();
-        await Assert.That(prop.Format).IsEqualTo("date-time");
+        IsSingleType(prop, "string").Should().BeTrue();
+        prop.Format.Should().Be("date-time");
     }
 
     [Test]
-    public async Task NullableDateTime_ProducesNullableType()
+    public void NullableDateTime_ProducesNullableType()
     {
         var schema = GenerateSchema<PrimitiveNullabilityModel>();
         var prop = schema.Properties!["nullableDateTime"];
 
-        await Assert.That(IsNullableType(prop, "string")).IsTrue();
-        await Assert.That(prop.Format).IsEqualTo("date-time");
+        IsNullableType(prop, "string").Should().BeTrue();
+        prop.Format.Should().Be("date-time");
     }
 
     // ──────────────────────────────
@@ -180,65 +181,65 @@ public class JsonSchemaGeneratorTests
     // ──────────────────────────────
 
     [Test]
-    public async Task NonNullableList_ProducesArrayWithoutNull()
+    public void NonNullableList_ProducesArrayWithoutNull()
     {
         var schema = GenerateSchema<CollectionNullabilityModel>();
         var prop = schema.Properties!["nonNullableList"];
 
-        await Assert.That(IsSingleType(prop, "array")).IsTrue();
-        await Assert.That(prop.OneOf).IsNull();
+        IsSingleType(prop, "array").Should().BeTrue();
+        prop.OneOf.Should().BeNull();
     }
 
     [Test]
-    public async Task NullableList_ProducesOneOfArrayAndNull()
+    public void NullableList_ProducesOneOfArrayAndNull()
     {
         var schema = GenerateSchema<CollectionNullabilityModel>();
         var prop = schema.Properties!["nullableList"];
 
-        await Assert.That(IsOneOfWithNull(prop)).IsTrue();
-        await Assert.That(IsSingleType(prop.OneOf![0], "array")).IsTrue();
+        IsOneOfWithNull(prop).Should().BeTrue();
+        IsSingleType(prop.OneOf![0], "array").Should().BeTrue();
     }
 
     [Test]
-    public async Task NonNullableArray_ProducesArrayWithoutNull()
+    public void NonNullableArray_ProducesArrayWithoutNull()
     {
         var schema = GenerateSchema<CollectionNullabilityModel>();
         var prop = schema.Properties!["nonNullableArray"];
 
-        await Assert.That(IsSingleType(prop, "array")).IsTrue();
-        await Assert.That(prop.OneOf).IsNull();
+        IsSingleType(prop, "array").Should().BeTrue();
+        prop.OneOf.Should().BeNull();
     }
 
     [Test]
-    public async Task NullableArray_ProducesOneOfArrayAndNull()
+    public void NullableArray_ProducesOneOfArrayAndNull()
     {
         var schema = GenerateSchema<CollectionNullabilityModel>();
         var prop = schema.Properties!["nullableArray"];
 
-        await Assert.That(IsOneOfWithNull(prop)).IsTrue();
-        await Assert.That(IsSingleType(prop.OneOf![0], "array")).IsTrue();
+        IsOneOfWithNull(prop).Should().BeTrue();
+        IsSingleType(prop.OneOf![0], "array").Should().BeTrue();
     }
 
     [Test]
-    public async Task NonNullableDictionary_ProducesObjectWithoutNull()
+    public void NonNullableDictionary_ProducesObjectWithoutNull()
     {
         var schema = GenerateSchema<CollectionNullabilityModel>();
         var prop = schema.Properties!["nonNullableDictionary"];
 
-        await Assert.That(IsSingleType(prop, "object")).IsTrue();
-        await Assert.That(prop.AdditionalProperties).IsNotNull();
-        await Assert.That(prop.OneOf).IsNull();
+        IsSingleType(prop, "object").Should().BeTrue();
+        prop.AdditionalProperties.Should().NotBeNull();
+        prop.OneOf.Should().BeNull();
     }
 
     [Test]
-    public async Task NullableDictionary_ProducesOneOfObjectAndNull()
+    public void NullableDictionary_ProducesOneOfObjectAndNull()
     {
         var schema = GenerateSchema<CollectionNullabilityModel>();
         var prop = schema.Properties!["nullableDictionary"];
 
-        await Assert.That(IsOneOfWithNull(prop)).IsTrue();
-        await Assert.That(IsSingleType(prop.OneOf![0], "object")).IsTrue();
-        await Assert.That(prop.OneOf[0].AdditionalProperties).IsNotNull();
+        IsOneOfWithNull(prop).Should().BeTrue();
+        IsSingleType(prop.OneOf![0], "object").Should().BeTrue();
+        prop.OneOf[0].AdditionalProperties.Should().NotBeNull();
     }
 
     // ──────────────────────────────
@@ -246,26 +247,26 @@ public class JsonSchemaGeneratorTests
     // ──────────────────────────────
 
     [Test]
-    public async Task NonNullableComplexType_ProducesRefWithoutNull()
+    public void NonNullableComplexType_ProducesRefWithoutNull()
     {
         var components = new Dictionary<string, JsonSchema>();
         _generator.GenerateAndRegister(typeof(ComplexNullabilityModel), components);
         var schema = components[nameof(ComplexNullabilityModel)];
         var prop = schema.Properties!["nonNullableNested"];
 
-        await Assert.That(prop.Ref).IsEqualTo("#/components/schemas/NestedModel");
-        await Assert.That(prop.OneOf).IsNull();
+        prop.Ref.Should().Be("#/components/schemas/NestedModel");
+        prop.OneOf.Should().BeNull();
     }
 
     [Test]
-    public async Task NullableComplexType_ProducesOneOfRefAndNull()
+    public void NullableComplexType_ProducesOneOfRefAndNull()
     {
         var components = new Dictionary<string, JsonSchema>();
         _generator.GenerateAndRegister(typeof(ComplexNullabilityModel), components);
         var schema = components[nameof(ComplexNullabilityModel)];
         var prop = schema.Properties!["nullableNested"];
 
-        await Assert.That(IsOneOfWithNull(prop)).IsTrue();
-        await Assert.That(prop.OneOf![0].Ref).IsEqualTo("#/components/schemas/NestedModel");
+        IsOneOfWithNull(prop).Should().BeTrue();
+        prop.OneOf![0].Ref.Should().Be("#/components/schemas/NestedModel");
     }
 }
