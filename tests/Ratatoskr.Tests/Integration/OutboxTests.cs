@@ -36,7 +36,9 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             services.AddRatatoskr(bus => 
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-                bus.AddEventPublishChannel(ExchangeName, c => c.Produces<TestEvent>());
+                bus.AddEventPublishChannel(ExchangeName, c => c
+                    .WithRabbitMq(r => r.WithTopicExchange())
+                    .Produces<TestEvent>());
             });
             
             services.AddTestDbContext(PostgresConnectionString);
