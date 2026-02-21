@@ -423,9 +423,14 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             await InScopeAsync(async ctx =>
             {
                 var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                await using var transaction = await dbContext.Database.BeginTransactionAsync();
+
                 dbContext.OutboxMessages.Add(new TestEvent { Data = "should not be saved" });
 
-                // Throw before SaveChanges to simulate a rollback
+                // The interceptor will run here and add the OutboxMessageEntity to the DbContext.
+                await dbContext.SaveChangesAsync();
+
+                // Simulate a subsequent failure that prevents the transaction from being committed.
                 throw new InvalidOperationException("Simulated failure before commit");
             });
         }
