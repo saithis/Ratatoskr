@@ -105,6 +105,20 @@ public class RabbitMqChannelOptions
         return this;
     }
 
+    /// <summary>Sets whether the exchange survives broker restarts.</summary>
+    public RabbitMqChannelOptions WithExchangeDurable(bool durable = true)
+    {
+        ExchangeDurable = durable;
+        return this;
+    }
+
+    /// <summary>Sets whether the exchange is deleted when the last queue is unbound.</summary>
+    public RabbitMqChannelOptions WithExchangeAutoDelete(bool autoDelete = true)
+    {
+        ExchangeAutoDelete = autoDelete;
+        return this;
+    }
+
     // ── Fluent API: Queue ────────────────────────────────────────────
 
     /// <summary>Sets the queue name. Required for consume channels.</summary>
