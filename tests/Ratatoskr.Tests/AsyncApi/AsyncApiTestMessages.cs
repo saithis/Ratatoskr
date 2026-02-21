@@ -54,23 +54,3 @@ public record RoleAssignment
 
 public enum AssignmentLevel { Global, Tenant }
 
-// Simple event with Range and Url constraints
-[RatatoskrMessage("order.created")]
-public record OrderCreatedEvent
-{
-    [Required]
-    public Guid OrderId { get; init; }
-
-    [Required]
-    [Range(0.01, 999999.99)]
-    public decimal Amount { get; init; }
-
-    [EmailAddress]
-    public string? CustomerEmail { get; init; }
-
-    [Url]
-    public string? CallbackUrl { get; init; }
-
-    [StringLength(500, MinimumLength = 1)]
-    public string? Notes { get; init; }
-}

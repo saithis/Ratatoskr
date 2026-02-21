@@ -404,6 +404,109 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
     }
 
 
+    [Test]
+    public async Task Outbox_RollbackTransaction_MessageNotPublished()
+    {
+        // Arrange
+        await StartTestAsync(services =>
+        {
+            services.AddTestRatatoskr(bus => bus.AddEventPublishChannel("test", c => c.Produces<TestEvent>()));
+            services.AddTestDbContext(PostgresConnectionString);
+            services.AddTestOutbox<TestDbContext>();
+        });
+
+        await InitializeDatabase();
+
+        // Act - Stage a message but throw before SaveChanges completes
+        try
+        {
+            await InScopeAsync(async ctx =>
+            {
+                var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                await using var transaction = await dbContext.Database.BeginTransactionAsync();
+
+                dbContext.OutboxMessages.Add(new TestEvent { Data = "should not be saved" });
+
+                // The interceptor will run here and add the OutboxMessageEntity to the DbContext.
+                await dbContext.SaveChangesAsync();
+
+                // Simulate a subsequent failure that prevents the transaction from being committed.
+                throw new InvalidOperationException("Simulated failure before commit");
+            });
+        }
+        catch (InvalidOperationException)
+        {
+            // Expected exception
+        }
+
+        // Assert - No outbox entities should exist
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var entities = await dbContext.Set<OutboxMessageEntity>().ToListAsync();
+            entities.Should().BeEmpty();
+        });
+
+        // Verify processing finds nothing
+        await InScopeAsync(async ctx =>
+        {
+            var count = await ProcessOutboxAsync<TestDbContext>(ctx.ServiceProvider);
+            count.Should().Be(0);
+        });
+    }
+
+    [Test]
+    public async Task Outbox_MultipleDbContextsInParallel_Isolated()
+    {
+        // Arrange
+        await StartTestAsync(services =>
+        {
+            services.AddTestRatatoskr(bus => bus.AddEventPublishChannel("test", c => c.Produces<TestEvent>()));
+            services.AddTestDbContext(PostgresConnectionString);
+            services.AddTestOutbox<TestDbContext>();
+        });
+
+        await InitializeDatabase();
+
+        // Act - Two parallel scopes stage different messages
+        var task1 = InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            dbContext.OutboxMessages.Add(new TestEvent { Data = "scope-1-msg" });
+            await dbContext.SaveChangesAsync();
+        });
+
+        var task2 = InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            dbContext.OutboxMessages.Add(new TestEvent { Data = "scope-2-msg" });
+            await dbContext.SaveChangesAsync();
+        });
+
+        await Task.WhenAll(task1, task2);
+
+        // Assert - Both messages should exist independently
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var entities = await dbContext.Set<OutboxMessageEntity>().ToListAsync();
+            entities.Should().HaveCount(2);
+        });
+
+        // Process all and verify both are sent
+        await InScopeAsync(async ctx =>
+        {
+            var processedCount = await ProcessOutboxAsync<TestDbContext>(ctx.ServiceProvider);
+            processedCount.Should().Be(2);
+        });
+
+        await InScopeAsync(ctx =>
+        {
+            var sender = ctx.ServiceProvider.GetRequiredService<InMemoryMessageSender>();
+            sender.SentMessages.Should().HaveCount(2);
+        });
+    }
+
     private async Task InitializeDatabase()
     {
         await InScopeAsync(async ctx =>

@@ -43,9 +43,10 @@ public class TestAssertionsTests
         // Arrange
         var sender = CreateSenderWithRegistry();
 
-        var event1 = new OrderCreatedEvent { OrderId = "ORDER-1", Amount = 50 };
-        var event2 = new OrderCreatedEvent { OrderId = "ORDER-2", Amount = 100 };
-        var event3 = new OrderCreatedEvent { OrderId = "ORDER-3", Amount = 150 };
+        var guid3 = Guid.NewGuid();
+        var event1 = new OrderCreatedEvent { OrderId = Guid.NewGuid(), Amount = 50 };
+        var event2 = new OrderCreatedEvent { OrderId = Guid.NewGuid(), Amount = 100 };
+        var event3 = new OrderCreatedEvent { OrderId = guid3, Amount = 150 };
 
         await sender.SendAsync(JsonSerializer.SerializeToUtf8Bytes(event1),
             new MessageProperties { Type = "order.created" }, CancellationToken.None);
@@ -60,7 +61,7 @@ public class TestAssertionsTests
         // Assert
         var deserialized = result.Deserialize<OrderCreatedEvent>();
         deserialized.Should().NotBeNull();
-        deserialized!.OrderId.Should().Be("ORDER-3");
+        deserialized!.OrderId.Should().Be(guid3);
         deserialized.Amount.Should().Be(150);
     }
 
@@ -85,7 +86,7 @@ public class TestAssertionsTests
     {
         // Arrange
         var sender = CreateSenderWithRegistry();
-        var event1 = new OrderCreatedEvent { OrderId = "ORDER-1", Amount = 50 };
+        var event1 = new OrderCreatedEvent { OrderId = Guid.NewGuid(), Amount = 50 };
 
         await sender.SendAsync(JsonSerializer.SerializeToUtf8Bytes(event1),
             new MessageProperties { Type = "order.created" }, CancellationToken.None);
@@ -177,7 +178,7 @@ public class TestAssertionsTests
         var sender = CreateSenderWithRegistry();
 
         var testEvent = new TestEvent { Data = "test" };
-        var orderEvent = new OrderCreatedEvent { OrderId = "ORDER-1" };
+        var orderEvent = new OrderCreatedEvent { OrderId = Guid.NewGuid() };
 
         await sender.SendAsync(JsonSerializer.SerializeToUtf8Bytes(testEvent),
             new MessageProperties { Type = "test.event" }, CancellationToken.None);
@@ -272,8 +273,8 @@ public class TestAssertionsTests
          // Arrange
         var sender = CreateSenderWithRegistry();
         
-        var event1 = new OrderCreatedEvent { OrderId = "A" };
-        var event2 = new OrderCreatedEvent { OrderId = "B" };
+        var event1 = new OrderCreatedEvent { OrderId = Guid.NewGuid() };
+        var event2 = new OrderCreatedEvent { OrderId = Guid.NewGuid() };
         var otherEvent = new TestEvent { Data = "other" };
 
         await sender.SendAsync(JsonSerializer.SerializeToUtf8Bytes(event1), 

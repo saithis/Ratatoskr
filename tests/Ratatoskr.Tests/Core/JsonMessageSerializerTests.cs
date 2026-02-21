@@ -101,21 +101,50 @@ public class JsonMessageSerializerTests
         // Arrange
         var deserializer = new JsonMessageSerializer();
         
-        var orderEvent = new OrderCreatedEvent 
-        { 
-            OrderId = "order-456", 
+        var orderId = Guid.NewGuid();
+        var orderEvent = new OrderCreatedEvent
+        {
+            OrderId = orderId,
             Amount = 123.45m,
             CreatedAt = new DateTimeOffset(2024, 1, 15, 10, 30, 0, TimeSpan.Zero)
         };
         var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(orderEvent));
-        
+
         // Act
         var result = deserializer.Deserialize<OrderCreatedEvent>(body);
-        
+
         // Assert
         result.Should().NotBeNull();
-        result.OrderId.Should().Be("order-456");
+        result.OrderId.Should().Be(orderId);
         result.Amount.Should().Be(123.45m);
         result.CreatedAt.Should().Be(new DateTimeOffset(2024, 1, 15, 10, 30, 0, TimeSpan.Zero));
+    }
+
+    [Test]
+    public void Deserialize_MalformedJson_ThrowsJsonException()
+    {
+        // Arrange
+        var serializer = new JsonMessageSerializer();
+        var malformedBody = Encoding.UTF8.GetBytes("{ not valid json }");
+
+        // Act
+        var act = () => serializer.Deserialize<TestEvent>(malformedBody);
+
+        // Assert
+        act.Should().Throw<JsonException>();
+    }
+
+    [Test]
+    public void Deserialize_WrongType_ThrowsJsonException()
+    {
+        // Arrange
+        var serializer = new JsonMessageSerializer();
+        var body = Encoding.UTF8.GetBytes("[1, 2, 3]");
+
+        // Act
+        var act = () => serializer.Deserialize<TestEvent>(body);
+
+        // Assert
+        act.Should().Throw<JsonException>();
     }
 }

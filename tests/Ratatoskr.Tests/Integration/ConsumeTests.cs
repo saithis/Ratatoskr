@@ -112,11 +112,76 @@ public class ConsumeTests(
         handler.HandledMessages[0].Id.Should().Be("struct-1");
     }
 
+    [Test]
+    public async Task Consume_UnknownEventType_HandlerNotInvoked()
+    {
+        // Arrange
+        var handler = new TestEventHandler();
+        var dlqName = $"{QueueName}.dlq";
+
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                ConfigureBusWithRetry(bus, QueueName, maxRetries: 1);
+                bus.AddHandler<TestEvent, TestEventHandler>(handler);
+            });
+        });
+
+        // Act - Send a message with an unknown event type
+        await PublishToRabbitMqAsync(exchange: "", routingKey: QueueName,
+            new TestEvent { Id = "unknown", Data = "test" }, type: "unknown.event.type");
+
+        // Assert - Handler should not be invoked for unknown event types
+        await WaitForConditionAsync(async () => await GetMessageCountAsync(dlqName) > 0,
+            TimeSpan.FromSeconds(5), "Unknown event message did not move to DLQ");
+        handler.HandledMessages.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task Consume_HandlerThrows_MessageNotAcked()
+    {
+        // Arrange
+        var handler = new ThrowingTestEventHandler();
+
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                ConfigureBusWithRetry(bus, QueueName, maxRetries: 3);
+                bus.AddHandler<TestEvent, ThrowingTestEventHandler>(handler);
+            });
+        });
+
+        // Act
+        await PublishToRabbitMqAsync(exchange: "", routingKey: QueueName,
+            new TestEvent { Id = "throw-1", Data = "will throw" });
+
+        // Assert - Handler is invoked multiple times (message redelivered after nack)
+        // This proves the message was NOT acked on the first failure
+        await WaitForConditionAsync(() => handler.ReceivedMessages.Count >= 2, TimeSpan.FromSeconds(5),
+            "Message was not redelivered after handler failure");
+        handler.ReceivedMessages.Should().AllSatisfy(e => e.Id.Should().Be("throw-1"));
+    }
+
     private void ConfigureBus(RatatoskrBuilder bus, string queueName)
     {
         bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
         bus.AddCommandConsumeChannel(queueName, c => c
             .WithRabbitMq(o => o.WithQueueName(queueName).WithAutoAck(false).WithTransientQueue()
+                .WithQueueType(QueueType.Classic))
+            .Consumes<TestEvent>());
+    }
+
+    private void ConfigureBusWithRetry(RatatoskrBuilder bus, string queueName, int maxRetries)
+    {
+        bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+        bus.AddCommandConsumeChannel(queueName, c => c
+            .WithRabbitMq(o => o
+                .WithQueueName(queueName)
+                .WithAutoAck(false)
+                .WithRetry(r => r.WithMaxRetries(maxRetries).WithDelay(TimeSpan.FromMilliseconds(50)))
+                .WithTransientQueue()
                 .WithQueueType(QueueType.Classic))
             .Consumes<TestEvent>());
     }

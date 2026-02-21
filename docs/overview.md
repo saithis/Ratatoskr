@@ -6,7 +6,7 @@
 - Abstractions to make other transports like Kafka possible
 - By default send messages as CloudEvents, but support other formats
 - Very good error handling and recovery
-- Works with horrizontally scaled applications
+- Works with horizontally scaled applications
 - Good Observability
 - Easy to test
 

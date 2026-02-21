@@ -23,9 +23,9 @@ public class RatatoskrTests
         var sender = provider.GetRequiredService<InMemoryMessageSender>();
         
         // Act
-        await bus.PublishDirectAsync(new OrderCreatedEvent 
-        { 
-            OrderId = "123",
+        await bus.PublishDirectAsync(new OrderCreatedEvent
+        {
+            OrderId = Guid.NewGuid(),
             Amount = 99.99m,
             CreatedAt = DateTimeOffset.UtcNow
         });

@@ -212,19 +212,20 @@ public class MessageDispatcherTests
     public async Task DispatchAsync_UsesNewScopeForEachMessage()
     {
         // Arrange
-        var handler = new ScopedServiceTestHandler();
-        var (dispatcher, _, channelRegistry) = CreateDispatcher(services => 
+        var collector = new ScopedServiceIdCollector();
+        var (dispatcher, _, channelRegistry) = CreateDispatcher(services =>
         {
-            services.AddScoped<ScopedServiceTestHandler>(_ => handler);
-            services.AddScoped<IMessageHandler<TestEvent>>(_ => handler);
+            services.AddSingleton(collector);
             services.AddScoped<ScopedService>();
+            services.AddScoped<ScopedServiceTestHandler>();
+            services.AddScoped<IMessageHandler<TestEvent>, ScopedServiceTestHandler>();
         });
-        
+
         var channel = new ChannelRegistration("test", ChannelType.EventConsume);
         channel.Messages.Add(new MessageRegistration(typeof(TestEvent), "test.event"));
         channelRegistry.Register(channel);
         channelRegistry.Freeze();
-        
+
         var testEvent = new TestEvent { Id = "123", Data = "test data" };
         var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testEvent));
         var context = new MessageProperties
@@ -233,14 +234,14 @@ public class MessageDispatcherTests
             Type = "test.event",
             Source = "/test",
         };
-        
+
         // Act - Dispatch twice
         await dispatcher.DispatchAsync(body, context, CancellationToken.None);
         await dispatcher.DispatchAsync(body, context, CancellationToken.None);
-        
+
         // Assert - Each dispatch creates a new scope, so scoped service is new each time
-        handler.ServiceIds.Should().HaveCount(2);
-        handler.ServiceIds[0].Should().NotBe(handler.ServiceIds[1]);
+        collector.ServiceIds.Should().HaveCount(2);
+        collector.ServiceIds[0].Should().NotBe(collector.ServiceIds[1]);
     }
 
     [Test]
@@ -284,7 +285,72 @@ public class MessageDispatcherTests
         handler.CapturedContext.Headers["custom"].Should().Be("header");
     }
 
-    private static (MessageDispatcher dispatcher, ServiceCollection services, ChannelRegistry channelRegistry) 
+    [Test]
+    public async Task DispatchAsync_CancellationRequested_ReturnsRecoverableError()
+    {
+        // Arrange
+        var (dispatcher, _, channelRegistry) = CreateDispatcher(services =>
+        {
+            services.AddScoped<CancellationAwareTestHandler>();
+            services.AddScoped<IMessageHandler<TestEvent>, CancellationAwareTestHandler>();
+        });
+
+        var channel = new ChannelRegistration("test", ChannelType.EventConsume);
+        channel.Messages.Add(new MessageRegistration(typeof(TestEvent), "test.event"));
+        channelRegistry.Register(channel);
+        channelRegistry.Freeze();
+
+        var testEvent = new TestEvent { Id = "123", Data = "test data" };
+        var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testEvent));
+        var context = new MessageProperties
+        {
+            Id = "event-123",
+            Type = "test.event",
+            Source = "/test",
+        };
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        // Act
+        var result = await dispatcher.DispatchAsync(body, context, cts.Token);
+
+        // Assert - OperationCanceledException from handler is treated as RecoverableError
+        result.Should().Be(DispatchResult.RecoverableError);
+    }
+
+    [Test]
+    public async Task DispatchAsync_NullBody_ReturnsPermanentError()
+    {
+        // Arrange
+        var handler = new TestEventHandler();
+        var (dispatcher, _, channelRegistry) = CreateDispatcher(services =>
+        {
+            services.AddScoped<TestEventHandler>(_ => handler);
+            services.AddScoped<IMessageHandler<TestEvent>>(_ => handler);
+        });
+
+        var channel = new ChannelRegistration("test", ChannelType.EventConsume);
+        channel.Messages.Add(new MessageRegistration(typeof(TestEvent), "test.event"));
+        channelRegistry.Register(channel);
+        channelRegistry.Freeze();
+
+        var context = new MessageProperties
+        {
+            Id = "event-123",
+            Type = "test.event",
+            Source = "/test",
+        };
+
+        // Act
+        var result = await dispatcher.DispatchAsync(null!, context, CancellationToken.None);
+
+        // Assert - null body causes deserialization failure → PermanentError
+        result.Should().Be(DispatchResult.PermanentError);
+        handler.HandledMessages.Should().BeEmpty();
+    }
+
+    private static (MessageDispatcher dispatcher, ServiceCollection services, ChannelRegistry channelRegistry)
         CreateDispatcher(Action<ServiceCollection>? configure = null)
     {
         var services = new ServiceCollection();
@@ -306,35 +372,5 @@ public class MessageDispatcherTests
             NullLogger<MessageDispatcher>.Instance);
         
         return (dispatcher, services, channelRegistry);
-    }
-}
-
-// Scoped service for testing DI scopes
-public class ScopedService
-{
-    public Guid Id { get; } = Guid.NewGuid();
-}
-
-// Handler that uses scoped service
-public class ScopedServiceTestHandler : IMessageHandler<TestEvent>
-{
-    public List<Guid> ServiceIds { get; } = new();
-    
-    public Task HandleAsync(TestEvent message, MessageProperties context, CancellationToken cancellationToken)
-    {
-        ServiceIds.Add(Guid.NewGuid()); // Simulate capturing service ID
-        return Task.CompletedTask;
-    }
-}
-
-// Handler that captures context
-public class ContextCapturingHandler : IMessageHandler<TestEvent>
-{
-    public MessageProperties? CapturedContext { get; private set; }
-    
-    public Task HandleAsync(TestEvent message, MessageProperties context, CancellationToken cancellationToken)
-    {
-        CapturedContext = context;
-        return Task.CompletedTask;
     }
 }

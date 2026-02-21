@@ -1,6 +1,9 @@
+using System.Reflection;
+using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.Time.Testing;
 using Ratatoskr.Core;
+using Ratatoskr.EfCore;
 using Ratatoskr.EfCore.Internal;
 using TUnit.Core;
 
@@ -210,5 +213,55 @@ public class OutboxMessageEntityTests
         // Assert
         entity.Error.Length.Should().Be(2000);
         entity.Error.Should().Be(longError[..2000]);
+    }
+
+    [Test]
+    public void Create_NullContent_DoesNotThrow()
+    {
+        // Arrange
+        var fakeTime = new FakeTimeProvider();
+
+        // Act - passing null content (violates non-nullable contract but no runtime guard)
+        var entity = OutboxMessageEntity.Create(null!, new MessageProperties(), fakeTime);
+
+        // Assert - entity is created, content is null (no validation in Create)
+        entity.Should().NotBeNull();
+        entity.Id.Should().NotBe(Guid.Empty);
+    }
+
+    [Test]
+    public void GetProperties_CorruptedJson_ThrowsJsonException()
+    {
+        // Arrange - create entity then corrupt SerializedProperties via reflection
+        var fakeTime = new FakeTimeProvider();
+        var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties(), fakeTime);
+
+        var backingField = typeof(OutboxMessageEntity)
+            .GetField("<SerializedProperties>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        backingField.SetValue(entity, "not valid json");
+
+        // Act
+        var act = () => entity.GetProperties();
+
+        // Assert
+        act.Should().Throw<JsonException>();
+    }
+
+    [Test]
+    public void GetProperties_NullDeserializationResult_ThrowsOutboxMessageSerializationException()
+    {
+        // Arrange - set SerializedProperties to JSON "null" which deserializes to null
+        var fakeTime = new FakeTimeProvider();
+        var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties(), fakeTime);
+
+        var backingField = typeof(OutboxMessageEntity)
+            .GetField("<SerializedProperties>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        backingField.SetValue(entity, "null");
+
+        // Act
+        var act = () => entity.GetProperties();
+
+        // Assert
+        act.Should().Throw<OutboxMessageSerializationException>();
     }
 }

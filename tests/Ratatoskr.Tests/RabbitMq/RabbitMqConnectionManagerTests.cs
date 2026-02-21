@@ -72,6 +72,33 @@ public class RabbitMqConnectionManagerTests(RabbitMqContainerFixture rabbitMq)
     }
 
     [Test]
+    public async Task CreateChannelAsync_ConcurrentCalls_AllSucceed()
+    {
+        // Arrange
+        var options = new RabbitMqOptions
+        {
+            ConnectionString = new Uri(rabbitMq.ConnectionString)
+        };
+        await using var manager = new RabbitMqConnectionManager(options);
+
+        // Act - Create multiple channels concurrently
+        var tasks = Enumerable.Range(0, 5)
+            .Select(_ => manager.CreateChannelAsync(enablePublisherConfirms: false))
+            .ToArray();
+
+        var channels = await Task.WhenAll(tasks);
+
+        // Assert - All channels should be open
+        channels.Should().AllSatisfy(c => c.IsOpen.Should().BeTrue());
+
+        // Cleanup
+        foreach (var channel in channels)
+        {
+            await channel.DisposeAsync();
+        }
+    }
+
+    [Test]
     public async Task DisposeAsync_ClosesConnection()
     {
         // Arrange
