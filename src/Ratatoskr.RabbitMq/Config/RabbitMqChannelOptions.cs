@@ -110,6 +110,7 @@ public class RabbitMqChannelOptions
     /// <summary>Sets the queue name. Required for consume channels.</summary>
     public RabbitMqChannelOptions WithQueueName(string name)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
         QueueName = name;
         return this;
     }

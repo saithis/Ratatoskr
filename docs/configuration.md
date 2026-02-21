@@ -12,7 +12,7 @@
 | Intent | API Method | Ownership | Action (RabbitMQ) |
 | :--- | :--- | :--- | :--- |
 | **Produces Event** | `AddEventPublishChannel` | **Us** (Originator) | **Declare** Exchange (Topic) |
-| **Sends Command** | `AddCommandPublishChannel` | **Them** (Receiver) | **Validate** Exchange Exists |
+| **Sends/Produces Command** | `AddCommandPublishChannel` | **Them** (Receiver) | **Validate** Exchange Exists |
 | **Consumes Command** | `AddCommandConsumeChannel` | **Us** (Processor) | **Declare** Exchange (Direct) + Queue |
 | **Consumes Event** | `AddEventConsumeChannel` | **Them** (Publisher) | **Validate** Exchange + **Declare** Queue + **Bind** |
 

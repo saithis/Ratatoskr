@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using PlaygroundApi;
 using PlaygroundApi.Database;
 using PlaygroundApi.Database.Entities;
-using PlaygroundApi.Events;
+using PlaygroundApi.Messages;
 using Ratatoskr;
 using Ratatoskr.AsyncApi.Extensions;
 using Ratatoskr.Core;
@@ -58,7 +58,7 @@ builder.Services.AddRatatoskr(bus =>
 
     bus.AddCommandConsumeChannel("commands.topic", c =>
         c.WithRabbitMq(r => r
-                .WithDirectExchange()
+                .WithTopicExchange()
                 .WithQueueName("commands.subscriptions"))
             .Consumes<AddNoteCommand>());
     
@@ -184,7 +184,7 @@ namespace PlaygroundApi
             dbContext.Notes.Add(new Note
             {
                 Text = message.Text,
-                CreatedAt = timeProvider.GetUtcNow().DateTime,
+                CreatedAt = timeProvider.GetUtcNow().UtcDateTime,
             });
             await dbContext.SaveChangesAsync(cancellationToken);
             logger.LogInformation("Received and handled: {EventType} {Body} {Props}", message, JsonSerializer.Serialize(message), JsonSerializer.Serialize(properties));

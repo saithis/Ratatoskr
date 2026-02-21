@@ -1,4 +1,5 @@
 using Ratatoskr.AsyncApi.Model.Bindings;
+using ClientExchangeType = RabbitMQ.Client.ExchangeType;
 
 namespace Ratatoskr.RabbitMq.Config;
 
@@ -27,10 +28,10 @@ internal static class ExchangeTypeExtensions
     /// </summary>
     internal static string ToRabbitMqString(this ExchangeType type) => type switch
     {
-        ExchangeType.Topic => "topic",
-        ExchangeType.Direct => "direct",
-        ExchangeType.Fanout => "fanout",
-        ExchangeType.Headers => "headers",
+        ExchangeType.Topic => ClientExchangeType.Topic,
+        ExchangeType.Direct => ClientExchangeType.Direct,
+        ExchangeType.Fanout => ClientExchangeType.Fanout,
+        ExchangeType.Headers => ClientExchangeType.Headers,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, null)
     };
 

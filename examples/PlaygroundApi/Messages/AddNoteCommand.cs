@@ -1,6 +1,6 @@
 using Ratatoskr;
 
-namespace PlaygroundApi.Events;
+namespace PlaygroundApi.Messages;
 
 [RatatoskrMessage("com.example.add.note")]
 public class AddNoteCommand

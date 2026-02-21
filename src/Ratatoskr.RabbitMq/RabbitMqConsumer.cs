@@ -138,8 +138,8 @@ internal class RabbitMqConsumer(
         {
              if (tags.Count > 0)
              {
-                 RatatoskrDiagnostics.ProcessDuration.Record(Stopwatch.GetElapsedTime(processStartTimestamp).TotalMilliseconds, tags);
                  tags.Add("outcome", outcome);
+                 RatatoskrDiagnostics.ProcessDuration.Record(Stopwatch.GetElapsedTime(processStartTimestamp).TotalMilliseconds, tags);
                  RatatoskrDiagnostics.ProcessMessages.Add(1, tags);
 
                  if (messageTime.HasValue)
@@ -231,12 +231,12 @@ internal class RabbitMqConsumer(
     {
         logger.LogInformation("Stopping RabbitMQ consumer");
 
+        await base.StopAsync(cancellationToken);
+
         foreach (var channel in _channels)
         {
             await channel.CloseAsync(cancellationToken);
             channel.Dispose();
         }
-
-        await base.StopAsync(cancellationToken);
     }
 }

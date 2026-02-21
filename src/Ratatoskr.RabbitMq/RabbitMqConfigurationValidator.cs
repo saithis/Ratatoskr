@@ -37,7 +37,7 @@ internal static class RabbitMqConfigurationValidator
                 $"Add at least one message using Produces<T>() or Consumes<T>().");
 
         // Consume channels must have a queue name
-        if (isConsume && string.IsNullOrEmpty(opts.QueueName))
+        if (isConsume && string.IsNullOrWhiteSpace(opts.QueueName))
             throw new InvalidOperationException(
                 $"Consume channel '{channel.ChannelName}' does not have a QueueName configured. " +
                 $"Call .WithQueueName(\"my-queue\") in the WithRabbitMq() configuration.");

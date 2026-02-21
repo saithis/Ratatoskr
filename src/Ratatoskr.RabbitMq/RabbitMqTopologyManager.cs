@@ -30,6 +30,7 @@ public class RabbitMqTopologyManager(
             // then validating channels (CommandPublish, EventConsume expect the exchange to exist).
             foreach (var reg in allChannels.OrderBy(r => r.Intent is ChannelType.CommandPublish or ChannelType.EventConsume))
             {
+                if (!reg.IsRabbitMqChannel()) continue;
                 await ProvisionChannelAsync(channel, reg, cancellationToken);
             }
 

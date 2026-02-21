@@ -34,6 +34,7 @@ public class RetryOptions
     /// <summary>Sets the maximum number of retry attempts.</summary>
     public RetryOptions WithMaxRetries(int maxRetries)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(maxRetries);
         MaxRetries = maxRetries;
         return this;
     }
@@ -41,6 +42,7 @@ public class RetryOptions
     /// <summary>Sets the delay between retry attempts.</summary>
     public RetryOptions WithDelay(TimeSpan delay)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(delay, TimeSpan.Zero);
         Delay = delay;
         return this;
     }
@@ -55,6 +57,7 @@ public class RetryOptions
     /// <summary>Sets the suffix for the dead-letter queue name.</summary>
     public RetryOptions WithDeadLetterSuffix(string suffix)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(suffix);
         DeadLetterSuffix = suffix;
         return this;
     }
@@ -62,6 +65,7 @@ public class RetryOptions
     /// <summary>Sets the suffix for the retry queue name.</summary>
     public RetryOptions WithRetrySuffix(string suffix)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(suffix);
         RetrySuffix = suffix;
         return this;
     }
