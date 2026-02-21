@@ -22,7 +22,7 @@ public class ChannelRegistryTests
         // Act
         builder.AddEventPublishChannel("local.events", cfg => cfg
             .Produces<TestEvent>()
-            .WithMetadata(RabbitMqChannelOptionsKey, new RabbitMqChannelOptions { ExchangeType = "topic" })
+            .WithRabbitMq(o => o.WithTopicExchange())
         );
 
         // Assert
@@ -71,9 +71,4 @@ public class ChannelRegistryTests
         results[0].Channel.ChannelName.Should().Be("orders.commands");
         results[0].Message.MessageType.Should().Be(typeof(TestEvent));
     }
-    
-    // Use the actual constant from extensions or define locally if internal? 
-    // It's internal in RabbitMqExtensions. But RabbitMqChannelOptions is public.
-    // The key is likely "RabbitMqChannelOptions".
-    private const string RabbitMqChannelOptionsKey = "RabbitMqChannelOptions";
 }

@@ -68,10 +68,10 @@ public class RetryTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
             bus.AddCommandConsumeChannel(QueueName, c => c
                 .WithRabbitMq(o => o
-                    .QueueName(QueueName)
-                    .AutoAck(false)
-                    .RetryOptions(maxRetries: maxRetries, delay: TimeSpan.FromMilliseconds(50), useManaged: true)
-                    .QueueOptions(durable: false, autoDelete: true)
+                    .WithQueueName(QueueName)
+                    .WithAutoAck(false)
+                    .WithRetry(r => r.WithMaxRetries(maxRetries).WithDelay(TimeSpan.FromMilliseconds(50)))
+                    .WithTransientQueue()
                     .WithQueueType(QueueType.Classic))
                 .Consumes<TestEvent>());
             

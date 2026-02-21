@@ -207,7 +207,7 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         var handler = new FailingTestEventHandler(failuresBeforeSuccess: 2);
         
         await StartTestAsync(services => ConfigureRatatoskr(services, handler, useOutbox: false, 
-            configureConsumer: c => c.RetryOptions(3, TimeSpan.FromMilliseconds(100))));
+            configureConsumer: c => c.WithRetry(3, TimeSpan.FromMilliseconds(100))));
 
         // 3. Act - Publish Message
         var eventId = "otel-retry-1";
@@ -276,7 +276,7 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         var handler = new AlwaysFailingTestEventHandler();
         
         await StartTestAsync(services => ConfigureRatatoskr(services, handler, useOutbox: false, 
-            configureConsumer: c => c.RetryOptions(2, TimeSpan.FromMilliseconds(100))));
+            configureConsumer: c => c.WithRetry(2, TimeSpan.FromMilliseconds(100))));
 
         // 3. Act - Publish Message
         var eventId = "otel-dlq-1";
@@ -370,21 +370,21 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
 
     // Helpers
 
-    private void ConfigureRatatoskr<THandler>(IServiceCollection services, THandler handler, bool useOutbox, Action<RabbitMqCombinedOptions>? configureConsumer = null)
+    private void ConfigureRatatoskr<THandler>(IServiceCollection services, THandler handler, bool useOutbox, Action<RabbitMqConsumeOptions>? configureConsumer = null)
         where THandler : class, IMessageHandler<TestEvent>
     {
         services.AddRatatoskr(bus =>
         {
             bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-            
+
             bus.AddEventPublishChannel(ExchangeName, c => c
-                .WithRabbitMq(r => r.ExchangeTypeTopic())
+                .WithRabbitMq(r => r.WithTopicExchange())
                 .Produces<TestEvent>());
 
             bus.AddEventConsumeChannel(ExchangeName, c => c
-                .WithRabbitMq(o => 
+                .WithRabbitMq(o =>
                 {
-                    o.QueueName(QueueName).AutoAck(false).QueueOptions(false, autoDelete: true)
+                    o.WithQueueName(QueueName).WithAutoAck(false).WithTransientQueue()
                      .WithQueueType(QueueType.Classic);
                     configureConsumer?.Invoke(o);
                 })

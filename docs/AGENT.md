@@ -7,6 +7,7 @@ This directory contains the user-facing documentation for Ratatoskr.
 - **`overview.md`**: High-level introduction and goals.
 - **`configuration.md`**: Detailed configuration options.
 - **`roadmap.md`**: Future plans and tasks.
+- **`topology.md`**: The RabbitMQ retry topology.
 
 ## Maintenance Rules
 

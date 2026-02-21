@@ -17,6 +17,9 @@ public static class ServiceCollectionExtensions
         var builder = new RatatoskrBuilder(services);
         configure?.Invoke(builder);
 
+        // Run all registered validators (e.g. RabbitMQ configuration validation)
+        builder.Validate();
+
         services.AddSingleton(builder.CloudEventsOptions);
 
         // Register TimeProvider if not already registered (allows test overrides)

@@ -12,7 +12,7 @@
 | Intent | API Method | Ownership | Action (RabbitMQ) |
 | :--- | :--- | :--- | :--- |
 | **Produces Event** | `AddEventPublishChannel` | **Us** (Originator) | **Declare** Exchange (Topic) |
-| **Sends Command** | `AddCommandPublishChannel` | **Them** (Receiver) | **Validate** Exchange Exists |
+| **Sends/Produces Command** | `AddCommandPublishChannel` | **Them** (Receiver) | **Validate** Exchange Exists |
 | **Consumes Command** | `AddCommandConsumeChannel` | **Us** (Processor) | **Declare** Exchange (Direct) + Queue |
 | **Consumes Event** | `AddEventConsumeChannel` | **Them** (Publisher) | **Validate** Exchange + **Declare** Queue + **Bind** |
 
@@ -39,9 +39,9 @@ services.AddRatatoskr(builder =>
     // 1. PRODUCER: Events we own
     // Intent: We govern "orders.events". We declare it.
     // ==========================================
-    builder.AddEventPublishChannel("orders.events") 
+    builder.AddEventPublishChannel("orders.events")
            .WithRabbitMq(cfg => cfg
-               .ExchangeType(ExchangeType.Topic)               
+               .WithTopicExchange()
            )
            // Default Routing Key: Uses [RatatoskrMessage("type")] or typeof(T).Name
            .Produces<OrderCreated>() 
@@ -52,22 +52,22 @@ services.AddRatatoskr(builder =>
     // 2. SENDER: Commands to others
     // Intent: We send to "payments.commands". We expect it to exist.
     // ==========================================
-    builder.AddCommandPublishChannel("payments.commands") 
+    builder.AddCommandPublishChannel("payments.commands")
            // We validate it exists and matches expectations (e.g. is Topic/Direct as expected)
            .WithRabbitMq(cfg => cfg
-               .ExchangeType(ExchangeType.Direct) 
+               .WithDirectExchange()
            )
-           .Sends<ProcessPayment>(cfg => cfg.WithRoutingKey("cmd.pay"));
+           .Produces<ProcessPayment>(cfg => cfg.WithRoutingKey("cmd.pay"));
 
     // ==========================================
     // 3. CONSUMER: Commands we own
     // Intent: We own "orders.commands". We declare it and our queue.
     // ==========================================
-    builder.AddCommandConsumeChannel("orders.commands") 
+    builder.AddCommandConsumeChannel("orders.commands")
            .WithRabbitMq(cfg => cfg
-                .ExchangeType(ExchangeType.Direct)
+                .WithDirectExchange()
                 // For Command Consumption, we usually bind a specific queue
-                .QueueName("orders.process") 
+                .WithQueueName("orders.process")
            )
            // Implicitly binds using Routing Key derived from Type or Attribute
            .Consumes<CreateOrder>(); 
@@ -78,8 +78,9 @@ services.AddRatatoskr(builder =>
     // ==========================================
     builder.AddEventConsumeChannel("users.events")
            .WithRabbitMq(cfg => cfg
-                .QueueName("orders.user-handler") // The shared queue for this channel's subscriptions
-                .ExchangeType(ExchangeType.Topic) // We expect this type
+                .WithTopicExchange() // We expect this type
+                // The shared queue for this channel's subscriptions
+                .WithQueueName("orders.user-handler")
                 // Optional: Global settings for this consumer (e.g. Prefetch)
             )
            // Binds queue "orders.user-handler" to exchange "users.events" with key "user.registered"

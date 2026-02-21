@@ -2,9 +2,9 @@
 
 ## Goals
 
-- Exceptional developer experience in combination RabbitMq and EfCore
+- Exceptional developer experience in combination with RabbitMq and EfCore
 - Abstractions to make other transports like Kafka possible
-- Send messages as CloudEvents
+- By default send messages as CloudEvents, but support other formats
 - Very good error handling and recovery
 - Works with horrizontally scaled applications
 - Good Observability
@@ -12,13 +12,14 @@
 
 ## Ratatoskr:
 
-- Generic implementation of event/message sending/receiving
+- Generic implementation of event/message sending/receiving and asyncapi
 - Support for different message serializers with a default one and overwritable per message
 - Support for multiple handlers of the same message
 
 ## Ratatoskr.RabbitMq:
 
 - RabbitMq implementations for sending, receiving and CloudEvents mapping
+- RabbitMq specific asyncapi bindings
 
 ## Ratatoskr.EfCore:
 

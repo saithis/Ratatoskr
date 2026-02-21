@@ -59,6 +59,7 @@ public class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposab
         {
             await _connection.CloseAsync();
             _connection.Dispose();
+            _connection = null;
         }
         _connectionLock.Dispose();
     }

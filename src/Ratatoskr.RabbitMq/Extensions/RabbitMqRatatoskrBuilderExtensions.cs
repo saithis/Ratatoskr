@@ -13,6 +13,9 @@ public static class RabbitMqRatatoskrBuilderExtensions
         var options = new RabbitMqOptions();
         configure.Invoke(options);
 
+        // Register build-time validation for RabbitMQ channels
+        builder.AddValidator(registry => RabbitMqConfigurationValidator.Validate(registry, options));
+
         // General
         builder.Services.AddSingleton(options);
         builder.Services.AddSingleton<RabbitMqConnectionManager>();

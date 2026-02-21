@@ -33,8 +33,8 @@ See [examples/AppHost/README.md](examples/AppHost/README.md) for more details.
 ## Project Structure
 
 - `src/Ratatoskr` - Core library
-- `src/Ratatoskr.EfCoreOutbox` - Entity Framework Core outbox pattern implementation
-- `src/Ratatoskr.RabbitMq` - RabbitMQ message sender
+- `src/Ratatoskr.EfCore` - Entity Framework Core outbox pattern implementation
+- `src/Ratatoskr.RabbitMq` - RabbitMQ transport
 - `examples/PlaygroundApi` - Example API application
 - `examples/AppHost` - .NET Aspire orchestration
 - `tests/Ratatoskr.Tests` - Integration and unit tests
