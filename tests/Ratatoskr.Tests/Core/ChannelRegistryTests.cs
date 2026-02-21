@@ -71,4 +71,146 @@ public class ChannelRegistryTests
         results[0].Channel.ChannelName.Should().Be("orders.commands");
         results[0].Message.MessageType.Should().Be(typeof(TestEvent));
     }
+
+    [Test]
+    public void Freeze_PreventsFurtherRegistration()
+    {
+        // Arrange
+        var registry = new ChannelRegistry();
+        registry.Register(new ChannelRegistration("existing.channel", ChannelType.EventPublish));
+        registry.Freeze();
+
+        // Act
+        var act = () => registry.Register(new ChannelRegistration("new.channel", ChannelType.EventPublish));
+
+        // Assert
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*frozen*");
+    }
+
+    [Test]
+    public void GetAllChannels_ReturnsPublishAndConsumeChannels()
+    {
+        // Arrange
+        var registry = new ChannelRegistry();
+        registry.Register(new ChannelRegistration("pub.channel", ChannelType.EventPublish));
+        registry.Register(new ChannelRegistration("consume.channel", ChannelType.EventConsume));
+
+        // Act
+        var allChannels = registry.GetAllChannels().ToList();
+
+        // Assert
+        allChannels.Should().HaveCount(2);
+        allChannels.Should().Contain(c => c.ChannelName == "pub.channel");
+        allChannels.Should().Contain(c => c.ChannelName == "consume.channel");
+    }
+
+    [Test]
+    public void FindPublishChannelForMessage_ReturnsCorrectChannel()
+    {
+        // Arrange
+        var registry = new ChannelRegistry();
+        var channel = new ChannelRegistration("test.exchange", ChannelType.EventPublish);
+        channel.Messages.Add(new MessageRegistration(typeof(TestEvent), "test.event"));
+        registry.Register(channel);
+
+        // Act
+        var result = registry.FindPublishChannelForMessage(typeof(TestEvent));
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.ChannelName.Should().Be("test.exchange");
+    }
+
+    [Test]
+    public void GetPublishInformation_ReturnsChannelAndMessage()
+    {
+        // Arrange
+        var registry = new ChannelRegistry();
+        var channel = new ChannelRegistration("test.exchange", ChannelType.EventPublish);
+        channel.Messages.Add(new MessageRegistration(typeof(TestEvent), "test.event"));
+        registry.Register(channel);
+
+        // Act
+        var result = registry.GetPublishInformation(typeof(TestEvent));
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.Channel.ChannelName.Should().Be("test.exchange");
+        result.Message.MessageTypeName.Should().Be("test.event");
+        result.Message.MessageType.Should().Be(typeof(TestEvent));
+    }
+
+    [Test]
+    public void GetPublishChannel_NonExistent_ReturnsNull()
+    {
+        // Arrange
+        var registry = new ChannelRegistry();
+
+        // Act
+        var result = registry.GetPublishChannel("nonexistent.channel");
+
+        // Assert
+        result.Should().BeNull();
+    }
+
+    [Test]
+    public void Register_DuplicateChannelName_Throws()
+    {
+        // Arrange
+        var registry = new ChannelRegistry();
+        registry.Register(new ChannelRegistration("duplicate.channel", ChannelType.EventPublish));
+
+        // Act
+        var act = () => registry.Register(new ChannelRegistration("duplicate.channel", ChannelType.EventPublish));
+
+        // Assert
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*already registered*");
+    }
+
+    [Test]
+    public void GetPublishInformation_NonExistent_ReturnsNull()
+    {
+        // Arrange
+        var registry = new ChannelRegistry();
+
+        // Act
+        var result = registry.GetPublishInformation(typeof(TestEvent));
+
+        // Assert
+        result.Should().BeNull();
+    }
+
+    [Test]
+    public void GetPublishChannels_ReturnsOnlyPublishChannels()
+    {
+        // Arrange
+        var registry = new ChannelRegistry();
+        registry.Register(new ChannelRegistration("pub.channel", ChannelType.EventPublish));
+        registry.Register(new ChannelRegistration("consume.channel", ChannelType.EventConsume));
+
+        // Act
+        var publishChannels = registry.GetPublishChannels().ToList();
+
+        // Assert
+        publishChannels.Should().HaveCount(1);
+        publishChannels[0].ChannelName.Should().Be("pub.channel");
+    }
+
+    [Test]
+    public void GetConsumeChannels_ReturnsOnlyConsumeChannels()
+    {
+        // Arrange
+        var registry = new ChannelRegistry();
+        registry.Register(new ChannelRegistration("pub.channel", ChannelType.EventPublish));
+        registry.Register(new ChannelRegistration("consume.channel", ChannelType.EventConsume));
+
+        // Act
+        var consumeChannels = registry.GetConsumeChannels().ToList();
+
+        // Assert
+        consumeChannels.Should().HaveCount(1);
+        consumeChannels[0].ChannelName.Should().Be("consume.channel");
+    }
 }
