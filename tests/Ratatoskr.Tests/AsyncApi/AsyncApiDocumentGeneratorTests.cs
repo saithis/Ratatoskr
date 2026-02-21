@@ -10,6 +10,7 @@ using Ratatoskr.CloudEvents;
 using Ratatoskr.RabbitMq;
 using Ratatoskr.RabbitMq.AsyncApi;
 using Ratatoskr.RabbitMq.Extensions;
+using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.AsyncApi;
 

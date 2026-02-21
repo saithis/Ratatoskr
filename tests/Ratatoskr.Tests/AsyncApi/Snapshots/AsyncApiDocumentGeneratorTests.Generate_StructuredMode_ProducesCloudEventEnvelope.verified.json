@@ -103,6 +103,10 @@
             ],
             "maxLength": 500,
             "minLength": 1
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       }

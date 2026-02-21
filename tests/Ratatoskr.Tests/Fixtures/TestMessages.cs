@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Ratatoskr.Core;
 
 namespace Ratatoskr.Tests.Fixtures;
@@ -13,13 +14,28 @@ public record TestEvent
 }
 
 /// <summary>
-/// Test event without attribute (for registry tests)
+/// Rich order event with data annotations for schema generation tests.
+/// Used across unit, integration, and AsyncApi tests.
 /// </summary>
 [RatatoskrMessage("order.created")]
 public record OrderCreatedEvent
 {
-    public string OrderId { get; init; } = string.Empty;
+    [Required]
+    public Guid OrderId { get; init; }
+
+    [Required]
+    [Range(0.01, 999999.99)]
     public decimal Amount { get; init; }
+
+    [EmailAddress]
+    public string? CustomerEmail { get; init; }
+
+    [Url]
+    public string? CallbackUrl { get; init; }
+
+    [StringLength(500, MinimumLength = 1)]
+    public string? Notes { get; init; }
+
     public DateTimeOffset CreatedAt { get; init; }
 }
 
