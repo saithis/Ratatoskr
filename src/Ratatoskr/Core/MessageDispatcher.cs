@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Ratatoskr.Testing;
 
 namespace Ratatoskr.Core;
 
@@ -74,40 +75,61 @@ public class MessageDispatcher(
             return DispatchResult.PermanentError;
         }
         
-        // 3. Dispatch to Handlers via DI
-        var errors = 0;
-        using var scope = scopeFactory.CreateScope();
-        
-        // Generic handler interface type: IMessageHandler<T>
-        var interfaceType = typeof(IMessageHandler<>).MakeGenericType(messageType);
-        var handlersInstances = scope.ServiceProvider.GetServices(interfaceType);
+        // 3. Propagate session context from message headers (for real transport e2e testing)
+        string? previousSessionId = null;
+        var hasSession = properties.Headers.TryGetValue(TestSessionContext.SessionHeaderName, out var sessionId)
+                         && !string.IsNullOrEmpty(sessionId);
 
-        if (!handlersInstances.Any())
+        if (hasSession)
         {
-             logger.LogWarning("No handlers registered in DI for CLR type '{Type}' (Event: {EventType})", messageType.Name, properties.Type);
-             return DispatchResult.NoHandlers;
+            previousSessionId = TestSessionContext.CurrentSessionId;
+            TestSessionContext.CurrentSessionId = sessionId;
         }
 
-        foreach (var handler in handlersInstances)
+        try
         {
-            if (handler == null) continue;
-            try
+            // 4. Dispatch to Handlers via DI
+            var errors = 0;
+            using var scope = scopeFactory.CreateScope();
+
+            // Generic handler interface type: IMessageHandler<T>
+            var interfaceType = typeof(IMessageHandler<>).MakeGenericType(messageType);
+            var handlersInstances = scope.ServiceProvider.GetServices(interfaceType);
+
+            if (!handlersInstances.Any())
             {
-                var handleMethod = interfaceType.GetMethod(nameof(IMessageHandler<object>.HandleAsync))!;
-                await (Task)handleMethod.Invoke(handler, [message, properties, cancellationToken])!;
-                
-                logger.LogDebug("Handler '{Handler}' processed message '{Id}' of type '{Type}'", 
-                    handler.GetType().Name, properties.Id, properties.Type);
+                logger.LogWarning("No handlers registered in DI for CLR type '{Type}' (Event: {EventType})", messageType.Name, properties.Type);
+                return DispatchResult.NoHandlers;
             }
-            catch (Exception ex)
+
+            foreach (var handler in handlersInstances)
             {
-                logger.LogError(ex, "Handler '{Handler}' failed for message '{Id}' of type '{Type}'", 
-                    handler.GetType().Name, properties.Id, properties.Type);
-                errors++;
+                if (handler == null) continue;
+                try
+                {
+                    var handleMethod = interfaceType.GetMethod(nameof(IMessageHandler<object>.HandleAsync))!;
+                    await (Task)handleMethod.Invoke(handler, [message, properties, cancellationToken])!;
+
+                    logger.LogDebug("Handler '{Handler}' processed message '{Id}' of type '{Type}'",
+                        handler.GetType().Name, properties.Id, properties.Type);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Handler '{Handler}' failed for message '{Id}' of type '{Type}'",
+                        handler.GetType().Name, properties.Id, properties.Type);
+                    errors++;
+                }
+            }
+
+            return errors > 0 ? DispatchResult.RecoverableError : DispatchResult.Success;
+        }
+        finally
+        {
+            if (hasSession)
+            {
+                TestSessionContext.CurrentSessionId = previousSessionId;
             }
         }
-        
-        return errors > 0 ? DispatchResult.RecoverableError : DispatchResult.Success;
     }
 }
 

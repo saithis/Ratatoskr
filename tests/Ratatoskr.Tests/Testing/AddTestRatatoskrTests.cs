@@ -26,7 +26,8 @@ public class AddTestRatatoskrTests
         provider.GetRequiredService<IRatatoskr>().Should().NotBeNull();
         provider.GetRequiredService<MessageSink>().Should().NotBeNull();
         provider.GetRequiredService<RatatoskrTestHarness>().Should().NotBeNull();
-        provider.GetRequiredService<IMessageSender>().Should().BeOfType<MessageSink>();
+        provider.GetRequiredService<IMessageSender>().Should().NotBeNull();
+        provider.GetRequiredService<IMessagePropertiesEnricher>().Should().BeOfType<TestSessionEnricher>();
     }
 
     [Test]

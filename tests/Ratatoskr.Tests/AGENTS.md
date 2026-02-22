@@ -94,17 +94,85 @@ public class MyIntegrationTests(PostgresContainerFixture postgres)
 
 ### Common Patterns
 
-#### Testing with MessageSink / RatatoskrTestHarness
+#### Tier 1: Unit Testing Handlers
 
 ```csharp
+var handler = new OrderCreatedHandler(mockRepo.Object);
+await HandlerTestInvoker.InvokeAsync(handler, new OrderCreated { OrderId = "123" });
+mockRepo.Verify(r => r.SaveAsync(It.IsAny<Order>()), Times.Once);
+```
+
+#### Tier 2: Unit Testing Message Sending (FakeRatatoskr)
+
+```csharp
+var ratatoskr = new FakeRatatoskr();
+var sut = new OrderService(ratatoskr);
+
+await sut.PlaceOrderAsync(new PlaceOrderCommand { ProductId = "abc" });
+
+// Typed assertions
+var msg = ratatoskr.ShouldHavePublished<OrderCreated>(m => m.ProductId == "abc");
+msg.ProductId.Should().Be("abc");
+
+// Count assertions
+ratatoskr.ShouldHavePublishedCount(1);
+ratatoskr.ShouldBeEmpty(); // after Clear()
+```
+
+#### Tier 3: Integration Testing with AddTestRatatoskr
+
+```csharp
+var services = new ServiceCollection();
+services.AddLogging();
+services.AddTestRatatoskr(bus =>
+{
+    bus.AddEventPublishChannel("events", c => c.Produces<OrderCreated>());
+    bus.AddHandler<OrderCreated, OrderCreatedHandler>();
+});
+
+var provider = services.BuildServiceProvider();
 var harness = provider.GetRequiredService<RatatoskrTestHarness>();
 
 // Assert message was sent (returns typed SentMessage<T>)
 var sent = harness.Sent.ShouldContain<MyEvent>(e => e.Id == "123");
 sent.Properties.Type.Should().Be("expected.type");
 
-// Or use raw messages
-harness.Sent.Messages.Should().HaveCount(1);
+// Simulate receiving a message (dispatches to handlers)
+await harness.SimulateReceiveAsync(new OrderCreated { OrderId = "123" });
+```
+
+#### Tier 3b: Parallel-Safe Testing with TestSession
+
+```csharp
+var harness = provider.GetRequiredService<RatatoskrTestHarness>();
+
+// Each test creates an isolated session
+await using var session = harness.CreateSession();
+
+// Publish within session context
+using (var scope = session.CreateScope())
+{
+    var bus = scope.ServiceProvider.GetRequiredService<IRatatoskr>();
+    await bus.PublishDirectAsync(new OrderCreated { OrderId = "123" });
+}
+
+// Assert on messages from THIS session only
+session.Sent.ShouldContain<OrderCreated>(m => m.OrderId == "123");
+```
+
+#### Tier 3c: WebApplicationFactory Integration
+
+```csharp
+var factory = new WebApplicationFactory<Program>()
+    .WithRatatoskrTestServices();
+
+// Parallel-safe session with HTTP client
+await using var session = factory.CreateTestSession();
+var client = session.CreateHttpClient(); // injects session header
+
+await client.PostAsJsonAsync("/api/orders", new { ProductId = "abc" });
+
+session.Sent.ShouldContain<OrderCreated>(m => m.ProductId == "abc");
 ```
 
 #### Testing with FakeTimeProvider
@@ -122,13 +190,16 @@ fakeTime.Advance(TimeSpan.FromSeconds(5));
 #### Testing Outbox Processing
 
 ```csharp
-using (var scope = provider.CreateScope())
-{
-    var processor = scope.ServiceProvider.GetRequiredService<SynchronousOutboxProcessor<TestDbContext>>();
-    var processedCount = await processor.ProcessAllAsync();
-    
-    processedCount.Should().Be(expectedCount);
-}
+// Stage messages via DbContext
+dbContext.OutboxMessages.Add(new OrderCreated { OrderId = "123" });
+await dbContext.SaveChangesAsync();
+
+// Assert staging
+dbContext.OutboxMessages.ShouldHaveStaged<OrderCreated>(m => m.OrderId == "123");
+
+// Process outbox
+var count = await OutboxTestHelper.ProcessAllAsync<MyDbContext>(serviceProvider);
+count.Should().Be(1);
 ```
 
 ## DO NOT
@@ -148,7 +219,9 @@ using (var scope = provider.CreateScope())
 - ✅ Use shared container fixtures with `SharedType.PerTestSession`
 - ✅ Clean up resources properly (use `IAsyncDisposable` for fixtures)
 - ✅ Use `FakeTimeProvider` for time-dependent tests
-- ✅ Use `RatatoskrTestHarness` / `MessageSink` and `OutboxTestHelper` for testing
+- ✅ Use `RatatoskrTestHarness` / `MessageSink` / `TestSession` and `OutboxTestHelper` for testing
+- ✅ Use `FakeRatatoskr` for unit testing services that depend on `IRatatoskr`
+- ✅ Use `TestSession` or `WebTestSession` for parallel-safe integration tests
 
 ## Example Test
 

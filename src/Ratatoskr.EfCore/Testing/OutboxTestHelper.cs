@@ -96,7 +96,7 @@ public static class OutboxTestExtensions
     /// <code>
     /// services.AddRatatoskr(bus =>
     /// {
-    ///     bus.UseInMemory();
+    ///     bus.UseTestTransport();
     ///     bus.AddEventPublishChannel("events", c => c.Produces&lt;OrderCreated&gt;());
     /// });
     /// services.AddTestOutbox&lt;MyDbContext&gt;();

@@ -8,9 +8,9 @@ namespace Ratatoskr.Testing;
 public static class TestingServiceCollectionExtensions
 {
     /// <summary>
-    /// Configures Ratatoskr with an in-memory transport for testing.
-    /// This is the recommended way to set up Ratatoskr in unit tests.
-    /// Combines <see cref="ServiceCollectionExtensions.AddRatatoskr"/> with <see cref="InMemoryRatatoskrExtensions.UseInMemory"/>.
+    /// Configures Ratatoskr with the test transport for testing.
+    /// This is the recommended way to set up Ratatoskr in unit and integration tests
+    /// without a <c>WebApplicationFactory</c>.
     /// </summary>
     /// <example>
     /// <code>
@@ -29,13 +29,20 @@ public static class TestingServiceCollectionExtensions
     /// </example>
     public static IServiceCollection AddTestRatatoskr(
         this IServiceCollection services,
-        Action<RatatoskrBuilder>? configure = null)
+        Action<RatatoskrBuilder>? configure = null,
+        Action<TestTransportOptions>? transportOptions = null)
     {
+        var options = new TestTransportOptions();
+        transportOptions?.Invoke(options);
+
         services.AddRatatoskr(builder =>
         {
-            builder.UseInMemory();
+            builder.UseTestTransport(options);
             configure?.Invoke(builder);
         });
+
+        // Decorate enricher AFTER AddRatatoskr registers it
+        services.DecorateEnricherWithSessionSupport();
 
         return services;
     }

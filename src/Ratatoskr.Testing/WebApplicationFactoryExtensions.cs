@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,31 +17,38 @@ public static class WebApplicationFactoryExtensions
 {
     /// <summary>
     /// Configures the <see cref="WebApplicationFactory{TEntryPoint}"/> to use Ratatoskr's test infrastructure.
-    /// By default, replaces any configured message broker with an in-memory sink,
+    /// By default, replaces any configured message broker with the test transport,
     /// removes broker-related hosted services, and registers the <see cref="RatatoskrTestHarness"/>.
+    /// Also adds the test session middleware for HTTP-based session propagation.
     /// </summary>
     /// <example>
     /// <code>
     /// var factory = new WebApplicationFactory&lt;Program&gt;()
     ///     .WithRatatoskrTestServices();
     ///
-    /// var harness = factory.GetTestHarness();
-    /// var client = factory.CreateClient();
+    /// await using var session = factory.CreateTestSession();
+    /// var client = session.CreateHttpClient();
     ///
     /// await client.PostAsync("/api/orders", content);
-    /// harness.Sent.ShouldContain&lt;OrderCreated&gt;();
+    /// session.Sent.ShouldContain&lt;OrderCreated&gt;();
     /// </code>
     /// </example>
     public static WebApplicationFactory<TEntryPoint> WithRatatoskrTestServices<TEntryPoint>(
         this WebApplicationFactory<TEntryPoint> factory,
-        Action<RatatoskrTestOptions>? configure = null)
+        Action<TestTransportOptions>? configure = null)
         where TEntryPoint : class
     {
-        var options = new RatatoskrTestOptions();
+        var options = new TestTransportOptions();
         configure?.Invoke(options);
 
         return factory.WithWebHostBuilder(builder =>
         {
+            // Add the session middleware via IStartupFilter (runs before all other middleware)
+            builder.ConfigureServices(services =>
+            {
+                services.AddSingleton<IStartupFilter, TestSessionStartupFilter>();
+            });
+
             builder.ConfigureTestServices(services =>
             {
                 services.UseRatatoskrTestServices(options);
@@ -48,7 +57,31 @@ public static class WebApplicationFactoryExtensions
     }
 
     /// <summary>
+    /// Creates a parallel-safe <see cref="WebTestSession"/> from the factory.
+    /// Each session has a unique ID and provides a session-aware HTTP client
+    /// that tags all messages published during requests with the session ID.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// await using var session = factory.CreateTestSession();
+    /// var client = session.CreateHttpClient();
+    ///
+    /// await client.PostAsJsonAsync("/api/orders", new { ProductId = "abc" });
+    /// session.Sent.ShouldContain&lt;OrderCreated&gt;(m => m.ProductId == "abc");
+    /// </code>
+    /// </example>
+    public static WebTestSession CreateTestSession<TEntryPoint>(
+        this WebApplicationFactory<TEntryPoint> factory)
+        where TEntryPoint : class
+    {
+        var harness = factory.Services.GetRequiredService<RatatoskrTestHarness>();
+        var session = harness.CreateSession();
+        return new WebTestSession(session, factory.Server);
+    }
+
+    /// <summary>
     /// Gets the <see cref="RatatoskrTestHarness"/> from the factory's service provider.
+    /// For parallel-safe testing, prefer <see cref="CreateTestSession{TEntryPoint}"/> instead.
     /// </summary>
     public static RatatoskrTestHarness GetTestHarness<TEntryPoint>(
         this WebApplicationFactory<TEntryPoint> factory)
@@ -76,9 +109,9 @@ public static class WebApplicationFactoryExtensions
     /// </example>
     public static IServiceCollection UseRatatoskrTestServices(
         this IServiceCollection services,
-        RatatoskrTestOptions? options = null)
+        TestTransportOptions? options = null)
     {
-        options ??= new RatatoskrTestOptions();
+        options ??= new TestTransportOptions();
 
         // Register the MessageSink (always needed for assertions)
         services.AddSingleton<MessageSink>(sp => new MessageSink
@@ -88,13 +121,20 @@ public static class WebApplicationFactoryExtensions
 
         if (options.ReplaceTransport)
         {
-            // Full in-memory mode: replace sender, remove broker services
+            // Replace sender with TestTransport (captures via MessageSink + optional routing)
             services.RemoveAll<IMessageSender>();
-            services.AddSingleton<IMessageSender>(sp => sp.GetRequiredService<MessageSink>());
+            services.AddSingleton<IMessageSender>(sp =>
+            {
+                var sink = sp.GetRequiredService<MessageSink>();
+                var dispatcher = options.RouteMessages
+                    ? sp.GetRequiredService<MessageDispatcher>()
+                    : null;
+                return new TestTransport(sink, dispatcher, options);
+            });
 
             // Replace the transport metadata enricher with a no-op
             services.RemoveAll<ITransportMessageMetadataEnricher>();
-            services.AddSingleton<ITransportMessageMetadataEnricher, NoOpTransportMessageMetadataEnricher>();
+            services.AddSingleton<ITransportMessageMetadataEnricher, TestTransportMessageMetadataEnricher>();
 
             // Remove broker-related hosted services.
             // We filter by name to avoid coupling to RabbitMQ assembly types.
@@ -126,19 +166,37 @@ public static class WebApplicationFactoryExtensions
             }
             else
             {
-                // Factory-based or instance-based registration - fall back to in-memory capture only
+                // Factory-based or instance-based registration - fall back to capture only
                 services.RemoveAll<IMessageSender>();
                 services.AddSingleton<IMessageSender>(sp => sp.GetRequiredService<MessageSink>());
             }
         }
 
-        // Ensure MessageDispatcher is registered (needed for RatatoskrTestHarness)
+        // Ensure MessageDispatcher is registered (needed for RatatoskrTestHarness and SimulateReceiveAsync)
         services.TryAddSingleton<MessageDispatcher>();
 
         // Register the test harness
         services.TryAddSingleton<RatatoskrTestHarness>();
 
+        // Decorate the enricher with session support for session-scoped tracking
+        services.DecorateEnricherWithSessionSupport();
+
         return services;
+    }
+}
+
+/// <summary>
+/// Startup filter that injects the <see cref="TestSessionMiddleware"/> before all other middleware.
+/// </summary>
+internal class TestSessionStartupFilter : IStartupFilter
+{
+    public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next)
+    {
+        return builder =>
+        {
+            builder.UseMiddleware<TestSessionMiddleware>();
+            next(builder);
+        };
     }
 }
 
@@ -162,13 +220,5 @@ internal static class ServiceCollectionRemoveExtensions
         }
 
         return services;
-    }
-}
-
-internal class NoOpTransportMessageMetadataEnricher : ITransportMessageMetadataEnricher
-{
-    public void Enrich(PublishInformation publishInformation, MessageProperties properties)
-    {
-        // No-op for test host
     }
 }

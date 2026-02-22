@@ -4,8 +4,8 @@ namespace Ratatoskr.Testing;
 
 /// <summary>
 /// The single entry point for testing Ratatoskr applications.
-/// Allows simulating incoming messages, asserting on sent messages,
-/// and integrating with the outbox pattern.
+/// Allows creating isolated test sessions, simulating incoming messages,
+/// asserting on sent messages, and integrating with the outbox pattern.
 /// </summary>
 public class RatatoskrTestHarness(
     MessageSink sent,
@@ -15,8 +15,8 @@ public class RatatoskrTestHarness(
     IServiceProvider serviceProvider)
 {
     /// <summary>
-    /// Gets the message sink containing all captured sent messages.
-    /// Use assertion extension methods like <c>ShouldContain&lt;T&gt;()</c> to verify messages.
+    /// Gets the global message sink containing all captured sent messages.
+    /// For parallel-safe testing, prefer <see cref="CreateSession"/> instead.
     /// </summary>
     public MessageSink Sent => sent;
 
@@ -27,15 +27,30 @@ public class RatatoskrTestHarness(
     internal IServiceProvider ServiceProvider => serviceProvider;
 
     /// <summary>
+    /// Creates an isolated test session for parallel-safe testing.
+    /// Each session has a unique ID and only sees messages published within its context.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// await using var session = harness.CreateSession();
+    /// await session.SimulateReceiveAsync(new OrderCreated { OrderId = "123" });
+    /// session.Sent.ShouldContain&lt;OrderCreated&gt;();
+    /// </code>
+    /// </example>
+    public TestSession CreateSession()
+    {
+        return new TestSession(sent, serviceProvider, dispatcher, serializer, enricher);
+    }
+
+    /// <summary>
     /// Simulates receiving a message of the specified type.
     /// This will be dispatched to the registered handlers for this message type.
     /// Throws <see cref="RatatoskrTestException"/> if no handlers are found or a permanent error occurs.
     /// </summary>
-    /// <typeparam name="TMessage">The type of the message.</typeparam>
-    /// <param name="message">The message content.</param>
-    /// <param name="properties">Optional message properties. If not provided, minimal properties will be generated.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The dispatch result indicating how the message was handled.</returns>
+    /// <remarks>
+    /// For parallel-safe testing, prefer <see cref="CreateSession"/> and use
+    /// <see cref="TestSession.SimulateReceiveAsync{TMessage}"/> instead.
+    /// </remarks>
     public async Task<DispatchResult> SimulateReceiveAsync<TMessage>(
         TMessage message,
         MessageProperties? properties = null,
