@@ -14,6 +14,7 @@ internal class OutboxMessageProcessor<TDbContext>(
     IMessageSender sender,
     TimeProvider timeProvider,
     OutboxOptions options,
+    IEnumerable<IMessageActivityObserver> observers,
     ILogger logger)
     where TDbContext : DbContext, IOutboxDbContext
 {
@@ -90,6 +91,17 @@ internal class OutboxMessageProcessor<TDbContext>(
                 message.MarkAsProcessed(timeProvider);
                 processedCount++;
                 RatatoskrDiagnostics.OutboxProcessCount.Add(1, new TagList { { "status", "success" } });
+
+                foreach (var observer in observers)
+                {
+                    await observer.OnMessageActivity(new MessageActivity
+                    {
+                        Stage = MessageStage.OutboxSent,
+                        Properties = props,
+                        SerializedBody = message.Content,
+                        Timestamp = DateTimeOffset.UtcNow,
+                    });
+                }
             }
             catch (Exception e)
             {

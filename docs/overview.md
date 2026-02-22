@@ -23,7 +23,15 @@
 
 ## Ratatoskr.EfCore:
 
-- Implements the Outbox pattern via EfCore 
+- Implements the Outbox pattern via EfCore
 - Exceptional developer experience
 - Low latency
 - Low resource usage
+
+## Ratatoskr.Testing:
+
+- Message tracking across all pipeline stages
+- Session-based parallel test isolation via W3C trace context
+- Assertion helpers and queryable message collections
+- Zero overhead in production (observer pattern)
+- See [Testing Guide](testing.md) for details

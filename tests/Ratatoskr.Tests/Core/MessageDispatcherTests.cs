@@ -369,6 +369,7 @@ public class MessageDispatcherTests
             channelRegistry,
             deserializer,
             scopeFactory,
+            [],
             NullLogger<MessageDispatcher>.Instance);
         
         return (dispatcher, services, channelRegistry);

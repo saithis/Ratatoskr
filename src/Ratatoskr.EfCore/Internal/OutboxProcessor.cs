@@ -90,10 +90,11 @@ internal class OutboxProcessor<TDbContext>(
 
             var dbContext = serviceScope.ServiceProvider.GetRequiredService<TDbContext>();
             var sender = serviceScope.ServiceProvider.GetRequiredService<IMessageSender>();
-            
+            var activityObservers = serviceScope.ServiceProvider.GetServices<IMessageActivityObserver>();
+
             // Use shared processor logic - ensures tests and production use SAME code
             var processor = new OutboxMessageProcessor<TDbContext>(
-                dbContext, sender, timeProvider, _options, logger);
+                dbContext, sender, timeProvider, _options, activityObservers, logger);
             
             while (true)
             {

@@ -575,8 +575,9 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
         var logger = serviceProvider.GetService<ILogger<OutboxMessageProcessor<TDbContext>>>()
                      ?? NullLogger<OutboxMessageProcessor<TDbContext>>.Instance;
 
+        var activityObservers = serviceProvider.GetServices<IMessageActivityObserver>();
         var processor = new OutboxMessageProcessor<TDbContext>(
-            dbContext, sender, timeProvider, options.Value, logger);
+            dbContext, sender, timeProvider, options.Value, activityObservers, logger);
 
         var totalProcessed = 0;
         while (true)

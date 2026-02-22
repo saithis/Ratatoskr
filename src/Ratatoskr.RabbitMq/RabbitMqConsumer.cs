@@ -16,6 +16,7 @@ internal class RabbitMqConsumer(
     MessageDispatcher dispatcher,
     IRabbitMqEnvelopeMapper envelopeMapper,
     RabbitMqRetryHandler retryHandler,
+    IEnumerable<IMessageActivityObserver> observers,
     ILogger<RabbitMqConsumer> logger)
     : BackgroundService
 {
@@ -90,6 +91,17 @@ internal class RabbitMqConsumer(
             // Use envelope mapper to extract body and properties
             var (body, props) = envelopeMapper.MapIncoming(ea);
             messageTime = props.Time;
+
+            foreach (var observer in observers)
+            {
+                await observer.OnMessageActivity(new MessageActivity
+                {
+                    Stage = MessageStage.Received,
+                    Properties = props,
+                    SerializedBody = body,
+                    Timestamp = DateTimeOffset.UtcNow,
+                });
+            }
 
             tags = CreateTags(ea, props, queueName);
 
