@@ -94,15 +94,17 @@ public class MyIntegrationTests(PostgresContainerFixture postgres)
 
 ### Common Patterns
 
-#### Testing InMemoryMessageSender
+#### Testing with MessageSink / RatatoskrTestHarness
 
 ```csharp
-var sender = provider.GetRequiredService<InMemoryMessageSender>();
+var harness = provider.GetRequiredService<RatatoskrTestHarness>();
 
-// Assert message was sent
-sender.SentMessages.Should().HaveCount(1);
-var message = sender.SentMessages.First();
-message.Properties.Type.Should().Be("expected.type");
+// Assert message was sent (returns typed SentMessage<T>)
+var sent = harness.Sent.ShouldContain<MyEvent>(e => e.Id == "123");
+sent.Properties.Type.Should().Be("expected.type");
+
+// Or use raw messages
+harness.Sent.Messages.Should().HaveCount(1);
 ```
 
 #### Testing with FakeTimeProvider
@@ -146,7 +148,7 @@ using (var scope = provider.CreateScope())
 - ✅ Use shared container fixtures with `SharedType.PerTestSession`
 - ✅ Clean up resources properly (use `IAsyncDisposable` for fixtures)
 - ✅ Use `FakeTimeProvider` for time-dependent tests
-- ✅ Use `InMemoryMessageSender` and `SynchronousOutboxProcessor` for testing
+- ✅ Use `RatatoskrTestHarness` / `MessageSink` and `OutboxTestHelper` for testing
 
 ## Example Test
 
@@ -172,19 +174,14 @@ public class ExampleTests
         
         var provider = services.BuildServiceProvider();
         var bus = provider.GetRequiredService<IRatatoskr>();
-        var sender = provider.GetRequiredService<InMemoryMessageSender>();
-        
+        var harness = provider.GetRequiredService<RatatoskrTestHarness>();
+
         // Act
         await bus.PublishDirectAsync(new TestEvent { Data = "test" });
-        
+
         // Assert
-        sender.SentMessages.Should().HaveCount(1);
-        var message = sender.SentMessages.First();
-        message.Properties.Type.Should().Be("test.event");
-        
-        var deserialized = message.Deserialize<TestEvent>();
-        deserialized.Should().NotBeNull();
-        deserialized!.Data.Should().Be("test");
+        var sent = harness.Sent.ShouldContain<TestEvent>(e => e.Data == "test");
+        sent.Properties.Type.Should().Be("test.event");
     }
 }
 ```

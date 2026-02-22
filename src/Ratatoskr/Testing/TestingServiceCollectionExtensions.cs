@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Ratatoskr.Core;
 
 namespace Ratatoskr.Testing;
 
@@ -9,27 +8,35 @@ namespace Ratatoskr.Testing;
 public static class TestingServiceCollectionExtensions
 {
     /// <summary>
-    /// Adds the in-memory message sender for testing.
-    /// The sender instance is registered as a scoped service for test isolation.
-    /// Note: If you need to access the sender for assertions, retrieve it from the same scope.
+    /// Configures Ratatoskr with an in-memory transport for testing.
+    /// This is the recommended way to set up Ratatoskr in unit tests.
+    /// Combines <see cref="ServiceCollectionExtensions.AddRatatoskr"/> with <see cref="InMemoryRatatoskrExtensions.UseInMemory"/>.
     /// </summary>
-    public static IServiceCollection AddInMemoryMessageSender(this IServiceCollection services)
+    /// <example>
+    /// <code>
+    /// var services = new ServiceCollection();
+    /// services.AddLogging();
+    /// services.AddTestRatatoskr(bus =>
+    /// {
+    ///     bus.AddEventPublishChannel("events", c => c.Produces&lt;OrderCreated&gt;());
+    ///     bus.AddEventConsumeChannel("events-in", c => c.Consumes&lt;OrderCreated&gt;());
+    ///     bus.AddHandler&lt;OrderCreated, OrderCreatedHandler&gt;();
+    /// });
+    ///
+    /// await using var provider = services.BuildServiceProvider();
+    /// var harness = provider.GetRequiredService&lt;RatatoskrTestHarness&gt;();
+    /// </code>
+    /// </example>
+    public static IServiceCollection AddTestRatatoskr(
+        this IServiceCollection services,
+        Action<RatatoskrBuilder>? configure = null)
     {
-        services.AddSingleton<InMemoryMessageSender>();
-        services.AddSingleton<IMessageSender>(sp => sp.GetRequiredService<InMemoryMessageSender>());
-        return services;
-    }
-    
-    /// <summary>
-    /// Adds the in-memory message sender with a specific instance.
-    /// Useful when you want to share the sender across test fixtures.
-    /// </summary>
-    public static IServiceCollection AddInMemoryMessageSender(
-        this IServiceCollection services, 
-        InMemoryMessageSender sender)
-    {
-        services.AddSingleton(sender);
-        services.AddSingleton<IMessageSender>(sender);
+        services.AddRatatoskr(builder =>
+        {
+            builder.UseInMemory();
+            configure?.Invoke(builder);
+        });
+
         return services;
     }
 }

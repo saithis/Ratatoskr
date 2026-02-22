@@ -2,6 +2,8 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.Tests.Fixtures;
 using Ratatoskr;
+using Ratatoskr.Core;
+using Ratatoskr.RabbitMq;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Testing;
 using TUnit.Core;
@@ -20,7 +22,7 @@ public class RatatoskrTests
         
         var provider = services.BuildServiceProvider();
         var bus = provider.GetRequiredService<IRatatoskr>();
-        var sender = provider.GetRequiredService<InMemoryMessageSender>();
+        var sender = provider.GetRequiredService<MessageSink>();
         
         // Act
         await bus.PublishDirectAsync(new OrderCreatedEvent
@@ -31,8 +33,8 @@ public class RatatoskrTests
         });
         
         // Assert
-        sender.SentMessages.Should().HaveCount(1);
-        var message = sender.SentMessages.First();
+        sender.Messages.Should().HaveCount(1);
+        var message = sender.Messages.First();
         message.Properties.Type.Should().Be("order.created");
     }
 
@@ -45,14 +47,14 @@ public class RatatoskrTests
         
         var provider = services.BuildServiceProvider();
         var bus = provider.GetRequiredService<IRatatoskr>();
-        var sender = provider.GetRequiredService<InMemoryMessageSender>();
+        var sender = provider.GetRequiredService<MessageSink>();
         
         // Act
         await bus.PublishDirectAsync(new TestEvent { Data = "test data" });
         
         // Assert
-        sender.SentMessages.Should().HaveCount(1);
-        var message = sender.SentMessages.First();
+        sender.Messages.Should().HaveCount(1);
+        var message = sender.Messages.First();
         message.Properties.Type.Should().Be("test.event");
     }
 
@@ -65,7 +67,7 @@ public class RatatoskrTests
         
         var provider = services.BuildServiceProvider();
         var bus = provider.GetRequiredService<IRatatoskr>();
-        var sender = provider.GetRequiredService<InMemoryMessageSender>();
+        var sender = provider.GetRequiredService<MessageSink>();
         
         var customProperties = new global::Ratatoskr.Core.MessageProperties
         {
@@ -78,8 +80,8 @@ public class RatatoskrTests
         await bus.PublishDirectAsync(new TestEvent { Data = "test" }, customProperties);
         
         // Assert
-        sender.SentMessages.Should().HaveCount(1);
-        var message = sender.SentMessages.First();
+        sender.Messages.Should().HaveCount(1);
+        var message = sender.Messages.First();
         message.Properties.Type.Should().Be("custom.type");
         message.Properties.Source.Should().Be("/custom-source");
         message.Properties.Subject.Should().Be("test-subject");
@@ -88,22 +90,24 @@ public class RatatoskrTests
     [Test]
     public async Task PublishDirectAsync_WithExtensions_IncludesExtensionsInProperties()
     {
-        // Arrange
+        // Arrange - This test verifies RabbitMQ-specific metadata enrichment,
+        // so we register RabbitMqMessageMetadataEnricher explicitly
         var services = new ServiceCollection();
         services.AddTestRatatoskr(bus => bus
             .AddEventPublishChannel("test", c => c.Produces<TestEvent>(m => m
                 .WithRoutingKey("routeKey"))));
-        
+        services.AddSingleton<ITransportMessageMetadataEnricher, RabbitMqMessageMetadataEnricher>();
+
         var provider = services.BuildServiceProvider();
         var bus = provider.GetRequiredService<IRatatoskr>();
-        var sender = provider.GetRequiredService<InMemoryMessageSender>();
-        
+        var sender = provider.GetRequiredService<MessageSink>();
+
         // Act
         await bus.PublishDirectAsync(new TestEvent { Data = "test" });
-        
+
         // Assert
-        sender.SentMessages.Should().HaveCount(1);
-        var message = sender.SentMessages.First();
+        sender.Messages.Should().HaveCount(1);
+        var message = sender.Messages.First();
         message.Properties.TransportMetadata.Should().ContainKey("rabbitmq.routingKey");
         message.Properties.TransportMetadata["rabbitmq.routingKey"].Should().Be("routeKey");
     }
@@ -117,7 +121,7 @@ public class RatatoskrTests
         
         var provider = services.BuildServiceProvider();
         var bus = provider.GetRequiredService<IRatatoskr>();
-        var sender = provider.GetRequiredService<InMemoryMessageSender>();
+        var sender = provider.GetRequiredService<MessageSink>();
         
         var beforePublish = DateTimeOffset.UtcNow;
         
@@ -127,8 +131,8 @@ public class RatatoskrTests
         var afterPublish = DateTimeOffset.UtcNow;
         
         // Assert
-        sender.SentMessages.Should().HaveCount(1);
-        var message = sender.SentMessages.First();
+        sender.Messages.Should().HaveCount(1);
+        var message = sender.Messages.First();
         message.Properties.Time.Should().NotBeNull();
         message.Properties.Time!.Value.Should().BeOnOrAfter(beforePublish);
         message.Properties.Time!.Value.Should().BeOnOrBefore(afterPublish);
