@@ -67,10 +67,10 @@ public async Task TestName_Scenario_ExpectedBehavior()
 {
     // Arrange
     var sut = new SystemUnderTest();
-    
+
     // Act
     var result = await sut.DoSomethingAsync();
-    
+
     // Assert
     result.Should().Be(expectedValue);
 }
@@ -94,15 +94,38 @@ public class MyIntegrationTests(PostgresContainerFixture postgres)
 
 ### Common Patterns
 
-#### Testing InMemoryMessageSender
+#### Integration Testing with RabbitMQ and PostgreSQL
+
+All integration tests extend `RatatoskrIntegrationTest` which provides shared RabbitMQ and PostgreSQL containers, per-test database isolation, and helper methods:
 
 ```csharp
-var sender = provider.GetRequiredService<InMemoryMessageSender>();
+public class MyTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
+    : RatatoskrIntegrationTest(rabbitMq, postgres)
+{
+    [Test]
+    public async Task MyTest()
+    {
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddEventPublishChannel("my-exchange", c => c
+                    .WithRabbitMq(r => r.WithTopicExchange())
+                    .Produces<TestEvent>());
+                bus.AddEfCoreOutbox<TestDbContext>();
+            });
 
-// Assert message was sent
-sender.SentMessages.Should().HaveCount(1);
-var message = sender.SentMessages.First();
-message.Properties.Type.Should().Be("expected.type");
+            services.AddDbContext<TestDbContext>((sp, options) =>
+            {
+                options.UseNpgsql(PostgresConnectionString);
+                options.RegisterOutbox<TestDbContext>(sp);
+            });
+        });
+
+        // Use InScopeAsync, GetMessageAsync, WaitForConditionAsync etc.
+    }
+}
 ```
 
 #### Testing with FakeTimeProvider
@@ -117,16 +140,18 @@ var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
 fakeTime.Advance(TimeSpan.FromSeconds(5));
 ```
 
-#### Testing Outbox Processing
+#### Testing Outbox with Manual Processing
+
+For tests that need fine-grained control (retry/poison scenarios), register `OutboxProcessor` without the hosted service:
 
 ```csharp
-using (var scope = provider.CreateScope())
+services.AddSingleton<OutboxProcessor<TestDbContext>>();
+services.AddSingleton(Options.Create(new OutboxOptions()));
+services.AddDbContext<TestDbContext>((sp, options) =>
 {
-    var processor = scope.ServiceProvider.GetRequiredService<SynchronousOutboxProcessor<TestDbContext>>();
-    var processedCount = await processor.ProcessAllAsync();
-    
-    processedCount.Should().Be(expectedCount);
-}
+    options.UseNpgsql(PostgresConnectionString);
+    options.RegisterOutbox<TestDbContext>(sp);
+});
 ```
 
 ## DO NOT
@@ -146,45 +171,71 @@ using (var scope = provider.CreateScope())
 - ✅ Use shared container fixtures with `SharedType.PerTestSession`
 - ✅ Clean up resources properly (use `IAsyncDisposable` for fixtures)
 - ✅ Use `FakeTimeProvider` for time-dependent tests
-- ✅ Use `InMemoryMessageSender` and `SynchronousOutboxProcessor` for testing
+- ✅ Prefer integration tests with real RabbitMQ and PostgreSQL over unit tests with mocks
 
-## Example Test
+## Example Integration Test
 
 ```csharp
+using System.Text;
 using AwesomeAssertions;
-using Ratatoskr.Tests.Fixtures;
 using Microsoft.Extensions.DependencyInjection;
-using Ratatoskr;
-using Ratatoskr.Testing;
+using Ratatoskr.Core;
+using Ratatoskr.EfCore;
+using Ratatoskr.RabbitMq.Extensions;
+using Ratatoskr.Tests.Fixtures;
 using TUnit.Core;
 
-namespace Ratatoskr.Tests.Core;
+namespace Ratatoskr.Tests.Integration;
 
-public class ExampleTests
+public class ExampleTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
+    : RatatoskrIntegrationTest(rabbitMq, postgres)
 {
     [Test]
-    public async Task PublishDirectAsync_WithMessage_SendsCorrectly()
+    public async Task Outbox_MessagePublished_DeliveredToQueue()
     {
         // Arrange
-        var services = new ServiceCollection();
-        services.AddTestRatatoskr(bus => bus
-            .AddMessage<TestEvent>("test.event"));
-        
-        var provider = services.BuildServiceProvider();
-        var bus = provider.GetRequiredService<IRatatoskr>();
-        var sender = provider.GetRequiredService<InMemoryMessageSender>();
-        
-        // Act
-        await bus.PublishDirectAsync(new TestEvent { Data = "test" });
-        
-        // Assert
-        sender.SentMessages.Should().HaveCount(1);
-        var message = sender.SentMessages.First();
-        message.Properties.Type.Should().Be("test.event");
-        
-        var deserialized = message.Deserialize<TestEvent>();
-        deserialized.Should().NotBeNull();
-        deserialized!.Data.Should().Be("test");
+        var exchangeName = $"example-{TestId}";
+        var queueName = $"example-queue-{TestId}";
+
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddEventPublishChannel(exchangeName, c => c
+                    .WithRabbitMq(r => r.WithTopicExchange())
+                    .Produces<TestEvent>(m => m.WithRoutingKey("test.event")));
+                bus.AddEfCoreOutbox<TestDbContext>();
+            });
+
+            services.AddDbContext<TestDbContext>((sp, options) =>
+            {
+                options.UseNpgsql(PostgresConnectionString);
+                options.RegisterOutbox<TestDbContext>(sp);
+            });
+        });
+
+        await EnsureQueueBoundAsync(queueName, exchangeName, "test.event");
+
+        // Initialize database
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            await dbContext.Database.EnsureCreatedAsync();
+        });
+
+        // Act - Stage message via outbox
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            dbContext.OutboxMessages.Add(new TestEvent { Data = "hello" });
+            await dbContext.SaveChangesAsync();
+        });
+
+        // Assert - Wait for message in queue
+        await WaitForConditionAsync(
+            async () => await GetMessageCountAsync(queueName) >= 1,
+            TimeSpan.FromSeconds(10));
     }
 }
 ```

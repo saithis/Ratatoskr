@@ -20,7 +20,7 @@ public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
         // Arrange
         await StartTestAsync(services =>
         {
-            services.AddRatatoskr(bus => 
+            services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
                 bus.AddEventPublishChannel(ExchangeName, c => c
@@ -35,17 +35,17 @@ public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
         // Act
         var props = new MessageProperties();
         props.SetRoutingKey(DefaultRoutingKey);
-        
+
         await InScopeAsync(async ctx =>
         {
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             await bus.PublishDirectAsync(new TestEvent { Data = "direct publish" }, props);
         });
-        
+
         // Assert
         var message = await GetMessageAsync(queueName);
         message.Should().NotBeNull();
-        
+
         var body = Encoding.UTF8.GetString(message.Body.ToArray());
         body.Should().Contain("direct publish");
     }
@@ -56,7 +56,7 @@ public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
         // Arrange - Override configuration for this test
         await StartTestAsync(services =>
         {
-            services.AddRatatoskr(bus => 
+            services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
                 bus.AddEventPublishChannel(ExchangeName, c => c
@@ -65,7 +65,7 @@ public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
                     .ConfigureCloudEvents(ce => ce.ContentMode = CloudEventsContentMode.Binary);
             });
         });
-        
+
         var queueName = $"pub-binary-{TestId}";
         await EnsureQueueBoundAsync(queueName, ExchangeName, DefaultRoutingKey);
 
@@ -82,7 +82,7 @@ public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
         // Assert
         var message = await GetMessageAsync(queueName);
         message.Should().NotBeNull();
-        
+
         message!.BasicProperties.Headers.Should().NotBeNull();
         message.BasicProperties.Headers.Should().ContainKey("cloudEvents_specversion");
         message.BasicProperties.Headers.Should().ContainKey("cloudEvents_type");
@@ -94,7 +94,7 @@ public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
         // Arrange
         await StartTestAsync(services =>
         {
-            services.AddRatatoskr(bus => 
+            services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
                 bus.AddEventPublishChannel(ExchangeName, c => c
