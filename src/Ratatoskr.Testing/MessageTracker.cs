@@ -73,6 +73,12 @@ public class MessageTracker : IMessageActivityObserver
         _activities.Clear();
         lock (_lock)
         {
+            foreach (var waiter in _waiters)
+            {
+                waiter.Completion.TrySetCanceled();
+                waiter.Cts.Dispose();
+            }
+
             _waiters.Clear();
         }
     }

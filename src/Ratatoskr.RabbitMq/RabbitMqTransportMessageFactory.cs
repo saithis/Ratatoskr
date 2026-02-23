@@ -79,11 +79,28 @@ internal static class RabbitMqTransportMessageFactory
 
     /// <summary>
     /// Normalizes header values for ergonomic assertions.
-    /// Converts byte arrays (common in AMQP) to UTF-8 strings.
+    /// Converts byte arrays (common in AMQP) to UTF-8 strings when they contain valid UTF-8.
+    /// Returns the original byte[] for non-UTF-8 binary data.
     /// </summary>
     private static object? NormalizeValue(object? value) => value switch
     {
-        byte[] bytes => Encoding.UTF8.GetString(bytes),
+        byte[] bytes => TryDecodeUtf8(bytes),
         _ => value
     };
+
+    private static object TryDecodeUtf8(byte[] bytes)
+    {
+        try
+        {
+            var decoded = Encoding.UTF8.GetString(bytes);
+            // Verify round-trip: re-encode and compare to detect replacement characters
+            if (Encoding.UTF8.GetBytes(decoded).AsSpan().SequenceEqual(bytes))
+                return decoded;
+            return bytes;
+        }
+        catch (DecoderFallbackException)
+        {
+            return bytes;
+        }
+    }
 }

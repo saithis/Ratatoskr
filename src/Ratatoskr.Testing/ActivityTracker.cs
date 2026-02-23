@@ -79,6 +79,13 @@ public class ActivityTracker
         MessageProperties? props = null,
         CancellationToken cancellationToken = default) where T : notnull
     {
+        if (_waitConditions.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "PublishAndWaitAsync always waits for MessageStage.Dispatched and ignores WaitForMessage conditions. " +
+                "Use ExecuteAndWaitAsync to apply custom wait conditions, or remove WaitForMessage calls.");
+        }
+
         var session = new MessageTrackingSession(_tracker, _timeout);
 
         try

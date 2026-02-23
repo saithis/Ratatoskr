@@ -14,6 +14,7 @@ public class MessageTrackingSession : IAsyncDisposable
     private readonly Activity _activity;
     private readonly Activity? _previousActivity;
     private readonly TimeSpan _defaultTimeout;
+    private readonly Dictionary<MessageStage, MessageCollection> _collections = new();
     private bool _disposed;
 
     internal MessageTrackingSession(MessageTracker tracker, TimeSpan? defaultTimeout = null)
@@ -117,11 +118,17 @@ public class MessageTrackingSession : IAsyncDisposable
 
     private MessageCollection GetCollection(MessageStage stage)
     {
+        if (_collections.TryGetValue(stage, out var cached))
+            return cached;
+
         var traceId = TraceId;
-        return new MessageCollection(() =>
+        var collection = new MessageCollection(() =>
             _tracker.GetActivities(traceId)
                 .Where(a => a.Stage == stage)
                 .Select(a => new TrackedMessage(a)));
+
+        _collections[stage] = collection;
+        return collection;
     }
 
     public ValueTask DisposeAsync()

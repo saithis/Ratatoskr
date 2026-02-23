@@ -96,6 +96,8 @@ internal class RabbitMqConsumer(
             var (body, props) = envelopeMapper.MapIncoming(ea);
             messageTime = props.Time;
 
+            var receivedTimestamp = timeProvider.GetUtcNow();
+
             foreach (var observer in observers)
             {
                 try
@@ -106,7 +108,7 @@ internal class RabbitMqConsumer(
                         Properties = props,
                         SerializedBody = body,
                         TransportMessage = transportMessage,
-                        Timestamp = timeProvider.GetUtcNow(),
+                        Timestamp = receivedTimestamp,
                     });
                 }
                 catch (Exception ex)

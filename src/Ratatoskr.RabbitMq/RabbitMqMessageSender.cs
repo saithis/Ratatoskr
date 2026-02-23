@@ -20,8 +20,8 @@ public class RabbitMqMessageSender(
 
         var basicProps = new BasicProperties();
 
-        var exchange = props.GetExchange();
-        var routingKey = props.GetRoutingKey() ?? props.Type;
+        var exchange = props.GetExchange() ?? "";
+        var routingKey = props.GetRoutingKey() ?? props.Type ?? "";
 
         // Explicitly use the current activity as parent to maintain trace hierarchy
         using var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
@@ -55,6 +55,8 @@ public class RabbitMqMessageSender(
         // BasicPublishAsync returns a ValueTask that completes when the message is confirmed
         var startTimestamp = Stopwatch.GetTimestamp();
 
+        Exception? publishException = null;
+
         try
         {
             await channel.BasicPublishAsync(
@@ -64,6 +66,11 @@ public class RabbitMqMessageSender(
                 basicProperties: basicProps,
                 body: bodyToSend,
                 cancellationToken: cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            publishException = ex;
+            throw;
         }
         finally
         {
@@ -78,24 +85,27 @@ public class RabbitMqMessageSender(
 
             RatatoskrDiagnostics.PublishDuration.Record(duration, tags);
             RatatoskrDiagnostics.PublishMessages.Add(1, tags);
-        }
 
-        foreach (var observer in observers)
-        {
-            try
+            var sentTimestamp = timeProvider.GetUtcNow();
+
+            foreach (var observer in observers)
             {
-                await observer.OnMessageActivity(new MessageActivity
+                try
                 {
-                    Stage = MessageStage.Sent,
-                    Properties = props,
-                    SerializedBody = transportMessage.Body,
-                    TransportMessage = transportMessage,
-                    Timestamp = timeProvider.GetUtcNow(),
-                });
-            }
-            catch
-            {
-                // Observer failures must not affect the pipeline
+                    await observer.OnMessageActivity(new MessageActivity
+                    {
+                        Stage = MessageStage.Sent,
+                        Properties = props,
+                        SerializedBody = transportMessage.Body,
+                        TransportMessage = transportMessage,
+                        Exception = publishException,
+                        Timestamp = sentTimestamp,
+                    });
+                }
+                catch
+                {
+                    // Observer failures must not affect the pipeline
+                }
             }
         }
     }

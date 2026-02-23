@@ -153,13 +153,16 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             TimeSpan.FromSeconds(10));
 
         // Verify all messages are marked as processed in the database
-        await InScopeAsync(async ctx =>
-        {
-            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var entities = await dbContext.Set<OutboxMessageEntity>().ToListAsync();
-            entities.Should().HaveCount(3);
-            entities.All(e => e.ProcessedAt != null).Should().BeTrue();
-        });
+        // Note: ProcessedAt is persisted AFTER messages are sent to RabbitMQ,
+        // so we need to wait for the database to be updated too.
+        await WaitForConditionAsync(
+            async () => await InScopeAsync(async ctx =>
+            {
+                var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                var entities = await dbContext.Set<OutboxMessageEntity>().ToListAsync();
+                return entities.Count == 3 && entities.All(e => e.ProcessedAt != null);
+            }),
+            TimeSpan.FromSeconds(10));
     }
 
     [Test]
@@ -369,12 +372,14 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             async () => await GetMessageCountAsync(QueueName) >= 5,
             TimeSpan.FromSeconds(10));
 
-        await InScopeAsync(async ctx =>
-        {
-            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var entities = await dbContext.Set<OutboxMessageEntity>().ToListAsync();
-            entities.All(e => e.ProcessedAt != null).Should().BeTrue();
-        });
+        await WaitForConditionAsync(
+            async () => await InScopeAsync(async ctx =>
+            {
+                var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                var entities = await dbContext.Set<OutboxMessageEntity>().ToListAsync();
+                return entities.All(e => e.ProcessedAt != null);
+            }),
+            TimeSpan.FromSeconds(10));
     }
 
     [Test]
@@ -536,13 +541,16 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             TimeSpan.FromSeconds(10));
 
         // Verify both are marked as processed
-        await InScopeAsync(async ctx =>
-        {
-            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var entities = await dbContext.Set<OutboxMessageEntity>().ToListAsync();
-            entities.Should().HaveCount(2);
-            entities.All(e => e.ProcessedAt != null).Should().BeTrue();
-        });
+        // Note: ProcessedAt is persisted AFTER messages are sent to RabbitMQ,
+        // so we need to wait for the database to be updated too.
+        await WaitForConditionAsync(
+            async () => await InScopeAsync(async ctx =>
+            {
+                var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                var entities = await dbContext.Set<OutboxMessageEntity>().ToListAsync();
+                return entities.Count == 2 && entities.All(e => e.ProcessedAt != null);
+            }),
+            TimeSpan.FromSeconds(10));
     }
 
     private async Task InitializeDatabase()

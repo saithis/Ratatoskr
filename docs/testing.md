@@ -174,7 +174,7 @@ public async Task CreateOrder_PublishesEvent()
 
 ### PublishAndWaitAsync
 
-A convenience method that resolves `IRatatoskr` and publishes for you:
+A convenience method that resolves `IRatatoskr` and publishes for you. It always waits for `MessageStage.Dispatched`:
 
 ```csharp
 await using var session = await Services
@@ -183,6 +183,8 @@ await using var session = await Services
 
 session.Dispatched.ShouldHaveMessage<OrderCreatedEvent>();
 ```
+
+> **Note:** `PublishAndWaitAsync` does not support custom `WaitForMessage` conditions. If you chain `WaitForMessage()` before calling `PublishAndWaitAsync`, it will throw an `InvalidOperationException`. Use `ExecuteAndWaitAsync` instead when you need custom wait conditions.
 
 ## Transport Wire Format Assertions
 
@@ -311,5 +313,5 @@ graph TD
         activity["ActivityTracker<br/>(action-based convenience API)"]
     end
 
-    observer -->|implements| tracker
+    tracker -->|implements| observer
 ```
