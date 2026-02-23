@@ -11,6 +11,8 @@ public class MessageDispatcher(
     ChannelRegistry channelRegistry,
     IMessageSerializer deserializer,
     IServiceScopeFactory scopeFactory,
+    TimeProvider timeProvider,
+    IEnumerable<IMessageActivityObserver> observers,
     ILogger<MessageDispatcher> logger)
 {
     /// <summary>
@@ -24,10 +26,10 @@ public class MessageDispatcher(
             logger.LogError("Received message without a type");
             return DispatchResult.PermanentError;
         }
-        
+
         // 1. Resolve Message Type
         Type? messageType = null;
-        
+
         // Try ChannelRegistry first (Topology based)
         if (channelName != null)
         {
@@ -38,7 +40,7 @@ public class MessageDispatcher(
                 messageType = msgReg.MessageType;
             }
         }
-        
+
         // Try global lookup in ChannelRegistry if not found in channel (or channel not provided)
         if (messageType == null)
         {
@@ -73,11 +75,11 @@ public class MessageDispatcher(
             logger.LogError("Message of type '{EventType}' deserialized to null", properties.Type);
             return DispatchResult.PermanentError;
         }
-        
+
         // 3. Dispatch to Handlers via DI
-        var errors = 0;
+        List<Exception>? exceptions = null;
         using var scope = scopeFactory.CreateScope();
-        
+
         // Generic handler interface type: IMessageHandler<T>
         var interfaceType = typeof(IMessageHandler<>).MakeGenericType(messageType);
         var handlersInstances = scope.ServiceProvider.GetServices(interfaceType);
@@ -95,19 +97,49 @@ public class MessageDispatcher(
             {
                 var handleMethod = interfaceType.GetMethod(nameof(IMessageHandler<object>.HandleAsync))!;
                 await (Task)handleMethod.Invoke(handler, [message, properties, cancellationToken])!;
-                
-                logger.LogDebug("Handler '{Handler}' processed message '{Id}' of type '{Type}'", 
+
+                logger.LogDebug("Handler '{Handler}' processed message '{Id}' of type '{Type}'",
                     handler.GetType().Name, properties.Id, properties.Type);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Handler '{Handler}' failed for message '{Id}' of type '{Type}'", 
+                logger.LogError(ex, "Handler '{Handler}' failed for message '{Id}' of type '{Type}'",
                     handler.GetType().Name, properties.Id, properties.Type);
-                errors++;
+                exceptions ??= [];
+                exceptions.Add(ex);
             }
         }
-        
-        return errors > 0 ? DispatchResult.RecoverableError : DispatchResult.Success;
+
+        var result = exceptions != null ? DispatchResult.RecoverableError : DispatchResult.Success;
+
+        foreach (var observer in observers)
+        {
+            try
+            {
+                await observer.OnMessageActivity(new MessageActivity
+                {
+                    Stage = MessageStage.Dispatched,
+                    Properties = properties,
+                    SerializedBody = body,
+                    Message = message,
+                    MessageType = messageType,
+                    DispatchResult = result,
+                    Exception = exceptions switch
+                    {
+                        null => null,
+                        [var single] => single,
+                        _ => new AggregateException(exceptions)
+                    },
+                    Timestamp = timeProvider.GetUtcNow(),
+                });
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Message activity observer failed at the {Stage} stage", MessageStage.Dispatched);
+            }
+        }
+
+        return result;
     }
 }
 

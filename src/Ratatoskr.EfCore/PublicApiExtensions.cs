@@ -69,7 +69,8 @@ public static class PublicApiExtensions
         var timeProvider = serviceProvider.GetRequiredService<TimeProvider>();
         var messageSerializer = serviceProvider.GetRequiredService<IMessageSerializer>();
         var enricher = serviceProvider.GetRequiredService<IMessagePropertiesEnricher>();
-        var interceptor = new OutboxTriggerInterceptor<TDbContext>(outboxProcessor, messageSerializer, enricher, timeProvider);
+        var observers = serviceProvider.GetServices<IMessageActivityObserver>();
+        var interceptor = new OutboxTriggerInterceptor<TDbContext>(outboxProcessor, messageSerializer, enricher, observers, timeProvider);
         return builder.AddInterceptors(interceptor);
     }
     

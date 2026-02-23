@@ -5,13 +5,14 @@ using Ratatoskr.Core;
 namespace Ratatoskr.EfCore.Internal;
 
 internal class OutboxTriggerInterceptor<TDbContext>(
-    OutboxProcessor<TDbContext> outboxProcessor, 
+    OutboxProcessor<TDbContext> outboxProcessor,
     IMessageSerializer messageSerializer,
     IMessagePropertiesEnricher enricher,
-    TimeProvider timeProvider) 
+    IEnumerable<IMessageActivityObserver> observers,
+    TimeProvider timeProvider)
     : SaveChangesInterceptor where TDbContext : DbContext, IOutboxDbContext
 {
-    public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+    public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
         DbContextEventData eventData,
         InterceptionResult<int> result,
         CancellationToken cancellationToken = default
@@ -20,7 +21,7 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         DbContext? context = eventData.Context;
         if (context == null)
         {
-            return ValueTask.FromResult(result);
+            return result;
         }
 
         if (context is not IOutboxDbContext outboxDbContext)
@@ -35,12 +36,32 @@ internal class OutboxTriggerInterceptor<TDbContext>(
             enrichedProperties.ContentType = messageSerializer.ContentType;
             var outboxMessage = OutboxMessageEntity.Create(serializedMessage, enrichedProperties, timeProvider);
             context.Set<OutboxMessageEntity>().Add(outboxMessage);
-            
+
             // Only dequeue after successful serialization
             outboxDbContext.OutboxMessages.Queue.TryDequeue(out _);
+
+            foreach (var observer in observers)
+            {
+                try
+                {
+                    await observer.OnMessageActivity(new MessageActivity
+                    {
+                        Stage = MessageStage.OutboxStaged,
+                        Properties = enrichedProperties,
+                        SerializedBody = serializedMessage,
+                        Message = item.Message,
+                        MessageType = item.Message.GetType(),
+                        Timestamp = timeProvider.GetUtcNow(),
+                    });
+                }
+                catch
+                {
+                    // Observer failures must not affect the pipeline
+                }
+            }
         }
 
-        return ValueTask.FromResult(result);
+        return result;
     }
 
     public override async ValueTask<int> SavedChangesAsync(

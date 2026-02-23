@@ -4,7 +4,6 @@ using Ratatoskr.AsyncApi.Generation;
 using Ratatoskr.AsyncApi.Model;
 using Ratatoskr.Core;
 using Ratatoskr.Serializers.Json;
-using Ratatoskr.Testing;
 
 namespace Ratatoskr;
 

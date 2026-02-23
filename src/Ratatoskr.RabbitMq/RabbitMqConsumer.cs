@@ -16,6 +16,8 @@ internal class RabbitMqConsumer(
     MessageDispatcher dispatcher,
     IRabbitMqEnvelopeMapper envelopeMapper,
     RabbitMqRetryHandler retryHandler,
+    TimeProvider timeProvider,
+    IEnumerable<IMessageActivityObserver> observers,
     ILogger<RabbitMqConsumer> logger)
     : BackgroundService
 {
@@ -87,9 +89,33 @@ internal class RabbitMqConsumer(
 
         try
         {
+            // Capture transport-level wire format before envelope mapping
+            var transportMessage = RabbitMqTransportMessageFactory.FromDeliverEventArgs(ea);
+
             // Use envelope mapper to extract body and properties
             var (body, props) = envelopeMapper.MapIncoming(ea);
             messageTime = props.Time;
+
+            var receivedTimestamp = timeProvider.GetUtcNow();
+
+            foreach (var observer in observers)
+            {
+                try
+                {
+                    await observer.OnMessageActivity(new MessageActivity
+                    {
+                        Stage = MessageStage.Received,
+                        Properties = props,
+                        SerializedBody = body,
+                        TransportMessage = transportMessage,
+                        Timestamp = receivedTimestamp,
+                    });
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Message activity observer failed at the {Stage} stage", MessageStage.Received);
+                }
+            }
 
             tags = CreateTags(ea, props, queueName);
 

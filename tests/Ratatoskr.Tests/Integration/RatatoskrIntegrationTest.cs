@@ -15,6 +15,12 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
 {
     private WebApplicationFactory<Program>? _factory;
 
+    /// <summary>
+    /// Provides access to the application's root service provider.
+    /// Available after <see cref="StartTestAsync"/> has been called.
+    /// </summary>
+    protected IServiceProvider Services => _factory?.Services ?? throw new InvalidOperationException("StartTestAsync has not been called yet.");
+
     // Unique ID for this test instance to isolate resources
     protected string TestId { get; } = Guid.NewGuid().ToString("N");
     protected string RabbitMqConnectionString => rabbitMq.ConnectionString;
