@@ -9,13 +9,13 @@ namespace Ratatoskr.Testing;
 /// </summary>
 public class MessageTracker : IMessageActivityObserver
 {
-    private readonly ConcurrentBag<MessageActivity> _activities = new();
+    private readonly ConcurrentQueue<MessageActivity> _activities = new();
     private readonly List<Waiter> _waiters = new();
     private readonly object _lock = new();
 
     public ValueTask OnMessageActivity(MessageActivity activity)
     {
-        _activities.Add(activity);
+        _activities.Enqueue(activity);
         NotifyWaiters(activity);
         return ValueTask.CompletedTask;
     }
@@ -102,11 +102,18 @@ public class MessageTracker : IMessageActivityObserver
                     continue;
                 }
 
-                if (waiter.Predicate(activity))
+                try
                 {
-                    waiter.Completion.TrySetResult(activity);
-                    waiter.Cts.Dispose();
-                    _waiters.RemoveAt(i);
+                    if (waiter.Predicate(activity))
+                    {
+                        waiter.Completion.TrySetResult(activity);
+                        waiter.Cts.Dispose();
+                        _waiters.RemoveAt(i);
+                    }
+                }
+                catch
+                {
+                    // Predicate failures must not prevent other waiters from being notified
                 }
             }
         }

@@ -109,9 +109,9 @@ internal class RabbitMqConsumer(
                         Timestamp = timeProvider.GetUtcNow(),
                     });
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Observer failures must not affect the pipeline
+                    logger.LogWarning(ex, "Message activity observer failed at the {Stage} stage", MessageStage.Received);
                 }
             }
 

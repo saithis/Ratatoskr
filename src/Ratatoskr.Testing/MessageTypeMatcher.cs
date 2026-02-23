@@ -28,7 +28,7 @@ internal static class MessageTypeMatcher
         if (activity.MessageType == expectedType)
             return true;
 
-        if (activity.Message?.GetType() == expectedType)
+        if (activity.Message != null && expectedType.IsInstanceOfType(activity.Message))
             return true;
 
         var typeName = GetTypeName(expectedType);

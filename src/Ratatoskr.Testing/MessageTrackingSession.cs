@@ -14,6 +14,7 @@ public class MessageTrackingSession : IAsyncDisposable
     private readonly Activity _activity;
     private readonly Activity? _previousActivity;
     private readonly TimeSpan _defaultTimeout;
+    private bool _disposed;
 
     internal MessageTrackingSession(MessageTracker tracker, TimeSpan? defaultTimeout = null)
     {
@@ -125,6 +126,10 @@ public class MessageTrackingSession : IAsyncDisposable
 
     public ValueTask DisposeAsync()
     {
+        if (_disposed)
+            return ValueTask.CompletedTask;
+
+        _disposed = true;
         _activity.Stop();
         _activity.Dispose();
         Activity.Current = _previousActivity;

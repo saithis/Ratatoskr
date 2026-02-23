@@ -206,7 +206,6 @@ public class MessageTrackingTests(
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             await bus.PublishDirectAsync(new TestEvent { Id = "parallel-1", Data = "session 1" });
         });
-        var dispatched1 = await session1.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(5));
 
         await using var session2 = Services.CreateTrackingSession();
         await InScopeAsync(async ctx =>
@@ -214,7 +213,14 @@ public class MessageTrackingTests(
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             await bus.PublishDirectAsync(new TestEvent { Id = "parallel-2", Data = "session 2" });
         });
-        var dispatched2 = await session2.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(5));
+
+        // Wait for both dispatches concurrently to verify trace isolation under parallelism
+        var wait1 = session1.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(5));
+        var wait2 = session2.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(5));
+        await Task.WhenAll(wait1, wait2);
+
+        var dispatched1 = await wait1;
+        var dispatched2 = await wait2;
 
         // Assert - each session only sees its own messages
         dispatched1.GetMessage<TestEvent>().Id.Should().Be("parallel-1");

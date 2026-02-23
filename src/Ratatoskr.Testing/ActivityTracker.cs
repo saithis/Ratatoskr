@@ -46,21 +46,29 @@ public class ActivityTracker
     {
         var session = new MessageTrackingSession(_tracker, _timeout);
 
-        await action();
-
-        if (_waitConditions.Count > 0)
+        try
         {
-            var waitTasks = _waitConditions.Select(wc =>
-                _tracker.WaitForAsync(
-                    a => a.Stage == wc.Stage
-                         && MessageTracker.ExtractTraceId(a.Properties.TraceParent) == session.TraceId
-                         && MessageTypeMatcher.Matches(a, wc.MessageType),
-                    _timeout));
+            await action();
 
-            await Task.WhenAll(waitTasks);
+            if (_waitConditions.Count > 0)
+            {
+                var waitTasks = _waitConditions.Select(wc =>
+                    _tracker.WaitForAsync(
+                        a => a.Stage == wc.Stage
+                             && MessageTracker.ExtractTraceId(a.Properties.TraceParent) == session.TraceId
+                             && MessageTypeMatcher.Matches(a, wc.MessageType),
+                        _timeout));
+
+                await Task.WhenAll(waitTasks);
+            }
+
+            return session;
         }
-
-        return session;
+        catch
+        {
+            await session.DisposeAsync();
+            throw;
+        }
     }
 
     /// <summary>
@@ -68,20 +76,30 @@ public class ActivityTracker
     /// </summary>
     public async Task<MessageTrackingSession> PublishAndWaitAsync<T>(
         T message,
-        MessageProperties? props = null) where T : notnull
+        MessageProperties? props = null,
+        CancellationToken cancellationToken = default) where T : notnull
     {
         var session = new MessageTrackingSession(_tracker, _timeout);
 
-        var bus = _services.GetRequiredService<IRatatoskr>();
-        await bus.PublishDirectAsync(message, props);
+        try
+        {
+            var bus = _services.GetRequiredService<IRatatoskr>();
+            await bus.PublishDirectAsync(message, props, cancellationToken);
 
-        await _tracker.WaitForAsync(
-            a => a.Stage == MessageStage.Dispatched
-                 && MessageTracker.ExtractTraceId(a.Properties.TraceParent) == session.TraceId
-                 && MessageTypeMatcher.Matches<T>(a),
-            _timeout);
+            await _tracker.WaitForAsync(
+                a => a.Stage == MessageStage.Dispatched
+                     && MessageTracker.ExtractTraceId(a.Properties.TraceParent) == session.TraceId
+                     && MessageTypeMatcher.Matches<T>(a),
+                _timeout,
+                cancellationToken);
 
-        return session;
+            return session;
+        }
+        catch
+        {
+            await session.DisposeAsync();
+            throw;
+        }
     }
 
     private record WaitCondition(Type MessageType, MessageStage Stage);

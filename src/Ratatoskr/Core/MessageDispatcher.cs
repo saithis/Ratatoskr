@@ -77,8 +77,7 @@ public class MessageDispatcher(
         }
 
         // 3. Dispatch to Handlers via DI
-        var errors = 0;
-        Exception? lastException = null;
+        List<Exception>? exceptions = null;
         using var scope = scopeFactory.CreateScope();
 
         // Generic handler interface type: IMessageHandler<T>
@@ -106,12 +105,12 @@ public class MessageDispatcher(
             {
                 logger.LogError(ex, "Handler '{Handler}' failed for message '{Id}' of type '{Type}'",
                     handler.GetType().Name, properties.Id, properties.Type);
-                errors++;
-                lastException = ex;
+                exceptions ??= [];
+                exceptions.Add(ex);
             }
         }
 
-        var result = errors > 0 ? DispatchResult.RecoverableError : DispatchResult.Success;
+        var result = exceptions != null ? DispatchResult.RecoverableError : DispatchResult.Success;
 
         foreach (var observer in observers)
         {
@@ -125,13 +124,18 @@ public class MessageDispatcher(
                     Message = message,
                     MessageType = messageType,
                     DispatchResult = result,
-                    Exception = lastException,
+                    Exception = exceptions switch
+                    {
+                        null => null,
+                        [var single] => single,
+                        _ => new AggregateException(exceptions)
+                    },
                     Timestamp = timeProvider.GetUtcNow(),
                 });
             }
-            catch
+            catch (Exception ex)
             {
-                // Observer failures must not affect the pipeline
+                logger.LogWarning(ex, "Message activity observer failed at the {Stage} stage", MessageStage.Dispatched);
             }
         }
 
