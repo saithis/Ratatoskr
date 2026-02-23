@@ -7,6 +7,7 @@ public class Ratatoskr(
     IMessageSerializer serializer,
     IMessageSender sender,
     IMessagePropertiesEnricher enricher,
+    TimeProvider timeProvider,
     IEnumerable<IMessageActivityObserver> observers) : IRatatoskr
 {
     public async Task PublishDirectAsync<TMessage>(
@@ -32,15 +33,22 @@ public class Ratatoskr(
 
         foreach (var observer in observers)
         {
-            await observer.OnMessageActivity(new MessageActivity
+            try
             {
-                Stage = MessageStage.Published,
-                Properties = props,
-                SerializedBody = serializedMessage,
-                Message = message,
-                MessageType = typeof(TMessage),
-                Timestamp = DateTimeOffset.UtcNow,
-            });
+                await observer.OnMessageActivity(new MessageActivity
+                {
+                    Stage = MessageStage.Published,
+                    Properties = props,
+                    SerializedBody = serializedMessage,
+                    Message = message,
+                    MessageType = typeof(TMessage),
+                    Timestamp = timeProvider.GetUtcNow(),
+                });
+            }
+            catch
+            {
+                // Observer failures must not affect the pipeline
+            }
         }
     }
 }

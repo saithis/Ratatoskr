@@ -67,18 +67,20 @@ internal class OutboxMessageProcessor<TDbContext>(
         // Process each message with error handling
         foreach (var message in messages)
         {
+            MessageProperties? sentProps = null;
+
             try
             {
                 var props = message.GetProperties();
-                
+
                 // Extract parent tracing context
                 ActivityContext.TryParse(props.TraceParent, props.TraceState, out var parentContext);
 
                 using var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
-                    "Ratatoskr.OutboxProcess", 
-                    ActivityKind.Producer, 
+                    "Ratatoskr.OutboxProcess",
+                    ActivityKind.Producer,
                     parentContext);
-                
+
                 if (activity != null)
                 {
                     // https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/#messaging-attributes
@@ -91,25 +93,36 @@ internal class OutboxMessageProcessor<TDbContext>(
                 message.MarkAsProcessed(timeProvider);
                 processedCount++;
                 RatatoskrDiagnostics.OutboxProcessCount.Add(1, new TagList { { "status", "success" } });
-
-                foreach (var observer in observers)
-                {
-                    await observer.OnMessageActivity(new MessageActivity
-                    {
-                        Stage = MessageStage.OutboxSent,
-                        Properties = props,
-                        SerializedBody = message.Content,
-                        Timestamp = DateTimeOffset.UtcNow,
-                    });
-                }
+                sentProps = props;
             }
             catch (Exception e)
             {
-                logger.LogWarning(e, "Failed to send message '{Id}', attempt {Attempt}", 
+                logger.LogWarning(e, "Failed to send message '{Id}', attempt {Attempt}",
                     message.Id, message.ErrorCount + 1);
-                message.PublishFailed(e.Message, timeProvider, 
+                message.PublishFailed(e.Message, timeProvider,
                     options.MaxRetries, options.MaxRetryDelay);
                 RatatoskrDiagnostics.OutboxProcessCount.Add(1, new TagList { { "status", "failure" } });
+            }
+
+            if (sentProps != null)
+            {
+                foreach (var observer in observers)
+                {
+                    try
+                    {
+                        await observer.OnMessageActivity(new MessageActivity
+                        {
+                            Stage = MessageStage.OutboxSent,
+                            Properties = sentProps,
+                            SerializedBody = message.Content,
+                            Timestamp = timeProvider.GetUtcNow(),
+                        });
+                    }
+                    catch
+                    {
+                        // Observer failures must not affect the pipeline
+                    }
+                }
             }
         }
 

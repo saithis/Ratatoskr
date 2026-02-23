@@ -44,11 +44,8 @@ public async Task OrderCreated_HandlerProcessesSuccessfully()
         await bus.PublishDirectAsync(new OrderCreatedEvent { OrderId = "123" });
     });
 
-    // Wait for the handler to complete
-    await session.WaitForDispatched<OrderCreatedEvent>();
-
-    // Assert on the dispatched message
-    var dispatched = session.Dispatched.Single<OrderCreatedEvent>();
+    // Wait for the handler to complete — returns the tracked message directly
+    var dispatched = await session.WaitForDispatched<OrderCreatedEvent>();
     dispatched.GetMessage<OrderCreatedEvent>().OrderId.Should().Be("123");
     dispatched.Result.Should().Be(DispatchResult.Success);
 }
@@ -70,21 +67,24 @@ await using var session = services.CreateTrackingSession(
 
 ### Waiting for Messages
 
-Each wait method blocks until a matching message arrives or the timeout expires:
+Each wait method blocks until a matching message arrives or the timeout expires, and returns the `TrackedMessage` directly:
 
 ```csharp
-await session.WaitForPublished<OrderCreatedEvent>();
-await session.WaitForSent<OrderCreatedEvent>();
-await session.WaitForReceived<OrderCreatedEvent>();
-await session.WaitForDispatched<OrderCreatedEvent>();
+var published = await session.WaitForPublished<OrderCreatedEvent>();
+var sent = await session.WaitForSent<OrderCreatedEvent>();
+var received = await session.WaitForReceived<OrderCreatedEvent>();
+var dispatched = await session.WaitForDispatched<OrderCreatedEvent>();
 
 // With custom timeout
-await session.WaitForDispatched<OrderCreatedEvent>(TimeSpan.FromSeconds(15));
+var dispatched = await session.WaitForDispatched<OrderCreatedEvent>(
+    TimeSpan.FromSeconds(15));
 
 // With additional predicate
-await session.WaitForDispatched<OrderCreatedEvent>(
+var dispatched = await session.WaitForDispatched<OrderCreatedEvent>(
     predicate: m => m.GetMessage<OrderCreatedEvent>().OrderId == "123");
 ```
+
+Prefer using the return value directly over querying the collection afterward — this avoids race conditions where a later stage completes before an earlier stage's observer notification is recorded.
 
 ### Querying Messages
 
@@ -122,7 +122,7 @@ Each `TrackedMessage` provides rich access to the captured data:
 var msg = session.Dispatched.Single<OrderCreatedEvent>();
 
 // Typed access to the deserialized message
-OrderCreatedEvent event = msg.GetMessage<OrderCreatedEvent>();
+OrderCreatedEvent order = msg.GetMessage<OrderCreatedEvent>();
 
 // Message properties (CloudEvents metadata)
 msg.Properties.Type    // "order.created"
@@ -155,7 +155,7 @@ public async Task CreateOrder_PublishesEvent()
 {
     // ... setup ...
 
-    var session = await Services
+    await using var session = await Services
         .TrackActivity()
         .Timeout(TimeSpan.FromSeconds(10))
         .WaitForMessage<OrderCreatedEvent>(MessageStage.Dispatched)
@@ -169,8 +169,6 @@ public async Task CreateOrder_PublishesEvent()
     // Assert
     session.Dispatched.Single<OrderCreatedEvent>()
         .Result.Should().Be(DispatchResult.Success);
-
-    await session.DisposeAsync();
 }
 ```
 
@@ -199,9 +197,7 @@ await InScopeAsync(async ctx =>
     await bus.PublishDirectAsync(new OrderCreatedEvent { OrderId = "123" });
 });
 
-await session.WaitForSent<OrderCreatedEvent>();
-
-var sent = session.Sent.Single<OrderCreatedEvent>();
+var sent = await session.WaitForSent<OrderCreatedEvent>();
 var rawJson = Encoding.UTF8.GetString(sent.RawBody!);
 
 // Assert on the wire format
@@ -226,15 +222,12 @@ await InScopeAsync(async ctx =>
     await dbContext.SaveChangesAsync();
 });
 
-await session.WaitForDispatched<OrderCreatedEvent>(TimeSpan.FromSeconds(10));
+var dispatched = await session.WaitForDispatched<OrderCreatedEvent>(
+    TimeSpan.FromSeconds(10));
+dispatched.Result.Should().Be(DispatchResult.Success);
 
-// Verify it went through the outbox
+// Verify it went through the outbox (OutboxStaged is synchronous during SaveChanges)
 session.OutboxStaged.ShouldHaveMessage<OrderCreatedEvent>();
-session.OutboxSent.ShouldHaveMessage<OrderCreatedEvent>();
-
-// Verify it was handled
-session.Dispatched.Single<OrderCreatedEvent>()
-    .Result.Should().Be(DispatchResult.Success);
 ```
 
 ## Parallel Test Isolation
@@ -258,23 +251,20 @@ session1.TraceId.Should().NotBe(session2.TraceId);
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Core Library (Ratatoskr)                                   │
-│                                                             │
-│  IMessageActivityObserver interface                         │
-│  Hooks in: Ratatoskr, MessageDispatcher,                    │
-│    RabbitMqMessageSender, RabbitMqConsumer,                  │
-│    OutboxTriggerInterceptor, OutboxMessageProcessor          │
-└──────────────────────────┬──────────────────────────────────┘
-                           │ implements
-┌──────────────────────────▼──────────────────────────────────┐
-│  Ratatoskr.Testing                                          │
-│                                                             │
-│  MessageTracker (singleton, collects all activities)         │
-│  MessageTrackingSession (per-test, trace-ID-scoped view)    │
-│  TrackedMessage (rich model per captured message)            │
-│  MessageCollection (queryable + assertion helpers)           │
-│  ActivityTracker (action-based convenience API)              │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph core["Core Library (Ratatoskr)"]
+        observer["IMessageActivityObserver interface"]
+        hooks["Hooks in: Ratatoskr, MessageDispatcher,<br/>RabbitMqMessageSender, RabbitMqConsumer,<br/>OutboxTriggerInterceptor, OutboxMessageProcessor"]
+    end
+
+    subgraph testing["Ratatoskr.Testing"]
+        tracker["MessageTracker<br/>(singleton, collects all activities)"]
+        session["MessageTrackingSession<br/>(per-test, trace-ID-scoped view)"]
+        tracked["TrackedMessage<br/>(rich model per captured message)"]
+        collection["MessageCollection<br/>(queryable + assertion helpers)"]
+        activity["ActivityTracker<br/>(action-based convenience API)"]
+    end
+
+    observer -->|implements| tracker
 ```

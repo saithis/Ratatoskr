@@ -42,15 +42,22 @@ internal class OutboxTriggerInterceptor<TDbContext>(
 
             foreach (var observer in observers)
             {
-                await observer.OnMessageActivity(new MessageActivity
+                try
                 {
-                    Stage = MessageStage.OutboxStaged,
-                    Properties = enrichedProperties,
-                    SerializedBody = serializedMessage,
-                    Message = item.Message,
-                    MessageType = item.Message.GetType(),
-                    Timestamp = DateTimeOffset.UtcNow,
-                });
+                    await observer.OnMessageActivity(new MessageActivity
+                    {
+                        Stage = MessageStage.OutboxStaged,
+                        Properties = enrichedProperties,
+                        SerializedBody = serializedMessage,
+                        Message = item.Message,
+                        MessageType = item.Message.GetType(),
+                        Timestamp = timeProvider.GetUtcNow(),
+                    });
+                }
+                catch
+                {
+                    // Observer failures must not affect the pipeline
+                }
             }
         }
 

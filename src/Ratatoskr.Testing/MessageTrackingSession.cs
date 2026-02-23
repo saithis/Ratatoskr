@@ -107,7 +107,7 @@ public class MessageTrackingSession : IAsyncDisposable
         var activity = await _tracker.WaitForAsync(
             a => a.Stage == stage
                  && MessageTracker.ExtractTraceId(a.Properties.TraceParent) == traceId
-                 && MatchesType<T>(a)
+                 && MessageTypeMatcher.Matches<T>(a)
                  && (predicate == null || predicate(new TrackedMessage(a))),
             effectiveTimeout);
 
@@ -121,23 +121,6 @@ public class MessageTrackingSession : IAsyncDisposable
             _tracker.GetActivities(traceId)
                 .Where(a => a.Stage == stage)
                 .Select(a => new TrackedMessage(a)));
-    }
-
-    private static bool MatchesType<T>(MessageActivity activity)
-    {
-        if (activity.MessageType == typeof(T))
-            return true;
-
-        if (activity.Message is T)
-            return true;
-
-        // Match by wire type name from attribute
-        var attr = typeof(T).GetCustomAttributes(typeof(RatatoskrMessageAttribute), false)
-            .FirstOrDefault() as RatatoskrMessageAttribute;
-        if (attr?.Type != null && activity.Properties.Type == attr.Type)
-            return true;
-
-        return false;
     }
 
     public ValueTask DisposeAsync()

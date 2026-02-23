@@ -10,6 +10,7 @@ public class RabbitMqMessageSender(
     RabbitMqConnectionManager connectionManager,
     RabbitMqOptions options,
     IRabbitMqEnvelopeMapper envelopeMapper,
+    TimeProvider timeProvider,
     IEnumerable<IMessageActivityObserver> observers)
     : IMessageSender, IAsyncDisposable
 {
@@ -74,13 +75,20 @@ public class RabbitMqMessageSender(
 
         foreach (var observer in observers)
         {
-            await observer.OnMessageActivity(new MessageActivity
+            try
             {
-                Stage = MessageStage.Sent,
-                Properties = props,
-                SerializedBody = bodyToSend.ToArray(),
-                Timestamp = DateTimeOffset.UtcNow,
-            });
+                await observer.OnMessageActivity(new MessageActivity
+                {
+                    Stage = MessageStage.Sent,
+                    Properties = props,
+                    SerializedBody = bodyToSend.ToArray(),
+                    Timestamp = timeProvider.GetUtcNow(),
+                });
+            }
+            catch
+            {
+                // Observer failures must not affect the pipeline
+            }
         }
     }
     

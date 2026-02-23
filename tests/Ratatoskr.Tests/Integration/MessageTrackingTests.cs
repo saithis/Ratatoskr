@@ -50,15 +50,13 @@ public class MessageTrackingTests(
         });
 
         // Assert - Published stage
-        await session.WaitForPublished<TestEvent>(TimeSpan.FromSeconds(5));
-        var published = session.Published.Single<TestEvent>();
+        var published = await session.WaitForPublished<TestEvent>(TimeSpan.FromSeconds(5));
         published.GetMessage<TestEvent>().Id.Should().Be("track-pub-1");
         published.Properties.Type.Should().Be("test.event");
         published.RawBody.Should().NotBeNull();
 
         // Assert - Sent stage (on the wire)
-        await session.WaitForSent<TestEvent>(TimeSpan.FromSeconds(5));
-        var sent = session.Sent.Single<TestEvent>();
+        var sent = await session.WaitForSent<TestEvent>(TimeSpan.FromSeconds(5));
         sent.RawBody.Should().NotBeNull();
         Encoding.UTF8.GetString(sent.RawBody!).Should().Contain("track-pub-1");
     }
@@ -89,8 +87,7 @@ public class MessageTrackingTests(
         });
 
         // Assert - Dispatched stage
-        await session.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(5));
-        var dispatched = session.Dispatched.Single<TestEvent>();
+        var dispatched = await session.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(5));
         dispatched.GetMessage<TestEvent>().Id.Should().Be("track-cons-1");
         dispatched.Result.Should().Be(DispatchResult.Success);
 
@@ -124,7 +121,8 @@ public class MessageTrackingTests(
         });
 
         // Wait for the full pipeline
-        await session.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(5));
+        var dispatched = await session.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(5));
+        dispatched.GetMessage<TestEvent>().Id.Should().Be("e2e-1");
 
         // Assert all stages are captured
         session.Published.Count.Should().BeGreaterThanOrEqualTo(1);
@@ -132,9 +130,8 @@ public class MessageTrackingTests(
         session.Received.Count.Should().BeGreaterThanOrEqualTo(1);
         session.Dispatched.Count.Should().BeGreaterThanOrEqualTo(1);
 
-        // All should reference the same message
+        // Published should also reference the same message
         session.Published.Single<TestEvent>().GetMessage<TestEvent>().Id.Should().Be("e2e-1");
-        session.Dispatched.Single<TestEvent>().GetMessage<TestEvent>().Id.Should().Be("e2e-1");
     }
 
     [Test]
@@ -177,20 +174,13 @@ public class MessageTrackingTests(
             await dbContext.SaveChangesAsync();
         });
 
-        // Wait for the outbox to process and the handler to be invoked
-        await session.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(10));
+        // Wait for the full outbox pipeline to complete
+        var dispatched = await session.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(10));
+        dispatched.Result.Should().Be(DispatchResult.Success);
 
-        // Assert - OutboxStaged
-        session.OutboxStaged.ShouldHaveMessage<TestEvent>();
+        // Assert - OutboxStaged (synchronous during SaveChanges, always available)
         var staged = session.OutboxStaged.Single<TestEvent>();
         staged.GetMessage<TestEvent>().Id.Should().Be("outbox-track-1");
-
-        // Assert - OutboxSent
-        session.OutboxSent.ShouldHaveMessage<TestEvent>();
-
-        // Assert - Dispatched
-        var dispatched = session.Dispatched.Single<TestEvent>();
-        dispatched.Result.Should().Be(DispatchResult.Success);
     }
 
     [Test]
@@ -216,7 +206,7 @@ public class MessageTrackingTests(
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             await bus.PublishDirectAsync(new TestEvent { Id = "parallel-1", Data = "session 1" });
         });
-        await session1.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(5));
+        var dispatched1 = await session1.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(5));
 
         await using var session2 = Services.CreateTrackingSession();
         await InScopeAsync(async ctx =>
@@ -224,11 +214,11 @@ public class MessageTrackingTests(
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             await bus.PublishDirectAsync(new TestEvent { Id = "parallel-2", Data = "session 2" });
         });
-        await session2.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(5));
+        var dispatched2 = await session2.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(5));
 
         // Assert - each session only sees its own messages
-        session1.Dispatched.Single<TestEvent>().GetMessage<TestEvent>().Id.Should().Be("parallel-1");
-        session2.Dispatched.Single<TestEvent>().GetMessage<TestEvent>().Id.Should().Be("parallel-2");
+        dispatched1.GetMessage<TestEvent>().Id.Should().Be("parallel-1");
+        dispatched2.GetMessage<TestEvent>().Id.Should().Be("parallel-2");
 
         // Sessions have different trace IDs
         session1.TraceId.Should().NotBe(session2.TraceId);
@@ -271,8 +261,7 @@ public class MessageTrackingTests(
         });
 
         // Assert - wait for a dispatch (which will be a failure)
-        await session.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(5));
-        var dispatched = session.Dispatched.First<TestEvent>();
+        var dispatched = await session.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(5));
         dispatched.Result.Should().Be(DispatchResult.RecoverableError);
         dispatched.Exception.Should().NotBeNull();
     }
@@ -308,9 +297,7 @@ public class MessageTrackingTests(
         });
 
         // Assert - verify the raw bytes on the wire
-        await session.WaitForSent<TestEvent>(TimeSpan.FromSeconds(5));
-        var sent = session.Sent.Single<TestEvent>();
-
+        var sent = await session.WaitForSent<TestEvent>(TimeSpan.FromSeconds(5));
         var rawJson = Encoding.UTF8.GetString(sent.RawBody!);
         rawJson.Should().Contain("shape-1");
         rawJson.Should().Contain("transport shape");
@@ -338,7 +325,7 @@ public class MessageTrackingTests(
         });
 
         // Act - use the action-based API
-        var session = await Services
+        await using var session = await Services
             .TrackActivity()
             .Timeout(TimeSpan.FromSeconds(10))
             .WaitForMessage<TestEvent>(MessageStage.Dispatched)
@@ -349,12 +336,10 @@ public class MessageTrackingTests(
                 await bus.PublishDirectAsync(new TestEvent { Id = "action-1", Data = "action based" });
             });
 
-        // Assert
+        // Assert - the wait already completed, so Dispatched is guaranteed populated
         var dispatched = session.Dispatched.Single<TestEvent>();
         dispatched.GetMessage<TestEvent>().Id.Should().Be("action-1");
         dispatched.Result.Should().Be(DispatchResult.Success);
-
-        await session.DisposeAsync();
     }
 
     [Test]
@@ -387,7 +372,8 @@ public class MessageTrackingTests(
             await bus.PublishDirectAsync(new TestEvent { Id = "neg-1", Data = "negative test" }, props);
         });
 
-        await session.WaitForPublished<TestEvent>(TimeSpan.FromSeconds(5));
+        var published = await session.WaitForPublished<TestEvent>(TimeSpan.FromSeconds(5));
+        published.GetMessage<TestEvent>().Id.Should().Be("neg-1");
 
         // Now it should throw
         var act = () => session.Published.ShouldHaveNoMessage<TestEvent>();

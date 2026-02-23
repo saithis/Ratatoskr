@@ -40,7 +40,7 @@ public class ActivityTracker
 
     /// <summary>
     /// Executes the action within a tracked session and waits for all expected completions.
-    /// If no explicit wait conditions were added, waits for all published messages to be dispatched.
+    /// If no explicit wait conditions were added, returns the session immediately after the action completes.
     /// </summary>
     public async Task<MessageTrackingSession> ExecuteAndWaitAsync(Func<Task> action)
     {
@@ -48,14 +48,13 @@ public class ActivityTracker
 
         await action();
 
-        // If explicit wait conditions were provided, wait for those
         if (_waitConditions.Count > 0)
         {
             var waitTasks = _waitConditions.Select(wc =>
                 _tracker.WaitForAsync(
                     a => a.Stage == wc.Stage
                          && MessageTracker.ExtractTraceId(a.Properties.TraceParent) == session.TraceId
-                         && MatchesType(a, wc.MessageType),
+                         && MessageTypeMatcher.Matches(a, wc.MessageType),
                     _timeout));
 
             await Task.WhenAll(waitTasks);
@@ -79,27 +78,10 @@ public class ActivityTracker
         await _tracker.WaitForAsync(
             a => a.Stage == MessageStage.Dispatched
                  && MessageTracker.ExtractTraceId(a.Properties.TraceParent) == session.TraceId
-                 && MatchesType(a, typeof(T)),
+                 && MessageTypeMatcher.Matches<T>(a),
             _timeout);
 
         return session;
-    }
-
-    private static bool MatchesType(MessageActivity activity, Type expectedType)
-    {
-        if (activity.MessageType == expectedType)
-            return true;
-
-        if (activity.Message?.GetType() == expectedType)
-            return true;
-
-        // Match by wire type name from attribute
-        var attr = expectedType.GetCustomAttributes(typeof(RatatoskrMessageAttribute), false)
-            .FirstOrDefault() as RatatoskrMessageAttribute;
-        if (attr?.Type != null && activity.Properties.Type == attr.Type)
-            return true;
-
-        return false;
     }
 
     private record WaitCondition(Type MessageType, MessageStage Stage);

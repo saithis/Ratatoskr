@@ -11,6 +11,7 @@ public class MessageDispatcher(
     ChannelRegistry channelRegistry,
     IMessageSerializer deserializer,
     IServiceScopeFactory scopeFactory,
+    TimeProvider timeProvider,
     IEnumerable<IMessageActivityObserver> observers,
     ILogger<MessageDispatcher> logger)
 {
@@ -114,17 +115,24 @@ public class MessageDispatcher(
 
         foreach (var observer in observers)
         {
-            await observer.OnMessageActivity(new MessageActivity
+            try
             {
-                Stage = MessageStage.Dispatched,
-                Properties = properties,
-                SerializedBody = body,
-                Message = message,
-                MessageType = messageType,
-                DispatchResult = result,
-                Exception = lastException,
-                Timestamp = DateTimeOffset.UtcNow,
-            });
+                await observer.OnMessageActivity(new MessageActivity
+                {
+                    Stage = MessageStage.Dispatched,
+                    Properties = properties,
+                    SerializedBody = body,
+                    Message = message,
+                    MessageType = messageType,
+                    DispatchResult = result,
+                    Exception = lastException,
+                    Timestamp = timeProvider.GetUtcNow(),
+                });
+            }
+            catch
+            {
+                // Observer failures must not affect the pipeline
+            }
         }
 
         return result;

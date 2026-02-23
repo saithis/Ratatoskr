@@ -10,7 +10,8 @@ namespace Ratatoskr.Testing;
 public class MessageTracker : IMessageActivityObserver
 {
     private readonly ConcurrentBag<MessageActivity> _activities = new();
-    private readonly ConcurrentBag<Waiter> _waiters = new();
+    private readonly List<Waiter> _waiters = new();
+    private readonly object _lock = new();
 
     public ValueTask OnMessageActivity(MessageActivity activity)
     {
@@ -34,37 +35,46 @@ public class MessageTracker : IMessageActivityObserver
 
     /// <summary>
     /// Waits for a message activity matching the given predicate.
-    /// Checks existing activities first, then subscribes to new ones.
+    /// Atomically checks existing activities and subscribes for new ones to avoid TOCTOU races.
     /// </summary>
     public Task<MessageActivity> WaitForAsync(
         Func<MessageActivity, bool> predicate,
         TimeSpan timeout,
         CancellationToken cancellationToken = default)
     {
-        // Check existing activities first
-        var existing = _activities.FirstOrDefault(predicate);
-        if (existing != null)
-            return Task.FromResult(existing);
+        lock (_lock)
+        {
+            // Check existing activities while holding the lock
+            var existing = _activities.FirstOrDefault(predicate);
+            if (existing != null)
+                return Task.FromResult(existing);
 
-        var tcs = new TaskCompletionSource<MessageActivity>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var waiter = new Waiter { Predicate = predicate, Completion = tcs };
-        _waiters.Add(waiter);
+            // Register waiter while still holding the lock — no activity can slip through
+            var tcs = new TaskCompletionSource<MessageActivity>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(timeout);
+            cts.Token.Register(() =>
+            {
+                tcs.TrySetException(
+                    new TimeoutException($"Timed out after {timeout.TotalSeconds}s waiting for message activity."));
+                cts.Dispose();
+            });
 
-        // Handle timeout
-        var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        cts.CancelAfter(timeout);
-        cts.Token.Register(() => tcs.TrySetException(
-            new TimeoutException($"Timed out after {timeout.TotalSeconds}s waiting for message activity.")));
-
-        return tcs.Task;
+            _waiters.Add(new Waiter(predicate, tcs, cts));
+            return tcs.Task;
+        }
     }
 
     /// <summary>
-    /// Clears all recorded activities. Useful for test cleanup.
+    /// Clears all recorded activities and waiters. Useful for test cleanup.
     /// </summary>
     public void Clear()
     {
         _activities.Clear();
+        lock (_lock)
+        {
+            _waiters.Clear();
+        }
     }
 
     internal static string? ExtractTraceId(string? traceParent)
@@ -79,18 +89,31 @@ public class MessageTracker : IMessageActivityObserver
 
     private void NotifyWaiters(MessageActivity activity)
     {
-        foreach (var waiter in _waiters)
+        lock (_lock)
         {
-            if (waiter.Predicate(activity))
+            for (var i = _waiters.Count - 1; i >= 0; i--)
             {
-                waiter.Completion.TrySetResult(activity);
+                var waiter = _waiters[i];
+
+                if (waiter.Completion.Task.IsCompleted)
+                {
+                    // Remove already completed (timed-out) waiters
+                    _waiters.RemoveAt(i);
+                    continue;
+                }
+
+                if (waiter.Predicate(activity))
+                {
+                    waiter.Completion.TrySetResult(activity);
+                    waiter.Cts.Dispose();
+                    _waiters.RemoveAt(i);
+                }
             }
         }
     }
 
-    private class Waiter
-    {
-        public required Func<MessageActivity, bool> Predicate { get; init; }
-        public required TaskCompletionSource<MessageActivity> Completion { get; init; }
-    }
+    private record Waiter(
+        Func<MessageActivity, bool> Predicate,
+        TaskCompletionSource<MessageActivity> Completion,
+        CancellationTokenSource Cts);
 }

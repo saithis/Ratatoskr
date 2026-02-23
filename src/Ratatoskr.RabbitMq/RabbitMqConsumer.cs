@@ -16,6 +16,7 @@ internal class RabbitMqConsumer(
     MessageDispatcher dispatcher,
     IRabbitMqEnvelopeMapper envelopeMapper,
     RabbitMqRetryHandler retryHandler,
+    TimeProvider timeProvider,
     IEnumerable<IMessageActivityObserver> observers,
     ILogger<RabbitMqConsumer> logger)
     : BackgroundService
@@ -94,13 +95,20 @@ internal class RabbitMqConsumer(
 
             foreach (var observer in observers)
             {
-                await observer.OnMessageActivity(new MessageActivity
+                try
                 {
-                    Stage = MessageStage.Received,
-                    Properties = props,
-                    SerializedBody = body,
-                    Timestamp = DateTimeOffset.UtcNow,
-                });
+                    await observer.OnMessageActivity(new MessageActivity
+                    {
+                        Stage = MessageStage.Received,
+                        Properties = props,
+                        SerializedBody = body,
+                        Timestamp = timeProvider.GetUtcNow(),
+                    });
+                }
+                catch
+                {
+                    // Observer failures must not affect the pipeline
+                }
             }
 
             tags = CreateTags(ea, props, queueName);
