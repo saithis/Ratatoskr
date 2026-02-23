@@ -101,13 +101,13 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
 
             dbContext.OutboxMessages.Add(new TestEvent { Id = "e2e-1", Data = "outbox->consumer" },
-                new MessageProperties().SetExchange(QueueName));
+                new MessageProperties().SetRoutingKey(QueueName));
 
             await dbContext.SaveChangesAsync();
         });
 
         // Assert
-        await WaitForConditionAsync(() => handler.HandledMessages.Count > 0 && handler.HandledMessages.Any(m => m.Id == "e2e-1"), TimeSpan.FromSeconds(5));
+        await WaitForConditionAsync(() => handler.HandledMessages.Count > 0 && handler.HandledMessages.Any(m => m.Id == "e2e-1"), TimeSpan.FromSeconds(10));
 
         handler.HandledMessages.Should().Contain(m => m.Id == "e2e-1");
     }

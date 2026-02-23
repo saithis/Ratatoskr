@@ -6,7 +6,7 @@ namespace Ratatoskr.Tests.Testing;
 public class MessageTrackingSessionTests
 {
     [Test]
-    public async Task CollectionProperties_ReturnSameInstance()
+    public async Task CollectionProperties_WhenAccessedMultipleTimes_ReturnsSameInstance()
     {
         // Arrange
         var tracker = new MessageTracker();

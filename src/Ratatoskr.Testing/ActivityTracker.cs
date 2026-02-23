@@ -44,15 +44,18 @@ public class ActivityTracker
     /// </summary>
     public async Task<MessageTrackingSession> ExecuteAndWaitAsync(Func<Task> action)
     {
+        var conditions = new List<WaitCondition>(_waitConditions);
+        _waitConditions.Clear();
+
         var session = new MessageTrackingSession(_tracker, _timeout);
 
         try
         {
             await action();
 
-            if (_waitConditions.Count > 0)
+            if (conditions.Count > 0)
             {
-                var waitTasks = _waitConditions.Select(wc =>
+                var waitTasks = conditions.Select(wc =>
                     _tracker.WaitForAsync(
                         a => a.Stage == wc.Stage
                              && MessageTracker.ExtractTraceId(a.Properties.TraceParent) == session.TraceId

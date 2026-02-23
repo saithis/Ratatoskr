@@ -55,8 +55,11 @@ public class MessageTracker : IMessageActivityObserver
             cts.CancelAfter(timeout);
             cts.Token.Register(() =>
             {
-                tcs.TrySetException(
-                    new TimeoutException($"Timed out after {timeout.TotalSeconds}s waiting for message activity."));
+                if (cancellationToken.IsCancellationRequested)
+                    tcs.TrySetCanceled(cancellationToken);
+                else
+                    tcs.TrySetException(
+                        new TimeoutException($"Timed out after {timeout.TotalSeconds}s waiting for message activity."));
                 cts.Dispose();
             });
 

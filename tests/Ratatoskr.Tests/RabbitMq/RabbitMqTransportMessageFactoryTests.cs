@@ -43,7 +43,7 @@ public class RabbitMqTransportMessageFactoryTests
         var result = RabbitMqTransportMessageFactory.FromBasicProperties(basicProps, [], "", "");
 
         // Assert
-        result.Headers["binary-header"].Should().BeOfType<byte[]>().And.BeEquivalentTo(binaryData);
+        result.Headers["binary-header"].Should().BeOfType<byte[]>().Which.Should().BeEquivalentTo(binaryData);
     }
 
     [Test]
@@ -63,5 +63,42 @@ public class RabbitMqTransportMessageFactoryTests
 
         // Assert
         result.Headers["empty-header"].Should().BeOfType<string>().And.Be("");
+    }
+
+    [Test]
+    public void FromBasicProperties_NullHeaders_ReturnsEmptyHeaders()
+    {
+        // Arrange
+        var basicProps = new BasicProperties { Headers = null };
+
+        // Act
+        var result = RabbitMqTransportMessageFactory.FromBasicProperties(basicProps, [], "", "");
+
+        // Assert - only standard AMQP properties may be present, no custom headers
+        result.Headers.Should().NotBeNull();
+        result.Headers.Should().NotContainKey("some-custom-header");
+    }
+
+    [Test]
+    public void FromBasicProperties_NonByteTypedHeaders_PreservedAndNormalized()
+    {
+        // Arrange - native RabbitMQ-typed header values (long, bool, string)
+        var basicProps = new BasicProperties
+        {
+            Headers = new Dictionary<string, object?>
+            {
+                ["long-header"] = 42L,
+                ["bool-header"] = true,
+                ["string-header"] = "plain-string"
+            }
+        };
+
+        // Act
+        var result = RabbitMqTransportMessageFactory.FromBasicProperties(basicProps, [], "", "");
+
+        // Assert - non-byte[] values pass through NormalizeValue unchanged
+        result.Headers["long-header"].Should().BeOfType<long>().Which.Should().Be(42L);
+        result.Headers["bool-header"].Should().BeOfType<bool>().Which.Should().BeTrue();
+        result.Headers["string-header"].Should().BeOfType<string>().Which.Should().Be("plain-string");
     }
 }

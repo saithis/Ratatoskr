@@ -302,16 +302,26 @@ session1.TraceId.Should().NotBe(session2.TraceId);
 graph TD
     subgraph core["Core Library (Ratatoskr)"]
         observer["IMessageActivityObserver interface"]
-        hooks["Hooks in: Ratatoskr, MessageDispatcher,<br/>RabbitMqMessageSender, RabbitMqConsumer,<br/>OutboxTriggerInterceptor, OutboxMessageProcessor"]
+        hooks["Hooks in: Ratatoskr, MessageDispatcher,<br/>OutboxTriggerInterceptor, OutboxMessageProcessor"]
+    end
+
+    subgraph rmq["RabbitMQ Transport (Ratatoskr.RabbitMq)"]
+        rmqhooks["Hooks in: RabbitMqMessageSender, RabbitMqConsumer"]
     end
 
     subgraph testing["Ratatoskr.Testing"]
         tracker["MessageTracker<br/>(singleton, collects all activities)"]
         session["MessageTrackingSession<br/>(per-test, trace-ID-scoped view)"]
-        tracked["TrackedMessage<br/>(rich model per captured message)"]
         collection["MessageCollection<br/>(queryable + assertion helpers)"]
+        tracked["TrackedMessage<br/>(rich model per captured message)"]
         activity["ActivityTracker<br/>(action-based convenience API)"]
     end
 
+    hooks --> observer
+    rmqhooks --> observer
     tracker -->|implements| observer
+    activity --> tracker
+    tracker --> session
+    session --> collection
+    collection --> tracked
 ```
