@@ -20,6 +20,9 @@ public class RabbitMqMessageSender(
 
         var basicProps = new BasicProperties();
 
+        var exchange = props.GetExchange();
+        var routingKey = props.GetRoutingKey() ?? props.Type;
+
         // Explicitly use the current activity as parent to maintain trace hierarchy
         using var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
             "Ratatoskr.Send",
@@ -35,8 +38,8 @@ public class RabbitMqMessageSender(
             // https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/#messaging-attributes
             // https://opentelemetry.io/docs/specs/semconv/messaging/rabbitmq/
             activity.SetTag("messaging.system", "rabbitmq");
-            activity.SetTag("messaging.destination.name", props.GetExchange());
-            activity.SetTag("messaging.rabbitmq.destination.routing_key", props.GetRoutingKey() ?? props.Type);
+            activity.SetTag("messaging.destination.name", exchange);
+            activity.SetTag("messaging.rabbitmq.destination.routing_key", routingKey);
             activity.SetTag("messaging.message.id", props.Id);
             activity.SetTag("messaging.message.body.size", content.Length);
         }
@@ -45,8 +48,6 @@ public class RabbitMqMessageSender(
         var bodyToSend = envelopeMapper.MapOutgoing(content, props, basicProps);
 
         // Capture transport-level wire format after envelope mapping
-        var exchange = props.GetExchange();
-        var routingKey = props.GetRoutingKey() ?? props.Type;
         var transportMessage = RabbitMqTransportMessageFactory.FromBasicProperties(
             basicProps, bodyToSend, exchange, routingKey);
 
@@ -57,8 +58,8 @@ public class RabbitMqMessageSender(
         try
         {
             await channel.BasicPublishAsync(
-                exchange: props.GetExchange(),
-                routingKey: props.GetRoutingKey() ?? props.Type,
+                exchange: exchange,
+                routingKey: routingKey,
                 mandatory: false,
                 basicProperties: basicProps,
                 body: bodyToSend,
@@ -71,8 +72,8 @@ public class RabbitMqMessageSender(
             var tags = new TagList
             {
                 { "messaging.system", "rabbitmq" },
-                { "messaging.destination.name", props.GetExchange() },
-                { "messaging.rabbitmq.destination.routing_key", props.GetRoutingKey() ?? props.Type }
+                { "messaging.destination.name", exchange },
+                { "messaging.rabbitmq.destination.routing_key", routingKey }
             };
 
             RatatoskrDiagnostics.PublishDuration.Record(duration, tags);
@@ -87,7 +88,7 @@ public class RabbitMqMessageSender(
                 {
                     Stage = MessageStage.Sent,
                     Properties = props,
-                    SerializedBody = bodyToSend.ToArray(),
+                    SerializedBody = transportMessage.Body,
                     TransportMessage = transportMessage,
                     Timestamp = timeProvider.GetUtcNow(),
                 });

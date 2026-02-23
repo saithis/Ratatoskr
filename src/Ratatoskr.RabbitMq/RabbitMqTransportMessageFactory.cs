@@ -16,7 +16,7 @@ internal static class RabbitMqTransportMessageFactory
     /// Used at the Sent stage to capture the wire format.
     /// </summary>
     public static TransportMessage FromBasicProperties(
-        BasicProperties props, byte[] body, string exchange, string routingKey)
+        IReadOnlyBasicProperties props, byte[] body, string exchange, string routingKey)
     {
         var headers = BuildHeaders(props);
 
@@ -62,15 +62,15 @@ internal static class RabbitMqTransportMessageFactory
             headers["app-id"] = props.AppId;
         if (props.Timestamp.UnixTime > 0)
             headers["timestamp"] = props.Timestamp.UnixTime;
-        if (props.DeliveryMode > 0)
+        if (props.IsDeliveryModePresent())
             headers["delivery-mode"] = (int)props.DeliveryMode;
 
-        // Custom headers
+        // Custom headers (standard AMQP properties take precedence on collision)
         if (props.Headers != null)
         {
             foreach (var (key, value) in props.Headers)
             {
-                headers[key] = NormalizeValue(value);
+                headers.TryAdd(key, NormalizeValue(value));
             }
         }
 

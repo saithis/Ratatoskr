@@ -177,7 +177,7 @@ public async Task CreateOrder_PublishesEvent()
 A convenience method that resolves `IRatatoskr` and publishes for you:
 
 ```csharp
-var session = await Services
+await using var session = await Services
     .TrackActivity()
     .PublishAndWaitAsync(new OrderCreatedEvent { OrderId = "123" });
 
