@@ -184,9 +184,9 @@ var session = await Services
 session.Dispatched.ShouldHaveMessage<OrderCreatedEvent>();
 ```
 
-## Transport Shape Assertions
+## Transport Wire Format Assertions
 
-The `RawBody` property on `TrackedMessage` gives you the exact bytes sent on the wire. This is useful for verifying the CloudEvents envelope format:
+The `TransportMessage` property on `TrackedMessage` captures the transport-level wire representation of a message. It's available at the **Sent** stage (after envelope mapping) and the **Received** stage (before envelope mapping). This lets you verify transport-specific details like AMQP headers, CloudEvents attributes, and the raw wire body — catching bugs in envelope mappers that would be invisible through `MessageProperties` alone.
 
 ```csharp
 await using var session = Services.CreateTrackingSession();
@@ -197,14 +197,59 @@ await InScopeAsync(async ctx =>
     await bus.PublishDirectAsync(new OrderCreatedEvent { OrderId = "123" });
 });
 
+// Verify outgoing wire format
 var sent = await session.WaitForSent<OrderCreatedEvent>();
-var rawJson = Encoding.UTF8.GetString(sent.RawBody!);
+var transport = sent.TransportMessage!;
 
-// Assert on the wire format
-rawJson.Should().Contain("123");
-sent.Properties.Type.Should().Be("order.created");
-sent.Properties.Id.Should().NotBeNullOrEmpty();
+// Assert on AMQP properties
+transport.Headers["content-type"].Should().Be("application/json");
+transport.Headers["type"].Should().Be("order.created");
+transport.Headers["delivery-mode"].Should().Be(2); // Persistent
+
+// Assert on CloudEvents AMQP headers (binary mode)
+transport.Headers["cloudEvents_specversion"].Should().Be("1.0");
+transport.Headers["cloudEvents_type"].Should().Be("order.created");
+
+// Assert on the raw wire body
+var wireBody = Encoding.UTF8.GetString(transport.Body);
+wireBody.Should().Contain("123");
+
+// Routing metadata (separate from protocol headers)
+transport.Metadata["exchange"].Should().Be("orders-exchange");
+transport.Metadata["routing-key"].Should().Be("order.created");
 ```
+
+### Received stage
+
+On the receive side, `TransportMessage` captures the raw data before the envelope mapper unwraps it. Delivery metadata is available via the `Metadata` dictionary:
+
+```csharp
+var received = await session.WaitForReceived<OrderCreatedEvent>();
+var transport = received.TransportMessage!;
+
+// Delivery metadata
+transport.Metadata["exchange"].Should().Be("orders-exchange");
+transport.Metadata["routing-key"].Should().Be("order.created");
+transport.Metadata["redelivered"].Should().Be(false);
+
+// Raw wire body (before envelope unwrapping)
+transport.Body.Should().NotBeEmpty();
+```
+
+### Stage availability
+
+| Stage | `TransportMessage` | Notes |
+|:---|:---|:---|
+| Published | `null` | No transport involved yet |
+| **Sent** | **populated** | After envelope mapping — AMQP properties + wire body |
+| OutboxStaged | `null` | No transport involved yet |
+| OutboxSent | `null` | Transport details captured in the corresponding Sent activity |
+| **Received** | **populated** | Before envelope mapping — raw AMQP delivery + wire body |
+| Dispatched | `null` | No transport at this stage |
+
+### Legacy: RawBody
+
+The `RawBody` property on `TrackedMessage` still provides the serialized body bytes. At the `Sent` stage this happens to be the wire body, but `TransportMessage` is the preferred way to assert on wire format since it also includes the transport headers.
 
 ## Outbox Testing
 

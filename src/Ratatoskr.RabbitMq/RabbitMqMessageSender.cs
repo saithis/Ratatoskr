@@ -44,6 +44,12 @@ public class RabbitMqMessageSender(
         // Use envelope mapper to map properties and potentially wrap content
         var bodyToSend = envelopeMapper.MapOutgoing(content, props, basicProps);
 
+        // Capture transport-level wire format after envelope mapping
+        var exchange = props.GetExchange();
+        var routingKey = props.GetRoutingKey() ?? props.Type;
+        var transportMessage = RabbitMqTransportMessageFactory.FromBasicProperties(
+            basicProps, bodyToSend, exchange, routingKey);
+
         // In RabbitMQ.Client 7.x with publisher confirms enabled,
         // BasicPublishAsync returns a ValueTask that completes when the message is confirmed
         var startTimestamp = Stopwatch.GetTimestamp();
@@ -82,6 +88,7 @@ public class RabbitMqMessageSender(
                     Stage = MessageStage.Sent,
                     Properties = props,
                     SerializedBody = bodyToSend.ToArray(),
+                    TransportMessage = transportMessage,
                     Timestamp = timeProvider.GetUtcNow(),
                 });
             }

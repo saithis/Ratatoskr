@@ -89,6 +89,9 @@ internal class RabbitMqConsumer(
 
         try
         {
+            // Capture transport-level wire format before envelope mapping
+            var transportMessage = RabbitMqTransportMessageFactory.FromDeliverEventArgs(ea);
+
             // Use envelope mapper to extract body and properties
             var (body, props) = envelopeMapper.MapIncoming(ea);
             messageTime = props.Time;
@@ -102,6 +105,7 @@ internal class RabbitMqConsumer(
                         Stage = MessageStage.Received,
                         Properties = props,
                         SerializedBody = body,
+                        TransportMessage = transportMessage,
                         Timestamp = timeProvider.GetUtcNow(),
                     });
                 }

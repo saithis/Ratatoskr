@@ -81,6 +81,14 @@ public class MessageActivity
     /// When this activity was captured.
     /// </summary>
     public required DateTimeOffset Timestamp { get; init; }
+
+    /// <summary>
+    /// The transport-level wire representation of the message.
+    /// Present for Sent and Received stages where transport data is available.
+    /// For Sent: captured after envelope mapping (what was published to the transport).
+    /// For Received: captured before envelope mapping (what arrived from the transport).
+    /// </summary>
+    public TransportMessage? TransportMessage { get; init; }
 }
 
 /// <summary>
