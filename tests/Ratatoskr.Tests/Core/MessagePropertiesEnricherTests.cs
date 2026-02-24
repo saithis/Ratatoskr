@@ -15,7 +15,7 @@ public class MessagePropertiesEnricherTests
     private readonly NoOpTransportEnricher _transportEnricher = new();
 
     private MessagePropertiesEnricher CreateEnricher() =>
-        new(_registry, _cloudEventsOptions, _timeProvider, _transportEnricher);
+        new(_registry, _cloudEventsOptions, _timeProvider, [_transportEnricher]);
 
     [Test]
     public void Enrich_WithRegisteredMessage_SetsTypeFromRegistry()
@@ -185,6 +185,7 @@ public class MessagePropertiesEnricherTests
 
     private class NoOpTransportEnricher : ITransportMessageMetadataEnricher
     {
+        public string TransportName => "test";
         public bool WasCalled { get; private set; }
 
         public void Enrich(PublishInformation publishInformation, MessageProperties properties)

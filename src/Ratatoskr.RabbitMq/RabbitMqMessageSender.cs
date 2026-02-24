@@ -14,6 +14,8 @@ public class RabbitMqMessageSender(
     IEnumerable<IMessageActivityObserver> observers)
     : IMessageSender, IAsyncDisposable
 {
+    public string TransportName => "rabbitmq";
+
     public async Task SendAsync(byte[] content, MessageProperties props, CancellationToken cancellationToken)
     {
         await using var channel = await connectionManager.CreateChannelAsync(options.UsePublisherConfirms, cancellationToken);

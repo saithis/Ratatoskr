@@ -41,13 +41,19 @@ internal class OutboxMessageEntity
     /// When this message was picked up for processing. Used to detect stuck messages.
     /// </summary>
     public DateTimeOffset? ProcessingStartedAt { get; private set; }
-    
+
+    /// <summary>
+    /// The transport this outbox entry targets (e.g. "rabbitmq", "local").
+    /// </summary>
+    [MaxLength(50)]
+    public string TransportName { get; private set; } = string.Empty;
+
     public MessageProperties GetProperties() => 
         JsonSerializer.Deserialize<MessageProperties>(SerializedProperties)
         ?? throw new OutboxMessageSerializationException("Could not deserialize the message properties.", SerializedProperties);
 
     private OutboxMessageEntity(){}
-    public static OutboxMessageEntity Create(byte[] message, MessageProperties props, TimeProvider timeProvider)
+    public static OutboxMessageEntity Create(byte[] message, MessageProperties props, TimeProvider timeProvider, string transportName)
     {
         return new OutboxMessageEntity
         {
@@ -55,6 +61,7 @@ internal class OutboxMessageEntity
             SerializedProperties = JsonSerializer.Serialize(props),
             Content = message,
             CreatedAt = timeProvider.GetUtcNow(),
+            TransportName = transportName,
         };
     }
 

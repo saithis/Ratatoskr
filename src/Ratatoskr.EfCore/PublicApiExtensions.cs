@@ -70,7 +70,8 @@ public static class PublicApiExtensions
         var messageSerializer = serviceProvider.GetRequiredService<IMessageSerializer>();
         var enricher = serviceProvider.GetRequiredService<IMessagePropertiesEnricher>();
         var observers = serviceProvider.GetServices<IMessageActivityObserver>();
-        var interceptor = new OutboxTriggerInterceptor<TDbContext>(outboxProcessor, messageSerializer, enricher, observers, timeProvider);
+        var channelRegistry = serviceProvider.GetRequiredService<ChannelRegistry>();
+        var interceptor = new OutboxTriggerInterceptor<TDbContext>(outboxProcessor, messageSerializer, enricher, channelRegistry, observers, timeProvider);
         return builder.AddInterceptors(interceptor);
     }
     
@@ -101,6 +102,7 @@ public static class PublicApiExtensions
             entity.Property(e => e.Error).HasMaxLength(2000);
             entity.Property(e => e.Content).IsRequired();
             entity.Property(e => e.SerializedProperties).IsRequired();
+            entity.Property(e => e.TransportName).HasMaxLength(50).IsRequired();
         });
     }
 }

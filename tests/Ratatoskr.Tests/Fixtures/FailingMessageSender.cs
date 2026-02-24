@@ -15,6 +15,7 @@ public class FailingMessageSender : IMessageSender
         _failuresBeforeSuccess = failuresBeforeSuccess;
     }
 
+    public string TransportName => "rabbitmq";
     public int CallCount => _callCount;
 
     public Task SendAsync(byte[] content, MessageProperties props, CancellationToken cancellationToken)

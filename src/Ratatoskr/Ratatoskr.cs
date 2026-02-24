@@ -5,8 +5,9 @@ namespace Ratatoskr;
 
 public class Ratatoskr(
     IMessageSerializer serializer,
-    IMessageSender sender,
+    IEnumerable<IMessageSender> senders,
     IMessagePropertiesEnricher enricher,
+    ChannelRegistry channelRegistry,
     TimeProvider timeProvider,
     IEnumerable<IMessageActivityObserver> observers) : IRatatoskr
 {
@@ -29,7 +30,19 @@ public class Ratatoskr(
 
         var serializedMessage = serializer.Serialize(message);
         props.ContentType = serializer.ContentType;
-        await sender.SendAsync(serializedMessage, props, cancellationToken);
+
+        var publishInfo = channelRegistry.GetPublishInformation(typeof(TMessage));
+        var transports = publishInfo?.Channel.Transports;
+
+        foreach (var sender in senders)
+        {
+            // If channel has explicit transports configured, only send to those.
+            // If no transports configured (backward compat), send to all.
+            if (transports is { Count: > 0 } && !transports.Contains(sender.TransportName))
+                continue;
+
+            await sender.SendAsync(serializedMessage, props, cancellationToken);
+        }
 
         foreach (var observer in observers)
         {

@@ -8,6 +8,7 @@ internal class OutboxTriggerInterceptor<TDbContext>(
     OutboxProcessor<TDbContext> outboxProcessor,
     IMessageSerializer messageSerializer,
     IMessagePropertiesEnricher enricher,
+    ChannelRegistry channelRegistry,
     IEnumerable<IMessageActivityObserver> observers,
     TimeProvider timeProvider)
     : SaveChangesInterceptor where TDbContext : DbContext, IOutboxDbContext
@@ -34,8 +35,26 @@ internal class OutboxTriggerInterceptor<TDbContext>(
             var enrichedProperties = enricher.Enrich(item.Message.GetType(), item.Properties);
             var serializedMessage = messageSerializer.Serialize(item.Message);
             enrichedProperties.ContentType = messageSerializer.ContentType;
-            var outboxMessage = OutboxMessageEntity.Create(serializedMessage, enrichedProperties, timeProvider);
-            context.Set<OutboxMessageEntity>().Add(outboxMessage);
+
+            // Determine transports for this message's channel
+            var publishInfo = channelRegistry.GetPublishInformation(item.Message.GetType());
+            var transports = publishInfo?.Channel.Transports;
+
+            if (transports is { Count: > 0 })
+            {
+                // Create one outbox entity per transport
+                foreach (var transport in transports)
+                {
+                    var outboxMessage = OutboxMessageEntity.Create(serializedMessage, enrichedProperties, timeProvider, transport);
+                    context.Set<OutboxMessageEntity>().Add(outboxMessage);
+                }
+            }
+            else
+            {
+                // Backward compat: no explicit transports, create a single entity with empty transport name
+                var outboxMessage = OutboxMessageEntity.Create(serializedMessage, enrichedProperties, timeProvider, string.Empty);
+                context.Set<OutboxMessageEntity>().Add(outboxMessage);
+            }
 
             // Only dequeue after successful serialization
             outboxDbContext.OutboxMessages.Queue.TryDequeue(out _);
