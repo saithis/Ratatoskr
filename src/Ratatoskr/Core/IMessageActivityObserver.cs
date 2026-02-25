@@ -88,7 +88,7 @@ public class MessageActivity
     /// For Sent: captured after envelope mapping (what was published to the transport).
     /// For Received: captured before envelope mapping (what arrived from the transport).
     /// </summary>
-    public TransportMessage? TransportMessage { get; init; }
+    public TransportMessageSnapshot? TransportMessage { get; init; }
 }
 
 /// <summary>

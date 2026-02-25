@@ -178,7 +178,6 @@ public class LocalTransportTests : IAsyncDisposable
     public async Task LocalTransport_HandlerFailure_DoesNotCrashConsumer()
     {
         var throwingHandler = new ThrowingTestEventHandler();
-        var normalHandler = new TestEventHandler();
 
         await StartAsync(services =>
         {

@@ -21,6 +21,7 @@ public class ChannelBuilder(ChannelRegistration channel)
     /// </summary>
     protected internal void AddTransport(string transportName)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(transportName);
         channel.Transports.Add(transportName);
     }
 

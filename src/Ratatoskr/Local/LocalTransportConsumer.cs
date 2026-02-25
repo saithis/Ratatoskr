@@ -38,7 +38,7 @@ internal class LocalTransportConsumer(
     {
         var receivedTimestamp = timeProvider.GetUtcNow();
 
-        var transportMessage = CreateTransportMessage(message);
+        var transportMessage = LocalTransportMessageSnapshotFactory.Create(message.Content, message.Properties);
 
         foreach (var observer in observers)
         {
@@ -129,32 +129,5 @@ internal class LocalTransportConsumer(
         {
             logger.LogWarning("Local transport consumer shutdown timed out");
         }
-    }
-
-    private static TransportMessage CreateTransportMessage(LocalMessage message)
-    {
-        var headers = new Dictionary<string, object?>();
-
-        if (message.Properties.ContentType != null) headers["content-type"] = message.Properties.ContentType;
-        if (message.Properties.Id != null) headers["message-id"] = message.Properties.Id;
-        if (message.Properties.Type != null) headers["type"] = message.Properties.Type;
-        if (message.Properties.Source != null) headers["source"] = message.Properties.Source;
-        if (message.Properties.TraceParent != null) headers["traceparent"] = message.Properties.TraceParent;
-        if (message.Properties.TraceState != null) headers["tracestate"] = message.Properties.TraceState;
-
-        foreach (var header in message.Properties.Headers)
-        {
-            headers[header.Key] = header.Value;
-        }
-
-        return new TransportMessage
-        {
-            Body = message.Content,
-            Headers = headers,
-            Metadata = new Dictionary<string, object?>
-            {
-                ["transport"] = "local",
-            },
-        };
     }
 }
