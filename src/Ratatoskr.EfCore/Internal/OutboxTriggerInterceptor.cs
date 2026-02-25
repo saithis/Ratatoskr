@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Logging;
 using Ratatoskr.Core;
 
 namespace Ratatoskr.EfCore.Internal;
@@ -10,7 +11,8 @@ internal class OutboxTriggerInterceptor<TDbContext>(
     IMessagePropertiesEnricher enricher,
     ChannelRegistry channelRegistry,
     IEnumerable<IMessageActivityObserver> observers,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    ILogger<OutboxTriggerInterceptor<TDbContext>> logger)
     : SaveChangesInterceptor where TDbContext : DbContext, IOutboxDbContext
 {
     public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
@@ -36,23 +38,17 @@ internal class OutboxTriggerInterceptor<TDbContext>(
             var serializedMessage = messageSerializer.Serialize(item.Message);
             enrichedProperties.ContentType = messageSerializer.ContentType;
 
-            // Determine transports for this message's channel
-            var publishInfo = channelRegistry.GetPublishInformation(item.Message.GetType());
-            var transports = publishInfo?.Channel.Transports;
-
-            if (transports is { Count: > 0 })
+            if (enrichedProperties.Transports.Count == 0)
             {
-                // Create one outbox entity per transport
-                foreach (var transport in transports)
-                {
-                    var outboxMessage = OutboxMessageEntity.Create(serializedMessage, enrichedProperties, timeProvider, transport);
-                    context.Set<OutboxMessageEntity>().Add(outboxMessage);
-                }
+                logger.LogError("No transports found for message '{MessageType}'", item.Message.GetType());
+                outboxDbContext.OutboxMessages.Queue.TryDequeue(out _);
+                continue;
             }
-            else
+            
+            // Create one outbox entity per transport
+            foreach (var transport in enrichedProperties.Transports)
             {
-                // Backward compat: no explicit transports, create a single entity with empty transport name
-                var outboxMessage = OutboxMessageEntity.Create(serializedMessage, enrichedProperties, timeProvider, string.Empty);
+                var outboxMessage = OutboxMessageEntity.Create(serializedMessage, enrichedProperties, timeProvider, transport);
                 context.Set<OutboxMessageEntity>().Add(outboxMessage);
             }
 

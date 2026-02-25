@@ -91,9 +91,7 @@ internal class OutboxMessageProcessor<TDbContext>(
                 logger.LogInformation("Processing message '{Id}' for transport '{Transport}'", message.Id, message.TransportName);
 
                 // Find the matching sender for this outbox entry's transport
-                var targetSender = string.IsNullOrEmpty(message.TransportName)
-                    ? senders.First() // Backward compat: use first registered sender
-                    : senders.FirstOrDefault(s => s.TransportName == message.TransportName)
+                var targetSender = senders.FirstOrDefault(s => s.TransportName == message.TransportName)
                       ?? throw new InvalidOperationException($"No sender found for transport '{message.TransportName}'");
 
                 await targetSender.SendAsync(message.Content, props, cancellationToken);

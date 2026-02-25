@@ -32,35 +32,39 @@ public class MessagePropertiesEnricher(ChannelRegistry registry, CloudEventsOpti
         
         // Query registry for type info
         var publishInfo = registry.GetPublishInformation(messageType);
-        if (publishInfo == null)
-        {
-            // If not in registry, try to deduce type from attribute
-            if (string.IsNullOrEmpty(properties.Type))
-            {
-                var attr = System.Reflection.CustomAttributeExtensions.GetCustomAttribute<RatatoskrMessageAttribute>(messageType);
-                if (attr != null)
-                {
-                    properties.Type = attr.Type;
-                }
-            }
-            return properties;
-        }
         
         // Enrich Type if not already set
         if (string.IsNullOrEmpty(properties.Type))
         {
-            properties.Type = publishInfo.Message.MessageTypeName;
+            properties.Type = GetMessageType(messageType, publishInfo);
         }
-            
-        foreach (var enricher in transportEnrichers)
+
+        if (publishInfo != null)
         {
-            if (publishInfo.Channel.Transports.Count == 0 ||
-                publishInfo.Channel.Transports.Contains(enricher.TransportName))
+            foreach (var transport in publishInfo.Channel.Transports)
             {
-                enricher.Enrich(publishInfo, properties);
+                properties.Transports.Add(transport);
+                var transportEnricher = transportEnrichers.FirstOrDefault(e => e.TransportName == transport);
+                transportEnricher?.Enrich(publishInfo, properties);
             }
         }
 
         return properties;
+    }
+
+    private string? GetMessageType(Type messageType, PublishInformation? publishInfo)
+    {
+        if (publishInfo != null)
+        {
+            return publishInfo.Message.MessageTypeName;
+        }
+        
+        var attr = System.Reflection.CustomAttributeExtensions.GetCustomAttribute<RatatoskrMessageAttribute>(messageType);
+        if (attr != null)
+        {
+            return attr.Type;
+        }
+
+        return null;
     }
 }

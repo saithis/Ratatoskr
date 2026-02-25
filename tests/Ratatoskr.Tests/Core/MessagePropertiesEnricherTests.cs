@@ -155,6 +155,7 @@ public class MessagePropertiesEnricherTests
         // Arrange
         var channel = new ChannelRegistration("test.exchange", ChannelType.EventPublish);
         channel.Messages.Add(new MessageRegistration(typeof(TestEvent), "test.event"));
+        channel.Transports.Add("test");
         _registry.Register(channel);
         var enricher = CreateEnricher();
 

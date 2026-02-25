@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore.Internal;
@@ -71,7 +72,8 @@ public static class PublicApiExtensions
         var enricher = serviceProvider.GetRequiredService<IMessagePropertiesEnricher>();
         var observers = serviceProvider.GetServices<IMessageActivityObserver>();
         var channelRegistry = serviceProvider.GetRequiredService<ChannelRegistry>();
-        var interceptor = new OutboxTriggerInterceptor<TDbContext>(outboxProcessor, messageSerializer, enricher, channelRegistry, observers, timeProvider);
+        var logger =  serviceProvider.GetRequiredService<ILogger<OutboxTriggerInterceptor<TDbContext>>>();
+        var interceptor = new OutboxTriggerInterceptor<TDbContext>(outboxProcessor, messageSerializer, enricher, channelRegistry, observers, timeProvider, logger);
         return builder.AddInterceptors(interceptor);
     }
     

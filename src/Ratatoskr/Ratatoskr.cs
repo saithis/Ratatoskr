@@ -31,14 +31,14 @@ public class Ratatoskr(
         var serializedMessage = serializer.Serialize(message);
         props.ContentType = serializer.ContentType;
 
-        var publishInfo = channelRegistry.GetPublishInformation(typeof(TMessage));
-        var transports = publishInfo?.Channel.Transports;
-
+        if (props.Transports.Count == 0)
+        {
+            throw new InvalidOperationException($"No transport found for message '{typeof(TMessage)}'");
+        }
+        
         foreach (var sender in senders)
         {
-            // If channel has explicit transports configured, only send to those.
-            // If no transports configured (backward compat), send to all.
-            if (transports is { Count: > 0 } && !transports.Contains(sender.TransportName))
+            if (!props.Transports.Contains(sender.TransportName))
                 continue;
 
             await sender.SendAsync(serializedMessage, props, cancellationToken);

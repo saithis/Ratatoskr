@@ -101,8 +101,10 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
 
+            var props = new MessageProperties().SetRoutingKey(QueueName);
+            props.Transports.Add("rabbitmq");
             dbContext.OutboxMessages.Add(new TestEvent { Id = "e2e-1", Data = "outbox->consumer" },
-                new MessageProperties().SetRoutingKey(QueueName));
+                props);
 
             await dbContext.SaveChangesAsync();
         });
