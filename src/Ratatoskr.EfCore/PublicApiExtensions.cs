@@ -71,9 +71,8 @@ public static class PublicApiExtensions
         var messageSerializer = serviceProvider.GetRequiredService<IMessageSerializer>();
         var enricher = serviceProvider.GetRequiredService<IMessagePropertiesEnricher>();
         var observers = serviceProvider.GetServices<IMessageActivityObserver>();
-        var channelRegistry = serviceProvider.GetRequiredService<ChannelRegistry>();
         var logger =  serviceProvider.GetRequiredService<ILogger<OutboxTriggerInterceptor<TDbContext>>>();
-        var interceptor = new OutboxTriggerInterceptor<TDbContext>(outboxProcessor, messageSerializer, enricher, channelRegistry, observers, timeProvider, logger);
+        var interceptor = new OutboxTriggerInterceptor<TDbContext>(outboxProcessor, messageSerializer, enricher, observers, timeProvider, logger);
         return builder.AddInterceptors(interceptor);
     }
     

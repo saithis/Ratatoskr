@@ -17,17 +17,15 @@ internal static class LocalTransportMessageSnapshotFactory
 
         foreach (var header in props.Headers)
         {
-            headers[header.Key] = header.Value;
+            headers.TryAdd(header.Key, header.Value);
         }
 
         return new TransportMessageSnapshot
         {
+            TransportName = LocalTransportConstants.TransportName,
             Body = content,
             Headers = headers,
-            Metadata = new Dictionary<string, object?>
-            {
-                ["transport"] = "local",
-            },
+            Metadata = new Dictionary<string, object?>(),
         };
     }
 }

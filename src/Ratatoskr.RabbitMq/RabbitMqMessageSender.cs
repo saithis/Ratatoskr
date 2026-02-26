@@ -14,7 +14,7 @@ public class RabbitMqMessageSender(
     IEnumerable<IMessageActivityObserver> observers)
     : IMessageSender, IAsyncDisposable
 {
-    public string TransportName => "rabbitmq";
+    public string TransportName => RabbitMqConstants.TransportName;
 
     public async Task SendAsync(byte[] content, MessageProperties props, CancellationToken cancellationToken)
     {
@@ -99,6 +99,7 @@ public class RabbitMqMessageSender(
                         Stage = MessageStage.Sent,
                         Properties = props,
                         SerializedBody = transportMessage.Body,
+                        TransportName = TransportName,
                         TransportMessage = transportMessage,
                         Exception = publishException,
                         Timestamp = sentTimestamp,

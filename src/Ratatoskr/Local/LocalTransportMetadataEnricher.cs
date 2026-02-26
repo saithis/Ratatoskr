@@ -4,7 +4,7 @@ namespace Ratatoskr.Local;
 
 internal class LocalTransportMetadataEnricher : ITransportMessageMetadataEnricher
 {
-    public string TransportName => "local";
+    public string TransportName => LocalTransportConstants.TransportName;
 
     public void Enrich(PublishInformation publishInformation, MessageProperties properties)
     {

@@ -55,6 +55,9 @@ internal class OutboxMessageEntity
     private OutboxMessageEntity(){}
     public static OutboxMessageEntity Create(byte[] message, MessageProperties props, TimeProvider timeProvider, string transportName)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(transportName);
+        if (transportName.Length > 50)
+            throw new ArgumentOutOfRangeException(nameof(transportName), "TransportName must be 50 characters or fewer.");
         return new OutboxMessageEntity
         {
             Id = Guid.CreateVersion7(),

@@ -167,6 +167,39 @@ public class MessagePropertiesEnricherTests
     }
 
     [Test]
+    public void Enrich_RegisteredMessage_WithNonMatchingTransport_DoesNotCallTransportEnricher()
+    {
+        // Arrange
+        var channel = new ChannelRegistration("test.exchange", ChannelType.EventPublish);
+        channel.Messages.Add(new MessageRegistration(typeof(TestEvent), "test.event"));
+        channel.Transports.Add("other-transport");
+        _registry.Register(channel);
+        var enricher = CreateEnricher();
+
+        // Act
+        enricher.Enrich<TestEvent>(null);
+
+        // Assert — enricher has TransportName "test", channel only has "other-transport"
+        _transportEnricher.WasCalled.Should().BeFalse();
+    }
+
+    [Test]
+    public void Enrich_RegisteredMessage_WithEmptyTransports_DoesNotCallTransportEnricher()
+    {
+        // Arrange — channel with no transports at all
+        var channel = new ChannelRegistration("test.exchange", ChannelType.EventPublish);
+        channel.Messages.Add(new MessageRegistration(typeof(TestEvent), "test.event"));
+        _registry.Register(channel);
+        var enricher = CreateEnricher();
+
+        // Act
+        enricher.Enrich<TestEvent>(null);
+
+        // Assert
+        _transportEnricher.WasCalled.Should().BeFalse();
+    }
+
+    [Test]
     public void Enrich_NonGeneric_BehavesSameAsGeneric()
     {
         // Arrange

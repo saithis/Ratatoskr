@@ -8,6 +8,11 @@ namespace Ratatoskr.Core;
 public class TransportMessageSnapshot
 {
     /// <summary>
+    /// The transport name the message is sent over.
+    /// </summary>
+    public required string TransportName { get; init; }
+    
+    /// <summary>
     /// The raw body bytes as they appear on the wire.
     /// In structured CloudEvents mode, this is the full JSON envelope.
     /// In binary mode, this is the serialized message payload.

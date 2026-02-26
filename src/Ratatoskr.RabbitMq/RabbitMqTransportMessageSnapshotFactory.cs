@@ -12,7 +12,7 @@ namespace Ratatoskr.RabbitMq;
 internal static class RabbitMqTransportMessageSnapshotFactory
 {
     /// <summary>
-    /// Creates a TransportMessage from outgoing BasicProperties after envelope mapping.
+    /// Creates a <see cref="TransportMessageSnapshot"/> from outgoing BasicProperties after envelope mapping.
     /// Used at the Sent stage to capture the wire format.
     /// </summary>
     public static TransportMessageSnapshot FromBasicProperties(
@@ -26,11 +26,17 @@ internal static class RabbitMqTransportMessageSnapshotFactory
             ["routing-key"] = routingKey,
         };
 
-        return new TransportMessageSnapshot { Body = body, Headers = headers, Metadata = metadata };
+        return new TransportMessageSnapshot
+        {
+            TransportName = RabbitMqConstants.TransportName,
+            Body = body, 
+            Headers = headers, 
+            Metadata = metadata
+        };
     }
 
     /// <summary>
-    /// Creates a TransportMessage from incoming BasicDeliverEventArgs before envelope mapping.
+    /// Creates a <see cref="TransportMessageSnapshot"/> from incoming BasicDeliverEventArgs before envelope mapping.
     /// Used at the Received stage to capture the raw wire data.
     /// </summary>
     public static TransportMessageSnapshot FromDeliverEventArgs(BasicDeliverEventArgs ea)
@@ -44,7 +50,13 @@ internal static class RabbitMqTransportMessageSnapshotFactory
             ["redelivered"] = ea.Redelivered,
         };
 
-        return new TransportMessageSnapshot { Body = ea.Body.ToArray(), Headers = headers, Metadata = metadata };
+        return new TransportMessageSnapshot
+        {
+            TransportName = RabbitMqConstants.TransportName,
+            Body = ea.Body.ToArray(), 
+            Headers = headers, 
+            Metadata = metadata
+        };
     }
 
     private static Dictionary<string, object?> BuildHeaders(IReadOnlyBasicProperties props)

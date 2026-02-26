@@ -107,6 +107,7 @@ internal class RabbitMqConsumer(
                         Stage = MessageStage.Received,
                         Properties = props,
                         SerializedBody = body,
+                        TransportName = RabbitMqConstants.TransportName,
                         TransportMessage = transportMessage,
                         Timestamp = receivedTimestamp,
                     });

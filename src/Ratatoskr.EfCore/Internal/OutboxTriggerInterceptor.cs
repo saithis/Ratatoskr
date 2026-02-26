@@ -9,7 +9,6 @@ internal class OutboxTriggerInterceptor<TDbContext>(
     OutboxProcessor<TDbContext> outboxProcessor,
     IMessageSerializer messageSerializer,
     IMessagePropertiesEnricher enricher,
-    ChannelRegistry channelRegistry,
     IEnumerable<IMessageActivityObserver> observers,
     TimeProvider timeProvider,
     ILogger<OutboxTriggerInterceptor<TDbContext>> logger)

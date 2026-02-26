@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using Ratatoskr.Core;
 
 namespace Ratatoskr;
@@ -7,9 +8,9 @@ public class Ratatoskr(
     IMessageSerializer serializer,
     IEnumerable<IMessageSender> senders,
     IMessagePropertiesEnricher enricher,
-    ChannelRegistry channelRegistry,
     TimeProvider timeProvider,
-    IEnumerable<IMessageActivityObserver> observers) : IRatatoskr
+    IEnumerable<IMessageActivityObserver> observers,
+    ILogger<Ratatoskr> logger) : IRatatoskr
 {
     public async Task PublishDirectAsync<TMessage>(
         TMessage message,
@@ -35,33 +36,57 @@ public class Ratatoskr(
         {
             throw new InvalidOperationException($"No transport found for message '{typeof(TMessage)}'");
         }
-        
-        foreach (var sender in senders)
-        {
-            if (!props.Transports.Contains(sender.TransportName))
-                continue;
 
-            await sender.SendAsync(serializedMessage, props, cancellationToken);
+        var sendersToUse = senders.Where(sender => props.Transports.Contains(sender.TransportName)).ToArray();
+        if (!sendersToUse.Any())
+        {
+            throw new InvalidOperationException($"No transport found for message '{typeof(TMessage)}'");
         }
-
-        foreach (var observer in observers)
+        
+        List<Exception>? exceptions = null;
+        foreach (var sender in sendersToUse)
         {
+            Exception? sendException = null;
             try
             {
-                await observer.OnMessageActivity(new MessageActivity
-                {
-                    Stage = MessageStage.Published,
-                    Properties = props,
-                    SerializedBody = serializedMessage,
-                    Message = message,
-                    MessageType = typeof(TMessage),
-                    Timestamp = timeProvider.GetUtcNow(),
-                });
+                await sender.SendAsync(serializedMessage, props, cancellationToken);
             }
-            catch
+            catch (Exception ex)
             {
-                // Observer failures must not affect the pipeline
+                logger.LogError(ex, "Transport '{TransportName}' failed to send message '{MessageId}'",
+                    sender.TransportName, props.Id);
+                sendException = ex;
+                exceptions ??= [];
+                exceptions.Add(ex);
             }
+
+            foreach (var observer in observers)
+            {
+                try
+                {
+                    await observer.OnMessageActivity(new MessageActivity
+                    {
+                        Stage = MessageStage.Published,
+                        Properties = props,
+                        SerializedBody = serializedMessage,
+                        Message = message,
+                        MessageType = typeof(TMessage),
+                        TransportName = sender.TransportName,
+                        Exception = sendException,
+                        Timestamp = timeProvider.GetUtcNow(),
+                    });
+                }
+                catch
+                {
+                    // Observer failures must not affect the pipeline
+                }
+            }
+        }
+
+        if (exceptions is { Count: > 0 })
+        {
+            throw new AggregateException(
+                $"One or more transports failed to send message '{props.Id}'", exceptions);
         }
     }
 }

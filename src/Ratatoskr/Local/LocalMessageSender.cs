@@ -10,7 +10,7 @@ internal class LocalMessageSender(
     IEnumerable<IMessageActivityObserver> observers)
     : IMessageSender
 {
-    public string TransportName => "local";
+    public string TransportName => LocalTransportConstants.TransportName;
 
     public async Task SendAsync(byte[] content, MessageProperties props, CancellationToken cancellationToken)
     {
@@ -66,6 +66,7 @@ internal class LocalMessageSender(
                         Stage = MessageStage.Sent,
                         Properties = props,
                         SerializedBody = content,
+                        TransportName = TransportName,
                         TransportMessage = transportMessage,
                         Exception = sendException,
                         Timestamp = sentTimestamp,

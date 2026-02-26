@@ -14,6 +14,7 @@ using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Tests.Fixtures;
 using RabbitMQ.Client;
+using Ratatoskr.RabbitMq;
 using TUnit.Core;
 
 namespace Ratatoskr.Tests.Integration;
@@ -102,7 +103,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
 
             var props = new MessageProperties().SetRoutingKey(QueueName);
-            props.Transports.Add("rabbitmq");
+            props.Transports.Add(RabbitMqConstants.TransportName);
             dbContext.OutboxMessages.Add(new TestEvent { Id = "e2e-1", Data = "outbox->consumer" },
                 props);
 
@@ -173,7 +174,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
     {
         // Arrange
         var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
-        var failingSender = new FailingMessageSender(failuresBeforeSuccess: 2);
+        var failingSender = new FailingMessageSender(RabbitMqConstants.TransportName, failuresBeforeSuccess: 2);
 
         await StartTestAsync(services =>
         {
@@ -270,7 +271,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
     {
         // Arrange
         var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
-        var alwaysFailingSender = new FailingMessageSender(); // Never succeeds
+        var alwaysFailingSender = new FailingMessageSender(RabbitMqConstants.TransportName); // Never succeeds
 
         await StartTestAsync(services =>
         {

@@ -18,6 +18,8 @@ internal class OutboxMessageProcessor<TDbContext>(
     ILogger logger)
     where TDbContext : DbContext, IOutboxDbContext
 {
+    private Dictionary<string, IMessageSender> _senderMap = senders.ToDictionary(x => x.TransportName);
+    
     /// <summary>
     /// Processes a single batch of outbox messages.
     /// Returns the number of messages successfully processed.
@@ -91,8 +93,8 @@ internal class OutboxMessageProcessor<TDbContext>(
                 logger.LogInformation("Processing message '{Id}' for transport '{Transport}'", message.Id, message.TransportName);
 
                 // Find the matching sender for this outbox entry's transport
-                var targetSender = senders.FirstOrDefault(s => s.TransportName == message.TransportName)
-                      ?? throw new InvalidOperationException($"No sender found for transport '{message.TransportName}'");
+                var targetSender = _senderMap.GetValueOrDefault(message.TransportName)
+                                   ?? throw new InvalidOperationException($"No sender found for transport '{message.TransportName}'");
 
                 await targetSender.SendAsync(message.Content, props, cancellationToken);
                 message.MarkAsProcessed(timeProvider);
@@ -120,6 +122,7 @@ internal class OutboxMessageProcessor<TDbContext>(
                             Stage = MessageStage.OutboxSent,
                             Properties = sentProps,
                             SerializedBody = message.Content,
+                            TransportName = message.TransportName,
                             Timestamp = timeProvider.GetUtcNow(),
                         });
                     }

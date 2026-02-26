@@ -11,7 +11,7 @@ public static class LocalChannelExtensions
         /// </summary>
         public PublishChannelBuilder WithLocal()
         {
-            builder.AddTransport("local");
+            builder.AddTransport(LocalTransportConstants.TransportName);
             return builder;
         }
     }

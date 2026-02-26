@@ -18,11 +18,11 @@ internal class LocalTransportConsumer(
     {
         logger.LogInformation("Starting local transport consumer");
 
-        await foreach (var message in messageChannel.Reader.ReadAllAsync(stoppingToken))
+        await foreach (var message in messageChannel.Reader.ReadAllAsync(CancellationToken.None))
         {
             try
             {
-                await ProcessMessageAsync(message, stoppingToken);
+                await ProcessMessageAsync(message, CancellationToken.None);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -49,6 +49,7 @@ internal class LocalTransportConsumer(
                     Stage = MessageStage.Received,
                     Properties = message.Properties,
                     SerializedBody = message.Content,
+                    TransportName = LocalTransportConstants.TransportName,
                     TransportMessage = transportMessage,
                     Timestamp = receivedTimestamp,
                 });

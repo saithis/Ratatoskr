@@ -5,7 +5,7 @@ namespace Ratatoskr.RabbitMq;
 
 public class RabbitMqMessageMetadataEnricher : ITransportMessageMetadataEnricher
 {
-    public string TransportName => "rabbitmq";
+    public string TransportName => RabbitMqConstants.TransportName;
 
     public void Enrich(PublishInformation publishInformation, MessageProperties properties)
     {

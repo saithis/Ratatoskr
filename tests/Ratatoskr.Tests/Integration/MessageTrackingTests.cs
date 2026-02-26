@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
+using Ratatoskr.RabbitMq;
 using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Testing;
@@ -170,7 +171,7 @@ public class MessageTrackingTests(
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var props = new MessageProperties().SetExchange(QueueName);
-            props.Transports.Add("rabbitmq");
+            props.Transports.Add(RabbitMqConstants.TransportName);
             dbContext.OutboxMessages.Add(new TestEvent { Id = "outbox-track-1", Data = "outbox tracked" },
                 props);
             await dbContext.SaveChangesAsync();

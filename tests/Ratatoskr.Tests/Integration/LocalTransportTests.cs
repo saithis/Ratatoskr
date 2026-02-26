@@ -2,6 +2,7 @@ using System.Text;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Ratatoskr.Config;
 using Ratatoskr.Core;
 using Ratatoskr.Local;
 using Ratatoskr.Testing;
@@ -17,6 +18,7 @@ public class LocalTransportTests : IAsyncDisposable
 
     private async Task StartAsync(Action<IServiceCollection> configure)
     {
+        if (_host != null) throw new InvalidOperationException("Host already started.");
         var builder = Host.CreateDefaultBuilder();
         builder.ConfigureServices(services =>
         {
@@ -98,12 +100,12 @@ public class LocalTransportTests : IAsyncDisposable
         // Sent stage should have TransportMessage with local transport metadata
         var sent = session.Sent.Single<TestEvent>();
         sent.TransportMessage.Should().NotBeNull();
-        sent.TransportMessage!.Metadata["transport"].Should().Be("local");
+        sent.TransportMessage.TransportName.Should().Be("local");
 
         // Received stage should also have TransportMessage
         var received = session.Received.Single<TestEvent>();
         received.TransportMessage.Should().NotBeNull();
-        received.TransportMessage!.Metadata["transport"].Should().Be("local");
+        received.TransportMessage.TransportName.Should().Be("local");
     }
 
     [Test]
@@ -172,6 +174,8 @@ public class LocalTransportTests : IAsyncDisposable
 
         var dispatched = await session.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(5));
         dispatched.Result.Should().Be(DispatchResult.Success);
+        handler1.HandledMessages.Should().ContainSingle(m => m.Id == "multi-1");
+        handler2.HandledMessages.Should().ContainSingle(m => m.Id == "multi-1");
     }
 
     [Test]
@@ -216,6 +220,111 @@ public class LocalTransportTests : IAsyncDisposable
 
         var dispatched2 = await session2.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(5));
         dispatched2.Result.Should().Be(DispatchResult.RecoverableError);
+    }
+
+    [Test]
+    public async Task LocalTransport_FailingSender_DoesNotPreventOtherTransports()
+    {
+        var handler = new TestEventHandler();
+        var failingSender = new FailingMessageSender("failing-transport");
+
+        await StartAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventPublishChannel("local.events", c =>
+                {
+                    c.WithLocal()
+                        .Produces<TestEvent>();
+                    c.AddTransport("failing-transport");
+                });
+                bus.AddEventConsumeChannel("local.events", c => c
+                    .Consumes<TestEvent>());
+                bus.AddHandler<TestEvent, TestEventHandler>(handler);
+            });
+            services.AddSingleton<IMessageSender>(failingSender);
+            services.AddRatatoskrTesting();
+        });
+
+        await using var session = Services.CreateTrackingSession();
+
+        using var scope = Services.CreateScope();
+        var bus = scope.ServiceProvider.GetRequiredService<IRatatoskr>();
+
+        // Publishing should throw AggregateException because the failing sender fails
+        var act = () => bus.PublishDirectAsync(new TestEvent { Id = "partial-1", Data = "partial failure" });
+        await act.Should().ThrowAsync<AggregateException>();
+
+        // But the local transport should still have received the message
+        var dispatched = await session.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(5));
+        dispatched.GetMessage<TestEvent>().Id.Should().Be("partial-1");
+        dispatched.Result.Should().Be(DispatchResult.Success);
+    }
+
+    [Test]
+    public async Task LocalTransport_Shutdown_DrainsBufferedMessages()
+    {
+        var handledIds = new List<string>();
+        var firstMessageReceived = new TaskCompletionSource();
+        var releaseHandler = new TaskCompletionSource();
+        var drainHandler = new DrainTestHandler(handledIds, firstMessageReceived, releaseHandler);
+
+        IHost? testHost = null;
+        var builder = Host.CreateDefaultBuilder();
+        builder.ConfigureServices(services =>
+        {
+            services.AddSingleton<TimeProvider>(TimeProvider.System);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventPublishChannel("local.events", c => c
+                    .WithLocal()
+                    .Produces<TestEvent>());
+                bus.AddEventConsumeChannel("local.events", c => c
+                    .Consumes<TestEvent>());
+                bus.AddHandler<TestEvent, DrainTestHandler>(drainHandler);
+            });
+        });
+
+        testHost = builder.Build();
+        await testHost.StartAsync();
+
+        try
+        {
+            using var scope = testHost.Services.CreateScope();
+            var bus = scope.ServiceProvider.GetRequiredService<IRatatoskr>();
+
+            // Publish 3 messages — first one will block the consumer, buffering the rest
+            await bus.PublishDirectAsync(new TestEvent { Id = "drain-1", Data = "first" });
+            await bus.PublishDirectAsync(new TestEvent { Id = "drain-2", Data = "second" });
+            await bus.PublishDirectAsync(new TestEvent { Id = "drain-3", Data = "third" });
+
+            // Wait until the consumer is actively processing the first message
+            await firstMessageReceived.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            // Start shutdown while messages 2 and 3 are still buffered in the channel
+            var stopTask = testHost.StopAsync(TimeSpan.FromSeconds(30));
+
+            // Give shutdown a moment to call Writer.Complete() and base.StopAsync
+            await Task.Delay(200);
+
+            // Release the blocked handler — remaining messages should be drained
+            releaseHandler.SetResult();
+
+            await stopTask;
+
+            // All 3 messages should have been processed during drain
+            handledIds.Should().HaveCount(3);
+            handledIds.Should().Contain("drain-1");
+            handledIds.Should().Contain("drain-2");
+            handledIds.Should().Contain("drain-3");
+        }
+        finally
+        {
+            testHost.Dispose();
+            _host = null;
+        }
     }
 
     [Test]
@@ -276,6 +385,28 @@ public class LocalTransportTests : IAsyncDisposable
         {
             handlerStarted.TrySetResult();
             await releaseSignal.Task.WaitAsync(cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Handler that blocks on the first message until released, letting subsequent messages buffer.
+    /// </summary>
+    private class DrainTestHandler(List<string> handled, TaskCompletionSource firstReceived, TaskCompletionSource release) : IMessageHandler<TestEvent>
+    {
+        private int _count;
+
+        public async Task HandleAsync(TestEvent message, MessageProperties context, CancellationToken cancellationToken)
+        {
+            if (Interlocked.Increment(ref _count) == 1)
+            {
+                firstReceived.TrySetResult();
+                await release.Task;
+            }
+
+            lock (handled)
+            {
+                handled.Add(message.Id);
+            }
         }
     }
 }

@@ -6,7 +6,8 @@ namespace Ratatoskr.Core;
 public enum MessageStage
 {
     /// <summary>
-    /// IRatatoskr.PublishDirectAsync completed - message enriched and serialized.
+    /// Fired once per transport after each IMessageSender.SendAsync attempt during PublishDirectAsync.
+    /// Includes TransportName and Exception (null on success) so observers can see per-transport outcomes.
     /// </summary>
     Published,
 
@@ -81,6 +82,12 @@ public class MessageActivity
     /// When this activity was captured.
     /// </summary>
     public required DateTimeOffset Timestamp { get; init; }
+
+    /// <summary>
+    /// The transport name this activity relates to (e.g. "rabbitmq", "local").
+    /// Set at Published, Sent, Received, and OutboxSent stages where a specific transport is involved.
+    /// </summary>
+    public string? TransportName { get; init; }
 
     /// <summary>
     /// The transport-level wire representation of the message.
