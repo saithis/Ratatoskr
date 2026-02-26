@@ -65,14 +65,16 @@ internal class LocalTransportConsumer(
 
         var tags = new TagList
         {
-            { "messaging.system", "local" },
+            { MessagingSemanticConventions.System, "local" },
+            { MessagingSemanticConventions.OperationName, "process" },
+            { MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeProcess },
         };
 
-        RatatoskrDiagnostics.ReceiveMessages.Add(1, tags);
+        RatatoskrDiagnostics.ClientConsumedMessages.Add(1, tags);
 
         if (message.Properties.Time.HasValue)
         {
-            var receiveLag = (receivedTimestamp - message.Properties.Time.Value).TotalMilliseconds;
+            var receiveLag = (receivedTimestamp - message.Properties.Time.Value).TotalSeconds;
             RatatoskrDiagnostics.ReceiveLag.Record(receiveLag, tags);
         }
 
@@ -83,35 +85,41 @@ internal class LocalTransportConsumer(
             out var parentContext);
 
         using var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
-            "Ratatoskr.Receive",
+            "process local",
             ActivityKind.Consumer,
             parentContext);
 
         if (activity != null)
         {
-            activity.SetTag("messaging.system", "local");
-            activity.SetTag("messaging.message.id", message.Properties.Id);
-            activity.SetTag("messaging.message.body.size", message.Content.Length);
+            activity.SetTag(MessagingSemanticConventions.OperationName, "process");
+            activity.SetTag(MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeProcess);
+            activity.SetTag(MessagingSemanticConventions.System, "local");
+            activity.SetTag(MessagingSemanticConventions.MessageId, message.Properties.Id);
+            activity.SetTag(MessagingSemanticConventions.MessageBodySize, message.Content.Length);
         }
 
         var startTimestamp = Stopwatch.GetTimestamp();
         var result = await dispatcher.DispatchAsync(
             message.Content, message.Properties, cancellationToken);
-        var duration = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
+        var duration = Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds;
 
-        tags.Add("outcome", result switch
+        var errorType = result switch
         {
-            DispatchResult.Success => "success",
-            DispatchResult.NoHandlers => "no_handler",
-            _ => "failure"
-        });
+            DispatchResult.Success => (string?)null,
+            DispatchResult.NoHandlers => "NoHandlerError",
+            _ => "ProcessingError"
+        };
+
+        if (errorType != null)
+        {
+            tags.Add(MessagingSemanticConventions.ErrorType, errorType);
+        }
 
         RatatoskrDiagnostics.ProcessDuration.Record(duration, tags);
-        RatatoskrDiagnostics.ProcessMessages.Add(1, tags);
 
         if (message.Properties.Time.HasValue)
         {
-            var processLag = (timeProvider.GetUtcNow() - message.Properties.Time.Value).TotalMilliseconds;
+            var processLag = (timeProvider.GetUtcNow() - message.Properties.Time.Value).TotalSeconds;
             RatatoskrDiagnostics.ProcessLag.Record(processLag, tags);
         }
     }

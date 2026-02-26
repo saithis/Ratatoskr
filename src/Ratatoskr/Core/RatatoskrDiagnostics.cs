@@ -11,6 +11,9 @@ public static class RatatoskrDiagnostics
     public const string ActivitySourceName = "Ratatoskr";
     public const string MeterName = "Ratatoskr";
 
+    private static readonly double[] DurationBuckets =
+        [0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 7.5, 10.0];
+
     /// <summary>
     /// The ActivitySource for Ratatoskr.
     /// </summary>
@@ -21,24 +24,35 @@ public static class RatatoskrDiagnostics
     /// </summary>
     public static readonly Meter Meter = new(MeterName);
 
-    // Messaging Metrics (Standard - prefixed with ratatoskr as requested)
-    public static readonly Histogram<double> PublishDuration = Meter.CreateHistogram<double>("ratatoskr.publish.duration", "ms", "Measures the duration of message publishing.");
-    public static readonly Histogram<double> ProcessDuration = Meter.CreateHistogram<double>("ratatoskr.process.duration", "ms", "Measures the duration of message processing.");
-    
-    public static readonly Counter<long> PublishMessages = Meter.CreateCounter<long>("ratatoskr.publish.messages", "nodim", "Number of messages published.");
-    public static readonly Counter<long> ReceiveMessages = Meter.CreateCounter<long>("ratatoskr.receive.messages", "nodim", "Number of messages received.");
-    public static readonly Counter<long> ProcessMessages = Meter.CreateCounter<long>("ratatoskr.process.messages", "nodim", "Number of messages processed.");
+    // Standard OTEL Messaging Metrics
+    public static readonly Histogram<double> ClientOperationDuration = Meter.CreateHistogram<double>(
+        "messaging.client.operation.duration", "s",
+        "Duration of messaging operation initiated by a producer or consumer client.",
+        advice: new InstrumentAdvice<double> { HistogramBucketBoundaries = DurationBuckets });
 
-    // Latency Metrics
-    public static readonly Histogram<double> ReceiveLag = Meter.CreateHistogram<double>("ratatoskr.receive.lag", "ms", "Duration from message creation (sent) to reception.");
-    public static readonly Histogram<double> ProcessLag = Meter.CreateHistogram<double>("ratatoskr.process.lag", "ms", "Duration from message creation (sent) to completion of processing.");
+    public static readonly Counter<long> ClientSentMessages = Meter.CreateCounter<long>(
+        "messaging.client.sent.messages", "{message}",
+        "Number of messages producer attempted to send to the broker.");
+
+    public static readonly Counter<long> ClientConsumedMessages = Meter.CreateCounter<long>(
+        "messaging.client.consumed.messages", "{message}",
+        "Number of messages that were delivered to the application.");
+
+    public static readonly Histogram<double> ProcessDuration = Meter.CreateHistogram<double>(
+        "messaging.process.duration", "s",
+        "Duration of processing operation.",
+        advice: new InstrumentAdvice<double> { HistogramBucketBoundaries = DurationBuckets });
+
+    // Custom Ratatoskr metrics (no OTEL standard equivalent)
+    public static readonly Histogram<double> ReceiveLag = Meter.CreateHistogram<double>("ratatoskr.receive.lag", "s", "Duration from message creation (sent) to reception.");
+    public static readonly Histogram<double> ProcessLag = Meter.CreateHistogram<double>("ratatoskr.process.lag", "s", "Duration from message creation (sent) to completion of processing.");
 
     // Reliability Metrics
-    public static readonly Counter<long> RetryMessages = Meter.CreateCounter<long>("ratatoskr.retry.messages", "nodim", "Number of messages scheduled for retry.");
-    public static readonly Counter<long> DeadLetterMessages = Meter.CreateCounter<long>("ratatoskr.dead_letter.messages", "nodim", "Number of messages sent to DLQ.");
+    public static readonly Counter<long> RetryMessages = Meter.CreateCounter<long>("ratatoskr.retry.messages", "{message}", "Number of messages scheduled for retry.");
+    public static readonly Counter<long> DeadLetterMessages = Meter.CreateCounter<long>("ratatoskr.dead_letter.messages", "{message}", "Number of messages sent to DLQ.");
 
     // Outbox Metrics
-    public static readonly Counter<long> OutboxProcessCount = Meter.CreateCounter<long>("ratatoskr.outbox.process.count", "nodim", "Number of messages processed from the outbox.");
-    public static readonly Histogram<double> OutboxProcessDuration = Meter.CreateHistogram<double>("ratatoskr.outbox.process.duration", "ms", "Duration of the outbox processing batch.");
-    public static readonly Histogram<long> OutboxBatchSize = Meter.CreateHistogram<long>("ratatoskr.outbox.batch.size", "nodim", "Number of messages picked up in a batch.");
+    public static readonly Counter<long> OutboxProcessCount = Meter.CreateCounter<long>("ratatoskr.outbox.process.count", "{message}", "Number of messages processed from the outbox.");
+    public static readonly Histogram<double> OutboxProcessDuration = Meter.CreateHistogram<double>("ratatoskr.outbox.process.duration", "s", "Duration of the outbox processing batch.");
+    public static readonly Histogram<long> OutboxBatchSize = Meter.CreateHistogram<long>("ratatoskr.outbox.batch.size", "{message}", "Number of messages picked up in a batch.");
 }

@@ -10,7 +10,7 @@ namespace Ratatoskr.RabbitMq;
 /// <summary>
 /// Handles retry logic for failed messages.
 /// </summary>
-internal class RabbitMqRetryHandler(ILogger<RabbitMqRetryHandler> logger)
+internal class RabbitMqRetryHandler(RabbitMqOptions options, TimeProvider timeProvider, ILogger<RabbitMqRetryHandler> logger)
 {
 
     /// <summary>
@@ -56,10 +56,14 @@ internal class RabbitMqRetryHandler(ILogger<RabbitMqRetryHandler> logger)
 
             var tags = new TagList
             {
-                { "messaging.system", "rabbitmq" },
-                { "messaging.destination.subscription.name", queueName },
-                { "messaging.destination.name", destinationName },
-                { "messaging.rabbitmq.destination.routing_key", routingKey }
+                { MessagingSemanticConventions.System, "rabbitmq" },
+                { MessagingSemanticConventions.OperationName, "process" },
+                { MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeProcess },
+                { MessagingSemanticConventions.DestinationSubscriptionName, queueName },
+                { MessagingSemanticConventions.DestinationName, destinationName },
+                { MessagingSemanticConventions.RabbitMqRoutingKey, routingKey },
+                { MessagingSemanticConventions.ServerAddress, options.ConnectionString?.Host },
+                { MessagingSemanticConventions.ServerPort, options.ConnectionString?.Port },
             };
             RatatoskrDiagnostics.RetryMessages.Add(1, tags);
 
@@ -81,10 +85,14 @@ internal class RabbitMqRetryHandler(ILogger<RabbitMqRetryHandler> logger)
 
         var tags = new TagList
         {
-            { "messaging.system", "rabbitmq" },
-            { "messaging.destination.subscription.name", queueName },
-            { "messaging.destination.name", destinationName },
-            { "messaging.rabbitmq.destination.routing_key", routingKey }
+            { MessagingSemanticConventions.System, "rabbitmq" },
+            { MessagingSemanticConventions.OperationName, "process" },
+            { MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeProcess },
+            { MessagingSemanticConventions.DestinationSubscriptionName, queueName },
+            { MessagingSemanticConventions.DestinationName, destinationName },
+            { MessagingSemanticConventions.RabbitMqRoutingKey, routingKey },
+            { MessagingSemanticConventions.ServerAddress, options.ConnectionString?.Host },
+            { MessagingSemanticConventions.ServerPort, options.ConnectionString?.Port },
         };
         RatatoskrDiagnostics.DeadLetterMessages.Add(1, tags);
 
@@ -104,7 +112,7 @@ internal class RabbitMqRetryHandler(ILogger<RabbitMqRetryHandler> logger)
             };
 
             props.Headers["x-original-queue"] = queueName;
-            props.Headers["x-failure-time"] = DateTimeOffset.UtcNow.ToString("O");
+            props.Headers["x-failure-time"] = timeProvider.GetUtcNow().ToString("O");
 
             // Publish to DLQ Exchange
             await channel.BasicPublishAsync(

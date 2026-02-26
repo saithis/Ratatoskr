@@ -19,7 +19,7 @@ internal class OutboxMessageProcessor<TDbContext>(
     where TDbContext : DbContext, IOutboxDbContext
 {
     private Dictionary<string, IMessageSender> _senderMap = senders.ToDictionary(x => x.TransportName);
-    
+
     /// <summary>
     /// Processes a single batch of outbox messages.
     /// Returns the number of messages successfully processed.
@@ -30,20 +30,20 @@ internal class OutboxMessageProcessor<TDbContext>(
         CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
-        
+
         // Build the query for pending messages
         var query = dbContext.Set<OutboxMessageEntity>()
-            .Where(x => x.ProcessedAt == null 
+            .Where(x => x.ProcessedAt == null
                      && !x.IsPoisoned
                      && (x.NextAttemptAt == null || x.NextAttemptAt <= now));
-        
+
         // Add stuck message detection if needed (only for production background processing)
         if (includeStuckMessageDetection)
         {
             var stuckThreshold = now - options.StuckMessageThreshold;
             query = query.Where(x => x.ProcessingStartedAt == null || x.ProcessingStartedAt < stuckThreshold);
         }
-        
+
         var messages = await query
             .OrderBy(x => x.CreatedAt)
             .Take(options.BatchSize)
@@ -52,7 +52,7 @@ internal class OutboxMessageProcessor<TDbContext>(
         RatatoskrDiagnostics.OutboxBatchSize.Record(messages.Length);
 
         logger.LogInformation("Found {Count} messages to send", messages.Length);
-        
+
         if (messages.Length == 0)
             return 0;
 
@@ -65,7 +65,7 @@ internal class OutboxMessageProcessor<TDbContext>(
 
         var processedCount = 0;
         var batchStartTimestamp = Stopwatch.GetTimestamp();
-        
+
         // Process each message with error handling
         foreach (var message in messages)
         {
@@ -78,16 +78,18 @@ internal class OutboxMessageProcessor<TDbContext>(
                 // Extract parent tracing context
                 ActivityContext.TryParse(props.TraceParent, props.TraceState, out var parentContext);
 
+                // https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/
                 using var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
-                    "Ratatoskr.OutboxProcess",
+                    "create outbox",
                     ActivityKind.Producer,
                     parentContext);
 
                 if (activity != null)
                 {
-                    // https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/#messaging-attributes
-                    activity.SetTag("messaging.system", "ratatoskr");
-                    activity.SetTag("messaging.message.id", props.Id);
+                    activity.SetTag(MessagingSemanticConventions.OperationName, "create");
+                    activity.SetTag(MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeCreate);
+                    activity.SetTag(MessagingSemanticConventions.System, "ratatoskr");
+                    activity.SetTag(MessagingSemanticConventions.MessageId, props.Id);
                 }
 
                 logger.LogInformation("Processing message '{Id}' for transport '{Transport}'", message.Id, message.TransportName);
@@ -134,11 +136,11 @@ internal class OutboxMessageProcessor<TDbContext>(
             }
         }
 
-        RatatoskrDiagnostics.OutboxProcessDuration.Record(Stopwatch.GetElapsedTime(batchStartTimestamp).TotalMilliseconds);
+        RatatoskrDiagnostics.OutboxProcessDuration.Record(Stopwatch.GetElapsedTime(batchStartTimestamp).TotalSeconds);
 
         // Save all changes (both successful and failed)
         await dbContext.SaveChangesAsync(CancellationToken.None);
-        
+
         return processedCount;
     }
 }

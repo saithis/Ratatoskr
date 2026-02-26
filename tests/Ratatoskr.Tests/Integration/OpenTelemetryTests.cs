@@ -39,7 +39,7 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var initialTraceParent = $"00-{ActivityTraceId.CreateRandom().ToHexString()}-{ActivitySpanId.CreateRandom().ToHexString()}-01";
-            dbContext.OutboxMessages.Add(new TestEvent { Id = eventId, Data = "trace-me" }, 
+            dbContext.OutboxMessages.Add(new TestEvent { Id = eventId, Data = "trace-me" },
                 new MessageProperties { Id = eventId, TraceParent = initialTraceParent });
             await dbContext.SaveChangesAsync();
         });
@@ -50,29 +50,36 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         // 5. Assert Activity Structure
         var relevantActivities = GetRelevantActivities(activities, eventId);
 
-        var outboxActivity = relevantActivities.FirstOrDefault(a => a.OperationName == "Ratatoskr.OutboxProcess");
-        var sendActivity = relevantActivities.FirstOrDefault(a => a.OperationName == "Ratatoskr.Send");
-        var receiveActivity = relevantActivities.FirstOrDefault(a => a.OperationName == "Ratatoskr.Receive");
+        var outboxActivity = relevantActivities.FirstOrDefault(a => a.OperationName == "create outbox");
+        var sendActivity = relevantActivities.FirstOrDefault(a => a.OperationName.StartsWith("send "));
+        var processActivity = relevantActivities.FirstOrDefault(a => a.OperationName.StartsWith("process "));
 
         outboxActivity.Should().NotBeNull("OutboxProcess activity should exist");
         sendActivity.Should().NotBeNull("Send activity should exist");
-        receiveActivity.Should().NotBeNull("Receive activity should exist");
+        processActivity.Should().NotBeNull("Process activity should exist");
 
         // Verify Hierarchy
         sendActivity!.ParentId.Should().Be(outboxActivity!.Id);
-        receiveActivity!.ParentId.Should().Be(sendActivity.Id);
+        processActivity!.ParentId.Should().Be(sendActivity.Id);
 
         // Verify Kinds
         outboxActivity.Kind.Should().Be(ActivityKind.Producer);
         sendActivity.Kind.Should().Be(ActivityKind.Client);
-        receiveActivity.Kind.Should().Be(ActivityKind.Consumer);
+        processActivity.Kind.Should().Be(ActivityKind.Consumer);
 
         // Verify Tags
-        AssertActivityTags(receiveActivity, ExchangeName, QueueName, RoutingKey, eventId);
-        AssertActivityTags(sendActivity, ExchangeName, queueName: null, RoutingKey, eventId);
+        AssertActivityTags(processActivity, ExchangeName, QueueName, RoutingKey, eventId,
+            operationName: "process", operationType: "process");
+        AssertActivityTags(sendActivity, ExchangeName, queueName: null, RoutingKey, eventId,
+            operationName: "send", operationType: "send");
 
         outboxActivity.TagObjects.Should().Contain(t => t.Key == "messaging.system" && (string?)t.Value == "ratatoskr");
         outboxActivity.TagObjects.Should().Contain(t => t.Key == "messaging.message.id" && (string?)t.Value == eventId);
+        outboxActivity.TagObjects.Should().Contain(t => t.Key == "messaging.operation.name" && (string?)t.Value == "create");
+        outboxActivity.TagObjects.Should().Contain(t => t.Key == "messaging.operation.type" && (string?)t.Value == "create");
+
+        // Verify delivery tag on consumer span
+        processActivity.TagObjects.Should().Contain(t => t.Key == "messaging.rabbitmq.message.delivery_tag");
     }
 
     [Test]
@@ -103,31 +110,38 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         // 5. Assert Activity Structure
         var relevantActivities = GetRelevantActivities(activities, eventId);
 
-        var publishActivity = relevantActivities.FirstOrDefault(a => a.OperationName == "Ratatoskr.Publish");
-        var sendActivity = relevantActivities.FirstOrDefault(a => a.OperationName == "Ratatoskr.Send");
-        var receiveActivity = relevantActivities.FirstOrDefault(a => a.OperationName == "Ratatoskr.Receive");
-        var outboxActivity = relevantActivities.FirstOrDefault(a => a.OperationName == "Ratatoskr.OutboxProcess");
+        var publishActivity = relevantActivities.FirstOrDefault(a => a.OperationName == "publish");
+        var sendActivity = relevantActivities.FirstOrDefault(a => a.OperationName.StartsWith("send "));
+        var processActivity = relevantActivities.FirstOrDefault(a => a.OperationName.StartsWith("process "));
+        var outboxActivity = relevantActivities.FirstOrDefault(a => a.OperationName == "create outbox");
 
         publishActivity.Should().NotBeNull("Publish activity should exist");
         sendActivity.Should().NotBeNull("Send activity should exist");
-        receiveActivity.Should().NotBeNull("Receive activity should exist");
+        processActivity.Should().NotBeNull("Process activity should exist");
         outboxActivity.Should().BeNull("OutboxProcess activity should NOT exist");
 
         // Verify Hierarchy
         sendActivity!.ParentId.Should().Be(publishActivity!.Id);
-        receiveActivity!.ParentId.Should().Be(sendActivity.Id);
+        processActivity!.ParentId.Should().Be(sendActivity.Id);
 
         // Verify Kinds
         publishActivity.Kind.Should().Be(ActivityKind.Producer);
         sendActivity.Kind.Should().Be(ActivityKind.Client);
-        receiveActivity.Kind.Should().Be(ActivityKind.Consumer);
+        processActivity.Kind.Should().Be(ActivityKind.Consumer);
 
         // Verify Tags
-        AssertActivityTags(receiveActivity, ExchangeName, QueueName, RoutingKey, eventId);
-        AssertActivityTags(sendActivity, ExchangeName, queueName: null, RoutingKey, eventId);
+        AssertActivityTags(processActivity, ExchangeName, QueueName, RoutingKey, eventId,
+            operationName: "process", operationType: "process");
+        AssertActivityTags(sendActivity, ExchangeName, queueName: null, RoutingKey, eventId,
+            operationName: "send", operationType: "send");
 
         publishActivity.TagObjects.Should().Contain(t => t.Key == "messaging.system" && (string?)t.Value == "ratatoskr");
         publishActivity.TagObjects.Should().Contain(t => t.Key == "messaging.message.id" && (string?)t.Value == eventId);
+        publishActivity.TagObjects.Should().Contain(t => t.Key == "messaging.operation.name" && (string?)t.Value == "publish");
+        publishActivity.TagObjects.Should().Contain(t => t.Key == "messaging.operation.type" && (string?)t.Value == "create");
+
+        // Verify delivery tag on consumer span
+        processActivity.TagObjects.Should().Contain(t => t.Key == "messaging.rabbitmq.message.delivery_tag");
     }
 
     [Test]
@@ -149,7 +163,7 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var initialTraceParent = $"00-{ActivityTraceId.CreateRandom().ToHexString()}-{ActivitySpanId.CreateRandom().ToHexString()}-01";
-            dbContext.OutboxMessages.Add(new TestEvent { Id = eventId, Data = "trace-me-metrics" }, 
+            dbContext.OutboxMessages.Add(new TestEvent { Id = eventId, Data = "trace-me-metrics" },
                 new MessageProperties { Id = eventId, TraceParent = initialTraceParent, Time = DateTimeOffset.UtcNow.AddSeconds(-1) });
             await dbContext.SaveChangesAsync();
         });
@@ -160,14 +174,13 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         // 5. Assert Metrics
         var testMetrics = GetRelevantMetrics(metricMeasurements, ExchangeName);
 
-        // Messaging Metrics
-        testMetrics.Should().Contain(m => m.InstrumentName == "ratatoskr.publish.messages" && m.Value == 1);
-        testMetrics.Should().Contain(m => m.InstrumentName == "ratatoskr.publish.duration");
-        testMetrics.Should().Contain(m => m.InstrumentName == "ratatoskr.receive.messages" && m.Value == 1);
-        testMetrics.Should().Contain(m => m.InstrumentName == "ratatoskr.process.messages" && m.Value == 1);
-        testMetrics.Should().Contain(m => m.InstrumentName == "ratatoskr.process.duration");
+        // Messaging Metrics (standard OTEL names)
+        testMetrics.Should().Contain(m => m.InstrumentName == "messaging.client.sent.messages" && m.Value == 1);
+        testMetrics.Should().Contain(m => m.InstrumentName == "messaging.client.operation.duration");
+        testMetrics.Should().Contain(m => m.InstrumentName == "messaging.client.consumed.messages" && m.Value == 1);
+        testMetrics.Should().Contain(m => m.InstrumentName == "messaging.process.duration");
 
-        // Latency Metrics
+        // Latency Metrics (custom)
         testMetrics.Should().Contain(m => m.InstrumentName == "ratatoskr.receive.lag");
         testMetrics.Should().Contain(m => m.InstrumentName == "ratatoskr.process.lag");
 
@@ -176,20 +189,25 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         metricMeasurements.Should().Contain(m => m.InstrumentName == "ratatoskr.outbox.process.count" && m.Value >= 1);
         metricMeasurements.Should().Contain(m => m.InstrumentName == "ratatoskr.outbox.process.duration");
 
-        // Verify Process Outcome
-        var processMetric = testMetrics.First(m => m.InstrumentName == "ratatoskr.process.messages");
-        AssertMetricTags(processMetric, ExchangeName, QueueName, RoutingKey, outcome: "success");
+        // Verify no error.type on successful processing
+        var processDuration = testMetrics.First(m => m.InstrumentName == "messaging.process.duration");
+        processDuration.Tags.Should().NotContain(t => t.Key == "error.type");
 
-        // Verify Retry/DLQ metrics exist (should be empty/false)
+        // Verify Retry/DLQ metrics don't exist (no failures)
         testMetrics.Any(m => m.InstrumentName == "ratatoskr.retry.messages").Should().BeFalse();
         testMetrics.Any(m => m.InstrumentName == "ratatoskr.dead_letter.messages").Should().BeFalse();
 
-        // Verify Tags
-        var publishMetric = testMetrics.First(m => m.InstrumentName == "ratatoskr.publish.messages");
-        AssertMetricTags(publishMetric, ExchangeName, queueName: null, RoutingKey);
+        // Verify Tags on send metrics
+        var sendMetric = testMetrics.First(m => m.InstrumentName == "messaging.client.sent.messages");
+        AssertMetricTags(sendMetric, ExchangeName, queueName: null, RoutingKey);
 
-        var receiveMetric = testMetrics.First(m => m.InstrumentName == "ratatoskr.receive.messages");
-        AssertMetricTags(receiveMetric, ExchangeName, QueueName, RoutingKey);
+        // Verify Tags on consume metrics
+        var consumeMetric = testMetrics.First(m => m.InstrumentName == "messaging.client.consumed.messages");
+        AssertMetricTags(consumeMetric, ExchangeName, QueueName, RoutingKey);
+
+        // Verify duration is in seconds (should be small values, not hundreds)
+        var durationMetric = testMetrics.First(m => m.InstrumentName == "messaging.client.operation.duration");
+        durationMetric.Value.Should().BeLessThan(30, "duration should be in seconds, not milliseconds");
     }
 
     [Test]
@@ -198,15 +216,15 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         // 1. Setup Listeners
         var metricMeasurements = new ConcurrentBag<(string InstrumentName, double Value, KeyValuePair<string, object?>[] Tags)>();
         using var meterListener = CreateMeterListener(metricMeasurements);
-        
+
         var activities = new ConcurrentBag<Activity>();
         using var activityListener = CreateActivityListener(activities);
         ActivitySource.AddActivityListener(activityListener);
 
         // 2. Setup Ratatoskr with a Failing Handler (fails 2 times)
         var handler = new FailingTestEventHandler(failuresBeforeSuccess: 2);
-        
-        await StartTestAsync(services => ConfigureRatatoskr(services, handler, useOutbox: false, 
+
+        await StartTestAsync(services => ConfigureRatatoskr(services, handler, useOutbox: false,
             configureConsumer: c => c.WithRetry(3, TimeSpan.FromMilliseconds(100))));
 
         // 3. Act - Publish Message
@@ -221,7 +239,7 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         await WaitForConditionAsync(() => handler.HandledMessages.Any(m => m.Id == eventId), TimeSpan.FromSeconds(30));
 
         // Wait for all metrics to be recorded
-        await WaitForConditionAsync(() => 
+        await WaitForConditionAsync(() =>
         {
             var allMetrics = GetRelevantMetrics(metricMeasurements, ExchangeName);
             var retries = allMetrics.Where(m => m.InstrumentName == "ratatoskr.retry.messages").Sum(m => m.Value);
@@ -230,15 +248,17 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
 
         // 5. Assert Metrics
         var testMetrics = GetRelevantMetrics(metricMeasurements, ExchangeName);
-        
-        testMetrics.Should().Contain(m => m.InstrumentName == "ratatoskr.publish.messages" && m.Value == 1);
-        
+
+        testMetrics.Should().Contain(m => m.InstrumentName == "messaging.client.sent.messages" && m.Value == 1);
+
         // Should have 3 processing attempts (1 initial + 2 retries)
-        var processMetrics = testMetrics.Where(m => m.InstrumentName == "ratatoskr.process.messages").ToList();
-        processMetrics.Count.Should().BeGreaterThan(2); 
-        
-        processMetrics.Should().Contain(m => m.Tags.Any(t => t.Key == "outcome" && (string?)t.Value == "failure"));
-        processMetrics.Should().Contain(m => m.Tags.Any(t => t.Key == "outcome" && (string?)t.Value == "success"));
+        var processMetrics = testMetrics.Where(m => m.InstrumentName == "messaging.process.duration").ToList();
+        processMetrics.Count.Should().BeGreaterThan(2);
+
+        // Failed attempts should have error.type set
+        processMetrics.Should().Contain(m => m.Tags.Any(t => t.Key == "error.type"));
+        // Successful attempt should not have error.type
+        processMetrics.Should().Contain(m => !m.Tags.Any(t => t.Key == "error.type"));
 
         // Verify Retries
         var retryMetrics = testMetrics.Where(m => m.InstrumentName == "ratatoskr.retry.messages").ToList();
@@ -252,12 +272,13 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         // Verify Traces
         var relevantActivities = GetRelevantActivities(activities, eventId);
         var consumerActivities = relevantActivities.Where(a => a.Kind == ActivityKind.Consumer).OrderBy(a => a.StartTimeUtc).ToList();
-        
+
         consumerActivities.Count.Should().Be(3);
-        
+
         foreach (var activity in consumerActivities)
         {
-            AssertActivityTags(activity, ExchangeName, QueueName, RoutingKey, eventId);
+            AssertActivityTags(activity, ExchangeName, QueueName, RoutingKey, eventId,
+                operationName: "process", operationType: "process");
         }
     }
 
@@ -267,15 +288,15 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         // 1. Setup Listeners
         var metricMeasurements = new ConcurrentBag<(string InstrumentName, double Value, KeyValuePair<string, object?>[] Tags)>();
         using var meterListener = CreateMeterListener(metricMeasurements);
-        
+
         var activities = new ConcurrentBag<Activity>();
         using var activityListener = CreateActivityListener(activities);
         ActivitySource.AddActivityListener(activityListener);
 
         // 2. Setup Ratatoskr with Always Failing Handler
         var handler = new AlwaysFailingTestEventHandler();
-        
-        await StartTestAsync(services => ConfigureRatatoskr(services, handler, useOutbox: false, 
+
+        await StartTestAsync(services => ConfigureRatatoskr(services, handler, useOutbox: false,
             configureConsumer: c => c.WithRetry(2, TimeSpan.FromMilliseconds(100))));
 
         // 3. Act - Publish Message
@@ -287,7 +308,7 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         });
 
         // 4. Wait for processing (DLQ)
-        await WaitForConditionAsync(() => 
+        await WaitForConditionAsync(() =>
         {
             var allMetrics = GetRelevantMetrics(metricMeasurements, ExchangeName);
             var dlqCount = allMetrics.Where(m => m.InstrumentName == "ratatoskr.dead_letter.messages").Sum(m => m.Value);
@@ -297,7 +318,7 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
 
         // 5. Assert Metrics
         var testMetrics = GetRelevantMetrics(metricMeasurements, ExchangeName);
-        
+
         // 2 retries recorded
         var retryMetrics = testMetrics.Where(m => m.InstrumentName == "ratatoskr.retry.messages").ToList();
         retryMetrics.Sum(m => m.Value).Should().Be(2);
@@ -306,11 +327,11 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         var dlqMetrics = testMetrics.Where(m => m.InstrumentName == "ratatoskr.dead_letter.messages").ToList();
         dlqMetrics.Sum(m => m.Value).Should().Be(1);
 
-        // Process outcome should be all failures
-        var processMetrics = testMetrics.Where(m => m.InstrumentName == "ratatoskr.process.messages").ToList();
-        processMetrics.Should().AllSatisfy(m => 
-            m.Tags.Should().Contain(t => t.Key == "outcome" && (string?)t.Value == "failure"));
-            
+        // Process durations should all have error.type set (all failures)
+        var processMetrics = testMetrics.Where(m => m.InstrumentName == "messaging.process.duration").ToList();
+        processMetrics.Should().AllSatisfy(m =>
+            m.Tags.Should().Contain(t => t.Key == "error.type"));
+
         // Assert Tags
         foreach (var dlqMetric in dlqMetrics)
         {
@@ -324,12 +345,13 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         // Verify Traces
         var relevantActivities = GetRelevantActivities(activities, eventId);
         var consumerActivities = relevantActivities.Where(a => a.Kind == ActivityKind.Consumer).OrderBy(a => a.StartTimeUtc).ToList();
-        
+
         consumerActivities.Count.Should().Be(3);
-        
+
         foreach (var activity in consumerActivities)
         {
-            AssertActivityTags(activity, ExchangeName, QueueName, RoutingKey, eventId);
+            AssertActivityTags(activity, ExchangeName, QueueName, RoutingKey, eventId,
+                operationName: "process", operationType: "process");
         }
     }
 
@@ -353,18 +375,18 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         });
 
         // 4. Wait
-        await WaitForConditionAsync(() => metricMeasurements.Any(m => 
-            m.InstrumentName == "ratatoskr.publish.messages" &&
-            m.Tags.Any(t => t.Key == "messaging.destination.name" && (string?)t.Value == ExchangeName)), 
+        await WaitForConditionAsync(() => metricMeasurements.Any(m =>
+            m.InstrumentName == "messaging.client.sent.messages" &&
+            m.Tags.Any(t => t.Key == "messaging.destination.name" && (string?)t.Value == ExchangeName)),
             TimeSpan.FromSeconds(5));
-        
+
         // 5. Assert
         var testMetrics = GetRelevantMetrics(metricMeasurements, ExchangeName);
 
-        testMetrics.Should().Contain(m => m.InstrumentName == "ratatoskr.publish.messages" && m.Value == 1);
-        testMetrics.Should().Contain(m => m.InstrumentName == "ratatoskr.publish.duration");
+        testMetrics.Should().Contain(m => m.InstrumentName == "messaging.client.sent.messages" && m.Value == 1);
+        testMetrics.Should().Contain(m => m.InstrumentName == "messaging.client.operation.duration");
 
-        var pubMetric = testMetrics.First(m => m.InstrumentName == "ratatoskr.publish.messages");
+        var pubMetric = testMetrics.First(m => m.InstrumentName == "messaging.client.sent.messages");
         AssertMetricTags(pubMetric, ExchangeName, queueName: null, RoutingKey);
     }
 
@@ -409,10 +431,10 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
     }
 
     private IEnumerable<(string InstrumentName, double Value, KeyValuePair<string, object?>[] Tags)> GetRelevantMetrics(
-        IEnumerable<(string InstrumentName, double Value, KeyValuePair<string, object?>[] Tags)> metrics, 
+        IEnumerable<(string InstrumentName, double Value, KeyValuePair<string, object?>[] Tags)> metrics,
         string exchangeName)
     {
-        return metrics.Where(m => 
+        return metrics.Where(m =>
             m.Tags.Any(t => t.Key == "messaging.destination.name" && (string?)t.Value == exchangeName));
     }
 
@@ -467,42 +489,45 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         });
     }
 
-    private void AssertActivityTags(Activity activity, string exchangeName, string? queueName, string routingKey, string messageId)
+    private void AssertActivityTags(Activity activity, string exchangeName, string? queueName,
+        string routingKey, string messageId, string operationName, string operationType)
     {
         activity.TagObjects.Should().Contain(t => t.Key == "messaging.system" && (string?)t.Value == "rabbitmq");
+        activity.TagObjects.Should().Contain(t => t.Key == "messaging.operation.name" && (string?)t.Value == operationName);
+        activity.TagObjects.Should().Contain(t => t.Key == "messaging.operation.type" && (string?)t.Value == operationType);
         activity.TagObjects.Should().Contain(t => t.Key == "messaging.destination.name" && (string?)t.Value == exchangeName);
-        
+
         if (queueName != null)
         {
             activity.TagObjects.Should().Contain(t => t.Key == "messaging.destination.subscription.name" && (string?)t.Value == queueName);
         }
-            
+
         activity.TagObjects.Should().Contain(t => t.Key == "messaging.rabbitmq.destination.routing_key" && (string?)t.Value == routingKey);
         activity.TagObjects.Should().Contain(t => t.Key == "messaging.message.id" && (string?)t.Value == messageId);
         activity.TagObjects.Should().Contain(t => t.Key == "messaging.message.body.size");
+        activity.TagObjects.Should().Contain(t => t.Key == "server.address");
+        activity.TagObjects.Should().Contain(t => t.Key == "server.port");
     }
 
     private void AssertMetricTags(
         (string InstrumentName, double Value, KeyValuePair<string, object?>[] Tags) metric,
         string exchangeName,
         string? queueName,
-        string routingKey,
-        string? outcome = null)
+        string routingKey)
     {
         metric.Tags.Should().Contain(t => t.Key == "messaging.system" && (string?)t.Value == "rabbitmq");
         metric.Tags.Should().Contain(t => t.Key == "messaging.destination.name" && (string?)t.Value == exchangeName);
-        
+
         if (queueName != null)
         {
             metric.Tags.Should().Contain(t => t.Key == "messaging.destination.subscription.name" && (string?)t.Value == queueName);
         }
 
         metric.Tags.Should().Contain(t => t.Key == "messaging.rabbitmq.destination.routing_key" && (string?)t.Value == routingKey);
-        
-        if (outcome != null)
-        {
-            metric.Tags.Should().Contain(t => t.Key == "outcome" && (string?)t.Value == outcome);
-        }
+        metric.Tags.Should().Contain(t => t.Key == "messaging.operation.name");
+        metric.Tags.Should().Contain(t => t.Key == "messaging.operation.type");
+        metric.Tags.Should().Contain(t => t.Key == "server.address");
+        metric.Tags.Should().Contain(t => t.Key == "server.port");
     }
 
     private class FailingTestEventHandler(int failuresBeforeSuccess) : IMessageHandler<TestEvent>
@@ -519,12 +544,12 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
                 _attempts++;
                 currentAttempt = _attempts;
             }
-            
+
             if (currentAttempt <= failuresBeforeSuccess)
             {
                 throw new InvalidOperationException($"Simulated failure {currentAttempt}");
             }
-            
+
             lock (_lock)
             {
                 HandledMessages.Add(message);

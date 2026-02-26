@@ -17,7 +17,7 @@ internal class LocalMessageSender(
         var startTimestamp = Stopwatch.GetTimestamp();
 
         using var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
-            "Ratatoskr.Send",
+            "send local",
             ActivityKind.Client,
             Activity.Current?.Context ?? default);
 
@@ -26,9 +26,11 @@ internal class LocalMessageSender(
             props.TraceParent = activity.Id;
             props.TraceState = activity.TraceStateString;
 
-            activity.SetTag("messaging.system", "local");
-            activity.SetTag("messaging.message.id", props.Id);
-            activity.SetTag("messaging.message.body.size", content.Length);
+            activity.SetTag(MessagingSemanticConventions.OperationName, "send");
+            activity.SetTag(MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeSend);
+            activity.SetTag(MessagingSemanticConventions.System, "local");
+            activity.SetTag(MessagingSemanticConventions.MessageId, props.Id);
+            activity.SetTag(MessagingSemanticConventions.MessageBodySize, content.Length);
         }
 
         var transportMessage = LocalTransportMessageSnapshotFactory.Create(content, props);
@@ -42,18 +44,27 @@ internal class LocalMessageSender(
         catch (Exception ex)
         {
             sendException = ex;
+            activity?.SetTag(MessagingSemanticConventions.ErrorType, ex.GetType().FullName);
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             throw;
         }
         finally
         {
-            var duration = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
+            var duration = Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds;
             var tags = new TagList
             {
-                { "messaging.system", "local" },
+                { MessagingSemanticConventions.System, "local" },
+                { MessagingSemanticConventions.OperationName, "send" },
+                { MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeSend },
             };
 
-            RatatoskrDiagnostics.PublishDuration.Record(duration, tags);
-            RatatoskrDiagnostics.PublishMessages.Add(1, tags);
+            if (sendException != null)
+            {
+                tags.Add(MessagingSemanticConventions.ErrorType, sendException.GetType().FullName);
+            }
+
+            RatatoskrDiagnostics.ClientOperationDuration.Record(duration, tags);
+            RatatoskrDiagnostics.ClientSentMessages.Add(1, tags);
 
             var sentTimestamp = timeProvider.GetUtcNow();
 
