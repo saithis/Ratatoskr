@@ -400,7 +400,7 @@ public class LocalTransportTests : IAsyncDisposable
             if (Interlocked.Increment(ref _count) == 1)
             {
                 firstReceived.TrySetResult();
-                await release.Task;
+                await release.Task.WaitAsync(cancellationToken);
             }
 
             lock (handled)

@@ -14,6 +14,8 @@ internal class LocalTransportConsumer(
     IEnumerable<IMessageActivityObserver> observers,
     ILogger<LocalTransportConsumer> logger) : BackgroundService
 {
+    private readonly CancellationTokenSource _drainProcessingCts = new();
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("Starting local transport consumer");
@@ -22,7 +24,7 @@ internal class LocalTransportConsumer(
         {
             try
             {
-                await ProcessMessageAsync(message, CancellationToken.None);
+                await ProcessMessageAsync(message, _drainProcessingCts.Token);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -129,6 +131,7 @@ internal class LocalTransportConsumer(
         catch (OperationCanceledException)
         {
             logger.LogWarning("Local transport consumer shutdown timed out");
+            await _drainProcessingCts.CancelAsync();
         }
     }
 }

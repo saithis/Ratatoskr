@@ -40,8 +40,7 @@ internal class OutboxTriggerInterceptor<TDbContext>(
             if (enrichedProperties.Transports.Count == 0)
             {
                 logger.LogError("No transports found for message '{MessageType}'", item.Message.GetType());
-                outboxDbContext.OutboxMessages.Queue.TryDequeue(out _);
-                continue;
+                throw new InvalidOperationException($"No transports found for message '{item.Message.GetType()}'.");
             }
             
             // Create one outbox entity per transport
