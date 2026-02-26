@@ -270,7 +270,6 @@ public class LocalTransportTests : IAsyncDisposable
         var releaseHandler = new TaskCompletionSource();
         var drainHandler = new DrainTestHandler(handledIds, firstMessageReceived, releaseHandler);
 
-        IHost? testHost = null;
         var builder = Host.CreateDefaultBuilder();
         builder.ConfigureServices(services =>
         {
@@ -287,7 +286,7 @@ public class LocalTransportTests : IAsyncDisposable
             });
         });
 
-        testHost = builder.Build();
+        var testHost = builder.Build();
         await testHost.StartAsync();
 
         try
@@ -323,7 +322,6 @@ public class LocalTransportTests : IAsyncDisposable
         finally
         {
             testHost.Dispose();
-            _host = null;
         }
     }
 
