@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Logging;
 using Ratatoskr.Core;
 
 namespace Ratatoskr.EfCore.Internal;
@@ -9,7 +10,8 @@ internal class OutboxTriggerInterceptor<TDbContext>(
     IMessageSerializer messageSerializer,
     IMessagePropertiesEnricher enricher,
     IEnumerable<IMessageActivityObserver> observers,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    ILogger<OutboxTriggerInterceptor<TDbContext>> logger)
     : SaveChangesInterceptor where TDbContext : DbContext, IOutboxDbContext
 {
     public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
@@ -34,8 +36,19 @@ internal class OutboxTriggerInterceptor<TDbContext>(
             var enrichedProperties = enricher.Enrich(item.Message.GetType(), item.Properties);
             var serializedMessage = messageSerializer.Serialize(item.Message);
             enrichedProperties.ContentType = messageSerializer.ContentType;
-            var outboxMessage = OutboxMessageEntity.Create(serializedMessage, enrichedProperties, timeProvider);
-            context.Set<OutboxMessageEntity>().Add(outboxMessage);
+
+            if (enrichedProperties.Transports.Count == 0)
+            {
+                logger.LogError("No transports found for message '{MessageType}'", item.Message.GetType());
+                throw new InvalidOperationException($"No transports found for message '{item.Message.GetType()}'.");
+            }
+            
+            // Create one outbox entity per transport
+            foreach (var transport in enrichedProperties.Transports)
+            {
+                var outboxMessage = OutboxMessageEntity.Create(serializedMessage, enrichedProperties, timeProvider, transport);
+                context.Set<OutboxMessageEntity>().Add(outboxMessage);
+            }
 
             // Only dequeue after successful serialization
             outboxDbContext.OutboxMessages.Queue.TryDequeue(out _);

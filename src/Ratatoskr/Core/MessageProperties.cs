@@ -54,6 +54,11 @@ public class MessageProperties
     public Dictionary<string, string> Headers { get; set; } = new();
     
     /// <summary>
+    /// The transports this message should be sent over.
+    /// </summary>
+    public HashSet<string> Transports { get; set; } = new();
+    
+    /// <summary>
     /// Transport-specific metadata (e.g., RabbitMQ exchange/routing key).
     /// Not included in CloudEvents envelope.
     /// </summary>

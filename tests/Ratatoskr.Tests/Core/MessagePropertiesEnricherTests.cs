@@ -15,7 +15,7 @@ public class MessagePropertiesEnricherTests
     private readonly NoOpTransportEnricher _transportEnricher = new();
 
     private MessagePropertiesEnricher CreateEnricher() =>
-        new(_registry, _cloudEventsOptions, _timeProvider, _transportEnricher);
+        new(_registry, _cloudEventsOptions, _timeProvider, [_transportEnricher]);
 
     [Test]
     public void Enrich_WithRegisteredMessage_SetsTypeFromRegistry()
@@ -155,6 +155,7 @@ public class MessagePropertiesEnricherTests
         // Arrange
         var channel = new ChannelRegistration("test.exchange", ChannelType.EventPublish);
         channel.Messages.Add(new MessageRegistration(typeof(TestEvent), "test.event"));
+        channel.Transports.Add("test");
         _registry.Register(channel);
         var enricher = CreateEnricher();
 
@@ -163,6 +164,39 @@ public class MessagePropertiesEnricherTests
 
         // Assert
         _transportEnricher.WasCalled.Should().BeTrue();
+    }
+
+    [Test]
+    public void Enrich_RegisteredMessage_WithNonMatchingTransport_DoesNotCallTransportEnricher()
+    {
+        // Arrange
+        var channel = new ChannelRegistration("test.exchange", ChannelType.EventPublish);
+        channel.Messages.Add(new MessageRegistration(typeof(TestEvent), "test.event"));
+        channel.Transports.Add("other-transport");
+        _registry.Register(channel);
+        var enricher = CreateEnricher();
+
+        // Act
+        enricher.Enrich<TestEvent>(null);
+
+        // Assert — enricher has TransportName "test", channel only has "other-transport"
+        _transportEnricher.WasCalled.Should().BeFalse();
+    }
+
+    [Test]
+    public void Enrich_RegisteredMessage_WithEmptyTransports_DoesNotCallTransportEnricher()
+    {
+        // Arrange — channel with no transports at all
+        var channel = new ChannelRegistration("test.exchange", ChannelType.EventPublish);
+        channel.Messages.Add(new MessageRegistration(typeof(TestEvent), "test.event"));
+        _registry.Register(channel);
+        var enricher = CreateEnricher();
+
+        // Act
+        enricher.Enrich<TestEvent>(null);
+
+        // Assert
+        _transportEnricher.WasCalled.Should().BeFalse();
     }
 
     [Test]
@@ -185,6 +219,7 @@ public class MessagePropertiesEnricherTests
 
     private class NoOpTransportEnricher : ITransportMessageMetadataEnricher
     {
+        public string TransportName => "test";
         public bool WasCalled { get; private set; }
 
         public void Enrich(PublishInformation publishInformation, MessageProperties properties)

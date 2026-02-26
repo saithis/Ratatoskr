@@ -54,7 +54,7 @@ public class TrackedMessage
     /// The transport-level wire representation of the message.
     /// Available at Sent (after envelope mapping) and Received (before envelope mapping) stages.
     /// </summary>
-    public TransportMessage? TransportMessage => Activity.TransportMessage;
+    public TransportMessageSnapshot? TransportMessage => Activity.TransportMessage;
 
     /// <summary>
     /// The trace ID extracted from the message's TraceParent header.

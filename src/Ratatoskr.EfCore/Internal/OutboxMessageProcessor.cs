@@ -11,13 +11,15 @@ namespace Ratatoskr.EfCore.Internal;
 /// </summary>
 internal class OutboxMessageProcessor<TDbContext>(
     TDbContext dbContext,
-    IMessageSender sender,
+    IEnumerable<IMessageSender> senders,
     TimeProvider timeProvider,
     OutboxOptions options,
     IEnumerable<IMessageActivityObserver> observers,
     ILogger logger)
     where TDbContext : DbContext, IOutboxDbContext
 {
+    private Dictionary<string, IMessageSender> _senderMap = senders.ToDictionary(x => x.TransportName);
+    
     /// <summary>
     /// Processes a single batch of outbox messages.
     /// Returns the number of messages successfully processed.
@@ -88,8 +90,13 @@ internal class OutboxMessageProcessor<TDbContext>(
                     activity.SetTag("messaging.message.id", props.Id);
                 }
 
-                logger.LogInformation("Processing message '{Id}'", message.Id);
-                await sender.SendAsync(message.Content, props, cancellationToken);
+                logger.LogInformation("Processing message '{Id}' for transport '{Transport}'", message.Id, message.TransportName);
+
+                // Find the matching sender for this outbox entry's transport
+                var targetSender = _senderMap.GetValueOrDefault(message.TransportName)
+                                   ?? throw new InvalidOperationException($"No sender found for transport '{message.TransportName}'");
+
+                await targetSender.SendAsync(message.Content, props, cancellationToken);
                 message.MarkAsProcessed(timeProvider);
                 processedCount++;
                 RatatoskrDiagnostics.OutboxProcessCount.Add(1, new TagList { { "status", "success" } });
@@ -115,6 +122,7 @@ internal class OutboxMessageProcessor<TDbContext>(
                             Stage = MessageStage.OutboxSent,
                             Properties = sentProps,
                             SerializedBody = message.Content,
+                            TransportName = message.TransportName,
                             Timestamp = timeProvider.GetUtcNow(),
                         });
                     }

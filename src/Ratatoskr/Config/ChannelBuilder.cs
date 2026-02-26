@@ -15,6 +15,17 @@ public class ChannelBuilder(ChannelRegistration channel)
         return this;
     }
 
+    /// <summary>
+    /// Registers a transport on this channel.
+    /// Used by transport providers to declare which transports handle this channel.
+    /// </summary>
+    protected internal ChannelBuilder AddTransport(string transportName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(transportName);
+        channel.Transports.Add(transportName);
+        return this;
+    }
+
     internal void AddMessage<T>(Action<MessageBuilder>? configure, string? typeName = null)
     {
         var type = typeof(T);

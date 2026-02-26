@@ -18,7 +18,7 @@ The tracker captures messages at every stage of the pipeline:
 
 | Stage | Description |
 |:---|:---|
-| `Published` | After `IRatatoskr.PublishDirectAsync` completes |
+| `Published` | Fired once per transport after each send attempt during `PublishDirectAsync` (includes `TransportName` and `Exception`) |
 | `Sent` | After bytes are sent to the transport (e.g. RabbitMQ) |
 | `Received` | When the consumer receives a message from the transport |
 | `Dispatched` | After handler invocation completes (includes result and exception) |
@@ -240,14 +240,14 @@ transport.Body.Should().NotBeEmpty();
 
 ### Stage availability
 
-| Stage | `TransportMessage` | Notes |
-|:---|:---|:---|
-| Published | `null` | No transport involved yet |
-| **Sent** | **populated** | After envelope mapping — AMQP properties + wire body |
-| OutboxStaged | `null` | No transport involved yet |
-| OutboxSent | `null` | Transport details captured in the corresponding Sent activity |
-| **Received** | **populated** | Before envelope mapping — raw AMQP delivery + wire body |
-| Dispatched | `null` | No transport at this stage |
+| Stage | `TransportMessage` | `TransportName` | Notes |
+|:---|:---|:---|:---|
+| Published | `null` | set | Per-transport; includes `Exception` on failure |
+| **Sent** | **populated** | set | After envelope mapping — AMQP properties + wire body |
+| OutboxStaged | `null` | `null` | No transport involved yet |
+| OutboxSent | `null` | set | Transport details captured in the corresponding Sent activity |
+| **Received** | **populated** | set | Before envelope mapping — raw AMQP delivery + wire body |
+| Dispatched | `null` | `null` | No transport at this stage |
 
 ### Legacy: RawBody
 

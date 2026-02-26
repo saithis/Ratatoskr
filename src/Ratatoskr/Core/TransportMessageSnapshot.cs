@@ -5,8 +5,13 @@ namespace Ratatoskr.Core;
 /// For the Sent stage, this captures the state after envelope mapping (outgoing).
 /// For the Received stage, this captures the state before envelope mapping (incoming).
 /// </summary>
-public class TransportMessage
+public class TransportMessageSnapshot
 {
+    /// <summary>
+    /// The transport name the message is sent over.
+    /// </summary>
+    public required string TransportName { get; init; }
+    
     /// <summary>
     /// The raw body bytes as they appear on the wire.
     /// In structured CloudEvents mode, this is the full JSON envelope.

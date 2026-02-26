@@ -14,6 +14,8 @@ public class RabbitMqMessageSender(
     IEnumerable<IMessageActivityObserver> observers)
     : IMessageSender, IAsyncDisposable
 {
+    public string TransportName => RabbitMqConstants.TransportName;
+
     public async Task SendAsync(byte[] content, MessageProperties props, CancellationToken cancellationToken)
     {
         await using var channel = await connectionManager.CreateChannelAsync(options.UsePublisherConfirms, cancellationToken);
@@ -48,7 +50,7 @@ public class RabbitMqMessageSender(
         var bodyToSend = envelopeMapper.MapOutgoing(content, props, basicProps);
 
         // Capture transport-level wire format after envelope mapping
-        var transportMessage = RabbitMqTransportMessageFactory.FromBasicProperties(
+        var transportMessage = RabbitMqTransportMessageSnapshotFactory.FromBasicProperties(
             basicProps, bodyToSend, exchange, routingKey);
 
         // In RabbitMQ.Client 7.x with publisher confirms enabled,
@@ -97,6 +99,7 @@ public class RabbitMqMessageSender(
                         Stage = MessageStage.Sent,
                         Properties = props,
                         SerializedBody = transportMessage.Body,
+                        TransportName = TransportName,
                         TransportMessage = transportMessage,
                         Exception = publishException,
                         Timestamp = sentTimestamp,

@@ -6,16 +6,16 @@ using Ratatoskr.Core;
 namespace Ratatoskr.RabbitMq;
 
 /// <summary>
-/// Creates <see cref="TransportMessage"/> instances from RabbitMQ types,
+/// Creates <see cref="TransportMessageSnapshot"/> instances from RabbitMQ types,
 /// flattening standard AMQP properties and custom headers into a single dictionary.
 /// </summary>
-internal static class RabbitMqTransportMessageFactory
+internal static class RabbitMqTransportMessageSnapshotFactory
 {
     /// <summary>
-    /// Creates a TransportMessage from outgoing BasicProperties after envelope mapping.
+    /// Creates a <see cref="TransportMessageSnapshot"/> from outgoing BasicProperties after envelope mapping.
     /// Used at the Sent stage to capture the wire format.
     /// </summary>
-    public static TransportMessage FromBasicProperties(
+    public static TransportMessageSnapshot FromBasicProperties(
         IReadOnlyBasicProperties props, byte[] body, string exchange, string routingKey)
     {
         var headers = BuildHeaders(props);
@@ -26,14 +26,20 @@ internal static class RabbitMqTransportMessageFactory
             ["routing-key"] = routingKey,
         };
 
-        return new TransportMessage { Body = body, Headers = headers, Metadata = metadata };
+        return new TransportMessageSnapshot
+        {
+            TransportName = RabbitMqConstants.TransportName,
+            Body = body, 
+            Headers = headers, 
+            Metadata = metadata
+        };
     }
 
     /// <summary>
-    /// Creates a TransportMessage from incoming BasicDeliverEventArgs before envelope mapping.
+    /// Creates a <see cref="TransportMessageSnapshot"/> from incoming BasicDeliverEventArgs before envelope mapping.
     /// Used at the Received stage to capture the raw wire data.
     /// </summary>
-    public static TransportMessage FromDeliverEventArgs(BasicDeliverEventArgs ea)
+    public static TransportMessageSnapshot FromDeliverEventArgs(BasicDeliverEventArgs ea)
     {
         var headers = BuildHeaders(ea.BasicProperties);
 
@@ -44,7 +50,13 @@ internal static class RabbitMqTransportMessageFactory
             ["redelivered"] = ea.Redelivered,
         };
 
-        return new TransportMessage { Body = ea.Body.ToArray(), Headers = headers, Metadata = metadata };
+        return new TransportMessageSnapshot
+        {
+            TransportName = RabbitMqConstants.TransportName,
+            Body = ea.Body.ToArray(), 
+            Headers = headers, 
+            Metadata = metadata
+        };
     }
 
     private static Dictionary<string, object?> BuildHeaders(IReadOnlyBasicProperties props)

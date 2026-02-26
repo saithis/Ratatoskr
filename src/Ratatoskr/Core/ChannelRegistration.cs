@@ -15,6 +15,8 @@ public class ChannelRegistration(string channelName, ChannelType intent)
     public void SetExtension<T>(T value) where T : class =>
         _extensions[typeof(T)] = value;
 
+    public HashSet<string> Transports { get; } = new(StringComparer.OrdinalIgnoreCase);
+
     public List<MessageRegistration> Messages { get; } = new();
 
     public MessageRegistration? GetMessage(Type messageType)

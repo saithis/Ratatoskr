@@ -5,7 +5,7 @@ using Ratatoskr.RabbitMq;
 
 namespace Ratatoskr.Tests.RabbitMq;
 
-public class RabbitMqTransportMessageFactoryTests
+public class RabbitMqTransportMessageSnapshotFactoryTests
 {
     [Test]
     public void FromBasicProperties_ValidUtf8Header_DecodesToString()
@@ -20,7 +20,7 @@ public class RabbitMqTransportMessageFactoryTests
         };
 
         // Act
-        var result = RabbitMqTransportMessageFactory.FromBasicProperties(basicProps, [], "", "");
+        var result = RabbitMqTransportMessageSnapshotFactory.FromBasicProperties(basicProps, [], "", "");
 
         // Assert
         result.Headers["my-header"].Should().BeOfType<string>().And.Be("hello world");
@@ -40,7 +40,7 @@ public class RabbitMqTransportMessageFactoryTests
         };
 
         // Act
-        var result = RabbitMqTransportMessageFactory.FromBasicProperties(basicProps, [], "", "");
+        var result = RabbitMqTransportMessageSnapshotFactory.FromBasicProperties(basicProps, [], "", "");
 
         // Assert
         result.Headers["binary-header"].Should().BeOfType<byte[]>().Which.Should().BeEquivalentTo(binaryData);
@@ -59,7 +59,7 @@ public class RabbitMqTransportMessageFactoryTests
         };
 
         // Act
-        var result = RabbitMqTransportMessageFactory.FromBasicProperties(basicProps, [], "", "");
+        var result = RabbitMqTransportMessageSnapshotFactory.FromBasicProperties(basicProps, [], "", "");
 
         // Assert
         result.Headers["empty-header"].Should().BeOfType<string>().And.Be("");
@@ -72,7 +72,7 @@ public class RabbitMqTransportMessageFactoryTests
         var basicProps = new BasicProperties { Headers = null };
 
         // Act
-        var result = RabbitMqTransportMessageFactory.FromBasicProperties(basicProps, [], "", "");
+        var result = RabbitMqTransportMessageSnapshotFactory.FromBasicProperties(basicProps, [], "", "");
 
         // Assert - only standard AMQP properties may be present, no custom headers
         result.Headers.Should().NotBeNull();
@@ -94,7 +94,7 @@ public class RabbitMqTransportMessageFactoryTests
         };
 
         // Act
-        var result = RabbitMqTransportMessageFactory.FromBasicProperties(basicProps, [], "", "");
+        var result = RabbitMqTransportMessageSnapshotFactory.FromBasicProperties(basicProps, [], "", "");
 
         // Assert - non-byte[] values pass through NormalizeValue unchanged
         result.Headers["long-header"].Should().BeOfType<long>().Which.Should().Be(42L);

@@ -2,6 +2,7 @@ using System.Text;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -13,6 +14,7 @@ using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Tests.Fixtures;
 using RabbitMQ.Client;
+using Ratatoskr.RabbitMq;
 using TUnit.Core;
 
 namespace Ratatoskr.Tests.Integration;
@@ -100,8 +102,10 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
 
+            var props = new MessageProperties().SetRoutingKey(QueueName);
+            props.Transports.Add(RabbitMqConstants.TransportName);
             dbContext.OutboxMessages.Add(new TestEvent { Id = "e2e-1", Data = "outbox->consumer" },
-                new MessageProperties().SetRoutingKey(QueueName));
+                props);
 
             await dbContext.SaveChangesAsync();
         });
@@ -170,7 +174,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
     {
         // Arrange
         var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
-        var failingSender = new FailingMessageSender(failuresBeforeSuccess: 2);
+        var failingSender = new FailingMessageSender(RabbitMqConstants.TransportName, failuresBeforeSuccess: 2);
 
         await StartTestAsync(services =>
         {
@@ -190,7 +194,8 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
                 options.UseNpgsql(PostgresConnectionString);
                 options.RegisterOutbox<TestDbContext>(sp);
             });
-            // Override sender with failing sender
+            // Override sender with failing sender - remove existing senders first
+            services.RemoveAll<IMessageSender>();
             services.AddSingleton<IMessageSender>(failingSender);
         });
 
@@ -266,7 +271,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
     {
         // Arrange
         var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
-        var alwaysFailingSender = new FailingMessageSender(); // Never succeeds
+        var alwaysFailingSender = new FailingMessageSender(RabbitMqConstants.TransportName); // Never succeeds
 
         await StartTestAsync(services =>
         {
@@ -286,6 +291,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
                 options.UseNpgsql(PostgresConnectionString);
                 options.RegisterOutbox<TestDbContext>(sp);
             });
+            services.RemoveAll<IMessageSender>();
             services.AddSingleton<IMessageSender>(alwaysFailingSender);
         });
 
@@ -577,7 +583,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
         where TDbContext : DbContext, IOutboxDbContext
     {
         var dbContext = serviceProvider.GetRequiredService<TDbContext>();
-        var sender = serviceProvider.GetRequiredService<IMessageSender>();
+        var messageSenders = serviceProvider.GetServices<IMessageSender>();
         var timeProvider = serviceProvider.GetRequiredService<TimeProvider>();
         var options = serviceProvider.GetRequiredService<IOptions<OutboxOptions>>();
         var logger = serviceProvider.GetService<ILogger<OutboxMessageProcessor<TDbContext>>>()
@@ -585,7 +591,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
 
         var activityObservers = serviceProvider.GetServices<IMessageActivityObserver>();
         var processor = new OutboxMessageProcessor<TDbContext>(
-            dbContext, sender, timeProvider, options.Value, activityObservers, logger);
+            dbContext, messageSenders, timeProvider, options.Value, activityObservers, logger);
 
         var totalProcessed = 0;
         while (true)

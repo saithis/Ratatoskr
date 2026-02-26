@@ -26,6 +26,7 @@ public static class RabbitMqChannelExtensions
             var options = new RabbitMqExchangeOptions(inner);
             configure(options);
             builder.WithExtension(inner);
+            builder.AddTransport(RabbitMqConstants.TransportName);
             return builder;
         }
     }
@@ -42,6 +43,7 @@ public static class RabbitMqChannelExtensions
             var options = new RabbitMqConsumeOptions(inner);
             configure(options);
             builder.WithExtension(inner);
+            builder.AddTransport(RabbitMqConstants.TransportName);
             return builder;
         }
     }

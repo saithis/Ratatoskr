@@ -1,3 +1,4 @@
+using System.Reflection;
 using Ratatoskr.CloudEvents;
 
 namespace Ratatoskr.Core;
@@ -5,8 +6,9 @@ namespace Ratatoskr.Core;
 /// <summary>
 /// Default implementation that enriches MessageProperties with metadata from the ChannelRegistry.
 /// </summary>
-public class MessagePropertiesEnricher(ChannelRegistry registry, CloudEventsOptions options, TimeProvider timeProvider, ITransportMessageMetadataEnricher transportEnricher) : IMessagePropertiesEnricher
+public class MessagePropertiesEnricher(ChannelRegistry registry, CloudEventsOptions options, TimeProvider timeProvider, IEnumerable<ITransportMessageMetadataEnricher> transportEnrichers) : IMessagePropertiesEnricher
 {
+    private readonly Dictionary<string, ITransportMessageMetadataEnricher> _enrichersByTransport = transportEnrichers.ToDictionary(e => e.TransportName);
     public MessageProperties Enrich<TMessage>(MessageProperties? properties) where TMessage : notnull
     {
         return Enrich(typeof(TMessage), properties);
@@ -32,28 +34,36 @@ public class MessagePropertiesEnricher(ChannelRegistry registry, CloudEventsOpti
         
         // Query registry for type info
         var publishInfo = registry.GetPublishInformation(messageType);
-        if (publishInfo == null)
-        {
-            // If not in registry, try to deduce type from attribute
-            if (string.IsNullOrEmpty(properties.Type))
-            {
-                var attr = System.Reflection.CustomAttributeExtensions.GetCustomAttribute<RatatoskrMessageAttribute>(messageType);
-                if (attr != null)
-                {
-                    properties.Type = attr.Type;
-                }
-            }
-            return properties;
-        }
         
         // Enrich Type if not already set
         if (string.IsNullOrEmpty(properties.Type))
         {
-            properties.Type = publishInfo.Message.MessageTypeName;
+            properties.Type = GetMessageType(messageType, publishInfo);
         }
-            
-        transportEnricher.Enrich(publishInfo, properties);
+
+        if (publishInfo != null)
+        {
+            foreach (var transport in publishInfo.Channel.Transports)
+            {
+                properties.Transports.Add(transport);
+                if (_enrichersByTransport.TryGetValue(transport, out var transportEnricher))
+                {
+                    transportEnricher.Enrich(publishInfo, properties);
+                }
+            }
+        }
 
         return properties;
+    }
+
+    private string? GetMessageType(Type messageType, PublishInformation? publishInfo)
+    {
+        if (publishInfo != null)
+        {
+            return publishInfo.Message.MessageTypeName;
+        }
+        
+        var attr = messageType.GetCustomAttribute<RatatoskrMessageAttribute>();
+        return attr?.Type;
     }
 }
