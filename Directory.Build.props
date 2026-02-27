@@ -8,6 +8,7 @@
     <PackageProjectUrl>https://github.com/saithis/Ratatoskr</PackageProjectUrl>
     <RepositoryUrl>https://github.com/saithis/Ratatoskr</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IncludeSymbols>true</IncludeSymbols>
