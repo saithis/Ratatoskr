@@ -280,6 +280,11 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
             AssertActivityTags(activity, ExchangeName, QueueName, RoutingKey, eventId,
                 operationName: "process", operationType: "process");
         }
+
+        // Failed spans should have error status, successful span should not
+        consumerActivities.Take(2).Should().AllSatisfy(a =>
+            a.Status.Should().Be(ActivityStatusCode.Error));
+        consumerActivities.Last().Status.Should().Be(ActivityStatusCode.Unset);
     }
 
     [Test]
@@ -353,6 +358,10 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
             AssertActivityTags(activity, ExchangeName, QueueName, RoutingKey, eventId,
                 operationName: "process", operationType: "process");
         }
+
+        // All spans should have error status (all failures)
+        consumerActivities.Should().AllSatisfy(a =>
+            a.Status.Should().Be(ActivityStatusCode.Error));
     }
 
     [Test]

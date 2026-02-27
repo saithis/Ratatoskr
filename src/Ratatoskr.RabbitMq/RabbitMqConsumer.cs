@@ -87,6 +87,7 @@ internal class RabbitMqConsumer(
         string? errorType = null;
         TagList tags = default;
         DateTimeOffset? messageTime = null;
+        Activity? activity = null;
 
         try
         {
@@ -130,7 +131,7 @@ internal class RabbitMqConsumer(
                 RatatoskrDiagnostics.ReceiveLag.Record(lag, tags);
             }
 
-            using var activity = StartActivity(props, tags, body.Length, ea.DeliveryTag);
+            activity = StartActivity(props, tags, body.Length, ea.DeliveryTag);
 
             var result = await dispatcher.DispatchAsync(body, props, cancellationToken, channelName);
 
@@ -140,6 +141,12 @@ internal class RabbitMqConsumer(
                 DispatchResult.NoHandlers => "NoHandlerError",
                 _ => "ProcessingError"
             };
+
+            if (errorType != null)
+            {
+                activity?.SetTag(MessagingSemanticConventions.ErrorType, errorType);
+                activity?.SetStatus(ActivityStatusCode.Error, errorType);
+            }
 
             if (!channelOptions.AutoAck)
             {
@@ -151,6 +158,9 @@ internal class RabbitMqConsumer(
             logger.LogError(ex, "Error processing message '{MessageId}'", messageId);
 
             errorType = ex.GetType().FullName;
+
+            activity?.SetTag(MessagingSemanticConventions.ErrorType, errorType);
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
 
             if (tags.Count == 0)
             {
@@ -166,6 +176,8 @@ internal class RabbitMqConsumer(
         }
         finally
         {
+             activity?.Dispose();
+
              if (tags.Count > 0)
              {
                  if (errorType != null)
