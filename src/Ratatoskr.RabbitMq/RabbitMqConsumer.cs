@@ -16,6 +16,7 @@ internal class RabbitMqConsumer(
     MessageDispatcher dispatcher,
     IRabbitMqEnvelopeMapper envelopeMapper,
     RabbitMqRetryHandler retryHandler,
+    RabbitMqOptions options,
     TimeProvider timeProvider,
     IEnumerable<IMessageActivityObserver> observers,
     ILogger<RabbitMqConsumer> logger)
@@ -41,28 +42,28 @@ internal class RabbitMqConsumer(
 
         foreach (var reg in consumerChannels)
         {
-            var options = reg.GetRabbitMqChannelOptions() ?? new RabbitMqChannelOptions();
+            var channelOptions = reg.GetRabbitMqChannelOptions() ?? new RabbitMqChannelOptions();
 
-            if (string.IsNullOrEmpty(options.QueueName))
+            if (string.IsNullOrEmpty(channelOptions.QueueName))
             {
                 logger.LogWarning("Skipping consumer channel '{Channel}' because no queue name is configured.", reg.ChannelName);
                 continue;
             }
 
             var channel = await connectionManager.CreateChannelAsync(false, stoppingToken);
-            await channel.BasicQosAsync(0, options.PrefetchCount, false, stoppingToken);
+            await channel.BasicQosAsync(0, channelOptions.PrefetchCount, false, stoppingToken);
 
             var consumer = new AsyncEventingBasicConsumer(channel);
             consumer.ReceivedAsync += async (_, ea) =>
             {
-                await HandleMessageAsync(channel, ea, options, options.QueueName!, reg.ChannelName, stoppingToken);
+                await HandleMessageAsync(channel, ea, channelOptions, channelOptions.QueueName!, reg.ChannelName, stoppingToken);
             };
 
-            logger.LogInformation("Starting consuming from queue '{Queue}' for channel '{Channel}'", options.QueueName, reg.ChannelName);
+            logger.LogInformation("Starting consuming from queue '{Queue}' for channel '{Channel}'", channelOptions.QueueName, reg.ChannelName);
 
             await channel.BasicConsumeAsync(
-                queue: options.QueueName!,
-                autoAck: options.AutoAck,
+                queue: channelOptions.QueueName!,
+                autoAck: channelOptions.AutoAck,
                 consumer: consumer,
                 cancellationToken: stoppingToken);
 
@@ -76,16 +77,17 @@ internal class RabbitMqConsumer(
     private async Task HandleMessageAsync(
         IChannel channel,
         BasicDeliverEventArgs ea,
-        RabbitMqChannelOptions options,
+        RabbitMqChannelOptions channelOptions,
         string queueName,
         string channelName,
         CancellationToken cancellationToken)
     {
         var messageId = ea.BasicProperties.MessageId ?? Guid.NewGuid().ToString();
         var processStartTimestamp = Stopwatch.GetTimestamp();
-        var outcome = "failure";
+        string? errorType = null;
         TagList tags = default;
         DateTimeOffset? messageTime = null;
+        Activity? activity = null;
 
         try
         {
@@ -120,100 +122,124 @@ internal class RabbitMqConsumer(
 
             tags = CreateTags(ea, props, queueName);
 
-            RatatoskrDiagnostics.ReceiveMessages.Add(1, tags);
+            RatatoskrDiagnostics.ClientConsumedMessages.Add(1, tags);
 
             if (messageTime.HasValue)
             {
                 // Avoid negative lag due to clock skew
-                var lag = Math.Max((DateTimeOffset.UtcNow - messageTime.Value).TotalMilliseconds, 0);
+                var lag = Math.Max((receivedTimestamp - messageTime.Value).TotalSeconds, 0);
                 RatatoskrDiagnostics.ReceiveLag.Record(lag, tags);
             }
 
-            using var activity = StartActivity(props, tags, body.Length);
+            activity = StartActivity(props, tags, body.Length, ea.DeliveryTag);
 
             var result = await dispatcher.DispatchAsync(body, props, cancellationToken, channelName);
 
-            outcome = result switch
+            errorType = result switch
             {
-                DispatchResult.Success => "success",
-                DispatchResult.NoHandlers => "no_handler",
-                _ => "failure"
+                DispatchResult.Success => null,
+                DispatchResult.NoHandlers => "NoHandlerError",
+                _ => "ProcessingError"
             };
 
-            if (!options.AutoAck)
+            if (errorType != null)
             {
-               await HandleDispatchResultAsync(channel, ea, options, queueName, result, cancellationToken);
+                activity?.SetTag(MessagingSemanticConventions.ErrorType, errorType);
+                activity?.SetStatus(ActivityStatusCode.Error, errorType);
+            }
+
+            if (!channelOptions.AutoAck)
+            {
+               await HandleDispatchResultAsync(channel, ea, channelOptions, queueName, result, cancellationToken);
             }
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error processing message '{MessageId}'", messageId);
 
+            errorType = ex.GetType().FullName;
+
+            activity?.SetTag(MessagingSemanticConventions.ErrorType, errorType);
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+
             if (tags.Count == 0)
             {
                 tags = CreateFallbackTags(ea, queueName);
             }
 
-            if (!options.AutoAck)
+            if (!channelOptions.AutoAck)
             {
                 await retryHandler.HandleFailureAsync(
-                    channel, ea, options, queueName,
+                    channel, ea, channelOptions, queueName,
                     DispatchResult.RecoverableError, cancellationToken);
             }
         }
         finally
         {
+             activity?.Dispose();
+
              if (tags.Count > 0)
              {
-                 tags.Add("outcome", outcome);
-                 RatatoskrDiagnostics.ProcessDuration.Record(Stopwatch.GetElapsedTime(processStartTimestamp).TotalMilliseconds, tags);
-                 RatatoskrDiagnostics.ProcessMessages.Add(1, tags);
+                 if (errorType != null)
+                 {
+                     tags.Add(MessagingSemanticConventions.ErrorType, errorType);
+                 }
+
+                 RatatoskrDiagnostics.ProcessDuration.Record(Stopwatch.GetElapsedTime(processStartTimestamp).TotalSeconds, tags);
 
                  if (messageTime.HasValue)
                  {
-                      var lag = Math.Max((DateTimeOffset.UtcNow - messageTime.Value).TotalMilliseconds, 0);
+                      var lag = Math.Max((timeProvider.GetUtcNow() - messageTime.Value).TotalSeconds, 0);
                       RatatoskrDiagnostics.ProcessLag.Record(lag, tags);
                  }
              }
         }
     }
 
-    private static TagList CreateTags(BasicDeliverEventArgs ea, MessageProperties props, string queueName)
+    private TagList CreateTags(BasicDeliverEventArgs ea, MessageProperties props, string queueName)
     {
         var (originalExchange, originalRoutingKey) = RabbitMqHeaderHelper.GetOriginalDestinationFromHeaders(ea.BasicProperties.Headers);
         var destinationName = props.GetExchange() ?? originalExchange ?? ea.Exchange;
         var routingKey = props.GetRoutingKey() ?? originalRoutingKey ?? ea.RoutingKey;
 
-        return new TagList
-        {
-            { "messaging.system", "rabbitmq" },
-            { "messaging.destination.subscription.name", queueName },
-            { "messaging.destination.name", destinationName },
-            { "messaging.rabbitmq.destination.routing_key", routingKey }
-        };
+        return BuildTagList(destinationName, routingKey, queueName);
     }
 
-    private static TagList CreateFallbackTags(BasicDeliverEventArgs ea, string queueName)
+    private TagList CreateFallbackTags(BasicDeliverEventArgs ea, string queueName)
     {
         var (originalExchange, originalRoutingKey) = RabbitMqHeaderHelper.GetOriginalDestinationFromHeaders(ea.BasicProperties.Headers);
         var destinationName = originalExchange ?? ea.Exchange;
         var routingKey = originalRoutingKey ?? ea.RoutingKey;
 
-         return new TagList
+        return BuildTagList(destinationName, routingKey, queueName);
+    }
+
+    private TagList BuildTagList(string destinationName, string routingKey, string queueName)
+    {
+        return new TagList
         {
-            { "messaging.system", "rabbitmq" },
-            { "messaging.destination.subscription.name", queueName },
-            { "messaging.destination.name", destinationName },
-            { "messaging.rabbitmq.destination.routing_key", routingKey }
+            { MessagingSemanticConventions.System, "rabbitmq" },
+            { MessagingSemanticConventions.OperationName, "process" },
+            { MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeProcess },
+            { MessagingSemanticConventions.DestinationSubscriptionName, queueName },
+            { MessagingSemanticConventions.DestinationName, destinationName },
+            { MessagingSemanticConventions.RabbitMqRoutingKey, routingKey },
+            { MessagingSemanticConventions.ServerAddress, options.ConnectionString?.Host },
+            { MessagingSemanticConventions.ServerPort, options.ConnectionString?.Port },
         };
     }
 
-    private static Activity? StartActivity(MessageProperties props, TagList tags, int bodySize)
+    private Activity? StartActivity(MessageProperties props, TagList tags, int bodySize, ulong deliveryTag)
     {
         ActivityContext.TryParse(props.TraceParent, props.TraceState, out var parentContext);
 
+        var destinationName = tags.FirstOrDefault(t => t.Key == MessagingSemanticConventions.DestinationName).Value as string;
+        var destination = string.IsNullOrEmpty(destinationName)
+            ? tags.FirstOrDefault(t => t.Key == MessagingSemanticConventions.DestinationSubscriptionName).Value as string
+            : destinationName;
+
         var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
-            "Ratatoskr.Receive",
+            $"process {destination}",
             ActivityKind.Consumer,
             parentContext);
 
@@ -225,8 +251,9 @@ internal class RabbitMqConsumer(
             {
                 activity.SetTag(tag.Key, tag.Value);
             }
-            activity.SetTag("messaging.message.id", props.Id);
-            activity.SetTag("messaging.message.body.size", bodySize);
+            activity.SetTag(MessagingSemanticConventions.MessageId, props.Id);
+            activity.SetTag(MessagingSemanticConventions.MessageBodySize, bodySize);
+            activity.SetTag(MessagingSemanticConventions.RabbitMqDeliveryTag, (long)deliveryTag);
         }
         return activity;
     }
@@ -234,7 +261,7 @@ internal class RabbitMqConsumer(
     private async Task HandleDispatchResultAsync(
         IChannel channel,
         BasicDeliverEventArgs ea,
-        RabbitMqChannelOptions options,
+        RabbitMqChannelOptions channelOptions,
         string queueName,
         DispatchResult result,
         CancellationToken cancellationToken)
@@ -249,7 +276,7 @@ internal class RabbitMqConsumer(
             case DispatchResult.PermanentError:
             case DispatchResult.RecoverableError:
                 await retryHandler.HandleFailureAsync(
-                    channel, ea, options, queueName, result, cancellationToken);
+                    channel, ea, channelOptions, queueName, result, cancellationToken);
                 break;
         }
     }

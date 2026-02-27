@@ -25,9 +25,12 @@ public class RabbitMqMessageSender(
         var exchange = props.GetExchange() ?? "";
         var routingKey = props.GetRoutingKey() ?? props.Type ?? "";
 
-        // Explicitly use the current activity as parent to maintain trace hierarchy
+        var destination = string.IsNullOrEmpty(exchange) ? routingKey : exchange;
+
+        // https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/
+        // https://opentelemetry.io/docs/specs/semconv/messaging/rabbitmq/
         using var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
-            "Ratatoskr.Send",
+            $"send {destination}",
             ActivityKind.Client,
             Activity.Current?.Context ?? default);
 
@@ -37,13 +40,15 @@ public class RabbitMqMessageSender(
             props.TraceParent = activity.Id;
             props.TraceState = activity.TraceStateString;
 
-            // https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/#messaging-attributes
-            // https://opentelemetry.io/docs/specs/semconv/messaging/rabbitmq/
-            activity.SetTag("messaging.system", "rabbitmq");
-            activity.SetTag("messaging.destination.name", exchange);
-            activity.SetTag("messaging.rabbitmq.destination.routing_key", routingKey);
-            activity.SetTag("messaging.message.id", props.Id);
-            activity.SetTag("messaging.message.body.size", content.Length);
+            activity.SetTag(MessagingSemanticConventions.OperationName, "send");
+            activity.SetTag(MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeSend);
+            activity.SetTag(MessagingSemanticConventions.System, "rabbitmq");
+            activity.SetTag(MessagingSemanticConventions.DestinationName, destination);
+            activity.SetTag(MessagingSemanticConventions.RabbitMqRoutingKey, routingKey);
+            activity.SetTag(MessagingSemanticConventions.MessageId, props.Id);
+            activity.SetTag(MessagingSemanticConventions.MessageBodySize, content.Length);
+            activity.SetTag(MessagingSemanticConventions.ServerAddress, options.ConnectionString?.Host);
+            activity.SetTag(MessagingSemanticConventions.ServerPort, options.ConnectionString?.Port);
         }
 
         // Use envelope mapper to map properties and potentially wrap content
@@ -72,21 +77,32 @@ public class RabbitMqMessageSender(
         catch (Exception ex)
         {
             publishException = ex;
+            activity?.SetTag(MessagingSemanticConventions.ErrorType, ex.GetType().FullName);
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             throw;
         }
         finally
         {
-            var duration = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
+            var duration = Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds;
 
             var tags = new TagList
             {
-                { "messaging.system", "rabbitmq" },
-                { "messaging.destination.name", exchange },
-                { "messaging.rabbitmq.destination.routing_key", routingKey }
+                { MessagingSemanticConventions.System, "rabbitmq" },
+                { MessagingSemanticConventions.OperationName, "send" },
+                { MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeSend },
+                { MessagingSemanticConventions.DestinationName, destination },
+                { MessagingSemanticConventions.RabbitMqRoutingKey, routingKey },
+                { MessagingSemanticConventions.ServerAddress, options.ConnectionString?.Host },
+                { MessagingSemanticConventions.ServerPort, options.ConnectionString?.Port },
             };
 
-            RatatoskrDiagnostics.PublishDuration.Record(duration, tags);
-            RatatoskrDiagnostics.PublishMessages.Add(1, tags);
+            if (publishException != null)
+            {
+                tags.Add(MessagingSemanticConventions.ErrorType, publishException.GetType().FullName);
+            }
+
+            RatatoskrDiagnostics.ClientOperationDuration.Record(duration, tags);
+            RatatoskrDiagnostics.ClientSentMessages.Add(1, tags);
 
             var sentTimestamp = timeProvider.GetUtcNow();
 
@@ -112,7 +128,7 @@ public class RabbitMqMessageSender(
             }
         }
     }
-    
+
     public async ValueTask DisposeAsync()
     {
         await connectionManager.DisposeAsync();

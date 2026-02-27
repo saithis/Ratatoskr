@@ -18,15 +18,17 @@ public class Ratatoskr(
         CancellationToken cancellationToken = default)
         where TMessage : notnull
     {
-        using var activity = RatatoskrDiagnostics.ActivitySource.StartActivity("Ratatoskr.Publish", ActivityKind.Producer);
+        // https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/
+        using var activity = RatatoskrDiagnostics.ActivitySource.StartActivity("publish", ActivityKind.Producer);
 
         props = enricher.Enrich<TMessage>(props);
 
         if (activity != null)
         {
-            // https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/#messaging-attributes
-            activity.SetTag("messaging.system", "ratatoskr");
-            activity.SetTag("messaging.message.id", props.Id);
+            activity.SetTag(MessagingSemanticConventions.OperationName, "publish");
+            activity.SetTag(MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeCreate);
+            activity.SetTag(MessagingSemanticConventions.System, "ratatoskr");
+            activity.SetTag(MessagingSemanticConventions.MessageId, props.Id);
         }
 
         var serializedMessage = serializer.Serialize(message);
@@ -42,7 +44,7 @@ public class Ratatoskr(
         {
             throw new InvalidOperationException($"No transport found for message '{typeof(TMessage)}'");
         }
-        
+
         List<Exception>? exceptions = null;
         foreach (var sender in sendersToUse)
         {
@@ -85,6 +87,8 @@ public class Ratatoskr(
 
         if (exceptions is { Count: > 0 })
         {
+            activity?.SetTag(MessagingSemanticConventions.ErrorType, exceptions[0].GetType().FullName);
+            activity?.SetStatus(ActivityStatusCode.Error, exceptions[0].Message);
             throw new AggregateException(
                 $"One or more transports failed to send message '{props.Id}'", exceptions);
         }
