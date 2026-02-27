@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="images/banner.png" alt="Ratatoskr" />
+  <img src="images/banner_outlined.png" alt="Ratatoskr" />
 </p>
 
 <p align="center">
