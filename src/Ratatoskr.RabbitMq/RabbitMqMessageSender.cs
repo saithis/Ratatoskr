@@ -43,7 +43,7 @@ public class RabbitMqMessageSender(
             activity.SetTag(MessagingSemanticConventions.OperationName, "send");
             activity.SetTag(MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeSend);
             activity.SetTag(MessagingSemanticConventions.System, "rabbitmq");
-            activity.SetTag(MessagingSemanticConventions.DestinationName, exchange);
+            activity.SetTag(MessagingSemanticConventions.DestinationName, destination);
             activity.SetTag(MessagingSemanticConventions.RabbitMqRoutingKey, routingKey);
             activity.SetTag(MessagingSemanticConventions.MessageId, props.Id);
             activity.SetTag(MessagingSemanticConventions.MessageBodySize, content.Length);
@@ -90,7 +90,7 @@ public class RabbitMqMessageSender(
                 { MessagingSemanticConventions.System, "rabbitmq" },
                 { MessagingSemanticConventions.OperationName, "send" },
                 { MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeSend },
-                { MessagingSemanticConventions.DestinationName, exchange },
+                { MessagingSemanticConventions.DestinationName, destination },
                 { MessagingSemanticConventions.RabbitMqRoutingKey, routingKey },
                 { MessagingSemanticConventions.ServerAddress, options.ConnectionString?.Host },
                 { MessagingSemanticConventions.ServerPort, options.ConnectionString?.Port },

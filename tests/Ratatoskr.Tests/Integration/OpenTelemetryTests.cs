@@ -532,28 +532,19 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
 
     private class FailingTestEventHandler(int failuresBeforeSuccess) : IMessageHandler<TestEvent>
     {
-        private int _attempts = 0;
-        private readonly object _lock = new();
-        public List<TestEvent> HandledMessages { get; } = new();
+        private int _attempts;
+        public ConcurrentBag<TestEvent> HandledMessages { get; } = new();
 
         public Task HandleAsync(TestEvent message, MessageProperties context, CancellationToken cancellationToken)
         {
-            int currentAttempt;
-            lock (_lock)
-            {
-                _attempts++;
-                currentAttempt = _attempts;
-            }
+            var currentAttempt = Interlocked.Increment(ref _attempts);
 
             if (currentAttempt <= failuresBeforeSuccess)
             {
                 throw new InvalidOperationException($"Simulated failure {currentAttempt}");
             }
 
-            lock (_lock)
-            {
-                HandledMessages.Add(message);
-            }
+            HandledMessages.Add(message);
             return Task.CompletedTask;
         }
     }

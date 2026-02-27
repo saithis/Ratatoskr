@@ -126,7 +126,7 @@ internal class RabbitMqConsumer(
             if (messageTime.HasValue)
             {
                 // Avoid negative lag due to clock skew
-                var lag = Math.Max((timeProvider.GetUtcNow() - messageTime.Value).TotalSeconds, 0);
+                var lag = Math.Max((receivedTimestamp - messageTime.Value).TotalSeconds, 0);
                 RatatoskrDiagnostics.ReceiveLag.Record(lag, tags);
             }
 
@@ -190,17 +190,7 @@ internal class RabbitMqConsumer(
         var destinationName = props.GetExchange() ?? originalExchange ?? ea.Exchange;
         var routingKey = props.GetRoutingKey() ?? originalRoutingKey ?? ea.RoutingKey;
 
-        return new TagList
-        {
-            { MessagingSemanticConventions.System, "rabbitmq" },
-            { MessagingSemanticConventions.OperationName, "process" },
-            { MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeProcess },
-            { MessagingSemanticConventions.DestinationSubscriptionName, queueName },
-            { MessagingSemanticConventions.DestinationName, destinationName },
-            { MessagingSemanticConventions.RabbitMqRoutingKey, routingKey },
-            { MessagingSemanticConventions.ServerAddress, options.ConnectionString?.Host },
-            { MessagingSemanticConventions.ServerPort, options.ConnectionString?.Port },
-        };
+        return BuildTagList(destinationName, routingKey, queueName);
     }
 
     private TagList CreateFallbackTags(BasicDeliverEventArgs ea, string queueName)
@@ -209,7 +199,12 @@ internal class RabbitMqConsumer(
         var destinationName = originalExchange ?? ea.Exchange;
         var routingKey = originalRoutingKey ?? ea.RoutingKey;
 
-         return new TagList
+        return BuildTagList(destinationName, routingKey, queueName);
+    }
+
+    private TagList BuildTagList(string destinationName, string routingKey, string queueName)
+    {
+        return new TagList
         {
             { MessagingSemanticConventions.System, "rabbitmq" },
             { MessagingSemanticConventions.OperationName, "process" },
