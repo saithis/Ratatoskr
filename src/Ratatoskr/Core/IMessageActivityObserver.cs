@@ -35,6 +35,18 @@ public enum MessageStage
     /// MessageDispatcher completed handler invocation.
     /// </summary>
     Dispatched,
+
+    /// <summary>
+    /// Message accepted into the inbox (persisted to DB). Inbox-managed handlers will be
+    /// invoked asynchronously by the InboxProcessor.
+    /// </summary>
+    InboxQueued,
+
+    /// <summary>
+    /// InboxProcessor completed invocation of a single inbox-managed handler.
+    /// Fired once per handler per delivery attempt.
+    /// </summary>
+    InboxDispatched,
 }
 
 /// <summary>

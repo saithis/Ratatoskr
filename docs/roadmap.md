@@ -1,10 +1,5 @@
 # Roadmap
 
-1. Inbox pattern
-
-    - Support for the inbox pattern
-    - Idempotent message processing
-
 1. Documentation
 
 1. Release

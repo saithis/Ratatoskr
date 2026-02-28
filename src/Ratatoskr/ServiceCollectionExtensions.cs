@@ -30,6 +30,9 @@ public static class ServiceCollectionExtensions
         // Register ChannelRegistry
         services.AddSingleton(builder.ChannelRegistry);
 
+        // Register InboxHandlerRegistry (empty if no inbox handlers were configured)
+        services.AddSingleton(builder.InboxHandlerRegistry);
+
         // Register serializer
         services.AddSingleton<IMessageSerializer, JsonMessageSerializer>();
 

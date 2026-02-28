@@ -6,6 +6,8 @@ namespace Ratatoskr.Core;
 /// <summary>
 /// Dispatches incoming messages to all registered handlers.
 /// Supports multiple handlers per message type.
+/// When inbox interceptors are registered, inbox-managed handlers are queued to durable storage
+/// instead of being called synchronously.
 /// </summary>
 public class MessageDispatcher(
     ChannelRegistry channelRegistry,
@@ -13,11 +15,17 @@ public class MessageDispatcher(
     IServiceScopeFactory scopeFactory,
     TimeProvider timeProvider,
     IEnumerable<IMessageActivityObserver> observers,
-    ILogger<MessageDispatcher> logger)
+    ILogger<MessageDispatcher> logger,
+    InboxHandlerRegistry? inboxHandlerRegistry = null,
+    IEnumerable<IInboxInterceptor>? inboxInterceptors = null)
 {
+    private readonly IReadOnlyList<IInboxInterceptor> _inboxInterceptors =
+        inboxInterceptors?.ToArray() ?? Array.Empty<IInboxInterceptor>();
+
     /// <summary>
     /// Dispatches a message to all registered handlers.
-    /// All handlers run in the same DI scope.
+    /// Non-inbox handlers run synchronously in the same DI scope.
+    /// Inbox-managed handlers are queued to durable storage via the registered interceptor.
     /// </summary>
     public async Task<DispatchResult> DispatchAsync(byte[] body, MessageProperties properties, CancellationToken cancellationToken, string? channelName = null)
     {
@@ -82,7 +90,7 @@ public class MessageDispatcher(
 
         // Generic handler interface type: IMessageHandler<T>
         var interfaceType = typeof(IMessageHandler<>).MakeGenericType(messageType);
-        var handlersInstances = scope.ServiceProvider.GetServices(interfaceType);
+        var handlersInstances = scope.ServiceProvider.GetServices(interfaceType).ToArray();
 
         if (!handlersInstances.Any())
         {
@@ -90,9 +98,41 @@ public class MessageDispatcher(
              return DispatchResult.NoHandlers;
         }
 
+        // 4. If inbox interceptors are registered, queue inbox-managed handlers to durable storage
+        var inboxHandlers = inboxHandlerRegistry != null && _inboxInterceptors.Count > 0
+            ? inboxHandlerRegistry.GetByMessageType(messageType)
+            : (IReadOnlyList<InboxHandlerRegistration>)Array.Empty<InboxHandlerRegistration>();
+
+        if (inboxHandlers.Count > 0)
+        {
+            try
+            {
+                foreach (var interceptor in _inboxInterceptors)
+                {
+                    await interceptor.AcceptAsync(scope.ServiceProvider, body, properties, inboxHandlers, cancellationToken);
+                }
+                logger.LogDebug("Queued {Count} inbox-managed handler(s) for message '{Id}' of type '{Type}'",
+                    inboxHandlers.Count, properties.Id, properties.Type);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Inbox interceptor failed for message '{Id}' of type '{Type}'", properties.Id, properties.Type);
+                exceptions ??= [];
+                exceptions.Add(ex);
+            }
+        }
+
+        // 5. Call non-inbox handlers synchronously
+        var inboxHandlerTypes = new HashSet<Type>(inboxHandlers.Select(h => h.HandlerType));
+
         foreach (var handler in handlersInstances)
         {
             if (handler == null) continue;
+
+            // Skip inbox-managed handlers — they will be delivered by InboxProcessor
+            if (inboxHandlerTypes.Contains(handler.GetType()))
+                continue;
+
             try
             {
                 var handleMethod = interfaceType.GetMethod(nameof(IMessageHandler<object>.HandleAsync))!;
@@ -110,7 +150,20 @@ public class MessageDispatcher(
             }
         }
 
-        var result = exceptions != null ? DispatchResult.RecoverableError : DispatchResult.Success;
+        DispatchResult result;
+        if (exceptions != null)
+        {
+            result = DispatchResult.RecoverableError;
+        }
+        else if (inboxHandlers.Count > 0 && inboxHandlerTypes.Count == handlersInstances.Length)
+        {
+            // All registered handlers were inbox-managed; none called synchronously
+            result = DispatchResult.Queued;
+        }
+        else
+        {
+            result = DispatchResult.Success;
+        }
 
         foreach (var observer in observers)
         {
@@ -149,4 +202,11 @@ public enum DispatchResult
     NoHandlers,
     RecoverableError,
     PermanentError,
+
+    /// <summary>
+    /// All handlers for this message were inbox-managed and have been queued to durable storage.
+    /// They will be delivered asynchronously by the InboxProcessor.
+    /// Transports should treat this the same as <see cref="Success"/> (ack the message).
+    /// </summary>
+    Queued,
 }
