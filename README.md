@@ -2,10 +2,9 @@
   <img src="images/banner_outlined.png" alt="Ratatoskr" />
 </p>
 
-<p align="center">
-  A modern .NET library for reliable event/message publishing using the outbox pattern with CloudEvents support.
-</p>
+# Ratatoskr
 
+  A modern .NET library for reliable event/message publishing using the outbox pattern with CloudEvents support.
 
 ## Getting Started
 
