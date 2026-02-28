@@ -53,14 +53,12 @@ public class AppDbContext : DbContext, IOutboxDbContext, IInboxDbContext
 
 ### 2. Register with `AddRatatoskr`
 
-Call `UseEfCoreInbox` **after** `UseLocalTransport` (if using local transport) so that `LocalMessageSender` can be replaced with the durable version.
+`UseEfCoreInbox` can be called in any order relative to `UseLocalTransport` or `UseRabbitMq`.
 
 ```csharp
 services.AddRatatoskr(bus =>
 {
     bus.UseLocalTransport(); // or UseRabbitMq(...)
-
-    // Call UseEfCoreInbox AFTER UseLocalTransport
     bus.UseEfCoreInbox<AppDbContext>(inbox =>
     {
         inbox.WithMaxRetries(5);
@@ -68,9 +66,9 @@ services.AddRatatoskr(bus =>
         inbox.WithPollingInterval(TimeSpan.FromSeconds(30));
     });
 
-    // Inbox-managed handlers — identified by a stable string key
-    bus.AddHandler<OrderPlaced, FulfillmentHandler>("fulfillment");
-    bus.AddHandler<OrderPlaced, NotificationHandler>("notification");
+    // Inbox-managed handlers — opted in via WithInbox("stable-key")
+    bus.AddHandler<OrderPlaced, FulfillmentHandler>(cfg => cfg.WithInbox("fulfillment"));
+    bus.AddHandler<OrderPlaced, NotificationHandler>(cfg => cfg.WithInbox("notification"));
 
     // Fire-and-forget (non-inbox) handler — existing behaviour
     bus.AddHandler<OrderPlaced, AuditLogHandler>();
@@ -79,7 +77,6 @@ services.AddRatatoskr(bus =>
 services.AddDbContext<AppDbContext>((sp, opts) =>
 {
     opts.UseNpgsql("...");
-    opts.RegisterInbox<AppDbContext>(sp); // no-op today; included for API consistency
 });
 ```
 
@@ -87,13 +84,32 @@ services.AddDbContext<AppDbContext>((sp, opts) =>
 
 ```csharp
 // Inbox-managed: durable delivery, per-handler retry, deduplication
-bus.AddHandler<OrderPlaced, FulfillmentHandler>("fulfillment");
+bus.AddHandler<OrderPlaced, FulfillmentHandler>(cfg => cfg.WithInbox("fulfillment"));
 
 // Fire-and-forget: synchronous, no deduplication
 bus.AddHandler<OrderPlaced, AuditLogHandler>();
 ```
 
 The **handler key** (`"fulfillment"`) is persisted in the database. It must be stable across deployments — renaming the key will cause existing in-flight messages to be poisoned with an "unknown handler key" error.
+
+#### Per-handler inbox opt-in API
+
+| Method | Effect |
+|---|---|
+| `cfg.WithInbox("key")` | Enroll handler in inbox with the given stable key. |
+| `cfg.WithInbox()` | Enroll with the handler's CLR full name as the stable key. |
+| `cfg.WithoutInbox()` | Explicitly exclude this handler from the inbox (overrides global default). |
+| *(no call)* | Determined by `WithDefaultInboxEnabled()` — excluded by default. |
+
+#### Global default opt-in
+
+Use `WithDefaultInboxEnabled()` to automatically enroll all handlers that have not explicitly called `WithoutInbox()`:
+
+```csharp
+bus.UseEfCoreInbox<AppDbContext>(inbox => inbox.WithDefaultInboxEnabled());
+// All AddHandler calls without WithoutInbox() are automatically enrolled.
+// The handler's CLR full name is used as the stable key.
+```
 
 ## Configuration Options
 
@@ -111,8 +127,8 @@ The **handler key** (`"fulfillment"`) is persisted in the database. It must be s
 You can register both inbox-managed and fire-and-forget handlers for the same message type:
 
 ```csharp
-bus.AddHandler<OrderPlaced, FulfillmentHandler>("fulfillment"); // inbox
-bus.AddHandler<OrderPlaced, AuditLogHandler>();                 // fire-and-forget
+bus.AddHandler<OrderPlaced, FulfillmentHandler>(cfg => cfg.WithInbox("fulfillment")); // inbox
+bus.AddHandler<OrderPlaced, AuditLogHandler>();                                        // fire-and-forget
 ```
 
 - **Non-inbox handlers** are called synchronously during message dispatch (existing behaviour).
@@ -136,3 +152,31 @@ Two new `MessageStage` values are emitted to all registered `IMessageActivityObs
 |---|---|
 | `MessageStage.InboxQueued` | Message accepted into inbox (interceptor called). |
 | `MessageStage.InboxDispatched` | A single handler status was attempted by `InboxProcessor` (success or failure). |
+
+When using `Ratatoskr.Testing`, these stages are available on `MessageTrackingSession`:
+
+```csharp
+await using var session = Services.CreateTrackingSession();
+// ... publish message ...
+var queued = await session.WaitForInboxQueued<MyMessage>();
+var dispatched = await session.WaitForInboxDispatched<MyMessage>();
+```
+
+`TrackedMessage.TransportName` reflects the transport that delivered the message to the inbox (e.g. `"rabbitmq"`, `"local"`).
+
+## Testing
+
+Use `WithoutBackgroundProcessing()` to disable the `InboxProcessor` background service in integration tests. This gives deterministic control over when inbox processing runs, so tests can inspect the database state between acceptance and delivery:
+
+```csharp
+services.AddRatatoskr(bus =>
+{
+    bus.UseLocalTransport();
+    bus.AddHandler<OrderPlaced, FulfillmentHandler>(cfg => cfg.WithInbox("fulfillment"));
+    bus.UseEfCoreInbox<AppDbContext>(inbox => inbox.WithoutBackgroundProcessing());
+});
+
+// In the test body, trigger processing manually:
+var processor = Services.GetRequiredService<InboxMessageProcessor<AppDbContext>>();
+await processor.ProcessBatchAsync(includeStuckMessageDetection: false, CancellationToken.None);
+```

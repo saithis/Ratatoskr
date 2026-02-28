@@ -1,7 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -29,8 +28,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, InboxHandlerA>("handler-a");
-                bus.AddHandler<TestEvent, InboxHandlerB>("handler-b");
+                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("handler-a"));
+                bus.AddHandler<TestEvent, InboxHandlerB>(cfg => cfg.WithInbox("handler-b"));
                 bus.UseEfCoreInbox<TestDbContext>();
             });
 
@@ -89,11 +88,10 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, InboxHandlerA>("succeeding");
-                bus.AddHandler<TestEvent, AlwaysFailingHandler>("failing");
+                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("succeeding"));
+                bus.AddHandler<TestEvent, AlwaysFailingHandler>(cfg => cfg.WithInbox("failing"));
+                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
             });
-
-            AddInboxWithoutHostedService(services);
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
                 opts.UseNpgsql(PostgresConnectionString));
@@ -162,10 +160,13 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, AlwaysFailingHandler>("failing");
+                bus.AddHandler<TestEvent, AlwaysFailingHandler>(cfg => cfg.WithInbox("failing"));
+                bus.UseEfCoreInbox<TestDbContext>(inbox =>
+                {
+                    inbox.WithMaxRetries(10);
+                    inbox.WithoutBackgroundProcessing();
+                });
             });
-
-            AddInboxWithoutHostedService(services, opts => opts.MaxRetries = 10);
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
                 opts.UseNpgsql(PostgresConnectionString));
@@ -233,10 +234,13 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, AlwaysFailingHandler>("failing");
+                bus.AddHandler<TestEvent, AlwaysFailingHandler>(cfg => cfg.WithInbox("failing"));
+                bus.UseEfCoreInbox<TestDbContext>(inbox =>
+                {
+                    inbox.WithMaxRetries(3);
+                    inbox.WithoutBackgroundProcessing();
+                });
             });
-
-            AddInboxWithoutHostedService(services, opts => opts.MaxRetries = 3);
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
                 opts.UseNpgsql(PostgresConnectionString));
@@ -289,7 +293,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, CountingHandler>("counting");
+                bus.AddHandler<TestEvent, CountingHandler>(cfg => cfg.WithInbox("counting"));
                 bus.UseEfCoreInbox<TestDbContext>();
             });
 
@@ -357,11 +361,13 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, InboxHandlerA>("handler-a");
+                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("handler-a"));
+                bus.UseEfCoreInbox<TestDbContext>(inbox =>
+                {
+                    inbox.Configure(opts => opts.StuckMessageThreshold = TimeSpan.FromMinutes(5));
+                    inbox.WithoutBackgroundProcessing();
+                });
             });
-
-            AddInboxWithoutHostedService(services, opts =>
-                opts.StuckMessageThreshold = TimeSpan.FromMinutes(5));
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
                 opts.UseNpgsql(PostgresConnectionString));
@@ -434,7 +440,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 bus.UseLocalTransport();
                 bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
                 bus.AddHandler<TestEvent, TestEventHandler>(nonInboxHandler); // Non-inbox (fire-and-forget)
-                bus.AddHandler<TestEvent, InboxHandlerA>("inbox-handler");   // Inbox-managed
+                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("inbox-handler"));
                 bus.UseEfCoreInbox<TestDbContext>();
             });
 
@@ -487,7 +493,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, InboxHandlerA>("inbox-handler");
+                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("inbox-handler"));
                 bus.AddEfCoreOutbox<TestDbContext>();
                 bus.UseEfCoreInbox<TestDbContext>();
             });
@@ -538,6 +544,145 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
         });
     }
 
+    [Test]
+    public async Task Inbox_DefaultInboxEnabled_AllHandlersEnrolled()
+    {
+        // Arrange: UseEfCoreInbox with WithDefaultInboxEnabled() — all handlers get inbox by default
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
+                // No explicit WithInbox() — rely on global default
+                bus.AddHandler<TestEvent, InboxHandlerA>();
+                bus.AddHandler<TestEvent, InboxHandlerB>();
+                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithDefaultInboxEnabled());
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await InitializeDatabase();
+
+        await InScopeAsync(async ctx =>
+        {
+            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+            await bus.PublishDirectAsync(new TestEvent { Id = "default-inbox-1" });
+        });
+
+        // Both handlers should be in the inbox (enrolled via global default)
+        await WaitForConditionAsync(
+            async () => await InScopeAsync(async ctx =>
+            {
+                var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                var statuses = await db.Set<InboxHandlerStatusEntity>().ToListAsync();
+                return statuses.Count == 2 && statuses.All(s => s.CompletedAt != null);
+            }),
+            TimeSpan.FromSeconds(15));
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var statuses = await db.Set<InboxHandlerStatusEntity>().ToListAsync();
+            statuses.Should().HaveCount(2);
+            // Keys should be the handler CLR full names
+            statuses.Should().AllSatisfy(s => s.HandlerKey.Should().Contain("InboxHandler"));
+        });
+    }
+
+    [Test]
+    public async Task Inbox_ExplicitWithoutInbox_HandlerSkippedByInbox()
+    {
+        // Arrange: one handler with inbox, one explicitly opted out
+        var nonInboxHandler = new TestEventHandler();
+
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
+                bus.AddHandler<TestEvent, TestEventHandler>(nonInboxHandler);
+                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("handler-a"));
+                // WithDefaultInboxEnabled but TestEventHandler explicitly opts out via instance registration
+                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithDefaultInboxEnabled());
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await InitializeDatabase();
+
+        await InScopeAsync(async ctx =>
+        {
+            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+            await bus.PublishDirectAsync(new TestEvent { Id = "opt-out-1" });
+        });
+
+        // Wait for inbox handler to complete
+        await WaitForConditionAsync(
+            async () => await InScopeAsync(async ctx =>
+            {
+                var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                var status = await db.Set<InboxHandlerStatusEntity>()
+                    .SingleOrDefaultAsync(s => s.HandlerKey == "handler-a");
+                return status?.CompletedAt != null;
+            }),
+            TimeSpan.FromSeconds(15));
+
+        // Only one inbox handler status (InboxHandlerA) — TestEventHandler was called directly
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var statuses = await db.Set<InboxHandlerStatusEntity>().ToListAsync();
+            statuses.Should().HaveCount(1);
+            statuses[0].HandlerKey.Should().Be("handler-a");
+        });
+
+        nonInboxHandler.HandledMessages.Should().ContainSingle(m => m.Id == "opt-out-1");
+    }
+
+    [Test]
+    public async Task Inbox_OrderIndependent_UseEfCoreInboxBeforeUseLocalTransport()
+    {
+        // Verifies that UseEfCoreInbox can be called BEFORE UseLocalTransport
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                // Intentionally call UseEfCoreInbox FIRST
+                bus.UseEfCoreInbox<TestDbContext>();
+                bus.UseLocalTransport();
+                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
+                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("handler-a"));
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await InitializeDatabase();
+
+        await InScopeAsync(async ctx =>
+        {
+            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+            await bus.PublishDirectAsync(new TestEvent { Id = "order-1" });
+        });
+
+        await WaitForConditionAsync(
+            async () => await InScopeAsync(async ctx =>
+            {
+                var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                var status = await db.Set<InboxHandlerStatusEntity>()
+                    .SingleOrDefaultAsync(s => s.HandlerKey == "handler-a");
+                return status?.CompletedAt != null;
+            }),
+            TimeSpan.FromSeconds(15));
+    }
+
     #endregion
 
     #region Helpers
@@ -549,28 +694,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             await db.Database.EnsureCreatedAsync();
         });
-    }
-
-    /// <summary>
-    /// Registers inbox components as singletons WITHOUT the <see cref="IHostedService"/> background service.
-    /// Gives tests deterministic control over when inbox processing runs via <see cref="ProcessInboxAsync"/>.
-    /// Must be called after <c>UseLocalTransport()</c> (so LocalMessageSender is registered to replace).
-    /// </summary>
-    private static void AddInboxWithoutHostedService(
-        IServiceCollection services,
-        Action<InboxOptions>? configureOptions = null)
-    {
-        var options = new InboxOptions();
-        configureOptions?.Invoke(options);
-        services.AddSingleton(Options.Create(options));
-        services.AddSingleton<InboxProcessor<TestDbContext>>();
-        // Do NOT register as IHostedService — tests call ProcessInboxAsync manually.
-        services.AddSingleton<IInboxInterceptor, InboxInterceptor<TestDbContext>>();
-
-        // Replace LocalMessageSender with DurableLocalMessageSender so inbox entries are written
-        // when the test calls PublishDirectAsync.
-        services.RemoveAll<IMessageSender>();
-        services.AddSingleton<IMessageSender, DurableLocalMessageSender<TestDbContext>>();
     }
 
     private async Task<int> ProcessInboxAsync(

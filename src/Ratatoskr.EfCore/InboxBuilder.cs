@@ -8,6 +8,7 @@ namespace Ratatoskr.EfCore;
 public class InboxBuilder<TDbContext> where TDbContext : DbContext, IInboxDbContext
 {
     internal InboxOptions Options { get; } = new();
+    internal bool RegisterBackgroundService { get; private set; } = true;
 
     internal InboxBuilder() { }
 
@@ -48,6 +49,27 @@ public class InboxBuilder<TDbContext> where TDbContext : DbContext, IInboxDbCont
     public InboxBuilder<TDbContext> WithMaxRetryDelay(TimeSpan delay)
     {
         Options.MaxRetryDelay = delay;
+        return this;
+    }
+
+    /// <summary>
+    /// Enrolls all handlers (that have not explicitly called <c>WithoutInbox()</c>) in the inbox by default.
+    /// Handlers without a stable key use the handler's CLR full name as the stable key.
+    /// </summary>
+    public InboxBuilder<TDbContext> WithDefaultInboxEnabled()
+    {
+        Options.DefaultHandlerInboxEnabled = true;
+        return this;
+    }
+
+    /// <summary>
+    /// Prevents the <see cref="InboxProcessor{TDbContext}"/> from being registered as a hosted service.
+    /// Use this in integration tests where you want deterministic control over when inbox processing runs
+    /// (e.g. by calling <c>InboxMessageProcessor.ProcessBatchAsync</c> directly).
+    /// </summary>
+    public InboxBuilder<TDbContext> WithoutBackgroundProcessing()
+    {
+        RegisterBackgroundService = false;
         return this;
     }
 

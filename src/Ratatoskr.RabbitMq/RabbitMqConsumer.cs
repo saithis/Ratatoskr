@@ -133,7 +133,7 @@ internal class RabbitMqConsumer(
 
             activity = StartActivity(props, tags, body.Length, ea.DeliveryTag);
 
-            var result = await dispatcher.DispatchAsync(body, props, cancellationToken, channelName);
+            var result = await dispatcher.DispatchAsync(body, props, cancellationToken, channelName, RabbitMqConstants.TransportName);
 
             errorType = result switch
             {

@@ -18,5 +18,6 @@ public interface IInboxInterceptor
         byte[] body,
         MessageProperties properties,
         IReadOnlyList<InboxHandlerRegistration> managedHandlers,
+        string transportName,
         CancellationToken cancellationToken);
 }

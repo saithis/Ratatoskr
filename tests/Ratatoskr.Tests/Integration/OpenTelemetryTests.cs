@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
+using Ratatoskr.Local;
 using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Tests.Fixtures;
@@ -399,6 +400,112 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         AssertMetricTags(pubMetric, ExchangeName, queueName: null, RoutingKey);
     }
 
+    [Test]
+    public async Task Metrics_Inbox_RecordsProcessingDuration()
+    {
+        // 1. Setup MeterListener
+        var metricMeasurements = new ConcurrentBag<(string InstrumentName, double Value, KeyValuePair<string, object?>[] Tags)>();
+        using var meterListener = CreateMeterListener(metricMeasurements);
+
+        // 2. Setup local transport + inbox (no RabbitMQ needed for this test)
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventConsumeChannel("otel-inbox-events", c => c.Consumes<TestEvent>());
+                bus.AddHandler<TestEvent, NoOpHandler>(cfg => cfg.WithInbox("otel-noop"));
+                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithPollingInterval(TimeSpan.FromMilliseconds(500)));
+            });
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await InitializeDatabase();
+
+        // 3. Publish a message so inbox has something to process
+        await InScopeAsync(async ctx =>
+        {
+            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+            await bus.PublishDirectAsync(new TestEvent { Id = "otel-inbox-1", Data = "inbox metrics" });
+        });
+
+        // 4. Wait for inbox processor to run and record metrics
+        await WaitForConditionAsync(
+            () => metricMeasurements.Any(m => m.InstrumentName == "ratatoskr.inbox.process.duration"),
+            TimeSpan.FromSeconds(15));
+
+        // 5. Assert — inbox-specific metrics are recorded (not the outbox ones)
+        metricMeasurements.Should().Contain(m => m.InstrumentName == "ratatoskr.inbox.process.duration");
+        metricMeasurements.Should().Contain(m => m.InstrumentName == "ratatoskr.inbox.batch.size");
+        metricMeasurements.Should().Contain(m => m.InstrumentName == "ratatoskr.inbox.deliver.count"
+            && m.Tags.Any(t => t.Key == "status" && (string?)t.Value == "success"));
+    }
+
+    [Test]
+    public async Task Tracing_Inbox_EmitsDeliverSpan()
+    {
+        // 1. Setup ActivityListener
+        var activities = new ConcurrentBag<Activity>();
+        using var listener = CreateActivityListener(activities);
+        ActivitySource.AddActivityListener(listener);
+
+        // 2. Setup local transport + inbox
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventConsumeChannel("otel-inbox-trace", c => c.Consumes<TestEvent>());
+                bus.AddHandler<TestEvent, NoOpHandler>(cfg => cfg.WithInbox("otel-trace-noop"));
+                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithPollingInterval(TimeSpan.FromMilliseconds(500)));
+            });
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await InitializeDatabase();
+
+        // 3. Publish with a known message ID
+        var eventId = "otel-inbox-trace-1";
+        await InScopeAsync(async ctx =>
+        {
+            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+            await bus.PublishDirectAsync(
+                new TestEvent { Id = eventId, Data = "inbox trace" },
+                new MessageProperties { Id = eventId });
+        });
+
+        // 4. Wait for the "deliver inbox" span to appear
+        await WaitForConditionAsync(
+            () => activities.Any(a =>
+                a.OperationName == "deliver inbox" &&
+                a.TagObjects.Any(t => t.Key == "messaging.message.id" && (string?)t.Value == eventId)),
+            TimeSpan.FromSeconds(15));
+
+        // 5. Assert — span has correct kind, system, and handler key
+        var deliverActivity = activities.First(a =>
+            a.OperationName == "deliver inbox" &&
+            a.TagObjects.Any(t => t.Key == "messaging.message.id" && (string?)t.Value == eventId));
+
+        deliverActivity.Kind.Should().Be(ActivityKind.Consumer);
+        deliverActivity.TagObjects.Should().Contain(t => t.Key == "messaging.system" && (string?)t.Value == "ratatoskr");
+        deliverActivity.TagObjects.Should().Contain(t => t.Key == "messaging.operation.name" && (string?)t.Value == "deliver");
+        deliverActivity.TagObjects.Should().Contain(t => t.Key == "messaging.operation.type" && (string?)t.Value == "process");
+        deliverActivity.TagObjects.Should().Contain(t => t.Key == "ratatoskr.inbox.handler.key" && (string?)t.Value == "otel-trace-noop");
+
+        // Verify trace context propagation: the deliver span lives in the same trace as the original publish
+        var publishActivity = activities.FirstOrDefault(a => a.OperationName == "publish");
+        if (publishActivity != null)
+        {
+            deliverActivity.TraceId.Should().Be(publishActivity.TraceId,
+                "inbox delivery must propagate the original message trace ID");
+        }
+
+        // Verify no error status on successful delivery
+        deliverActivity.Status.Should().Be(ActivityStatusCode.Unset);
+    }
+
     // Helpers
 
     private void ConfigureRatatoskr<THandler>(IServiceCollection services, THandler handler, bool useOutbox, Action<RabbitMqConsumeOptions>? configureConsumer = null)
@@ -537,6 +644,12 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         metric.Tags.Should().Contain(t => t.Key == "messaging.operation.type");
         metric.Tags.Should().Contain(t => t.Key == "server.address");
         metric.Tags.Should().Contain(t => t.Key == "server.port");
+    }
+
+    private class NoOpHandler : IMessageHandler<TestEvent>
+    {
+        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
+            => Task.CompletedTask;
     }
 
     private class FailingTestEventHandler(int failuresBeforeSuccess) : IMessageHandler<TestEvent>

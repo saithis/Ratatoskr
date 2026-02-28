@@ -60,4 +60,7 @@ public class InboxHandlerRegistry
 
     /// <summary>True if no handlers have been registered with inbox keys.</summary>
     public bool IsEmpty => _byKey.Count == 0;
+
+    /// <summary>Returns all registered inbox handler registrations.</summary>
+    public IReadOnlyCollection<InboxHandlerRegistration> GetAll() => _byKey.Values;
 }

@@ -160,9 +160,33 @@ internal class DurableLocalMessageSender<TDbContext>(
                 InboxHandlerStatusEntity.Create(messageId, handler.Key, timeProvider));
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+        {
+            // Another instance or an outbox retry already persisted this message.
+            // The unique constraint fired — safe to ignore.
+            logger.LogDebug(
+                "Inbox entries for message '{MessageId}' were already inserted by a concurrent instance (unique constraint). Ignoring.",
+                messageId);
+            return;
+        }
 
         logger.LogDebug("Persisted inbox entries for message '{MessageId}', {HandlerCount} handler(s)",
             messageId, inboxHandlers.Count);
+    }
+
+    private static bool IsUniqueConstraintViolation(DbUpdateException ex)
+    {
+        var inner = ex.InnerException;
+        if (inner == null) return false;
+        var msg = inner.Message;
+        return msg.Contains("23505")       // PostgreSQL
+            || msg.Contains("UNIQUE")      // SQLite
+            || msg.Contains("unique")      // SQLite / generic
+            || msg.Contains("2601")        // SQL Server
+            || msg.Contains("2627");       // SQL Server
     }
 }

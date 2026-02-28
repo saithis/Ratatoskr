@@ -1,10 +1,15 @@
 using System.Text;
 using AwesomeAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using RabbitMQ.Client;
 using Ratatoskr.CloudEvents;
+using Ratatoskr.Core;
+using Ratatoskr.EfCore;
+using Ratatoskr.EfCore.Internal;
+using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Tests.Fixtures;
-using Ratatoskr.RabbitMq.Config;
 
 namespace Ratatoskr.Tests.Integration;
 
@@ -164,6 +169,59 @@ public class ConsumeTests(
         handler.ReceivedMessages.Should().AllSatisfy(e => e.Id.Should().Be("throw-1"));
     }
 
+    [Test]
+    public async Task Consume_WithInboxHandler_ViaRabbitMq_MessageAcceptedWithRabbitMqTransportName()
+    {
+        // Verifies that when a message arrives from RabbitMQ and is dispatched to an inbox handler,
+        // the inbox message is stored with TransportName = "rabbitmq" (Issue 6 fix).
+        // Background processing is disabled so we can inspect the DB before the handler runs.
+
+        // Arrange
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                ConfigureBus(bus, QueueName);
+                bus.AddHandler<TestEvent, NoOpHandler>(cfg => cfg.WithInbox("consume-noop"));
+                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
+            });
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            await db.Database.EnsureCreatedAsync();
+        });
+
+        // Act — publish to RabbitMQ, consumer receives and accepts to inbox
+        var eventId = Guid.NewGuid().ToString();
+        await PublishToRabbitMqAsync(exchange: "", routingKey: QueueName,
+            new TestEvent { Id = eventId, Data = "inbox via rmq" });
+
+        // Assert — message appears in inbox DB with RabbitMQ transport name
+        await WaitForConditionAsync(
+            async () => await InScopeAsync(async ctx =>
+            {
+                var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                return await db.Set<InboxMessageEntity>().AnyAsync(m => m.Id == eventId);
+            }),
+            TimeSpan.FromSeconds(10));
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var inboxMessage = await db.Set<InboxMessageEntity>().SingleAsync(m => m.Id == eventId);
+            inboxMessage.TransportName.Should().Be("rabbitmq");
+
+            var status = await db.Set<InboxHandlerStatusEntity>()
+                .SingleAsync(s => s.MessageId == eventId);
+            status.HandlerKey.Should().Be("consume-noop");
+            status.CompletedAt.Should().BeNull("background processing is disabled");
+        });
+    }
+
     private void ConfigureBus(RatatoskrBuilder bus, string queueName)
     {
         bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
@@ -235,5 +293,11 @@ public class ConsumeTests(
         };
         
         await channel.BasicPublishAsync(exchange: "", routingKey: routingKey, mandatory: false, basicProperties: props, body: body);
+    }
+
+    private class NoOpHandler : IMessageHandler<TestEvent>
+    {
+        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
+            => Task.CompletedTask;
     }
 }

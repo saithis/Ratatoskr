@@ -23,6 +23,7 @@ internal class InboxInterceptor<TDbContext>(
         byte[] body,
         MessageProperties properties,
         IReadOnlyList<InboxHandlerRegistration> managedHandlers,
+        string transportName,
         CancellationToken cancellationToken)
     {
         var messageId = properties.Id;
@@ -32,11 +33,10 @@ internal class InboxInterceptor<TDbContext>(
             throw new InvalidOperationException("Messages must have a non-empty Id for inbox deduplication.");
         }
 
-        var transportName = properties.TransportName() ?? "unknown";
-
         var dbContext = scopedServices.GetRequiredService<TDbContext>();
 
-        // Insert InboxMessage (skip if already exists — dedup)
+        // Insert InboxMessage if not already present — dedup via unique constraint on Id.
+        // On concurrent delivery (multiple app instances), the second insert is silently ignored.
         var messageExists = await dbContext.Set<InboxMessageEntity>()
             .AnyAsync(m => m.Id == messageId, cancellationToken);
 
@@ -51,7 +51,8 @@ internal class InboxInterceptor<TDbContext>(
             logger.LogDebug("Inbox message '{MessageId}' already exists (duplicate delivery), updating handler statuses only", messageId);
         }
 
-        // Insert InboxHandlerStatuses for handlers not yet present (dedup per handler key)
+        // Insert InboxHandlerStatuses for handlers not yet present (dedup per handler key).
+        // On concurrent delivery, the unique constraint on (MessageId, HandlerKey) prevents duplicates.
         var existingKeys = await dbContext.Set<InboxHandlerStatusEntity>()
             .Where(s => s.MessageId == messageId)
             .Select(s => s.HandlerKey)
@@ -65,14 +66,35 @@ internal class InboxInterceptor<TDbContext>(
                 handler.Key, messageId);
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+        {
+            // Another instance raced us — the deduplication constraint fired.
+            // This is expected and safe: the other instance will process the handlers.
+            logger.LogDebug(
+                "Inbox message '{MessageId}' was already inserted by a concurrent instance (unique constraint). Ignoring.",
+                messageId);
+            return;
+        }
+
         await inboxProcessor.TriggerAsync(cancellationToken);
     }
-}
 
-/// <summary>Extension to read the transport name from properties metadata.</summary>
-file static class MessagePropertiesExtensions
-{
-    internal static string? TransportName(this MessageProperties properties) =>
-        properties.TransportMetadata.TryGetValue("transport-name", out var name) ? name : null;
+    private static bool IsUniqueConstraintViolation(DbUpdateException ex)
+    {
+        // PostgreSQL error code 23505 = unique_violation
+        // SQLite error code 19 = SQLITE_CONSTRAINT (unique)
+        // SQL Server error code 2601 / 2627 = unique constraint
+        var inner = ex.InnerException;
+        if (inner == null) return false;
+        var msg = inner.Message;
+        return msg.Contains("23505")       // PostgreSQL
+            || msg.Contains("UNIQUE")      // SQLite
+            || msg.Contains("unique")      // SQLite / generic
+            || msg.Contains("2601")        // SQL Server
+            || msg.Contains("2627");       // SQL Server
+    }
 }

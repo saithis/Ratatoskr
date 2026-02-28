@@ -10,5 +10,12 @@ public record InboxHandlerRegistration(
     Type MessageType,
     /// <summary>CLR type of the handler class to resolve from DI.</summary>
     Type HandlerType,
-    /// <summary>Wire type name from <see cref="RatatoskrMessageAttribute"/> (e.g. "order.created").</summary>
-    string? WireTypeName);
+    /// <summary>Wire type name (e.g. "order.created") — from config or [RatatoskrMessage] attribute.</summary>
+    string? WireTypeName)
+{
+    /// <summary>
+    /// Compiled delegate for invoking <see cref="IMessageHandler{T}.HandleAsync"/> without per-call reflection.
+    /// </summary>
+    public Func<object, object, MessageProperties, CancellationToken, Task> Invoke { get; } =
+        HandlerInvokerCache.Get(MessageType);
+}

@@ -55,4 +55,9 @@ public static class RatatoskrDiagnostics
     public static readonly Counter<long> OutboxProcessCount = Meter.CreateCounter<long>("ratatoskr.outbox.process.count", "{message}", "Number of messages processed from the outbox.");
     public static readonly Histogram<double> OutboxProcessDuration = Meter.CreateHistogram<double>("ratatoskr.outbox.process.duration", "s", "Duration of the outbox processing batch.");
     public static readonly Histogram<long> OutboxBatchSize = Meter.CreateHistogram<long>("ratatoskr.outbox.batch.size", "{message}", "Number of messages picked up in a batch.");
+
+    // Inbox Metrics
+    public static readonly Counter<long> InboxDeliverCount = Meter.CreateCounter<long>("ratatoskr.inbox.deliver.count", "{message}", "Number of inbox handler deliveries attempted.");
+    public static readonly Histogram<double> InboxProcessDuration = Meter.CreateHistogram<double>("ratatoskr.inbox.process.duration", "s", "Duration of the inbox processing batch.");
+    public static readonly Histogram<long> InboxBatchSize = Meter.CreateHistogram<long>("ratatoskr.inbox.batch.size", "{message}", "Number of inbox handler statuses picked up in a batch.");
 }

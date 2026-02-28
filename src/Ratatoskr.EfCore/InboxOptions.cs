@@ -57,4 +57,12 @@ public class InboxOptions
     /// Default: "InboxProcessor".
     /// </summary>
     public string LockName { get; set; } = "InboxProcessor";
+
+    /// <summary>
+    /// When true, all handlers registered via <c>AddHandler</c> without an explicit
+    /// <c>WithoutInbox()</c> are automatically enrolled in the inbox.
+    /// The handler's CLR full name is used as the stable key unless overridden by <c>WithInbox("key")</c>.
+    /// Default: false (handlers must opt in explicitly).
+    /// </summary>
+    public bool DefaultHandlerInboxEnabled { get; set; } = false;
 }

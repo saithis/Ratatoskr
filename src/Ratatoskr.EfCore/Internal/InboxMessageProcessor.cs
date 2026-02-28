@@ -66,6 +66,8 @@ internal class InboxMessageProcessor<TDbContext>(
             status.MarkAsProcessing(timeProvider);
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        RatatoskrDiagnostics.InboxBatchSize.Record(statuses.Length);
+
         var batchStartTimestamp = Stopwatch.GetTimestamp();
         var successCount = 0;
 
@@ -93,9 +95,23 @@ internal class InboxMessageProcessor<TDbContext>(
             }
 
             MessageProperties? props = null;
+            Activity? deliverActivity = null;
             try
             {
                 props = inboxMessage.GetProperties();
+
+                // Start a Consumer span, parented to the original message trace
+                ActivityContext.TryParse(props.TraceParent, props.TraceState, out var parentContext);
+                deliverActivity = RatatoskrDiagnostics.ActivitySource.StartActivity(
+                    "deliver inbox", ActivityKind.Consumer, parentContext);
+                if (deliverActivity != null)
+                {
+                    deliverActivity.SetTag(MessagingSemanticConventions.OperationName, "deliver");
+                    deliverActivity.SetTag(MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeProcess);
+                    deliverActivity.SetTag(MessagingSemanticConventions.System, "ratatoskr");
+                    deliverActivity.SetTag(MessagingSemanticConventions.MessageId, props.Id);
+                    deliverActivity.SetTag("ratatoskr.inbox.handler.key", status.HandlerKey);
+                }
 
                 // Resolve handler in a fresh DI scope (matches MessageDispatcher behaviour)
                 using var handlerScope = scopeFactory.CreateScope();
@@ -106,29 +122,33 @@ internal class InboxMessageProcessor<TDbContext>(
                               ?? throw new InvalidOperationException(
                                   $"Deserialized message of type '{registration.MessageType.Name}' was null.");
 
-                // Invoke handler via the IMessageHandler<T> interface
-                var interfaceType = typeof(IMessageHandler<>).MakeGenericType(registration.MessageType);
-                var handleMethod = interfaceType.GetMethod(nameof(IMessageHandler<object>.HandleAsync))!;
-                await (Task)handleMethod.Invoke(handler, [message, props, cancellationToken])!;
+                // Invoke handler via compiled delegate (no per-call reflection overhead)
+                await registration.Invoke(handler, message, props, cancellationToken);
 
                 status.MarkAsCompleted(timeProvider);
                 successCount++;
+                RatatoskrDiagnostics.InboxDeliverCount.Add(1, new TagList { { "status", "success" } });
 
                 logger.LogDebug("Inbox handler '{HandlerKey}' completed for message '{MessageId}'",
                     status.HandlerKey, status.MessageId);
             }
             catch (Exception ex)
             {
+                deliverActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                RatatoskrDiagnostics.InboxDeliverCount.Add(1, new TagList { { "status", "failure" } });
                 logger.LogWarning(ex,
                     "Inbox handler '{HandlerKey}' failed for message '{MessageId}', attempt {Attempt}",
                     status.HandlerKey, status.MessageId, status.ErrorCount + 1);
                 status.MarkAsFailed(ex.Message, timeProvider, options.MaxRetries, options.MaxRetryDelay);
             }
+            finally
+            {
+                deliverActivity?.Dispose();
+            }
 
             // Fire observers after each handler invocation
             if (props != null)
             {
-                var registration2 = handlerRegistry.GetByKey(status.HandlerKey);
                 foreach (var observer in observers)
                 {
                     try
@@ -150,7 +170,7 @@ internal class InboxMessageProcessor<TDbContext>(
             }
         }
 
-        RatatoskrDiagnostics.OutboxProcessDuration.Record(Stopwatch.GetElapsedTime(batchStartTimestamp).TotalSeconds);
+        RatatoskrDiagnostics.InboxProcessDuration.Record(Stopwatch.GetElapsedTime(batchStartTimestamp).TotalSeconds);
 
         await dbContext.SaveChangesAsync(CancellationToken.None);
         return successCount;

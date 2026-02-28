@@ -16,6 +16,10 @@ public static class ServiceCollectionExtensions
         var builder = new RatatoskrBuilder(services);
         configure?.Invoke(builder);
 
+        // Run deferred actions (e.g. UseEfCoreInbox replacing LocalMessageSender,
+        // finalizing inbox handler registrations). Must run after the full configure callback.
+        builder.ExecuteDeferredActions();
+
         // Run all registered validators (e.g. RabbitMQ configuration validation)
         builder.Validate();
 

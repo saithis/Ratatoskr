@@ -67,6 +67,16 @@ public class MessageTrackingSession : IAsyncDisposable
     public MessageCollection Dispatched => GetCollection(MessageStage.Dispatched);
 
     /// <summary>
+    /// Messages captured at the InboxQueued stage (message accepted into inbox).
+    /// </summary>
+    public MessageCollection InboxQueued => GetCollection(MessageStage.InboxQueued);
+
+    /// <summary>
+    /// Messages captured at the InboxDispatched stage (inbox processor attempted handler delivery).
+    /// </summary>
+    public MessageCollection InboxDispatched => GetCollection(MessageStage.InboxDispatched);
+
+    /// <summary>
     /// Waits for a message of the specified type to reach the Published stage.
     /// </summary>
     public Task<TrackedMessage> WaitForPublished<T>(
@@ -97,6 +107,22 @@ public class MessageTrackingSession : IAsyncDisposable
         TimeSpan? timeout = null,
         Func<TrackedMessage, bool>? predicate = null) where T : notnull
         => WaitForStage<T>(MessageStage.Dispatched, timeout, predicate);
+
+    /// <summary>
+    /// Waits for a message of the specified type to reach the InboxQueued stage.
+    /// </summary>
+    public Task<TrackedMessage> WaitForInboxQueued<T>(
+        TimeSpan? timeout = null,
+        Func<TrackedMessage, bool>? predicate = null) where T : notnull
+        => WaitForStage<T>(MessageStage.InboxQueued, timeout, predicate);
+
+    /// <summary>
+    /// Waits for a message of the specified type to reach the InboxDispatched stage.
+    /// </summary>
+    public Task<TrackedMessage> WaitForInboxDispatched<T>(
+        TimeSpan? timeout = null,
+        Func<TrackedMessage, bool>? predicate = null) where T : notnull
+        => WaitForStage<T>(MessageStage.InboxDispatched, timeout, predicate);
 
     private async Task<TrackedMessage> WaitForStage<T>(
         MessageStage stage,

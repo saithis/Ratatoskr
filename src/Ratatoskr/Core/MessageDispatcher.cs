@@ -27,7 +27,7 @@ public class MessageDispatcher(
     /// Non-inbox handlers run synchronously in the same DI scope.
     /// Inbox-managed handlers are queued to durable storage via the registered interceptor.
     /// </summary>
-    public async Task<DispatchResult> DispatchAsync(byte[] body, MessageProperties properties, CancellationToken cancellationToken, string? channelName = null)
+    public async Task<DispatchResult> DispatchAsync(byte[] body, MessageProperties properties, CancellationToken cancellationToken, string? channelName = null, string? transportName = null)
     {
         if (properties.Type == null)
         {
@@ -107,9 +107,10 @@ public class MessageDispatcher(
         {
             try
             {
+                var effectiveTransportName = transportName ?? "unknown";
                 foreach (var interceptor in _inboxInterceptors)
                 {
-                    await interceptor.AcceptAsync(scope.ServiceProvider, body, properties, inboxHandlers, cancellationToken);
+                    await interceptor.AcceptAsync(scope.ServiceProvider, body, properties, inboxHandlers, effectiveTransportName, cancellationToken);
                 }
                 logger.LogDebug("Queued {Count} inbox-managed handler(s) for message '{Id}' of type '{Type}'",
                     inboxHandlers.Count, properties.Id, properties.Type);
@@ -135,8 +136,8 @@ public class MessageDispatcher(
 
             try
             {
-                var handleMethod = interfaceType.GetMethod(nameof(IMessageHandler<object>.HandleAsync))!;
-                await (Task)handleMethod.Invoke(handler, [message, properties, cancellationToken])!;
+                var invoke = HandlerInvokerCache.Get(messageType);
+                await invoke(handler, message, properties, cancellationToken);
 
                 logger.LogDebug("Handler '{Handler}' processed message '{Id}' of type '{Type}'",
                     handler.GetType().Name, properties.Id, properties.Type);
