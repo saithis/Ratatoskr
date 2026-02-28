@@ -8,6 +8,7 @@
     <PackageProjectUrl>https://github.com/saithis/Ratatoskr</PackageProjectUrl>
     <RepositoryUrl>https://github.com/saithis/Ratatoskr</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IncludeSymbols>true</IncludeSymbols>
@@ -15,4 +16,8 @@
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
+  
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)images/icon.png" Pack="true" PackagePath="\" Condition="'$(IsPackable)' == 'true' and Exists('$(MSBuildThisFileDirectory)images/icon.png')" />
+  </ItemGroup>
 </Project>
