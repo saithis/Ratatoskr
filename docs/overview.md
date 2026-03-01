@@ -24,6 +24,7 @@
 ## Ratatoskr.EfCore:
 
 - Implements the Outbox pattern via EfCore
+- Implements the Inbox pattern via EfCore (durable, per-handler delivery with retry and deduplication)
 - Exceptional developer experience
 - Low latency
 - Low resource usage

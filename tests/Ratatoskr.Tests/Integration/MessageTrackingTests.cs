@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
+using Ratatoskr.Local;
 using Ratatoskr.RabbitMq;
 using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
@@ -493,6 +494,83 @@ public class MessageTrackingTests(
         // Dispatched stage should NOT have TransportMessage
         var dispatched = await session.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(5));
         dispatched.TransportMessage.Should().BeNull();
+    }
+
+    [Test]
+    public async Task Tracking_InboxQueued_CapturesInboxQueuedStage()
+    {
+        // Arrange: local transport + inbox, tracking session captures InboxQueued
+        await StartTestAsync(services =>
+        {
+            var channelName = $"track-inbox-events-{TestId}";
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventPublishChannel(channelName, c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventConsumeChannel(channelName, c => c.Consumes<TestEvent>());
+                bus.AddHandler<TestEvent, NoOpTestEventHandler>(cfg => cfg.WithInbox("no-op"));
+                bus.UseEfCoreInbox<TestDbContext>();
+            });
+            services.AddRatatoskrTesting();
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await InitializeDatabase();
+
+        await using var session = Services.CreateTrackingSession();
+
+        // Act
+        await InScopeAsync(async ctx =>
+        {
+            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+            await bus.PublishDirectAsync(new TestEvent { Id = "inbox-queue-1", Data = "track inbox" });
+        });
+
+        // Assert — InboxQueued stage emitted by InboxInterceptor/DurableLocalMessageSender
+        var queued = await session.WaitForInboxQueued<TestEvent>(TimeSpan.FromSeconds(10));
+        queued.Properties.Id.Should().NotBeNullOrEmpty();
+        queued.TransportName.Should().Be("local");
+    }
+
+    [Test]
+    public async Task Tracking_InboxDispatched_CapturesInboxDispatchedStage()
+    {
+        // Arrange
+        await StartTestAsync(services =>
+        {
+            var channelName = $"track-inbox-disp-{TestId}";
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventPublishChannel(channelName, c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventConsumeChannel(channelName, c => c.Consumes<TestEvent>());
+                bus.AddHandler<TestEvent, NoOpTestEventHandler>(cfg => cfg.WithInbox("no-op"));
+                bus.UseEfCoreInbox<TestDbContext>();
+            });
+            services.AddRatatoskrTesting();
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await InitializeDatabase();
+
+        await using var session = Services.CreateTrackingSession();
+
+        // Act
+        await InScopeAsync(async ctx =>
+        {
+            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+            await bus.PublishDirectAsync(new TestEvent { Id = "inbox-disp-1", Data = "track dispatch" });
+        });
+
+        // Assert — InboxDispatched stage emitted after handler completes
+        var dispatched = await session.WaitForInboxDispatched<TestEvent>(TimeSpan.FromSeconds(15));
+        dispatched.Properties.Id.Should().NotBeNullOrEmpty();
+
+        // Both stages should be captured for the same message
+        session.InboxQueued.ShouldHaveMessage<TestEvent>();
+        session.InboxDispatched.ShouldHaveMessage<TestEvent>();
     }
 
     // --- Test Helpers ---

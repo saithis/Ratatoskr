@@ -57,4 +57,13 @@ public class OutboxOptions
     /// Default: "OutboxProcessor".
     /// </summary>
     public string LockName { get; set; } = "OutboxProcessor";
+
+    /// <summary>
+    /// Maximum time a send operation is allowed to run before being cancelled.
+    /// When set, the send receives a cancellation token that fires after this duration.
+    /// Timeout cancellation is treated as a failure (increments ErrorCount) and
+    /// will eventually lead to poisoning after MaxRetries.
+    /// Default: null (no timeout).
+    /// </summary>
+    public TimeSpan? SendTimeout { get; set; }
 }

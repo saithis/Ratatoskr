@@ -85,34 +85,40 @@ public class OutboxMessageEntityTests
     }
 
     [Test]
-    public void PublishFailed_CalculatesExponentialBackoff()
+    public void PublishFailed_CalculatesExponentialBackoffWithJitter()
     {
         // Arrange
         var fakeTime = new FakeTimeProvider(new DateTimeOffset(2025, 1, 24, 12, 0, 0, TimeSpan.Zero));
         var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties(), fakeTime, "rabbitmq");
-        
-        // Act - First failure (2^1 = 2 seconds)
+
+        // Act - First failure (base = 2^1 = 2s, jitter range = [1s, 2s))
         entity.PublishFailed("Error 1", fakeTime, maxRetries: 5, TimeSpan.FromMinutes(5));
-        
-        // Assert
+
+        // Assert — NextAttemptAt should be within the jitter range
         entity.NextAttemptAt.Should().NotBeNull();
-        entity.NextAttemptAt!.Value.Should().Be(fakeTime.GetUtcNow().AddSeconds(2));
-        
-        // Act - Second failure (2^2 = 4 seconds)
+        var now1 = fakeTime.GetUtcNow();
+        entity.NextAttemptAt!.Value.Should().BeOnOrAfter(now1.AddSeconds(1));
+        entity.NextAttemptAt!.Value.Should().BeOnOrBefore(now1.AddSeconds(2));
+
+        // Act - Second failure (base = 2^2 = 4s, jitter range = [2s, 4s))
         fakeTime.Advance(TimeSpan.FromSeconds(3));
         entity.PublishFailed("Error 2", fakeTime, maxRetries: 5, TimeSpan.FromMinutes(5));
-        
+
         // Assert
         entity.ErrorCount.Should().Be(2);
-        entity.NextAttemptAt!.Value.Should().Be(fakeTime.GetUtcNow().AddSeconds(4));
-        
-        // Act - Third failure (2^3 = 8 seconds)
+        var now2 = fakeTime.GetUtcNow();
+        entity.NextAttemptAt!.Value.Should().BeOnOrAfter(now2.AddSeconds(2));
+        entity.NextAttemptAt!.Value.Should().BeOnOrBefore(now2.AddSeconds(4));
+
+        // Act - Third failure (base = 2^3 = 8s, jitter range = [4s, 8s))
         fakeTime.Advance(TimeSpan.FromSeconds(5));
         entity.PublishFailed("Error 3", fakeTime, maxRetries: 5, TimeSpan.FromMinutes(5));
-        
+
         // Assert
         entity.ErrorCount.Should().Be(3);
-        entity.NextAttemptAt!.Value.Should().Be(fakeTime.GetUtcNow().AddSeconds(8));
+        var now3 = fakeTime.GetUtcNow();
+        entity.NextAttemptAt!.Value.Should().BeOnOrAfter(now3.AddSeconds(4));
+        entity.NextAttemptAt!.Value.Should().BeOnOrBefore(now3.AddSeconds(8));
     }
 
     [Test]
@@ -122,21 +128,22 @@ public class OutboxMessageEntityTests
         var fakeTime = new FakeTimeProvider();
         var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties(), fakeTime, "rabbitmq");
         var maxDelay = TimeSpan.FromSeconds(10);
-        
+
         // Simulate many failures to hit the cap
         for (int i = 0; i < 10; i++)
         {
             entity.PublishFailed($"Error {i}", fakeTime, maxRetries: 20, maxDelay);
             fakeTime.Advance(TimeSpan.FromSeconds(1));
         }
-        
-        // Act - One more failure (would be 2^10 = 1024 seconds without cap)
+
+        // Act - One more failure (would be 2^11 = 2048 seconds without cap)
         var beforeFail = fakeTime.GetUtcNow();
         entity.PublishFailed("Final error", fakeTime, maxRetries: 20, maxDelay);
-        
-        // Assert - Should be capped at maxDelay (10 seconds)
+
+        // Assert - Should be capped at maxDelay (10 seconds) with jitter: [5s, 10s)
         entity.NextAttemptAt.Should().NotBeNull();
-        entity.NextAttemptAt!.Value.Should().Be(beforeFail.AddSeconds(10));
+        entity.NextAttemptAt!.Value.Should().BeOnOrAfter(beforeFail.AddSeconds(5));
+        entity.NextAttemptAt!.Value.Should().BeOnOrBefore(beforeFail.AddSeconds(10));
     }
 
     [Test]

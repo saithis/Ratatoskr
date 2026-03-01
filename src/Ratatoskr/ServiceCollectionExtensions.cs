@@ -13,8 +13,16 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         Action<RatatoskrBuilder>? configure = null)
     {
+        if (services.Any(d => d.ServiceType == typeof(RatatoskrMarker)))
+            throw new InvalidOperationException("AddRatatoskr has already been called. It must only be called once per IServiceCollection.");
+        services.AddSingleton<RatatoskrMarker>();
+
         var builder = new RatatoskrBuilder(services);
         configure?.Invoke(builder);
+
+        // Run deferred actions (e.g. UseEfCoreInbox replacing LocalMessageSender,
+        // finalizing inbox handler registrations). Must run after the full configure callback.
+        builder.ExecuteDeferredActions();
 
         // Run all registered validators (e.g. RabbitMQ configuration validation)
         builder.Validate();
@@ -29,6 +37,9 @@ public static class ServiceCollectionExtensions
 
         // Register ChannelRegistry
         services.AddSingleton(builder.ChannelRegistry);
+
+        // Register InboxHandlerRegistry (empty if no inbox handlers were configured)
+        services.AddSingleton(builder.InboxHandlerRegistry);
 
         // Register serializer
         services.AddSingleton<IMessageSerializer, JsonMessageSerializer>();
@@ -54,4 +65,9 @@ public static class ServiceCollectionExtensions
         public void ConfigureOperation(ChannelRegistration channel, AsyncApiOperation operation) { }
         public void ConfigureMessage(MessageRegistration message, ChannelRegistration channel, AsyncApiMessage asyncApiMessage) { }
     }
+
+    /// <summary>
+    /// Sentinel type used to detect duplicate <see cref="AddRatatoskr"/> calls.
+    /// </summary>
+    private sealed class RatatoskrMarker;
 }

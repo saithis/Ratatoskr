@@ -7,18 +7,18 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr.EfCore.Internal;
 
-internal class OutboxProcessor<TDbContext>(
+internal class InboxProcessor<TDbContext>(
     IServiceScopeFactory serviceScopeFactory,
     IDistributedLockProvider distributedLockProvider,
     TimeProvider timeProvider,
-    IOptions<OutboxOptions> options,
-    ILogger<OutboxProcessor<TDbContext>> logger)
+    IOptions<InboxOptions> options,
+    ILogger<InboxProcessor<TDbContext>> logger)
     : PollingBackgroundService(distributedLockProvider, timeProvider, logger)
-    where TDbContext : DbContext, IOutboxDbContext
+    where TDbContext : DbContext, IInboxDbContext
 {
-    private readonly OutboxOptions _options = options.Value;
+    private readonly InboxOptions _options = options.Value;
 
-    protected override string ProcessorName => "OutboxProcessor";
+    protected override string ProcessorName => "InboxProcessor";
     protected override TimeSpan PollingInterval => _options.PollingInterval;
     protected override TimeSpan RestartDelay => _options.RestartDelay;
     protected override TimeSpan LockAcquireTimeout => _options.LockAcquireTimeout;
@@ -30,20 +30,23 @@ internal class OutboxProcessor<TDbContext>(
         {
             // Create a fresh scope (and DbContext) per batch to avoid stale EF state
             using var batchScope = serviceScopeFactory.CreateScope();
+            var sp = batchScope.ServiceProvider;
 
-            var dbContext = batchScope.ServiceProvider.GetRequiredService<TDbContext>();
-            var messageSenders = batchScope.ServiceProvider.GetServices<IMessageSender>();
-            var activityObservers = batchScope.ServiceProvider.GetServices<IMessageActivityObserver>();
+            var dbContext = sp.GetRequiredService<TDbContext>();
+            var handlerRegistry = sp.GetRequiredService<InboxHandlerRegistry>();
+            var observers = sp.GetServices<IMessageActivityObserver>();
+            var messageSerializer = sp.GetRequiredService<IMessageSerializer>();
 
-            var processor = new OutboxMessageProcessor<TDbContext>(
-                dbContext, messageSenders, timeProvider, _options, activityObservers, logger);
+            var processor = new InboxMessageProcessor<TDbContext>(
+                dbContext, serviceScopeFactory, handlerRegistry, timeProvider,
+                _options, observers, messageSerializer, logger);
 
-            logger.LogDebug("Checking outbox for unsent messages");
-            var processedCount = await processor.ProcessBatchAsync(
+            logger.LogDebug("Checking inbox for pending handler deliveries");
+            var processed = await processor.ProcessBatchAsync(
                 includeStuckMessageDetection: true,
                 cancellationToken);
 
-            if (processedCount == 0)
+            if (processed == 0)
                 return;
         }
     }

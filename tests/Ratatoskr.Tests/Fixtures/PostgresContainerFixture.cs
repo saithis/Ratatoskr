@@ -20,6 +20,7 @@ public class PostgresContainerFixture : IAsyncInitializer, IAsyncDisposable
             .WithDatabase("testdb")
             .WithUsername("testuser")
             .WithPassword("testpass")
+            .WithCommand("-c", "max_connections=300")
             .Build();
             
         await _container.StartAsync();

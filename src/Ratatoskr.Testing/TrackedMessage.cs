@@ -57,6 +57,17 @@ public class TrackedMessage
     public TransportMessageSnapshot? TransportMessage => Activity.TransportMessage;
 
     /// <summary>
+    /// Whether the operation succeeded. Set at the InboxDispatched stage.
+    /// </summary>
+    public bool? IsSuccess => Activity.IsSuccess;
+
+    /// <summary>
+    /// The transport that delivered this message (e.g. "rabbitmq", "local").
+    /// Set at InboxQueued and InboxDispatched stages.
+    /// </summary>
+    public string? TransportName => Activity.TransportName;
+
+    /// <summary>
     /// The trace ID extracted from the message's TraceParent header.
     /// </summary>
     public string? TraceId => MessageTracker.ExtractTraceId(Activity.Properties.TraceParent);

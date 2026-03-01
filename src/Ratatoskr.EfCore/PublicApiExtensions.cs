@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -79,26 +80,43 @@ public static class PublicApiExtensions
     /// <summary>
     /// Adds the necessary outbox entities to the DB model.
     /// </summary>
-    public static void AddOutboxEntities(this ModelBuilder modelBuilder)
+    public static void AddOutboxEntities(this ModelBuilder modelBuilder) =>
+        modelBuilder.AddOutboxEntities(database: null);
+
+    /// <summary>
+    /// Adds the necessary outbox entities to the DB model.
+    /// When <paramref name="database"/> is provided, a partial/filtered index is applied
+    /// for supported providers (PostgreSQL, SQL Server) to improve query performance on large tables.
+    /// </summary>
+    /// <param name="modelBuilder">The model builder.</param>
+    /// <param name="database">
+    /// The <see cref="DatabaseFacade"/> from your DbContext (<c>this.Database</c> in <c>OnModelCreating</c>).
+    /// Pass this to enable provider-specific partial indexes.
+    /// </param>
+    public static void AddOutboxEntities(this ModelBuilder modelBuilder, DatabaseFacade? database)
     {
         modelBuilder.Entity<OutboxMessageEntity>(entity =>
         {
             // Primary key (if not already configured by convention)
             entity.HasKey(e => e.Id);
-            
-            // Index for the main query: unprocessed, not poisoned, ready to process
-            // Covers: ProcessedAt, IsPoisoned, NextAttemptAt, ProcessingStartedAt, CreatedAt
-            entity.HasIndex(
-                e => new { 
-                    e.ProcessedAt, 
-                    e.IsPoisoned, 
-                    e.NextAttemptAt, 
-                    e.ProcessingStartedAt, 
-                    e.CreatedAt 
+
+            // Index for the main query: unprocessed, not poisoned, ready to process.
+            var index = entity.HasIndex(
+                e => new {
+                    e.ProcessedAt,
+                    e.IsPoisoned,
+                    e.NextAttemptAt,
+                    e.ProcessingStartedAt,
+                    e.CreatedAt
                 },
-                "IX_OutboxMessages_Processing")
-            .HasFilter("\"ProcessedAt\" IS NULL AND \"IsPoisoned\" = false");
-            
+                "IX_OutboxMessages_Processing");
+
+            // Apply a partial/filtered index for supported providers.
+            // This dramatically improves query performance on large tables by excluding processed rows.
+            var filter = DatabaseProviderHelper.GetOutboxProcessingFilter(database);
+            if (filter != null)
+                index.HasFilter(filter);
+
             // Configure column constraints
             entity.Property(e => e.Error).HasMaxLength(2000);
             entity.Property(e => e.Content).IsRequired();
