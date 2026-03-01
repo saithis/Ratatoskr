@@ -59,6 +59,15 @@ public class InboxOptions
     public string LockName { get; set; } = "InboxProcessor";
 
     /// <summary>
+    /// Maximum time a handler is allowed to run before being cancelled.
+    /// When set, the handler receives a cancellation token that fires after this duration.
+    /// Timeout cancellation is treated as a handler failure (increments ErrorCount) and
+    /// will eventually lead to poisoning after MaxRetries.
+    /// Default: null (no timeout).
+    /// </summary>
+    public TimeSpan? HandlerTimeout { get; set; }
+
+    /// <summary>
     /// When true, all handlers registered via <c>AddHandler</c> without an explicit
     /// <c>WithoutInbox()</c> are automatically enrolled in the inbox.
     /// The handler's CLR full name is used as the stable key unless overridden by <c>WithInbox("key")</c>.

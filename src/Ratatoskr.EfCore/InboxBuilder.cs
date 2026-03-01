@@ -104,6 +104,17 @@ public class InboxBuilder<TDbContext> where TDbContext : DbContext, IInboxDbCont
     }
 
     /// <summary>
+    /// Sets the maximum time a handler is allowed to run before being cancelled.
+    /// Timeout cancellation is treated as a handler failure and increments the error count.
+    /// </summary>
+    public InboxBuilder<TDbContext> WithHandlerTimeout(TimeSpan timeout)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(timeout, TimeSpan.Zero, nameof(timeout));
+        Options.HandlerTimeout = timeout;
+        return this;
+    }
+
+    /// <summary>
     /// Prevents the <see cref="InboxProcessor{TDbContext}"/> from being registered as a hosted service.
     /// Use this in integration tests where you want deterministic control over when inbox processing runs
     /// (e.g. by calling <c>InboxMessageProcessor.ProcessBatchAsync</c> directly).

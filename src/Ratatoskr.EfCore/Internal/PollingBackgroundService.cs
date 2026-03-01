@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using System.Threading.Channels;
 using Medallion.Threading;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Ratatoskr.Core;
 
 namespace Ratatoskr.EfCore.Internal;
 
@@ -75,7 +77,8 @@ internal abstract class PollingBackgroundService(
 
         if (dLock == null)
         {
-            logger.LogInformation("Failed to acquire lock for {Processor}, processing will be skipped", ProcessorName);
+            logger.LogWarning("Failed to acquire lock for {Processor}, processing will be skipped", ProcessorName);
+            RatatoskrDiagnostics.LockAcquisitionFailure.Add(1, new TagList { { "processor", ProcessorName } });
             return;
         }
 
@@ -95,6 +98,7 @@ internal abstract class PollingBackgroundService(
         catch (OperationCanceledException) when (dLock.HandleLostToken.IsCancellationRequested)
         {
             logger.LogWarning("Distributed lock was lost during {Processor} processing", ProcessorName);
+            RatatoskrDiagnostics.LockLost.Add(1, new TagList { { "processor", ProcessorName } });
         }
         catch (Exception e)
         {

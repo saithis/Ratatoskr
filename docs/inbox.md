@@ -37,6 +37,8 @@ A unique constraint on `(MessageId, HandlerKey)` is the **deduplication key**: t
 
 When using `UseEfCoreInbox` together with `UseLocalTransport`, the regular `LocalMessageSender` is replaced by `DurableLocalMessageSender`. Its `SendAsync` writes inbox entries to the database **before** writing to the in-memory channel. Combined with the outbox's deduplication, this guarantees no message loss at any crash point in the pipeline.
 
+> **Important:** This replacement means that local publish calls (`PublishDirectAsync`) now depend on database availability and will have database-level latency. If the database is slow or unavailable, local publishes will be affected. Plan database capacity accordingly.
+
 ## Setup
 
 ### 1. Implement `IInboxDbContext`
@@ -47,8 +49,9 @@ public class AppDbContext : DbContext, IOutboxDbContext, IInboxDbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-        modelBuilder.AddOutboxEntities(); // if using outbox
-        modelBuilder.AddInboxEntities();
+        // Pass Database to enable provider-specific partial indexes (PostgreSQL, SQL Server)
+        modelBuilder.AddOutboxEntities(Database); // if using outbox
+        modelBuilder.AddInboxEntities(Database);
     }
 }
 ```
@@ -127,6 +130,7 @@ bus.UseEfCoreInbox<AppDbContext>(inbox =>
     inbox.WithPollingInterval(TimeSpan.FromSeconds(30));
     inbox.WithBatchSize(100);
     inbox.WithStuckMessageThreshold(TimeSpan.FromMinutes(5));
+    inbox.WithHandlerTimeout(TimeSpan.FromMinutes(2));
     inbox.WithRestartDelay(TimeSpan.FromSeconds(5));
     inbox.WithLockAcquireTimeout(TimeSpan.FromSeconds(60));
     inbox.WithLockName("InboxProcessor");
@@ -136,10 +140,11 @@ bus.UseEfCoreInbox<AppDbContext>(inbox =>
 | Fluent Method | Default | Description |
 |---|---|---|
 | `WithMaxRetries(int)` | `5` | Number of delivery attempts before marking a status as poisoned. Must be >= 1. A value of 1 means one attempt, poisoned on the first failure. |
-| `WithMaxRetryDelay(TimeSpan)` | `5 minutes` | Maximum backoff delay (`2^n` seconds, capped). |
+| `WithMaxRetryDelay(TimeSpan)` | `5 minutes` | Maximum backoff delay (`2^n` seconds, capped). Jitter is applied to prevent thundering herd. |
 | `WithPollingInterval(TimeSpan)` | `30 seconds` | How often the background processor polls the DB when idle. |
 | `WithBatchSize(int)` | `100` | Handler statuses processed per batch. |
 | `WithStuckMessageThreshold(TimeSpan)` | `5 minutes` | How long a status can remain in "processing" state before it is considered stuck (crash recovery). |
+| `WithHandlerTimeout(TimeSpan)` | *none* | Maximum time a handler is allowed to run. Timeout cancellation counts as a failure (increments ErrorCount). |
 | `WithRestartDelay(TimeSpan)` | `5 seconds` | Delay before restarting the processor after an unexpected crash. |
 | `WithLockAcquireTimeout(TimeSpan)` | `60 seconds` | Timeout for acquiring the distributed lock. |
 | `WithLockName(string)` | `"InboxProcessor"` | Distributed lock name. Change if you run multiple inboxes or conflict with the outbox lock. |

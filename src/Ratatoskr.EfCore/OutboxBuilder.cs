@@ -48,6 +48,18 @@ public class OutboxBuilder<TDbContext> where TDbContext : DbContext, IOutboxDbCo
     }
     
     /// <summary>
+    /// Sets the maximum time a send operation is allowed to run before being cancelled.
+    /// Timeout cancellation is treated as a failure and increments the error count.
+    /// </summary>
+    public OutboxBuilder<TDbContext> WithSendTimeout(TimeSpan timeout)
+    {
+        if (timeout <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(timeout), "Send timeout must be positive");
+        Options.SendTimeout = timeout;
+        return this;
+    }
+
+    /// <summary>
     /// Configures all options via an action.
     /// </summary>
     public OutboxBuilder<TDbContext> Configure(Action<OutboxOptions> configure)

@@ -124,9 +124,35 @@ public class MessageDispatcher(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Inbox interceptor failed for message '{Id}' of type '{Type}'", properties.Id, properties.Type);
-                exceptions ??= [];
-                exceptions.Add(ex);
+                // Inbox interceptor failed — don't run non-inbox handlers.
+                // The transport will NACK and redeliver the entire message.
+                // Running non-inbox handlers now would cause duplicate execution on retry.
+                logger.LogError(ex, "Inbox interceptor failed for message '{Id}' of type '{Type}'. " +
+                    "Aborting dispatch — transport will redeliver.", properties.Id, properties.Type);
+
+                foreach (var observer in observers)
+                {
+                    try
+                    {
+                        await observer.OnMessageActivity(new MessageActivity
+                        {
+                            Stage = MessageStage.Dispatched,
+                            Properties = properties,
+                            SerializedBody = body,
+                            Message = message,
+                            MessageType = messageType,
+                            DispatchResult = DispatchResult.RecoverableError,
+                            Exception = ex,
+                            Timestamp = timeProvider.GetUtcNow(),
+                        });
+                    }
+                    catch (Exception observerEx)
+                    {
+                        logger.LogWarning(observerEx, "Message activity observer failed at the {Stage} stage", MessageStage.Dispatched);
+                    }
+                }
+
+                return DispatchResult.RecoverableError;
             }
         }
 

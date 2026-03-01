@@ -61,4 +61,8 @@ public static class RatatoskrDiagnostics
     public static readonly Counter<long> InboxPoisonCount = Meter.CreateCounter<long>("ratatoskr.inbox.poison.count", "{message}", "Number of inbox handler statuses marked as poisoned.");
     public static readonly Histogram<double> InboxProcessDuration = Meter.CreateHistogram<double>("ratatoskr.inbox.process.duration", "s", "Duration of the inbox processing batch.");
     public static readonly Histogram<long> InboxBatchSize = Meter.CreateHistogram<long>("ratatoskr.inbox.batch.size", "{message}", "Number of inbox handler statuses picked up in a batch.");
+
+    // Distributed Lock Metrics
+    public static readonly Counter<long> LockAcquisitionFailure = Meter.CreateCounter<long>("ratatoskr.lock.acquisition.failure", "{attempt}", "Number of times a distributed lock could not be acquired.");
+    public static readonly Counter<long> LockLost = Meter.CreateCounter<long>("ratatoskr.lock.lost", "{event}", "Number of times a distributed lock was lost during processing.");
 }

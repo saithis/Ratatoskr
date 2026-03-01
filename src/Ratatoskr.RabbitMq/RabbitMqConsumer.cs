@@ -23,6 +23,8 @@ internal class RabbitMqConsumer(
     : BackgroundService
 {
     private readonly List<IChannel> _channels = new();
+    private static readonly TimeSpan InitialReconnectDelay = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan MaxReconnectDelay = TimeSpan.FromSeconds(30);
 
     /// <summary>
     /// Gets whether the consumer is healthy (all channels are open).
@@ -33,11 +35,57 @@ internal class RabbitMqConsumer(
     {
         logger.LogInformation("Starting RabbitMQ consumer");
 
-        // 1. Provision Topology First
+        var reconnectAttempt = 0;
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                using var channelClosedCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+
+                await ProvisionAndConsumeAsync(channelClosedCts, stoppingToken);
+
+                // Reset reconnect backoff on successful connection
+                reconnectAttempt = 0;
+
+                // Keep running until a channel closes or we're asked to stop
+                await Task.Delay(Timeout.Infinite, channelClosedCts.Token);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                reconnectAttempt++;
+                var delay = CalculateReconnectDelay(reconnectAttempt);
+
+                logger.LogError(ex, "RabbitMQ consumer disconnected. Reconnecting in {Delay} (attempt {Attempt})...",
+                    delay, reconnectAttempt);
+
+                await CleanupChannelsAsync();
+
+                try
+                {
+                    await Task.Delay(delay, timeProvider, stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+            }
+        }
+
+        logger.LogInformation("RabbitMQ consumer stopped");
+    }
+
+    private async Task ProvisionAndConsumeAsync(CancellationTokenSource channelClosedCts, CancellationToken stoppingToken)
+    {
+        // Provision Topology
         logger.LogInformation("Provisioning topology...");
         await topologyManager.ProvisionTopologyAsync(stoppingToken);
 
-        // 2. Start Consumers for each Consumer Channel
+        // Start Consumers for each Consumer Channel
         var consumerChannels = registry.GetConsumeChannels();
 
         foreach (var reg in consumerChannels)
@@ -52,6 +100,14 @@ internal class RabbitMqConsumer(
 
             var channel = await connectionManager.CreateChannelAsync(false, stoppingToken);
             await channel.BasicQosAsync(0, channelOptions.PrefetchCount, false, stoppingToken);
+
+            // Register channel close handler to trigger reconnection
+            channel.ChannelShutdownAsync += (_, args) =>
+            {
+                logger.LogWarning("RabbitMQ channel closed: {ReplyCode} - {ReplyText}", args.ReplyCode, args.ReplyText);
+                channelClosedCts.Cancel();
+                return Task.CompletedTask;
+            };
 
             var consumer = new AsyncEventingBasicConsumer(channel);
             consumer.ReceivedAsync += async (_, ea) =>
@@ -69,9 +125,34 @@ internal class RabbitMqConsumer(
 
             _channels.Add(channel);
         }
+    }
 
-        // Keep running until cancelled
-        await Task.Delay(Timeout.Infinite, stoppingToken);
+    private async Task CleanupChannelsAsync()
+    {
+        foreach (var channel in _channels)
+        {
+            try
+            {
+                if (channel.IsOpen)
+                    await channel.CloseAsync();
+                channel.Dispose();
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Error cleaning up RabbitMQ channel during reconnection");
+            }
+        }
+        _channels.Clear();
+    }
+
+    private static TimeSpan CalculateReconnectDelay(int attempt)
+    {
+        // Exponential backoff with equal jitter, capped at MaxReconnectDelay
+        var baseDelay = Math.Min(
+            InitialReconnectDelay.TotalSeconds * Math.Pow(2, attempt - 1),
+            MaxReconnectDelay.TotalSeconds);
+        var delaySeconds = baseDelay * 0.5 + baseDelay * 0.5 * Random.Shared.NextDouble();
+        return TimeSpan.FromSeconds(delaySeconds);
     }
 
     private async Task HandleMessageAsync(
@@ -289,10 +370,6 @@ internal class RabbitMqConsumer(
 
         await base.StopAsync(cancellationToken);
 
-        foreach (var channel in _channels)
-        {
-            await channel.CloseAsync(cancellationToken);
-            channel.Dispose();
-        }
+        await CleanupChannelsAsync();
     }
 }

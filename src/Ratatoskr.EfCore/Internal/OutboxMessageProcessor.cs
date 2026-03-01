@@ -98,7 +98,17 @@ internal class OutboxMessageProcessor<TDbContext>(
                 var targetSender = _senderMap.GetValueOrDefault(message.TransportName)
                                    ?? throw new InvalidOperationException($"No sender found for transport '{message.TransportName}'");
 
-                await targetSender.SendAsync(message.Content, props, cancellationToken);
+                // When SendTimeout is configured, wrap in a linked CTS that fires after the timeout.
+                if (options.SendTimeout.HasValue)
+                {
+                    using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    timeoutCts.CancelAfter(options.SendTimeout.Value);
+                    await targetSender.SendAsync(message.Content, props, timeoutCts.Token);
+                }
+                else
+                {
+                    await targetSender.SendAsync(message.Content, props, cancellationToken);
+                }
                 message.MarkAsProcessed(timeProvider);
                 processedCount++;
                 RatatoskrDiagnostics.OutboxProcessCount.Add(1, new TagList { { "status", "success" } });
@@ -111,7 +121,16 @@ internal class OutboxMessageProcessor<TDbContext>(
                 message.PublishFailed(e.Message, timeProvider,
                     options.MaxRetries, options.MaxRetryDelay);
                 RatatoskrDiagnostics.OutboxProcessCount.Add(1, new TagList { { "status", "failure" } });
+
+                if (message.IsPoisoned)
+                {
+                    logger.LogError("Outbox message '{Id}' for transport '{Transport}' has been poisoned after {Attempts} failed attempts. Last error: {Error}",
+                        message.Id, message.TransportName, message.ErrorCount, e.Message);
+                }
             }
+
+            // Persist each message's state immediately so progress isn't lost on crash
+            await dbContext.SaveChangesAsync(CancellationToken.None);
 
             if (sentProps != null)
             {
@@ -137,9 +156,6 @@ internal class OutboxMessageProcessor<TDbContext>(
         }
 
         RatatoskrDiagnostics.OutboxProcessDuration.Record(Stopwatch.GetElapsedTime(batchStartTimestamp).TotalSeconds);
-
-        // Save all changes (both successful and failed)
-        await dbContext.SaveChangesAsync(CancellationToken.None);
 
         return processedCount;
     }

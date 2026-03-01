@@ -189,7 +189,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 new MessageProperties { Id = "backoff-1" });
         });
 
-        // Attempt 1: ErrorCount=1, NextAttemptAt = startTime + 2^1 = startTime + 2s
+        // Attempt 1: ErrorCount=1, base = 2^1 = 2s, jitter range = [1s, 2s)
         await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
 
         await InScopeAsync(async ctx =>
@@ -198,20 +198,23 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             var status = await db.Set<InboxHandlerStatusEntity>().SingleAsync();
             status.ErrorCount.Should().Be(1);
             status.NextAttemptAt.Should().NotBeNull();
-            status.NextAttemptAt!.Value.Should().BeCloseTo(startTime.AddSeconds(2), TimeSpan.FromMilliseconds(500));
+            // With equal jitter: delay ∈ [base*0.5, base) = [1s, 2s)
+            status.NextAttemptAt!.Value.Should().BeOnOrAfter(startTime.AddSeconds(1));
+            status.NextAttemptAt!.Value.Should().BeOnOrBefore(startTime.AddSeconds(2));
         });
 
-        // Processing immediately: nothing processed (NextAttemptAt is still in the future)
+        // Processing immediately: nothing processed (NextAttemptAt is still in the future — at least 1s from now)
         await InScopeAsync(async ctx =>
         {
             var processed = await ProcessInboxAsync(ctx.ServiceProvider);
             processed.Should().Be(0);
         });
 
-        // Advance 3s past the first retry window
+        // Advance 3s past the maximum possible first retry window
         fakeTime.Advance(TimeSpan.FromSeconds(3));
 
-        // Attempt 2: ErrorCount=2, NextAttemptAt = (startTime + 3s) + 2^2 = startTime + 7s
+        // Attempt 2: ErrorCount=2, base = 2^2 = 4s, jitter range = [2s, 4s)
+        // now = startTime + 3s → NextAttemptAt ∈ [startTime+5s, startTime+7s)
         await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
 
         await InScopeAsync(async ctx =>
@@ -219,8 +222,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var status = await db.Set<InboxHandlerStatusEntity>().SingleAsync();
             status.ErrorCount.Should().Be(2);
-            // 2^2 = 4 seconds from now (which is startTime + 3s)
-            status.NextAttemptAt!.Value.Should().BeCloseTo(startTime.AddSeconds(7), TimeSpan.FromMilliseconds(500));
+            status.NextAttemptAt!.Value.Should().BeOnOrAfter(startTime.AddSeconds(5));
+            status.NextAttemptAt!.Value.Should().BeOnOrBefore(startTime.AddSeconds(7));
         });
 
         // Processing immediately: nothing processed (NextAttemptAt still in the future)
@@ -1984,6 +1987,161 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
         });
     }
 
+    [Test]
+    public async Task Inbox_InterceptorFailure_DoesNotRunNonInboxHandlers()
+    {
+        // Verifies the fix: when an inbox interceptor throws, non-inbox handlers must NOT run.
+        // Before the fix, the dispatcher would still call non-inbox handlers after interceptor failure,
+        // causing duplicate execution when the transport retries the message.
+        var nonInboxCounter = new InvocationCounter();
+        var dispatchObserver = new DispatchCompletionObserver();
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton(nonInboxCounter);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
+                bus.AddHandler<TestEvent, CountingNonInboxHandler>(); // Non-inbox (fire-and-forget)
+                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("inbox-a"));
+                bus.UseEfCoreInbox<TestDbContext>();
+            });
+
+            // Register a failing interceptor — the dispatcher iterates all IInboxInterceptor instances.
+            // DurableLocalMessageSender persists inbox entries via InboxPersistence directly (unaffected).
+            services.AddSingleton<IInboxInterceptor>(new AlwaysFailingInterceptor());
+            services.AddSingleton<IMessageActivityObserver>(dispatchObserver);
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await InitializeDatabase();
+
+        // Act — publish a message. DurableLocalMessageSender persists inbox entries, then writes to channel.
+        // LocalTransportConsumer dispatches, but the AlwaysFailingInterceptor causes an abort.
+        await InScopeAsync(async ctx =>
+        {
+            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+            await bus.PublishDirectAsync(
+                new TestEvent { Id = "business-intercept-fail-1" },
+                new MessageProperties { Id = "intercept-fail-1" });
+        });
+
+        // Wait for the dispatch to complete (observer fires even on interceptor failure)
+        await dispatchObserver.WaitForDispatchAsync(TimeSpan.FromSeconds(10));
+
+        // Assert — non-inbox handler should NOT have been called
+        nonInboxCounter.Count.Should().Be(0,
+            "non-inbox handlers must not execute when an inbox interceptor fails");
+    }
+
+    [Test]
+    public async Task Inbox_HandlerTimeout_IncreasesErrorCount()
+    {
+        // Verifies that a handler exceeding the configured timeout is treated as a failure.
+        // The timeout CTS cancels only the handler's token; the outer cancellationToken is NOT cancelled,
+        // so the OperationCanceledException falls into the general failure path (not the shutdown path).
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
+                bus.AddHandler<TestEvent, SlowHandler>(cfg => cfg.WithInbox("slow-handler"));
+                bus.UseEfCoreInbox<TestDbContext>(inbox =>
+                {
+                    inbox.WithHandlerTimeout(TimeSpan.FromMilliseconds(100));
+                    inbox.WithoutBackgroundProcessing();
+                });
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await InitializeDatabase();
+
+        await InScopeAsync(async ctx =>
+        {
+            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+            await bus.PublishDirectAsync(
+                new TestEvent { Id = "business-timeout-1" },
+                new MessageProperties { Id = "timeout-1" });
+        });
+
+        // Act — process; the handler will be cancelled by the timeout
+        await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
+
+        // Assert
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var status = await db.Set<InboxHandlerStatusEntity>().SingleAsync();
+            status.CompletedAt.Should().BeNull("handler timed out and should not be marked as completed");
+            status.ErrorCount.Should().Be(1);
+            status.IsPoisoned.Should().BeFalse();
+        });
+    }
+
+    [Test]
+    public async Task Inbox_HandlerTimeout_EventuallyPoisoned()
+    {
+        // Verifies that repeated timeouts eventually poison the handler status.
+        var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TimeProvider>(fakeTime);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
+                bus.AddHandler<TestEvent, SlowHandler>(cfg => cfg.WithInbox("slow-handler"));
+                bus.UseEfCoreInbox<TestDbContext>(inbox =>
+                {
+                    inbox.WithHandlerTimeout(TimeSpan.FromMilliseconds(100));
+                    inbox.WithMaxRetries(2);
+                    inbox.WithoutBackgroundProcessing();
+                });
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await InitializeDatabase();
+
+        await InScopeAsync(async ctx =>
+        {
+            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+            await bus.PublishDirectAsync(
+                new TestEvent { Id = "business-timeout-poison-1" },
+                new MessageProperties { Id = "timeout-poison-1" });
+        });
+
+        // Process MaxRetries times with time advances between each attempt
+        for (int i = 0; i < 2; i++)
+        {
+            await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
+            fakeTime.Advance(TimeSpan.FromMinutes(10));
+        }
+
+        // Assert — handler should be poisoned after MaxRetries timeouts
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var status = await db.Set<InboxHandlerStatusEntity>().SingleAsync();
+            status.IsPoisoned.Should().BeTrue();
+            status.ErrorCount.Should().Be(2);
+            status.CompletedAt.Should().BeNull();
+        });
+    }
+
     #endregion
 
     #region Helpers
@@ -2182,6 +2340,51 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             using var cts = new CancellationTokenSource(timeout);
             while (Volatile.Read(ref _count) < expected)
                 await _signal.WaitAsync(cts.Token);
+        }
+    }
+
+    /// <summary>Handler that blocks indefinitely until its cancellation token fires. Used for timeout tests.</summary>
+    private class SlowHandler : IMessageHandler<TestEvent>
+    {
+        public async Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
+        {
+            await Task.Delay(Timeout.Infinite, ct);
+        }
+    }
+
+    /// <summary>Non-inbox handler that increments a singleton counter. Used to verify non-inbox handler execution.</summary>
+    private class CountingNonInboxHandler(InvocationCounter counter) : IMessageHandler<TestEvent>
+    {
+        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
+        {
+            counter.Increment();
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>Interceptor that always throws, used to test interceptor failure abort behavior.</summary>
+    private class AlwaysFailingInterceptor : IInboxInterceptor
+    {
+        public Task AcceptAsync(byte[] body, MessageProperties properties,
+            IReadOnlyList<InboxHandlerRegistration> managedHandlers, string transportName,
+            CancellationToken cancellationToken)
+        {
+            throw new InvalidOperationException("Simulated interceptor failure");
+        }
+    }
+
+    /// <summary>Observer that signals when a Dispatched-stage activity fires. Used to synchronize with dispatch completion.</summary>
+    private class DispatchCompletionObserver : IMessageActivityObserver
+    {
+        private readonly TaskCompletionSource _dispatched = new();
+
+        public Task WaitForDispatchAsync(TimeSpan timeout) => _dispatched.Task.WaitAsync(timeout);
+
+        public ValueTask OnMessageActivity(MessageActivity activity)
+        {
+            if (activity.Stage == MessageStage.Dispatched)
+                _dispatched.TrySetResult();
+            return ValueTask.CompletedTask;
         }
     }
 

@@ -1,5 +1,6 @@
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -122,7 +123,20 @@ public static class InboxPublicApiExtensions
     /// Adds the necessary inbox entities to the DB model.
     /// Call this inside <c>OnModelCreating</c> of your DbContext.
     /// </summary>
-    public static void AddInboxEntities(this ModelBuilder modelBuilder)
+    public static void AddInboxEntities(this ModelBuilder modelBuilder) =>
+        modelBuilder.AddInboxEntities(database: null);
+
+    /// <summary>
+    /// Adds the necessary inbox entities to the DB model.
+    /// When <paramref name="database"/> is provided, a partial/filtered index is applied
+    /// for supported providers (PostgreSQL, SQL Server) to improve query performance on large tables.
+    /// </summary>
+    /// <param name="modelBuilder">The model builder.</param>
+    /// <param name="database">
+    /// The <see cref="DatabaseFacade"/> from your DbContext (<c>this.Database</c> in <c>OnModelCreating</c>).
+    /// Pass this to enable provider-specific partial indexes.
+    /// </param>
+    public static void AddInboxEntities(this ModelBuilder modelBuilder, DatabaseFacade? database)
     {
         modelBuilder.Entity<InboxMessageEntity>(entity =>
         {
@@ -141,9 +155,14 @@ public static class InboxPublicApiExtensions
                 .IsUnique()
                 .HasDatabaseName("UX_InboxHandlerStatuses_MessageId_HandlerKey");
 
-            entity.HasIndex(
+            var processingIndex = entity.HasIndex(
                 e => new { e.CompletedAt, e.IsPoisoned, e.NextAttemptAt, e.ProcessingStartedAt, e.MessageId },
                 "IX_InboxHandlerStatuses_Processing");
+
+            // Apply a partial/filtered index for supported providers.
+            var filter = DatabaseProviderHelper.GetInboxProcessingFilter(database);
+            if (filter != null)
+                processingIndex.HasFilter(filter);
 
             entity.Property(e => e.HandlerKey).HasMaxLength(200).IsRequired();
             entity.Property(e => e.LastError).HasMaxLength(2000);

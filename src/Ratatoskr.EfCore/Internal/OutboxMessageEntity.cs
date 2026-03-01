@@ -93,8 +93,10 @@ internal class OutboxMessageEntity
         }
         else
         {
-            // Exponential backoff: 2^attempt seconds, capped at maxRetryDelay
-            var delaySeconds = Math.Min(Math.Pow(2, ErrorCount), maxRetryDelay.TotalSeconds);
+            // Exponential backoff with equal jitter: base/2 + random(0, base/2)
+            // Prevents thundering herd while maintaining a predictable minimum delay
+            var baseDelay = Math.Min(Math.Pow(2, ErrorCount), maxRetryDelay.TotalSeconds);
+            var delaySeconds = baseDelay * 0.5 + baseDelay * 0.5 * Random.Shared.NextDouble();
             NextAttemptAt = timeProvider.GetUtcNow().AddSeconds(delaySeconds);
         }
     }

@@ -156,6 +156,8 @@ sequenceDiagram
 
 The local transport uses an in-memory `System.Threading.Channels.Channel<T>`. `LocalMessageSender` writes to the channel, and `LocalTransportConsumer` (a `BackgroundService`) reads from it and calls `MessageDispatcher`.
 
+> **Note:** When `UseEfCoreInbox` and `UseLocalTransport` are both configured, the local sender is automatically replaced with `DurableLocalMessageSender`, which writes inbox entries to the database **before** writing to the in-memory channel. This means local publishes will have database-level latency and require database availability. See the [Inbox — Crash safety](inbox.md#crash-safety-local-transport) section for details.
+
 ### Message Dispatch
 
 ```mermaid
@@ -345,3 +347,28 @@ Ratatoskr integrates with OpenTelemetry via `System.Diagnostics.Activity`:
 - **Publishing** — Injects W3C trace context (`TraceParent`, `TraceState`) into message properties and transport headers.
 - **Consuming** — Extracts trace context to continue the distributed trace.
 - **Metrics** — Records receive lag, process duration, and message counts, tagged with messaging semantic conventions (`messaging.system`, `messaging.destination.name`).
+
+### Message Activity Observers
+
+`IMessageActivityObserver` implementations are notified at various pipeline stages (`Published`, `Received`, `Dispatched`, `OutboxStaged`, `OutboxSent`, `InboxQueued`, `InboxDispatched`, `InboxPoisoned`). Observers are designed for **testing and instrumentation** — they are not a mechanism for reliable side effects:
+
+- Observer exceptions are always caught and logged at `Warning` level. They never affect the message pipeline.
+- If an observer throws, the message is still processed normally.
+
+Use `Ratatoskr.Testing`'s `MessageTrackingSession` (which is backed by an observer) for asserting message flow in integration tests.
+
+---
+
+## Message Schema Evolution
+
+Ratatoskr uses `System.Text.Json` for message serialization. By default:
+
+- New fields added to a message type will deserialize as `default` for in-flight messages that don't contain them.
+- Removed fields in new code will be silently ignored during deserialization of old messages.
+- Renamed fields will appear as new fields (old data lost).
+
+**Recommendations:**
+
+- Only add fields (additive changes). Never rename or remove fields that may exist in in-flight outbox/inbox messages.
+- For breaking changes, introduce a new message type and migrate consumers before producers.
+- Consider using a `SchemaVersion` CloudEvents extension attribute for future compatibility checks.

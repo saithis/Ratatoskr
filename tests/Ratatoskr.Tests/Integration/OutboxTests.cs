@@ -559,6 +559,216 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             TimeSpan.FromSeconds(10));
     }
 
+    [Test]
+    public async Task Outbox_PerMessageSave_ProcessedMessageSurvivesNextFailure()
+    {
+        // Verifies the per-message save fix: when message 1 sends successfully and message 2 fails,
+        // message 1's ProcessedAt is already persisted to the database.
+        // Before the fix (batch save), both would be lost if a crash occurred after send but before SaveChanges.
+        var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var sender = new SucceedThenFailSender(RabbitMqConstants.TransportName, successesBeforeFailure: 1);
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TimeProvider>(fakeTime);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddEventPublishChannel(ExchangeName, c => c
+                    .WithRabbitMq(r => r.WithTopicExchange())
+                    .Produces<TestEvent>());
+            });
+            services.AddSingleton<OutboxProcessor<TestDbContext>>();
+            services.AddSingleton(Options.Create(new OutboxOptions()));
+            services.AddDbContext<TestDbContext>((sp, options) =>
+            {
+                options.UseNpgsql(PostgresConnectionString);
+                options.RegisterOutbox<TestDbContext>(sp);
+            });
+            services.RemoveAll<IMessageSender>();
+            services.AddSingleton<IMessageSender>(sender);
+        });
+
+        await InitializeDatabase();
+
+        // Stage 2 messages
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            dbContext.OutboxMessages.Add(new TestEvent { Data = "msg-1" });
+            dbContext.OutboxMessages.Add(new TestEvent { Data = "msg-2" });
+            await dbContext.SaveChangesAsync();
+        });
+
+        // Act — first message succeeds, second fails
+        await InScopeAsync(async ctx =>
+        {
+            await ProcessOutboxAsync<TestDbContext>(ctx.ServiceProvider);
+        });
+
+        // Assert — first message should be processed, second should have error
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var entities = await dbContext.Set<OutboxMessageEntity>()
+                .OrderBy(e => e.CreatedAt).ToListAsync();
+
+            entities.Should().HaveCount(2);
+            entities[0].ProcessedAt.Should().NotBeNull("first message should be persisted as processed");
+            entities[1].ProcessedAt.Should().BeNull("second message failed and should not be processed");
+            entities[1].ErrorCount.Should().Be(1);
+        });
+    }
+
+    [Test]
+    public async Task Outbox_SendTimeout_IncreasesErrorCount()
+    {
+        // Verifies that a send operation exceeding the configured timeout is treated as a failure.
+        var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var slowSender = new SlowMessageSender(RabbitMqConstants.TransportName);
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TimeProvider>(fakeTime);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddEventPublishChannel(ExchangeName, c => c
+                    .WithRabbitMq(r => r.WithTopicExchange())
+                    .Produces<TestEvent>());
+            });
+            services.AddSingleton<OutboxProcessor<TestDbContext>>();
+            services.AddSingleton(Options.Create(new OutboxOptions { SendTimeout = TimeSpan.FromMilliseconds(100) }));
+            services.AddDbContext<TestDbContext>((sp, options) =>
+            {
+                options.UseNpgsql(PostgresConnectionString);
+                options.RegisterOutbox<TestDbContext>(sp);
+            });
+            services.RemoveAll<IMessageSender>();
+            services.AddSingleton<IMessageSender>(slowSender);
+        });
+
+        await InitializeDatabase();
+
+        // Stage a message
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            dbContext.OutboxMessages.Add(new TestEvent { Data = "slow-msg" });
+            await dbContext.SaveChangesAsync();
+        });
+
+        // Act — process; the slow sender will be cancelled by the timeout
+        await InScopeAsync(async ctx =>
+        {
+            await ProcessOutboxAsync<TestDbContext>(ctx.ServiceProvider);
+        });
+
+        // Assert — message should have failed, not processed
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var entity = await dbContext.Set<OutboxMessageEntity>().FirstAsync();
+            entity.ProcessedAt.Should().BeNull("send timed out and should not be marked as processed");
+            entity.ErrorCount.Should().Be(1);
+            entity.IsPoisoned.Should().BeFalse();
+        });
+    }
+
+    [Test]
+    public async Task Outbox_StuckMessageDetection_ReprocessesStuckMessage()
+    {
+        // Verifies that a message stuck in "processing" state is recovered after the threshold.
+        var startTime = new DateTimeOffset(2025, 6, 1, 12, 0, 0, TimeSpan.Zero);
+        var fakeTime = new FakeTimeProvider(startTime);
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TimeProvider>(fakeTime);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddEventPublishChannel(ExchangeName, c => c
+                    .WithRabbitMq(r => r.WithTopicExchange())
+                    .Produces<TestEvent>());
+            });
+            services.AddSingleton<OutboxProcessor<TestDbContext>>();
+            services.AddSingleton(Options.Create(new OutboxOptions
+            {
+                StuckMessageThreshold = TimeSpan.FromMinutes(5)
+            }));
+            services.AddDbContext<TestDbContext>((sp, options) =>
+            {
+                options.UseNpgsql(PostgresConnectionString);
+                options.RegisterOutbox<TestDbContext>(sp);
+            });
+        });
+
+        await InitializeDatabase();
+
+        // Stage a message and simulate it getting stuck in "processing"
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            dbContext.OutboxMessages.Add(new TestEvent { Data = "stuck-msg" });
+            await dbContext.SaveChangesAsync();
+        });
+
+        // Process normally — marks as processing and sends
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var entity = await dbContext.Set<OutboxMessageEntity>().FirstAsync();
+            entity.MarkAsProcessing(fakeTime);
+            await dbContext.SaveChangesAsync();
+        });
+
+        // Advance 1 minute — below the 5-minute threshold
+        fakeTime.Advance(TimeSpan.FromMinutes(1));
+
+        // Process with stuck detection — too recent, should NOT pick up
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var messageSenders = ctx.ServiceProvider.GetServices<IMessageSender>();
+            var timeProvider = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
+            var options = ctx.ServiceProvider.GetRequiredService<IOptions<OutboxOptions>>();
+            var logger = NullLogger<OutboxMessageProcessor<TestDbContext>>.Instance;
+            var observers = ctx.ServiceProvider.GetServices<IMessageActivityObserver>();
+            var processor = new OutboxMessageProcessor<TestDbContext>(
+                dbContext, messageSenders, timeProvider, options.Value, observers, logger);
+
+            var count = await processor.ProcessBatchAsync(includeStuckMessageDetection: true, CancellationToken.None);
+            count.Should().Be(0, "message is stuck for only 1 minute — not yet considered stuck");
+        });
+
+        // Advance to 6 minutes total — past the 5-minute threshold
+        fakeTime.Advance(TimeSpan.FromMinutes(5));
+
+        // Process with stuck detection — should pick up and re-process
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var messageSenders = ctx.ServiceProvider.GetServices<IMessageSender>();
+            var timeProvider = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
+            var options = ctx.ServiceProvider.GetRequiredService<IOptions<OutboxOptions>>();
+            var logger = NullLogger<OutboxMessageProcessor<TestDbContext>>.Instance;
+            var observers = ctx.ServiceProvider.GetServices<IMessageActivityObserver>();
+            var processor = new OutboxMessageProcessor<TestDbContext>(
+                dbContext, messageSenders, timeProvider, options.Value, observers, logger);
+
+            var count = await processor.ProcessBatchAsync(includeStuckMessageDetection: true, CancellationToken.None);
+            count.Should().BeGreaterThan(0);
+        });
+
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var entity = await dbContext.Set<OutboxMessageEntity>().FirstAsync();
+            entity.ProcessedAt.Should().NotBeNull("stuck message should have been re-processed");
+        });
+    }
+
     private async Task InitializeDatabase()
     {
         await InScopeAsync(async ctx =>
@@ -601,5 +811,37 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             if (batchProcessed == 0) break;
         }
         return totalProcessed;
+    }
+
+    /// <summary>
+    /// Sender that succeeds for the first N calls, then always fails.
+    /// Used to test per-message save behavior.
+    /// </summary>
+    private class SucceedThenFailSender(string transportName, int successesBeforeFailure) : IMessageSender
+    {
+        private int _callCount;
+        public string TransportName => transportName;
+
+        public Task SendAsync(byte[] content, MessageProperties props, CancellationToken cancellationToken)
+        {
+            _callCount++;
+            if (_callCount > successesBeforeFailure)
+                throw new InvalidOperationException($"Simulated failure (attempt {_callCount})");
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>
+    /// Sender that blocks indefinitely until its cancellation token fires.
+    /// Used to test send timeout behavior.
+    /// </summary>
+    private class SlowMessageSender(string transportName) : IMessageSender
+    {
+        public string TransportName => transportName;
+
+        public async Task SendAsync(byte[] content, MessageProperties props, CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+        }
     }
 }

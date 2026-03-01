@@ -166,8 +166,20 @@ internal class InboxMessageProcessor<TDbContext>(
                               ?? throw new InvalidOperationException(
                                   $"Deserialized message of type '{registration.MessageType.Name}' was null.");
 
-                // Invoke handler via compiled delegate (no per-call reflection overhead)
-                await registration.Invoke(handler, message, props, cancellationToken);
+                // Invoke handler via compiled delegate (no per-call reflection overhead).
+                // When HandlerTimeout is configured, wrap in a linked CTS that fires after the timeout.
+                // Timeout cancellation falls into the general catch (not the shutdown catch) because
+                // the outer cancellationToken is NOT cancelled — only the timeout CTS is.
+                if (options.HandlerTimeout.HasValue)
+                {
+                    using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    timeoutCts.CancelAfter(options.HandlerTimeout.Value);
+                    await registration.Invoke(handler, message, props, timeoutCts.Token);
+                }
+                else
+                {
+                    await registration.Invoke(handler, message, props, cancellationToken);
+                }
 
                 status.MarkAsCompleted(timeProvider);
                 RatatoskrDiagnostics.InboxDeliverCount.Add(1, new TagList { { "status", "success" } });
@@ -194,6 +206,12 @@ internal class InboxMessageProcessor<TDbContext>(
                     "Inbox handler '{HandlerKey}' failed for message '{MessageId}', attempt {Attempt}",
                     status.HandlerKey, status.MessageId, status.ErrorCount + 1);
                 status.MarkAsFailed(ex.Message, timeProvider, options.MaxRetries, options.MaxRetryDelay);
+
+                if (status.IsPoisoned)
+                {
+                    logger.LogError("Inbox handler '{HandlerKey}' for message '{MessageId}' has been poisoned after {Attempts} failed attempts. Last error: {Error}",
+                        status.HandlerKey, status.MessageId, status.ErrorCount, ex.Message);
+                }
             }
             finally
             {
