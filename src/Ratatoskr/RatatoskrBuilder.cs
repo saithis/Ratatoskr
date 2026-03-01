@@ -110,26 +110,24 @@ public class RatatoskrBuilder
 
     /// <summary>
     /// Registers a message handler.
-    /// <para>
-    /// Use <paramref name="configure"/> to control inbox participation:
-    /// <list type="bullet">
-    /// <item><description><c>cfg.WithInbox("key")</c> — durable inbox with a stable key (must not change after deployment).</description></item>
-    /// <item><description><c>cfg.WithInbox()</c> — durable inbox using the handler's CLR full name as the stable key.</description></item>
-    /// <item><description><c>cfg.WithoutInbox()</c> — fire-and-forget (synchronous dispatch), even when a global default inbox is configured.</description></item>
-    /// <item><description>Omit the argument (or pass <c>null</c>) — uses the global default set by <c>UseEfCoreInbox</c>.</description></item>
-    /// </list>
-    /// </para>
+    /// Use <paramref name="configure"/> to attach infrastructure-specific options
+    /// (e.g. inbox participation via the <c>Ratatoskr.EfCore</c> package).
     /// </summary>
-    public RatatoskrBuilder AddHandler<TMessage, THandler>(Action<HandlerInboxConfig>? configure = null)
+    public RatatoskrBuilder AddHandler<TMessage, THandler>(Action<HandlerBuilder>? configure = null)
         where TMessage : notnull
         where THandler : class, IMessageHandler<TMessage>
     {
         Services.AddScoped<THandler>();
         Services.AddScoped<IMessageHandler<TMessage>>(sp => sp.GetRequiredService<THandler>());
 
-        var config = new HandlerInboxConfig();
-        configure?.Invoke(config);
-        PendingHandlers.Add(new PendingHandlerRegistration(typeof(TMessage), typeof(THandler), config.UseInboxExplicit, config.Key));
+        var registration = new HandlerRegistration();
+        if (configure != null)
+        {
+            var builder = new HandlerBuilder(registration);
+            configure(builder);
+        }
+
+        PendingHandlers.Add(new PendingHandlerRegistration(typeof(TMessage), typeof(THandler), registration));
 
         return this;
     }
@@ -150,13 +148,10 @@ public class RatatoskrBuilder
 }
 
 /// <summary>
-/// Holds a pending handler registration that will be resolved to an inbox registration
-/// (or skipped) once the global inbox configuration is known.
+/// Holds a pending handler registration that will be finalized by infrastructure packages
+/// (e.g. inbox) once the global configuration is known.
 /// </summary>
 internal record PendingHandlerRegistration(
     Type MessageType,
     Type HandlerType,
-    /// <summary>null = use global default; true = use inbox; false = fire-and-forget</summary>
-    bool? ExplicitUseInbox,
-    /// <summary>null = use handler type full name as key</summary>
-    string? ExplicitKey);
+    HandlerRegistration Registration);

@@ -69,8 +69,8 @@ services.AddRatatoskr(bus =>
     });
 
     // Inbox-managed handlers — opted in via WithInbox("stable-key")
-    bus.AddHandler<OrderPlaced, FulfillmentHandler>(cfg => cfg.WithInbox("fulfillment"));
-    bus.AddHandler<OrderPlaced, NotificationHandler>(cfg => cfg.WithInbox("notification"));
+    bus.AddHandler<OrderPlaced, FulfillmentHandler>(h => h.WithInbox("fulfillment"));
+    bus.AddHandler<OrderPlaced, NotificationHandler>(h => h.WithInbox("notification"));
 
     // Fire-and-forget (non-inbox) handler — existing behaviour
     bus.AddHandler<OrderPlaced, AuditLogHandler>();
@@ -86,7 +86,7 @@ services.AddDbContext<AppDbContext>((sp, opts) =>
 
 ```csharp
 // Inbox-managed: durable delivery, per-handler retry, deduplication
-bus.AddHandler<OrderPlaced, FulfillmentHandler>(cfg => cfg.WithInbox("fulfillment"));
+bus.AddHandler<OrderPlaced, FulfillmentHandler>(h => h.WithInbox("fulfillment"));
 
 // Fire-and-forget: synchronous, no deduplication
 bus.AddHandler<OrderPlaced, AuditLogHandler>();
@@ -100,9 +100,9 @@ The **handler key** (`"fulfillment"`) is persisted in the database. It must be s
 
 | Method | Effect |
 |---|---|
-| `cfg.WithInbox("key")` | Enroll handler in inbox with the given stable key. |
-| `cfg.WithInbox()` | Enroll with the handler's CLR full name as the stable key. |
-| `cfg.WithoutInbox()` | Explicitly exclude this handler from the inbox (overrides global default). |
+| `h.WithInbox("key")` | Enroll handler in inbox with the given stable key. |
+| `h.WithInbox()` | Enroll with the handler's CLR full name as the stable key. |
+| `h.WithoutInbox()` | Explicitly exclude this handler from the inbox (overrides global default). |
 | *(no call)* | Determined by `WithDefaultInboxEnabled()` — excluded by default. |
 
 #### Global default opt-in
@@ -149,7 +149,7 @@ bus.UseEfCoreInbox<AppDbContext>(inbox =>
 You can register both inbox-managed and fire-and-forget handlers for the same message type:
 
 ```csharp
-bus.AddHandler<OrderPlaced, FulfillmentHandler>(cfg => cfg.WithInbox("fulfillment")); // inbox
+bus.AddHandler<OrderPlaced, FulfillmentHandler>(h => h.WithInbox("fulfillment")); // inbox
 bus.AddHandler<OrderPlaced, AuditLogHandler>();                                        // fire-and-forget
 ```
 
@@ -206,7 +206,7 @@ Use `WithoutBackgroundProcessing()` to disable the `InboxProcessor` background s
 services.AddRatatoskr(bus =>
 {
     bus.UseLocalTransport();
-    bus.AddHandler<OrderPlaced, FulfillmentHandler>(cfg => cfg.WithInbox("fulfillment"));
+    bus.AddHandler<OrderPlaced, FulfillmentHandler>(h => h.WithInbox("fulfillment"));
     bus.UseEfCoreInbox<AppDbContext>(inbox => inbox.WithoutBackgroundProcessing());
 });
 

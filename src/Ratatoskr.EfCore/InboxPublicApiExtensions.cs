@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Ratatoskr;
+using Ratatoskr.Config;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.Local;
@@ -63,10 +64,11 @@ public static class InboxPublicApiExtensions
                 var defaultEnabled = inboxBuilder.Options.DefaultHandlerInboxEnabled;
                 foreach (var pending in builder.PendingHandlers)
                 {
-                    var useInbox = pending.ExplicitUseInbox ?? defaultEnabled;
+                    var inboxOptions = pending.Registration.GetExtension<InboxHandlerOptions>();
+                    var useInbox = inboxOptions?.UseInboxExplicit ?? defaultEnabled;
                     if (!useInbox) continue;
 
-                    var key = pending.ExplicitKey ?? pending.HandlerType.FullName!;
+                    var key = inboxOptions?.Key ?? pending.HandlerType.FullName!;
 
                     // Resolve wire type name: prefer ChannelRegistry config (accounts for per-message
                     // overrides), fall back to [RatatoskrMessage] attribute.
@@ -79,6 +81,39 @@ public static class InboxPublicApiExtensions
             // Startup validation runs after deferred actions (InboxHandlerRegistry is fully populated).
             builder.AddValidator(cr => InboxConfigurationValidator.Validate(cr, builder.InboxHandlerRegistry));
 
+            return builder;
+        }
+    }
+
+    extension(HandlerBuilder builder)
+    {
+        /// <summary>
+        /// Routes this handler through the durable inbox with the given stable key.
+        /// The key is persisted to the database — it must remain stable across deployments.
+        /// </summary>
+        public HandlerBuilder WithInbox(string stableKey)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(stableKey);
+            builder.WithExtension(new InboxHandlerOptions { UseInboxExplicit = true, Key = stableKey });
+            return builder;
+        }
+
+        /// <summary>
+        /// Routes this handler through the durable inbox, using the handler's CLR full name as the stable key.
+        /// </summary>
+        public HandlerBuilder WithInbox()
+        {
+            builder.WithExtension(new InboxHandlerOptions { UseInboxExplicit = true });
+            return builder;
+        }
+
+        /// <summary>
+        /// Explicitly opts this handler out of the inbox. The handler will be called synchronously (fire-and-forget),
+        /// even when a global default inbox is configured.
+        /// </summary>
+        public HandlerBuilder WithoutInbox()
+        {
+            builder.WithExtension(new InboxHandlerOptions { UseInboxExplicit = false });
             return builder;
         }
     }

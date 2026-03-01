@@ -18,7 +18,7 @@ internal static class InboxConfigurationValidator
             if (string.IsNullOrWhiteSpace(handler.Key))
                 throw new InvalidOperationException(
                     $"Inbox handler for '{handler.HandlerType.Name}' has an empty stable key. " +
-                    $"Provide a non-empty key via AddHandler<TMsg, THandler>(cfg => cfg.WithInbox(\"key\")).");
+                    $"Provide a non-empty key via AddHandler<TMsg, THandler>(h => h.WithInbox(\"key\")).");
 
             // Verify the message type is registered in at least one consume channel.
             // Without this, MessageDispatcher cannot route incoming messages to the handler.
