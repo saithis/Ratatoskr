@@ -1105,6 +1105,259 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
         });
     }
 
+    [Test]
+    public async Task Inbox_ConcurrentDuplicate_ExactlyOneMessageAndStatus()
+    {
+        // Arrange: publish the same message ID from two concurrent tasks
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
+                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("handler-a"));
+                bus.UseEfCoreInbox<TestDbContext>();
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await InitializeDatabase();
+
+        const string sharedMessageId = "concurrent-dedup-1";
+
+        // Act: publish the same message ID concurrently from two tasks
+        await Task.WhenAll(
+            InScopeAsync(async ctx =>
+            {
+                var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+                await bus.PublishDirectAsync(
+                    new TestEvent { Id = "business-concurrent-1" },
+                    new MessageProperties { Id = sharedMessageId });
+            }),
+            InScopeAsync(async ctx =>
+            {
+                var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+                await bus.PublishDirectAsync(
+                    new TestEvent { Id = "business-concurrent-2" },
+                    new MessageProperties { Id = sharedMessageId });
+            })
+        );
+
+        // Wait for handler to complete
+        await WaitForConditionAsync(
+            async () => await InScopeAsync(async ctx =>
+            {
+                var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                var status = await db.Set<InboxHandlerStatusEntity>()
+                    .SingleOrDefaultAsync(s => s.MessageId == sharedMessageId);
+                return status?.CompletedAt != null;
+            }),
+            TimeSpan.FromSeconds(15));
+
+        // Assert: exactly one inbox message and one handler status
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+
+            var messages = await db.Set<InboxMessageEntity>()
+                .Where(m => m.Id == sharedMessageId).ToListAsync();
+            messages.Should().HaveCount(1, "concurrent publish must not create duplicate InboxMessage rows");
+
+            var statuses = await db.Set<InboxHandlerStatusEntity>()
+                .Where(s => s.MessageId == sharedMessageId).ToListAsync();
+            statuses.Should().HaveCount(1, "concurrent publish must not create duplicate handler status rows");
+        });
+    }
+
+    [Test]
+    public async Task Inbox_CancellationToken_PropagatedToHandler()
+    {
+        // Arrange: handler that blocks until a semaphore is released
+        var coordination = new CancellableHandlerCoordination();
+        var receivedCancellation = false;
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton(coordination);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
+                bus.AddHandler<TestEvent, CancellableHandler>(cfg => cfg.WithInbox("cancellable"));
+                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await InitializeDatabase();
+
+        await InScopeAsync(async ctx =>
+        {
+            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+            await bus.PublishDirectAsync(
+                new TestEvent { Id = "business-cancel-1" },
+                new MessageProperties { Id = "cancel-1" });
+        });
+
+        // Act: start processing with a cancellable token, then cancel mid-handler
+        using var cts = new CancellationTokenSource();
+        var processTask = InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var scopeFactory = ctx.ServiceProvider.GetRequiredService<IServiceScopeFactory>();
+            var handlerRegistry = ctx.ServiceProvider.GetRequiredService<InboxHandlerRegistry>();
+            var timeProvider = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
+            var options = ctx.ServiceProvider.GetRequiredService<IOptions<InboxOptions>>();
+            var observers = ctx.ServiceProvider.GetServices<IMessageActivityObserver>();
+            var messageSerializer = ctx.ServiceProvider.GetRequiredService<IMessageSerializer>();
+
+            var processor = new InboxMessageProcessor<TestDbContext>(
+                dbContext, scopeFactory, handlerRegistry, timeProvider,
+                options.Value, observers, messageSerializer,
+                NullLogger<InboxMessageProcessor<TestDbContext>>.Instance);
+
+            try
+            {
+                await processor.ProcessBatchAsync(false, cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                receivedCancellation = true;
+            }
+        });
+
+        // Wait for handler to start, then cancel
+        await coordination.HandlerStarted.WaitAsync(TimeSpan.FromSeconds(5));
+        await cts.CancelAsync();
+        coordination.HandlerGate.Release(); // Unblock the handler so it can observe cancellation
+
+        await processTask;
+
+        // Assert: cancellation was received
+        receivedCancellation.Should().BeTrue("cancellation should propagate to the processor");
+
+        // Status should remain incomplete (not marked as completed since we cancelled)
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var status = await db.Set<InboxHandlerStatusEntity>().SingleAsync();
+            status.CompletedAt.Should().BeNull("handler was cancelled, not completed");
+        });
+    }
+
+    [Test]
+    public async Task Inbox_BatchBoundary_ProcessesAcrossMultipleBatches()
+    {
+        // Arrange: BatchSize = 3, publish 5 messages
+        var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TimeProvider>(fakeTime);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
+                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("handler-a"));
+                bus.UseEfCoreInbox<TestDbContext>(inbox =>
+                {
+                    inbox.WithBatchSize(3);
+                    inbox.WithoutBackgroundProcessing();
+                });
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await InitializeDatabase();
+
+        // Publish 5 messages
+        for (int i = 0; i < 5; i++)
+        {
+            await InScopeAsync(async ctx =>
+            {
+                var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+                await bus.PublishDirectAsync(
+                    new TestEvent { Id = $"business-batch-{i}" },
+                    new MessageProperties { Id = $"batch-{i}" });
+            });
+        }
+
+        // Act: process all batches (should take at least 2 batch iterations: 3 + 2)
+        await InScopeAsync(async ctx =>
+        {
+            var processed = await ProcessInboxAsync(ctx.ServiceProvider);
+            processed.Should().Be(5, "all 5 messages should be processed across multiple batches");
+        });
+
+        // Assert: all 5 are completed
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var statuses = await db.Set<InboxHandlerStatusEntity>().ToListAsync();
+            statuses.Should().HaveCount(5);
+            statuses.Should().AllSatisfy(s => s.CompletedAt.Should().NotBeNull());
+        });
+    }
+
+    [Test]
+    public async Task Inbox_ZeroInboxHandlers_MessagesDispatchedNormally()
+    {
+        // Arrange: UseEfCoreInbox configured but no handlers with WithInbox()
+        var nonInboxHandler = new TestEventHandler();
+
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
+                bus.AddHandler<TestEvent, TestEventHandler>(nonInboxHandler);
+                bus.UseEfCoreInbox<TestDbContext>(); // Inbox enabled, but no handlers opted in
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await InitializeDatabase();
+
+        // Act
+        await InScopeAsync(async ctx =>
+        {
+            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+            await bus.PublishDirectAsync(
+                new TestEvent { Id = "business-zero-inbox-1", Data = "no inbox handlers" },
+                new MessageProperties { Id = "zero-inbox-1" });
+        });
+
+        // Assert: non-inbox handler was called synchronously
+        await WaitForConditionAsync(
+            () => Task.FromResult(nonInboxHandler.HandledMessages.Any()),
+            TimeSpan.FromSeconds(5));
+
+        nonInboxHandler.HandledMessages.Should().ContainSingle(m => m.Id == "business-zero-inbox-1");
+
+        // No inbox rows should have been created
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var inboxMessages = await db.Set<InboxMessageEntity>().ToListAsync();
+            inboxMessages.Should().BeEmpty("no inbox handlers means no inbox rows");
+
+            var handlerStatuses = await db.Set<InboxHandlerStatusEntity>().ToListAsync();
+            handlerStatuses.Should().BeEmpty();
+        });
+    }
+
     #endregion
 
     #region Helpers
@@ -1225,6 +1478,24 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
     {
         public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
             => throw new InvalidOperationException(new string('X', 5000));
+    }
+
+    /// <summary>Coordination object for the cancellable handler test (avoids DI ambiguity with two SemaphoreSlim params).</summary>
+    private class CancellableHandlerCoordination
+    {
+        public SemaphoreSlim HandlerStarted { get; } = new(0, 1);
+        public SemaphoreSlim HandlerGate { get; } = new(0, 1);
+    }
+
+    /// <summary>Handler that blocks until a semaphore is released, then checks for cancellation.</summary>
+    private class CancellableHandler(CancellableHandlerCoordination coordination) : IMessageHandler<TestEvent>
+    {
+        public async Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
+        {
+            coordination.HandlerStarted.Release();
+            await coordination.HandlerGate.WaitAsync(ct);
+            ct.ThrowIfCancellationRequested();
+        }
     }
 
     #endregion

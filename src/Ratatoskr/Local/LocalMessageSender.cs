@@ -15,26 +15,8 @@ internal class LocalMessageSender(
     public async Task SendAsync(byte[] content, MessageProperties props, CancellationToken cancellationToken)
     {
         var startTimestamp = Stopwatch.GetTimestamp();
-
-        using var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
-            "send local",
-            ActivityKind.Client,
-            Activity.Current?.Context ?? default);
-
-        if (activity != null)
-        {
-            props.TraceParent = activity.Id;
-            props.TraceState = activity.TraceStateString;
-
-            activity.SetTag(MessagingSemanticConventions.OperationName, "send");
-            activity.SetTag(MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeSend);
-            activity.SetTag(MessagingSemanticConventions.System, "local");
-            activity.SetTag(MessagingSemanticConventions.MessageId, props.Id);
-            activity.SetTag(MessagingSemanticConventions.MessageBodySize, content.Length);
-        }
-
+        using var activity = LocalSendInstrumentation.StartSendActivity(props, content.Length);
         var transportMessage = LocalTransportMessageSnapshotFactory.Create(content, props);
-
         Exception? sendException = null;
 
         try
@@ -44,50 +26,14 @@ internal class LocalMessageSender(
         catch (Exception ex)
         {
             sendException = ex;
-            activity?.SetTag(MessagingSemanticConventions.ErrorType, ex.GetType().FullName);
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            LocalSendInstrumentation.SetActivityError(activity, ex);
             throw;
         }
         finally
         {
-            var duration = Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds;
-            var tags = new TagList
-            {
-                { MessagingSemanticConventions.System, "local" },
-                { MessagingSemanticConventions.OperationName, "send" },
-                { MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeSend },
-            };
-
-            if (sendException != null)
-            {
-                tags.Add(MessagingSemanticConventions.ErrorType, sendException.GetType().FullName);
-            }
-
-            RatatoskrDiagnostics.ClientOperationDuration.Record(duration, tags);
-            RatatoskrDiagnostics.ClientSentMessages.Add(1, tags);
-
-            var sentTimestamp = timeProvider.GetUtcNow();
-
-            foreach (var observer in observers)
-            {
-                try
-                {
-                    await observer.OnMessageActivity(new MessageActivity
-                    {
-                        Stage = MessageStage.Sent,
-                        Properties = props,
-                        SerializedBody = content,
-                        TransportName = TransportName,
-                        TransportMessage = transportMessage,
-                        Exception = sendException,
-                        Timestamp = sentTimestamp,
-                    });
-                }
-                catch
-                {
-                    // Observer failures must not affect the pipeline
-                }
-            }
+            await LocalSendInstrumentation.RecordSendMetricsAndNotifyAsync(
+                startTimestamp, sendException, props, content,
+                TransportName, transportMessage, observers, timeProvider);
         }
     }
 }

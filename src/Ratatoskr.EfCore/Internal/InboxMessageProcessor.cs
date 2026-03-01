@@ -79,6 +79,8 @@ internal class InboxMessageProcessor<TDbContext>(
                     status.MessageId, status.Id);
                 status.MarkAsFailed("InboxMessage record not found — likely deleted.", timeProvider,
                     options.MaxRetries, options.MaxRetryDelay);
+                if (status.IsPoisoned)
+                    RatatoskrDiagnostics.InboxPoisonCount.Add(1);
                 continue;
             }
 
@@ -91,15 +93,32 @@ internal class InboxMessageProcessor<TDbContext>(
                 status.MarkAsFailed(
                     $"Handler key '{status.HandlerKey}' is not registered. The handler may have been removed or renamed.",
                     timeProvider, options.MaxRetries, options.MaxRetryDelay);
+                if (status.IsPoisoned)
+                    RatatoskrDiagnostics.InboxPoisonCount.Add(1);
                 continue;
             }
 
-            MessageProperties? props = null;
-            Activity? deliverActivity = null;
+            // Deserialize properties before the handler try-catch so observers always fire
+            MessageProperties props;
             try
             {
                 props = inboxMessage.GetProperties();
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to deserialize properties for InboxMessage '{MessageId}'. Poisoning status '{StatusId}'.",
+                    status.MessageId, status.Id);
+                status.MarkAsFailed($"Properties deserialization failed: {ex.Message}", timeProvider,
+                    options.MaxRetries, options.MaxRetryDelay);
+                if (status.IsPoisoned)
+                    RatatoskrDiagnostics.InboxPoisonCount.Add(1);
+                continue;
+            }
 
+            Activity? deliverActivity = null;
+            Exception? handlerException = null;
+            try
+            {
                 // Start a Consumer span, parented to the original message trace
                 ActivityContext.TryParse(props.TraceParent, props.TraceState, out var parentContext);
                 deliverActivity = RatatoskrDiagnostics.ActivitySource.StartActivity(
@@ -134,6 +153,7 @@ internal class InboxMessageProcessor<TDbContext>(
             }
             catch (Exception ex)
             {
+                handlerException = ex;
                 deliverActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 RatatoskrDiagnostics.InboxDeliverCount.Add(1, new TagList { { "status", "failure" } });
                 logger.LogWarning(ex,
@@ -146,27 +166,31 @@ internal class InboxMessageProcessor<TDbContext>(
                 deliverActivity?.Dispose();
             }
 
-            // Fire observers after each handler invocation
-            if (props != null)
+            // Fire InboxDispatched observer — always fires (props always available here)
+            await NotifyObserversAsync(new MessageActivity
             {
-                foreach (var observer in observers)
+                Stage = MessageStage.InboxDispatched,
+                Properties = props,
+                SerializedBody = inboxMessage.Content,
+                TransportName = inboxMessage.TransportName,
+                IsSuccess = handlerException == null,
+                Exception = handlerException,
+                Timestamp = timeProvider.GetUtcNow(),
+            });
+
+            // Fire InboxPoisoned observer when max retries are exceeded
+            if (status.IsPoisoned)
+            {
+                RatatoskrDiagnostics.InboxPoisonCount.Add(1);
+                await NotifyObserversAsync(new MessageActivity
                 {
-                    try
-                    {
-                        await observer.OnMessageActivity(new MessageActivity
-                        {
-                            Stage = MessageStage.InboxDispatched,
-                            Properties = props,
-                            SerializedBody = inboxMessage.Content,
-                            TransportName = inboxMessage.TransportName,
-                            Timestamp = timeProvider.GetUtcNow(),
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(ex, "Observer failed at {Stage} stage", MessageStage.InboxDispatched);
-                    }
-                }
+                    Stage = MessageStage.InboxPoisoned,
+                    Properties = props,
+                    SerializedBody = inboxMessage.Content,
+                    TransportName = inboxMessage.TransportName,
+                    Exception = handlerException,
+                    Timestamp = timeProvider.GetUtcNow(),
+                });
             }
         }
 
@@ -174,5 +198,20 @@ internal class InboxMessageProcessor<TDbContext>(
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return successCount;
+    }
+
+    private async Task NotifyObserversAsync(MessageActivity activity)
+    {
+        foreach (var observer in observers)
+        {
+            try
+            {
+                await observer.OnMessageActivity(activity);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Observer failed at {Stage} stage", activity.Stage);
+            }
+        }
     }
 }

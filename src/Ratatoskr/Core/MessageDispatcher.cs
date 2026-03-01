@@ -156,7 +156,7 @@ public class MessageDispatcher(
         {
             result = DispatchResult.RecoverableError;
         }
-        else if (inboxHandlers.Count > 0 && inboxHandlerTypes.Count == handlersInstances.Length)
+        else if (inboxHandlers.Count > 0 && inboxHandlerTypes.Count == handlersInstances.Count(h => h != null))
         {
             // All registered handlers were inbox-managed; none called synchronously
             result = DispatchResult.Queued;

@@ -47,6 +47,11 @@ public enum MessageStage
     /// Fired once per handler per delivery attempt.
     /// </summary>
     InboxDispatched,
+
+    /// <summary>
+    /// A handler status has been marked as poisoned after exceeding the maximum retry count.
+    /// </summary>
+    InboxPoisoned,
 }
 
 /// <summary>
@@ -84,6 +89,12 @@ public class MessageActivity
     /// The dispatch result. Only set at the Dispatched stage.
     /// </summary>
     public DispatchResult? DispatchResult { get; init; }
+
+    /// <summary>
+    /// Whether the operation succeeded. Set at the <see cref="MessageStage.InboxDispatched"/> stage:
+    /// <c>true</c> on success, <c>false</c> on failure. <c>null</c> for other stages.
+    /// </summary>
+    public bool? IsSuccess { get; init; }
 
     /// <summary>
     /// Any exception that occurred. Set when dispatch fails.

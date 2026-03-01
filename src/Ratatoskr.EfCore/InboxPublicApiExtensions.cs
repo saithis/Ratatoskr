@@ -108,8 +108,7 @@ public static class InboxPublicApiExtensions
 
             entity.HasIndex(
                 e => new { e.CompletedAt, e.IsPoisoned, e.NextAttemptAt, e.ProcessingStartedAt, e.MessageId },
-                "IX_InboxHandlerStatuses_Processing")
-            .HasFilter("\"CompletedAt\" IS NULL AND \"IsPoisoned\" = false");
+                "IX_InboxHandlerStatuses_Processing");
 
             entity.Property(e => e.HandlerKey).HasMaxLength(200).IsRequired();
             entity.Property(e => e.LastError).HasMaxLength(2000);

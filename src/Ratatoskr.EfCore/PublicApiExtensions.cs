@@ -89,15 +89,14 @@ public static class PublicApiExtensions
             // Index for the main query: unprocessed, not poisoned, ready to process
             // Covers: ProcessedAt, IsPoisoned, NextAttemptAt, ProcessingStartedAt, CreatedAt
             entity.HasIndex(
-                e => new { 
-                    e.ProcessedAt, 
-                    e.IsPoisoned, 
-                    e.NextAttemptAt, 
-                    e.ProcessingStartedAt, 
-                    e.CreatedAt 
+                e => new {
+                    e.ProcessedAt,
+                    e.IsPoisoned,
+                    e.NextAttemptAt,
+                    e.ProcessingStartedAt,
+                    e.CreatedAt
                 },
-                "IX_OutboxMessages_Processing")
-            .HasFilter("\"ProcessedAt\" IS NULL AND \"IsPoisoned\" = false");
+                "IX_OutboxMessages_Processing");
             
             // Configure column constraints
             entity.Property(e => e.Error).HasMaxLength(2000);

@@ -13,6 +13,10 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         Action<RatatoskrBuilder>? configure = null)
     {
+        if (services.Any(d => d.ServiceType == typeof(RatatoskrMarker)))
+            throw new InvalidOperationException("AddRatatoskr has already been called. It must only be called once per IServiceCollection.");
+        services.AddSingleton<RatatoskrMarker>();
+
         var builder = new RatatoskrBuilder(services);
         configure?.Invoke(builder);
 
@@ -61,4 +65,9 @@ public static class ServiceCollectionExtensions
         public void ConfigureOperation(ChannelRegistration channel, AsyncApiOperation operation) { }
         public void ConfigureMessage(MessageRegistration message, ChannelRegistration channel, AsyncApiMessage asyncApiMessage) { }
     }
+
+    /// <summary>
+    /// Sentinel type used to detect duplicate <see cref="AddRatatoskr"/> calls.
+    /// </summary>
+    private sealed class RatatoskrMarker;
 }
