@@ -183,13 +183,6 @@ public static class InboxPublicApiExtensions
     /// </summary>
     private static string? ResolveWireTypeName(ChannelRegistry registry, Type messageType)
     {
-        foreach (var channel in registry.GetConsumeChannels())
-        {
-            var msg = channel.Messages.FirstOrDefault(m => m.MessageType == messageType);
-            if (msg != null)
-                return msg.MessageTypeName;
-        }
-
         var names = registry.GetConsumeChannels()
             .SelectMany(c => c.Messages.Where(m => m.MessageType == messageType)
             .Select(m => m.MessageTypeName))
