@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using Ratatoskr.Core;
 
 namespace Ratatoskr.Local;
@@ -45,7 +46,8 @@ internal static class LocalSendInstrumentation
         string transportName,
         TransportMessageSnapshot transportMessage,
         IEnumerable<IMessageActivityObserver> observers,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        ILogger? logger = null)
     {
         var duration = Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds;
         var tags = new TagList
@@ -77,9 +79,10 @@ internal static class LocalSendInstrumentation
                     Timestamp = sentTimestamp,
                 });
             }
-            catch
+            catch (Exception ex)
             {
                 // Observer failures must not affect the pipeline
+                logger?.LogWarning(ex, "Observer failed at {Stage} stage", MessageStage.Sent);
             }
         }
     }

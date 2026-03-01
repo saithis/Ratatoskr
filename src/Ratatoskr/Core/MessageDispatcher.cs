@@ -84,24 +84,31 @@ public class MessageDispatcher(
             return DispatchResult.PermanentError;
         }
 
-        // 3. Dispatch to Handlers via DI
+        // 3. Discover registered handler types via a short-lived DI scope.
+        //    Each handler will later be invoked in its own scope for full isolation.
         List<Exception>? exceptions = null;
-        using var scope = scopeFactory.CreateScope();
-
-        // Generic handler interface type: IMessageHandler<T>
         var interfaceType = typeof(IMessageHandler<>).MakeGenericType(messageType);
-        var handlersInstances = scope.ServiceProvider.GetServices(interfaceType).ToArray();
+        Type[] handlerTypes;
+        using (var discoveryScope = scopeFactory.CreateScope())
+        {
+            handlerTypes = discoveryScope.ServiceProvider
+                .GetServices(interfaceType)
+                .Where(h => h != null)
+                .Select(h => h!.GetType())
+                .ToArray();
+        }
 
-        if (!handlersInstances.Any())
+        if (handlerTypes.Length == 0)
         {
              logger.LogWarning("No handlers registered in DI for CLR type '{Type}' (Event: {EventType})", messageType.Name, properties.Type);
              return DispatchResult.NoHandlers;
         }
 
-        // 4. If inbox interceptors are registered, queue inbox-managed handlers to durable storage
+        // 4. If inbox interceptors are registered, queue inbox-managed handlers to durable storage.
+        //    Interceptors create their own DI scope — fully isolated from handler scopes.
         var inboxHandlers = inboxHandlerRegistry != null && _inboxInterceptors.Count > 0
             ? inboxHandlerRegistry.GetByMessageType(messageType)
-            : (IReadOnlyList<InboxHandlerRegistration>)Array.Empty<InboxHandlerRegistration>();
+            : (IReadOnlyList<InboxHandlerRegistration>)[];
 
         if (inboxHandlers.Count > 0)
         {
@@ -110,7 +117,7 @@ public class MessageDispatcher(
                 var effectiveTransportName = transportName ?? "unknown";
                 foreach (var interceptor in _inboxInterceptors)
                 {
-                    await interceptor.AcceptAsync(scope.ServiceProvider, body, properties, inboxHandlers, effectiveTransportName, cancellationToken);
+                    await interceptor.AcceptAsync(body, properties, inboxHandlers, effectiveTransportName, cancellationToken);
                 }
                 logger.LogDebug("Queued {Count} inbox-managed handler(s) for message '{Id}' of type '{Type}'",
                     inboxHandlers.Count, properties.Id, properties.Type);
@@ -123,29 +130,29 @@ public class MessageDispatcher(
             }
         }
 
-        // 5. Call non-inbox handlers synchronously
+        // 5. Call non-inbox handlers — each in its own DI scope for full isolation.
         var inboxHandlerTypes = new HashSet<Type>(inboxHandlers.Select(h => h.HandlerType));
 
-        foreach (var handler in handlersInstances)
+        foreach (var handlerType in handlerTypes)
         {
-            if (handler == null) continue;
-
             // Skip inbox-managed handlers — they will be delivered by InboxProcessor
-            if (inboxHandlerTypes.Contains(handler.GetType()))
+            if (inboxHandlerTypes.Contains(handlerType))
                 continue;
 
             try
             {
+                using var handlerScope = scopeFactory.CreateScope();
+                var handler = handlerScope.ServiceProvider.GetRequiredService(handlerType);
                 var invoke = HandlerInvokerCache.Get(messageType);
                 await invoke(handler, message, properties, cancellationToken);
 
                 logger.LogDebug("Handler '{Handler}' processed message '{Id}' of type '{Type}'",
-                    handler.GetType().Name, properties.Id, properties.Type);
+                    handlerType.Name, properties.Id, properties.Type);
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Handler '{Handler}' failed for message '{Id}' of type '{Type}'",
-                    handler.GetType().Name, properties.Id, properties.Type);
+                    handlerType.Name, properties.Id, properties.Type);
                 exceptions ??= [];
                 exceptions.Add(ex);
             }
@@ -156,7 +163,7 @@ public class MessageDispatcher(
         {
             result = DispatchResult.RecoverableError;
         }
-        else if (inboxHandlers.Count > 0 && inboxHandlerTypes.Count == handlersInstances.Count(h => h != null))
+        else if (inboxHandlers.Count > 0 && inboxHandlerTypes.Count == handlerTypes.Length)
         {
             // All registered handlers were inbox-managed; none called synchronously
             result = DispatchResult.Queued;

@@ -25,13 +25,14 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
     protected string TestId { get; } = Guid.NewGuid().ToString("N");
     protected string RabbitMqConnectionString => rabbitMq.ConnectionString;
     // Override the connection string to point to the unique database for this test
-    protected string PostgresConnectionString 
+    protected string PostgresConnectionString
     {
-        get 
+        get
         {
             var builder = new Npgsql.NpgsqlConnectionStringBuilder(postgres?.ConnectionString ?? "")
             {
-                Database = $"test_{TestId}"
+                Database = $"test_{TestId}",
+                MaxPoolSize = 2
             };
             return builder.ToString();
         }

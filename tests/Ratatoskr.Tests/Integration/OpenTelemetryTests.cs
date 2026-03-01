@@ -496,8 +496,11 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         deliverActivity.TagObjects.Should().Contain(t => t.Key == "messaging.operation.type" && (string?)t.Value == "process");
         deliverActivity.TagObjects.Should().Contain(t => t.Key == "ratatoskr.inbox.handler.key" && (string?)t.Value == "otel-trace-noop");
 
-        // Verify trace context propagation: the deliver span lives in the same trace as the original publish
-        var publishActivity = activities.FirstOrDefault(a => a.OperationName == "publish");
+        // Verify trace context propagation: the deliver span lives in the same trace as the original publish.
+        // Filter by message ID to avoid picking up a publish activity from another parallel test.
+        var publishActivity = activities.FirstOrDefault(a =>
+            a.OperationName == "publish" &&
+            a.TagObjects.Any(t => t.Key == "messaging.message.id" && (string?)t.Value == eventId));
         if (publishActivity != null)
         {
             deliverActivity.TraceId.Should().Be(publishActivity.TraceId,

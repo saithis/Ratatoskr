@@ -86,8 +86,11 @@ public static class PublicApiExtensions
             // Primary key (if not already configured by convention)
             entity.HasKey(e => e.Id);
             
-            // Index for the main query: unprocessed, not poisoned, ready to process
-            // Covers: ProcessedAt, IsPoisoned, NextAttemptAt, ProcessingStartedAt, CreatedAt
+            // Index for the main query: unprocessed, not poisoned, ready to process.
+            // Covers: ProcessedAt, IsPoisoned, NextAttemptAt, ProcessingStartedAt, CreatedAt.
+            // Note: a partial index (WHERE ProcessedAt IS NULL AND IsPoisoned = false) would be ideal
+            // for large tables, but HasFilter takes raw SQL which is provider-specific (e.g. different
+            // quoting for Postgres vs SQL Server), so we use a full covering index for cross-provider compat.
             entity.HasIndex(
                 e => new {
                     e.ProcessedAt,

@@ -24,7 +24,7 @@ internal class InboxMessageProcessor<TDbContext>(
 {
     /// <summary>
     /// Processes a single batch of pending handler statuses.
-    /// Returns the number of handler statuses successfully delivered.
+    /// Returns the number of handler statuses picked up in the batch (0 means no work found).
     /// </summary>
     /// <param name="includeStuckMessageDetection">Whether to include stuck-message detection (needed in background processing).</param>
     public async Task<int> ProcessBatchAsync(
@@ -69,7 +69,6 @@ internal class InboxMessageProcessor<TDbContext>(
         RatatoskrDiagnostics.InboxBatchSize.Record(statuses.Length);
 
         var batchStartTimestamp = Stopwatch.GetTimestamp();
-        var successCount = 0;
 
         foreach (var status in statuses)
         {
@@ -77,10 +76,9 @@ internal class InboxMessageProcessor<TDbContext>(
             {
                 logger.LogError("InboxMessage '{MessageId}' not found for handler status '{StatusId}'. Poisoning status.",
                     status.MessageId, status.Id);
-                status.MarkAsFailed("InboxMessage record not found — likely deleted.", timeProvider,
-                    options.MaxRetries, options.MaxRetryDelay);
-                if (status.IsPoisoned)
-                    RatatoskrDiagnostics.InboxPoisonCount.Add(1);
+                status.MarkAsPoisoned("InboxMessage record not found — likely deleted.", timeProvider);
+                RatatoskrDiagnostics.InboxPoisonCount.Add(1);
+                await dbContext.SaveChangesAsync(cancellationToken);
                 continue;
             }
 
@@ -90,11 +88,11 @@ internal class InboxMessageProcessor<TDbContext>(
                 logger.LogWarning(
                     "Handler key '{HandlerKey}' is no longer registered. Poisoning status '{StatusId}'.",
                     status.HandlerKey, status.Id);
-                status.MarkAsFailed(
+                status.MarkAsPoisoned(
                     $"Handler key '{status.HandlerKey}' is not registered. The handler may have been removed or renamed.",
-                    timeProvider, options.MaxRetries, options.MaxRetryDelay);
-                if (status.IsPoisoned)
-                    RatatoskrDiagnostics.InboxPoisonCount.Add(1);
+                    timeProvider);
+                RatatoskrDiagnostics.InboxPoisonCount.Add(1);
+                await dbContext.SaveChangesAsync(cancellationToken);
                 continue;
             }
 
@@ -108,10 +106,9 @@ internal class InboxMessageProcessor<TDbContext>(
             {
                 logger.LogError(ex, "Failed to deserialize properties for InboxMessage '{MessageId}'. Poisoning status '{StatusId}'.",
                     status.MessageId, status.Id);
-                status.MarkAsFailed($"Properties deserialization failed: {ex.Message}", timeProvider,
-                    options.MaxRetries, options.MaxRetryDelay);
-                if (status.IsPoisoned)
-                    RatatoskrDiagnostics.InboxPoisonCount.Add(1);
+                status.MarkAsPoisoned($"Properties deserialization failed: {ex.Message}", timeProvider);
+                RatatoskrDiagnostics.InboxPoisonCount.Add(1);
+                await dbContext.SaveChangesAsync(cancellationToken);
                 continue;
             }
 
@@ -145,11 +142,20 @@ internal class InboxMessageProcessor<TDbContext>(
                 await registration.Invoke(handler, message, props, cancellationToken);
 
                 status.MarkAsCompleted(timeProvider);
-                successCount++;
                 RatatoskrDiagnostics.InboxDeliverCount.Add(1, new TagList { { "status", "success" } });
 
                 logger.LogDebug("Inbox handler '{HandlerKey}' completed for message '{MessageId}'",
                     status.HandlerKey, status.MessageId);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Shutdown or lock loss — do NOT count as a handler failure.
+                // Leave status as "processing"; stuck detection will recover it on restart.
+                logger.LogDebug(
+                    "Inbox handler '{HandlerKey}' for message '{MessageId}' interrupted by cancellation, will be retried via stuck detection",
+                    status.HandlerKey, status.MessageId);
+                deliverActivity?.Dispose();
+                break;
             }
             catch (Exception ex)
             {
@@ -165,6 +171,9 @@ internal class InboxMessageProcessor<TDbContext>(
             {
                 deliverActivity?.Dispose();
             }
+
+            // Persist each handler's state immediately so progress isn't lost on crash
+            await dbContext.SaveChangesAsync(CancellationToken.None);
 
             // Fire InboxDispatched observer — always fires (props always available here)
             await NotifyObserversAsync(new MessageActivity
@@ -196,8 +205,7 @@ internal class InboxMessageProcessor<TDbContext>(
 
         RatatoskrDiagnostics.InboxProcessDuration.Record(Stopwatch.GetElapsedTime(batchStartTimestamp).TotalSeconds);
 
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return successCount;
+        return statuses.Length;
     }
 
     private async Task NotifyObserversAsync(MessageActivity activity)

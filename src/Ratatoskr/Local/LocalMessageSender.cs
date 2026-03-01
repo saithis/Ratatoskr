@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Threading.Channels;
+using Microsoft.Extensions.Logging;
 using Ratatoskr.Core;
 
 namespace Ratatoskr.Local;
@@ -7,7 +8,8 @@ namespace Ratatoskr.Local;
 internal class LocalMessageSender(
     Channel<LocalMessage> messageChannel,
     TimeProvider timeProvider,
-    IEnumerable<IMessageActivityObserver> observers)
+    IEnumerable<IMessageActivityObserver> observers,
+    ILogger<LocalMessageSender> logger)
     : IMessageSender
 {
     public string TransportName => LocalTransportConstants.TransportName;
@@ -33,7 +35,7 @@ internal class LocalMessageSender(
         {
             await LocalSendInstrumentation.RecordSendMetricsAndNotifyAsync(
                 startTimestamp, sendException, props, content,
-                TransportName, transportMessage, observers, timeProvider);
+                TransportName, transportMessage, observers, timeProvider, logger);
         }
     }
 }

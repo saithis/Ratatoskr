@@ -112,6 +112,7 @@ public static class InboxPublicApiExtensions
 
             entity.Property(e => e.HandlerKey).HasMaxLength(200).IsRequired();
             entity.Property(e => e.LastError).HasMaxLength(2000);
+            entity.Property(e => e.CreatedAt).IsRequired();
 
             entity.HasOne<InboxMessageEntity>()
                 .WithMany()

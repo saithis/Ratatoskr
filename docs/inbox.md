@@ -18,7 +18,7 @@ Use the inbox pattern when:
 | Table | Purpose |
 |---|---|
 | `InboxMessages` | One row per unique CloudEvents `id` received. Stores the serialized message body and properties. |
-| `InboxHandlerStatuses` | One row per (message, handler) pair. Tracks retry state, backoff schedule, and completion. |
+| `InboxHandlerStatuses` | One row per (message, handler) pair. Tracks retry state, backoff schedule, completion, and `CreatedAt` timestamp. |
 
 A unique constraint on `(MessageId, HandlerKey)` is the **deduplication key**: the same handler will never run twice for the same message ID, even on redelivery.
 
@@ -27,9 +27,11 @@ A unique constraint on `(MessageId, HandlerKey)` is the **deduplication key**: t
 1. A message arrives (from RabbitMQ, the outbox, or a direct publish).
 2. The message and one `InboxHandlerStatus` row per inbox-managed handler are written to the database **before** the transport acknowledges receipt.
 3. The background `InboxProcessor` polls (and is also woken up via a trigger channel) for pending handler statuses and delivers them in batches.
-4. On success: `CompletedAt` is set on the status row.
+4. On success: `CompletedAt` is set on the status row. Each handler's result is **persisted immediately** — completed handlers are not lost if a subsequent handler or the process fails.
 5. On failure: `ErrorCount` is incremented, `NextAttemptAt` is set using exponential backoff (`2^n` seconds, capped at `MaxRetryDelay`).
 6. After `MaxRetries` failures: the status is marked `IsPoisoned = true` and no longer retried (kept for future manual retry).
+7. If the application shuts down (cancellation) while a handler is running, the attempt is **not** counted as a failure. The handler status remains in "processing" state and is recovered by stuck message detection on the next startup.
+8. For deterministically unrecoverable errors (e.g. `InboxMessage` row deleted, handler key unregistered), the status is poisoned **immediately** without going through the retry cycle.
 
 ### Crash safety (local transport)
 
@@ -133,7 +135,7 @@ bus.UseEfCoreInbox<AppDbContext>(inbox =>
 
 | Fluent Method | Default | Description |
 |---|---|---|
-| `WithMaxRetries(int)` | `5` | Number of delivery attempts before marking a status as poisoned. |
+| `WithMaxRetries(int)` | `5` | Number of delivery attempts before marking a status as poisoned. Must be >= 1. A value of 1 means one attempt, poisoned on the first failure. |
 | `WithMaxRetryDelay(TimeSpan)` | `5 minutes` | Maximum backoff delay (`2^n` seconds, capped). |
 | `WithPollingInterval(TimeSpan)` | `30 seconds` | How often the background processor polls the DB when idle. |
 | `WithBatchSize(int)` | `100` | Handler statuses processed per batch. |
@@ -151,8 +153,9 @@ bus.AddHandler<OrderPlaced, FulfillmentHandler>(cfg => cfg.WithInbox("fulfillmen
 bus.AddHandler<OrderPlaced, AuditLogHandler>();                                        // fire-and-forget
 ```
 
-- **Non-inbox handlers** are called synchronously during message dispatch (existing behaviour).
+- **Non-inbox handlers** are called synchronously during message dispatch, each in its own DI scope.
 - **Inbox-managed handlers** are queued to the database and delivered by `InboxProcessor`.
+- Each handler and the inbox interceptor run in **separate DI scopes**, so a failure or `ChangeTracker.Clear()` in one scope cannot affect another.
 
 > **Recommendation**: avoid mixing on the same consume channel where possible. If a non-inbox handler fails, the transport may redeliver the message; inbox handlers will deduplicate correctly, but non-inbox handlers will run again.
 
@@ -168,7 +171,7 @@ Deduplication is per **(message ID, handler key)**. If the same CloudEvents `id`
 
 ## RabbitMQ Integration
 
-When using RabbitMQ, the `InboxInterceptor` is called by `MessageDispatcher` before handler dispatch. The message and handler statuses are persisted to the database, the broker message is acknowledged, and `InboxProcessor` delivers to each handler independently. Handler failures no longer affect broker acknowledgement.
+When using RabbitMQ, the `InboxInterceptor` is called by `MessageDispatcher` before handler dispatch. The interceptor creates its own DI scope, so its `DbContext` is fully isolated from handler scopes. The message and handler statuses are persisted to the database, the broker message is acknowledged, and `InboxProcessor` delivers to each handler independently. Handler failures no longer affect broker acknowledgement.
 
 ## Observability
 
@@ -227,11 +230,7 @@ WHERE "CompletedAt" IS NOT NULL
 -- Delete poisoned statuses older than 30 days
 DELETE FROM "InboxHandlerStatuses"
 WHERE "IsPoisoned" = true
-  AND "Id" IN (
-    SELECT s."Id" FROM "InboxHandlerStatuses" s
-    JOIN "InboxMessages" m ON s."MessageId" = m."Id"
-    WHERE m."CreatedAt" < NOW() - INTERVAL '30 days'
-  );
+  AND "CreatedAt" < NOW() - INTERVAL '30 days';
 
 -- Delete orphaned inbox messages (no remaining handler statuses)
 DELETE FROM "InboxMessages"

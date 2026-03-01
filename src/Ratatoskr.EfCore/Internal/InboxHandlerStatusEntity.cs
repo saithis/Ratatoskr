@@ -35,6 +35,9 @@ internal class InboxHandlerStatusEntity
     /// <summary>Set when the handler completes successfully.</summary>
     public DateTimeOffset? CompletedAt { get; private set; }
 
+    /// <summary>When this handler status row was created.</summary>
+    public DateTimeOffset CreatedAt { get; private set; }
+
     private InboxHandlerStatusEntity() { }
 
     public static InboxHandlerStatusEntity Create(string messageId, string handlerKey, TimeProvider timeProvider)
@@ -46,6 +49,7 @@ internal class InboxHandlerStatusEntity
             Id = Guid.CreateVersion7(),
             MessageId = messageId,
             HandlerKey = handlerKey,
+            CreatedAt = timeProvider.GetUtcNow(),
         };
     }
 
@@ -77,5 +81,17 @@ internal class InboxHandlerStatusEntity
             var delaySeconds = Math.Min(Math.Pow(2, ErrorCount), maxRetryDelay.TotalSeconds);
             NextAttemptAt = timeProvider.GetUtcNow().AddSeconds(delaySeconds);
         }
+    }
+
+    /// <summary>
+    /// Immediately marks this handler status as poisoned without going through the retry cycle.
+    /// Used for deterministically unrecoverable errors (e.g. message deleted, handler key removed).
+    /// </summary>
+    public void MarkAsPoisoned(string error, TimeProvider timeProvider)
+    {
+        LastError = error.Length > 2000 ? error[..2000] : error;
+        ProcessingStartedAt = null;
+        IsPoisoned = true;
+        NextAttemptAt = null;
     }
 }

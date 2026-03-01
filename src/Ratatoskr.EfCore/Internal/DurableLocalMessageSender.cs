@@ -52,28 +52,6 @@ internal class DurableLocalMessageSender<TDbContext>(
             if (inboxHandlers.Count > 0)
             {
                 await PersistToInboxAsync(content, props, inboxHandlers, cancellationToken);
-
-                // Notify observers that the message has been accepted into the inbox
-                foreach (var observer in observers)
-                {
-                    try
-                    {
-                        await observer.OnMessageActivity(new MessageActivity
-                        {
-                            Stage = MessageStage.InboxQueued,
-                            Properties = props,
-                            SerializedBody = content,
-                            TransportName = TransportName,
-                            Timestamp = timeProvider.GetUtcNow(),
-                        });
-                    }
-                    catch
-                    {
-                        // Observer failures must not affect the pipeline
-                    }
-                }
-
-                await inboxProcessor.TriggerAsync(cancellationToken);
             }
 
             // Step 2: Write to in-memory channel so LocalTransportConsumer can process non-inbox handlers.
@@ -90,7 +68,7 @@ internal class DurableLocalMessageSender<TDbContext>(
         {
             await LocalSendInstrumentation.RecordSendMetricsAndNotifyAsync(
                 startTimestamp, sendException, props, content,
-                TransportName, transportMessage, observers, timeProvider);
+                TransportName, transportMessage, observers, timeProvider, logger);
         }
     }
 
@@ -100,11 +78,9 @@ internal class DurableLocalMessageSender<TDbContext>(
         IReadOnlyList<InboxHandlerRegistration> inboxHandlers,
         CancellationToken cancellationToken)
     {
-        using var scope = scopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<TDbContext>();
-
-        await InboxPersistence.PersistAsync(
-            dbContext, props.Id!, LocalTransportConstants.TransportName,
-            content, props, inboxHandlers, timeProvider, logger, cancellationToken);
+        await InboxPersistence.PersistAsync<TDbContext>(
+            scopeFactory, props.Id!, LocalTransportConstants.TransportName,
+            content, props, inboxHandlers, timeProvider,
+            observers, inboxProcessor.TriggerAsync, logger, cancellationToken);
     }
 }

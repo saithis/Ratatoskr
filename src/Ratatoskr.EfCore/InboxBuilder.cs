@@ -17,6 +17,7 @@ public class InboxBuilder<TDbContext> where TDbContext : DbContext, IInboxDbCont
     /// </summary>
     public InboxBuilder<TDbContext> WithPollingInterval(TimeSpan interval)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(interval, TimeSpan.Zero, nameof(interval));
         Options.PollingInterval = interval;
         return this;
     }
@@ -26,19 +27,18 @@ public class InboxBuilder<TDbContext> where TDbContext : DbContext, IInboxDbCont
     /// </summary>
     public InboxBuilder<TDbContext> WithBatchSize(int batchSize)
     {
-        if (batchSize <= 0)
-            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be positive");
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(batchSize, 0, nameof(batchSize));
         Options.BatchSize = batchSize;
         return this;
     }
 
     /// <summary>
     /// Sets the maximum number of delivery attempts before marking a handler as poisoned.
+    /// A value of 1 means the handler runs once and is poisoned on the first failure.
     /// </summary>
     public InboxBuilder<TDbContext> WithMaxRetries(int maxRetries)
     {
-        if (maxRetries < 0)
-            throw new ArgumentOutOfRangeException(nameof(maxRetries), "Max retries cannot be negative");
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(maxRetries, 0, nameof(maxRetries));
         Options.MaxRetries = maxRetries;
         return this;
     }
@@ -48,6 +48,7 @@ public class InboxBuilder<TDbContext> where TDbContext : DbContext, IInboxDbCont
     /// </summary>
     public InboxBuilder<TDbContext> WithMaxRetryDelay(TimeSpan delay)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(delay, TimeSpan.Zero, nameof(delay));
         Options.MaxRetryDelay = delay;
         return this;
     }
@@ -57,6 +58,7 @@ public class InboxBuilder<TDbContext> where TDbContext : DbContext, IInboxDbCont
     /// </summary>
     public InboxBuilder<TDbContext> WithStuckMessageThreshold(TimeSpan threshold)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(threshold, TimeSpan.Zero, nameof(threshold));
         Options.StuckMessageThreshold = threshold;
         return this;
     }
@@ -66,6 +68,7 @@ public class InboxBuilder<TDbContext> where TDbContext : DbContext, IInboxDbCont
     /// </summary>
     public InboxBuilder<TDbContext> WithRestartDelay(TimeSpan delay)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(delay, TimeSpan.Zero, nameof(delay));
         Options.RestartDelay = delay;
         return this;
     }
@@ -75,6 +78,7 @@ public class InboxBuilder<TDbContext> where TDbContext : DbContext, IInboxDbCont
     /// </summary>
     public InboxBuilder<TDbContext> WithLockAcquireTimeout(TimeSpan timeout)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(timeout, TimeSpan.Zero, nameof(timeout));
         Options.LockAcquireTimeout = timeout;
         return this;
     }

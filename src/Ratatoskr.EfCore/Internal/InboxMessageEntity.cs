@@ -51,6 +51,7 @@ internal class InboxMessageEntity
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
         ArgumentException.ThrowIfNullOrWhiteSpace(transportName);
+        ValidateIdLength(messageId);
         return new InboxMessageEntity
         {
             Id = messageId,
