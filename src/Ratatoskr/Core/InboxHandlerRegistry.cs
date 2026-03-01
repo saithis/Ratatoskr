@@ -13,6 +13,11 @@ public class InboxHandlerRegistry
 
     internal void Register(string key, Type messageType, Type handlerType, string? wireTypeName)
     {
+        if (_byKey.TryGetValue(key, out var existing))
+            throw new InvalidOperationException(
+                $"Duplicate inbox handler key '{key}': already registered for handler '{existing.HandlerType.Name}', " +
+                $"cannot register again for handler '{handlerType.Name}'. Each handler must have a unique stable key.");
+
         var registration = new InboxHandlerRegistration(key, messageType, handlerType, wireTypeName);
 
         _byKey[key] = registration;

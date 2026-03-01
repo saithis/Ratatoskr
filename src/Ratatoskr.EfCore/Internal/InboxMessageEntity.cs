@@ -26,6 +26,20 @@ internal class InboxMessageEntity
         JsonSerializer.Deserialize<MessageProperties>(SerializedProperties)
         ?? throw new InvalidOperationException($"Could not deserialize MessageProperties for inbox message '{Id}'.");
 
+    internal const int MaxIdLength = 200;
+
+    /// <summary>
+    /// Validates that the message ID does not exceed the database column length.
+    /// Call before attempting to insert to get a clear error instead of a DB truncation/failure.
+    /// </summary>
+    public static void ValidateIdLength(string messageId)
+    {
+        if (messageId.Length > MaxIdLength)
+            throw new InvalidOperationException(
+                $"Message ID exceeds the maximum length of {MaxIdLength} characters (actual: {messageId.Length}). " +
+                $"ID: '{messageId[..50]}...'");
+    }
+
     private InboxMessageEntity() { }
 
     public static InboxMessageEntity Create(

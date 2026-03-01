@@ -69,6 +69,27 @@ internal class DurableLocalMessageSender<TDbContext>(
             if (inboxHandlers.Count > 0)
             {
                 await PersistToInboxAsync(content, props, inboxHandlers, cancellationToken);
+
+                // Notify observers that the message has been accepted into the inbox
+                foreach (var observer in observers)
+                {
+                    try
+                    {
+                        await observer.OnMessageActivity(new MessageActivity
+                        {
+                            Stage = MessageStage.InboxQueued,
+                            Properties = props,
+                            SerializedBody = content,
+                            TransportName = TransportName,
+                            Timestamp = timeProvider.GetUtcNow(),
+                        });
+                    }
+                    catch
+                    {
+                        // Observer failures must not affect the pipeline
+                    }
+                }
+
                 await inboxProcessor.TriggerAsync(cancellationToken);
             }
 
@@ -135,10 +156,13 @@ internal class DurableLocalMessageSender<TDbContext>(
             throw new InvalidOperationException("Messages must have a non-empty Id for inbox deduplication.");
         }
 
+        InboxMessageEntity.ValidateIdLength(messageId);
+
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<TDbContext>();
 
-        // Insert InboxMessage (skip if already exists — dedup on outbox retry)
+        // Best-effort optimization: skip inserting the message if it already exists.
+        // On concurrent delivery the unique constraint is the real dedup mechanism.
         var messageExists = await dbContext.Set<InboxMessageEntity>()
             .AnyAsync(m => m.Id == messageId, cancellationToken);
 
@@ -164,7 +188,7 @@ internal class DurableLocalMessageSender<TDbContext>(
         {
             await dbContext.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+        catch (DbUpdateException ex) when (DbExceptionHelper.IsUniqueConstraintViolation(ex))
         {
             // Another instance or an outbox retry already persisted this message.
             // The unique constraint fired — safe to ignore.
@@ -176,17 +200,5 @@ internal class DurableLocalMessageSender<TDbContext>(
 
         logger.LogDebug("Persisted inbox entries for message '{MessageId}', {HandlerCount} handler(s)",
             messageId, inboxHandlers.Count);
-    }
-
-    private static bool IsUniqueConstraintViolation(DbUpdateException ex)
-    {
-        var inner = ex.InnerException;
-        if (inner == null) return false;
-        var msg = inner.Message;
-        return msg.Contains("23505")       // PostgreSQL
-            || msg.Contains("UNIQUE")      // SQLite
-            || msg.Contains("unique")      // SQLite / generic
-            || msg.Contains("2601")        // SQL Server
-            || msg.Contains("2627");       // SQL Server
     }
 }

@@ -53,6 +53,43 @@ public class InboxBuilder<TDbContext> where TDbContext : DbContext, IInboxDbCont
     }
 
     /// <summary>
+    /// Sets how long a handler status can remain in "processing" state before being considered stuck.
+    /// </summary>
+    public InboxBuilder<TDbContext> WithStuckMessageThreshold(TimeSpan threshold)
+    {
+        Options.StuckMessageThreshold = threshold;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the delay before restarting the inbox processor after a crash.
+    /// </summary>
+    public InboxBuilder<TDbContext> WithRestartDelay(TimeSpan delay)
+    {
+        Options.RestartDelay = delay;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the maximum time to wait when acquiring the distributed lock.
+    /// </summary>
+    public InboxBuilder<TDbContext> WithLockAcquireTimeout(TimeSpan timeout)
+    {
+        Options.LockAcquireTimeout = timeout;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the distributed lock name. Change this if you have multiple inboxes or conflict with the outbox lock.
+    /// </summary>
+    public InboxBuilder<TDbContext> WithLockName(string lockName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(lockName);
+        Options.LockName = lockName;
+        return this;
+    }
+
+    /// <summary>
     /// Enrolls all handlers (that have not explicitly called <c>WithoutInbox()</c>) in the inbox by default.
     /// Handlers without a stable key use the handler's CLR full name as the stable key.
     /// </summary>
@@ -70,15 +107,6 @@ public class InboxBuilder<TDbContext> where TDbContext : DbContext, IInboxDbCont
     public InboxBuilder<TDbContext> WithoutBackgroundProcessing()
     {
         RegisterBackgroundService = false;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures all options via an action.
-    /// </summary>
-    public InboxBuilder<TDbContext> Configure(Action<InboxOptions> configure)
-    {
-        configure(Options);
         return this;
     }
 }

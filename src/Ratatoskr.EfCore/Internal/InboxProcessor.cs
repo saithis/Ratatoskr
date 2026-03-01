@@ -80,6 +80,13 @@ internal class InboxProcessor<TDbContext>(
 
         logger.LogDebug("Inbox distributed lock acquired");
 
+        // Combine the host stopping token with the lock's HandleLostToken so that
+        // processing stops immediately if the lock is lost (e.g. network partition).
+        using var linkedCts = dLock.HandleLostToken.CanBeCanceled
+            ? CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, dLock.HandleLostToken)
+            : CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        var processingToken = linkedCts.Token;
+
         try
         {
             using IServiceScope serviceScope = serviceScopeFactory.CreateScope();
@@ -99,10 +106,14 @@ internal class InboxProcessor<TDbContext>(
                 logger.LogDebug("Checking inbox for pending handler deliveries");
                 var processed = await processor.ProcessBatchAsync(
                     includeStuckMessageDetection: true,
-                    stoppingToken);
+                    processingToken);
                 if (processed == 0)
                     return;
             }
+        }
+        catch (OperationCanceledException) when (dLock.HandleLostToken.IsCancellationRequested)
+        {
+            logger.LogWarning("Distributed lock was lost during inbox processing");
         }
         catch (Exception e)
         {

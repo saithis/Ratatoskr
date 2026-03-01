@@ -413,8 +413,9 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
             services.AddRatatoskr(bus =>
             {
                 bus.UseLocalTransport();
+                bus.AddEventPublishChannel("otel-inbox-events", c => c.WithLocal().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("otel-inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, NoOpHandler>(cfg => cfg.WithInbox("otel-noop"));
+                bus.AddHandler<TestEvent, NoOpTestEventHandler>(cfg => cfg.WithInbox("otel-noop"));
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithPollingInterval(TimeSpan.FromMilliseconds(500)));
             });
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -456,8 +457,9 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
             services.AddRatatoskr(bus =>
             {
                 bus.UseLocalTransport();
+                bus.AddEventPublishChannel("otel-inbox-trace", c => c.WithLocal().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("otel-inbox-trace", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, NoOpHandler>(cfg => cfg.WithInbox("otel-trace-noop"));
+                bus.AddHandler<TestEvent, NoOpTestEventHandler>(cfg => cfg.WithInbox("otel-trace-noop"));
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithPollingInterval(TimeSpan.FromMilliseconds(500)));
             });
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -644,12 +646,6 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         metric.Tags.Should().Contain(t => t.Key == "messaging.operation.type");
         metric.Tags.Should().Contain(t => t.Key == "server.address");
         metric.Tags.Should().Contain(t => t.Key == "server.port");
-    }
-
-    private class NoOpHandler : IMessageHandler<TestEvent>
-    {
-        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
-            => Task.CompletedTask;
     }
 
     private class FailingTestEventHandler(int failuresBeforeSuccess) : IMessageHandler<TestEvent>

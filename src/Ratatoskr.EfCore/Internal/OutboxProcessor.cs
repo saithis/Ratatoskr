@@ -83,7 +83,14 @@ internal class OutboxProcessor<TDbContext>(
         }
 
         logger.LogDebug("Distributed lock acquired");
-        
+
+        // Combine the host stopping token with the lock's HandleLostToken so that
+        // processing stops immediately if the lock is lost (e.g. network partition).
+        using var linkedCts = dLock.HandleLostToken.CanBeCanceled
+            ? CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, dLock.HandleLostToken)
+            : CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        var processingToken = linkedCts.Token;
+
         try
         {
             using IServiceScope serviceScope = serviceScopeFactory.CreateScope();
@@ -95,19 +102,23 @@ internal class OutboxProcessor<TDbContext>(
             // Use shared processor logic - ensures tests and production use SAME code
             var processor = new OutboxMessageProcessor<TDbContext>(
                 dbContext, messageSenders, timeProvider, _options, activityObservers, logger);
-            
+
             while (true)
             {
                 logger.LogDebug("Checking outbox for unsent messages");
-                
+
                 // Process one batch with stuck message detection enabled (for production)
                 var processedCount = await processor.ProcessBatchAsync(
-                    includeStuckMessageDetection: true, 
-                    stoppingToken);
-                
+                    includeStuckMessageDetection: true,
+                    processingToken);
+
                 if (processedCount == 0)
                     return;
             }
+        }
+        catch (OperationCanceledException) when (dLock.HandleLostToken.IsCancellationRequested)
+        {
+            logger.LogWarning("Distributed lock was lost during outbox processing");
         }
         catch (Exception e)
         {

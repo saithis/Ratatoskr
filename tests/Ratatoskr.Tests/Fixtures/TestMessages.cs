@@ -83,6 +83,15 @@ public class ThrowingTestEventHandler : IMessageHandler<TestEvent>
 }
 
 /// <summary>
+/// No-op handler that always succeeds — used in inbox, tracking, and OTel tests.
+/// </summary>
+public class NoOpTestEventHandler : IMessageHandler<TestEvent>
+{
+    public Task HandleAsync(TestEvent message, MessageProperties context, CancellationToken cancellationToken)
+        => Task.CompletedTask;
+}
+
+/// <summary>
 /// Scoped service for testing DI scope isolation.
 /// Each scope gets a unique Id.
 /// </summary>

@@ -92,6 +92,8 @@ bus.AddHandler<OrderPlaced, AuditLogHandler>();
 
 The **handler key** (`"fulfillment"`) is persisted in the database. It must be stable across deployments — renaming the key will cause existing in-flight messages to be poisoned with an "unknown handler key" error.
 
+> **Validation**: Each handler key must be unique. Registering two handlers with the same key throws `InvalidOperationException` at startup.
+
 #### Per-handler inbox opt-in API
 
 | Method | Effect |
@@ -113,14 +115,32 @@ bus.UseEfCoreInbox<AppDbContext>(inbox => inbox.WithDefaultInboxEnabled());
 
 ## Configuration Options
 
-| Option | Default | Description |
+All options are configurable via fluent methods on `InboxBuilder<TDbContext>`:
+
+```csharp
+bus.UseEfCoreInbox<AppDbContext>(inbox =>
+{
+    inbox.WithMaxRetries(5);
+    inbox.WithMaxRetryDelay(TimeSpan.FromMinutes(5));
+    inbox.WithPollingInterval(TimeSpan.FromSeconds(30));
+    inbox.WithBatchSize(100);
+    inbox.WithStuckMessageThreshold(TimeSpan.FromMinutes(5));
+    inbox.WithRestartDelay(TimeSpan.FromSeconds(30));
+    inbox.WithLockAcquireTimeout(TimeSpan.FromSeconds(10));
+    inbox.WithLockName("InboxProcessor");
+});
+```
+
+| Fluent Method | Default | Description |
 |---|---|---|
-| `MaxRetries` | `5` | Number of delivery attempts before marking a status as poisoned. |
-| `MaxRetryDelay` | `5 minutes` | Maximum backoff delay (`2^n` seconds, capped). |
-| `PollingInterval` | `30 seconds` | How often the background processor polls the DB when idle. |
-| `BatchSize` | `100` | Handler statuses processed per batch. |
-| `StuckMessageThreshold` | `5 minutes` | How long a status can remain in "processing" state before it is considered stuck (crash recovery). |
-| `LockName` | `"InboxProcessor"` | Distributed lock name. Change if you run multiple inboxes or conflict with the outbox lock. |
+| `WithMaxRetries(int)` | `5` | Number of delivery attempts before marking a status as poisoned. |
+| `WithMaxRetryDelay(TimeSpan)` | `5 minutes` | Maximum backoff delay (`2^n` seconds, capped). |
+| `WithPollingInterval(TimeSpan)` | `30 seconds` | How often the background processor polls the DB when idle. |
+| `WithBatchSize(int)` | `100` | Handler statuses processed per batch. |
+| `WithStuckMessageThreshold(TimeSpan)` | `5 minutes` | How long a status can remain in "processing" state before it is considered stuck (crash recovery). |
+| `WithRestartDelay(TimeSpan)` | `30 seconds` | Delay before restarting the processor after an unexpected crash. |
+| `WithLockAcquireTimeout(TimeSpan)` | `10 seconds` | Timeout for acquiring the distributed lock. |
+| `WithLockName(string)` | `"InboxProcessor"` | Distributed lock name. Change if you run multiple inboxes or conflict with the outbox lock. |
 
 ## Mixing Inbox and Non-Inbox Handlers
 
@@ -139,6 +159,12 @@ bus.AddHandler<OrderPlaced, AuditLogHandler>();                                 
 ## Deduplication
 
 Deduplication is per **(message ID, handler key)**. If the same CloudEvents `id` is received twice (e.g. RabbitMQ redelivery or outbox retry), the second delivery is a no-op for the inbox: the unique constraint on `(MessageId, HandlerKey)` prevents duplicate handler status rows from being inserted.
+
+> **Note**: The CloudEvents `id` (i.e., `MessageProperties.Id`) must not exceed **200 characters**. Messages with IDs longer than this limit are rejected with an `InvalidOperationException` before the database insert is attempted.
+
+## Distributed Lock Safety
+
+`InboxProcessor` acquires a distributed lock before processing batches to prevent multiple instances from processing the same messages concurrently. If the lock is lost mid-processing (e.g. network partition, Postgres connection drop), the processor detects it immediately via `HandleLostToken` and stops processing. Any in-flight handler status that was being processed will be picked up by stuck message detection on the next cycle.
 
 ## RabbitMQ Integration
 

@@ -84,18 +84,6 @@ public static class InboxPublicApiExtensions
     }
 
     /// <summary>
-    /// Adds the interceptor that ties the inbox into the DbContext.
-    /// Call this inside your <c>services.AddDbContext&lt;TDbContext&gt;((sp, c) => ...)</c> lambda.
-    /// </summary>
-    public static DbContextOptionsBuilder RegisterInbox<TDbContext>(
-        this DbContextOptionsBuilder builder,
-        IServiceProvider serviceProvider)
-        where TDbContext : DbContext, IInboxDbContext
-    {
-        return builder;
-    }
-
-    /// <summary>
     /// Adds the necessary inbox entities to the DB model.
     /// Call this inside <c>OnModelCreating</c> of your DbContext.
     /// </summary>

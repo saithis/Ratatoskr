@@ -172,7 +172,7 @@ internal class InboxMessageProcessor<TDbContext>(
 
         RatatoskrDiagnostics.InboxProcessDuration.Record(Stopwatch.GetElapsedTime(batchStartTimestamp).TotalSeconds);
 
-        await dbContext.SaveChangesAsync(CancellationToken.None);
+        await dbContext.SaveChangesAsync(cancellationToken);
         return successCount;
     }
 }

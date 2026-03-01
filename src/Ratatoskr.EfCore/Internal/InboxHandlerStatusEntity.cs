@@ -18,7 +18,7 @@ internal class InboxHandlerStatusEntity
     [MaxLength(200)]
     public string HandlerKey { get; private set; } = string.Empty;
 
-    public short ErrorCount { get; private set; }
+    public int ErrorCount { get; private set; }
 
     [MaxLength(2000)]
     public string LastError { get; private set; } = string.Empty;

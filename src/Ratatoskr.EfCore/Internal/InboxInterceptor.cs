@@ -14,6 +14,7 @@ namespace Ratatoskr.EfCore.Internal;
 internal class InboxInterceptor<TDbContext>(
     InboxProcessor<TDbContext> inboxProcessor,
     TimeProvider timeProvider,
+    IEnumerable<IMessageActivityObserver> observers,
     ILogger<InboxInterceptor<TDbContext>> logger)
     : IInboxInterceptor
     where TDbContext : DbContext, IInboxDbContext
@@ -33,10 +34,12 @@ internal class InboxInterceptor<TDbContext>(
             throw new InvalidOperationException("Messages must have a non-empty Id for inbox deduplication.");
         }
 
+        InboxMessageEntity.ValidateIdLength(messageId);
+
         var dbContext = scopedServices.GetRequiredService<TDbContext>();
 
-        // Insert InboxMessage if not already present — dedup via unique constraint on Id.
-        // On concurrent delivery (multiple app instances), the second insert is silently ignored.
+        // Best-effort optimization: skip inserting the message if it already exists.
+        // On concurrent delivery the unique constraint is the real dedup mechanism.
         var messageExists = await dbContext.Set<InboxMessageEntity>()
             .AnyAsync(m => m.Id == messageId, cancellationToken);
 
@@ -70,7 +73,7 @@ internal class InboxInterceptor<TDbContext>(
         {
             await dbContext.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+        catch (DbUpdateException ex) when (DbExceptionHelper.IsUniqueConstraintViolation(ex))
         {
             // Another instance raced us — the deduplication constraint fired.
             // This is expected and safe: the other instance will process the handlers.
@@ -80,21 +83,26 @@ internal class InboxInterceptor<TDbContext>(
             return;
         }
 
-        await inboxProcessor.TriggerAsync(cancellationToken);
-    }
+        // Notify observers that the message has been accepted into the inbox
+        foreach (var observer in observers)
+        {
+            try
+            {
+                await observer.OnMessageActivity(new MessageActivity
+                {
+                    Stage = MessageStage.InboxQueued,
+                    Properties = properties,
+                    SerializedBody = body,
+                    TransportName = transportName,
+                    Timestamp = timeProvider.GetUtcNow(),
+                });
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Observer failed at {Stage} stage", MessageStage.InboxQueued);
+            }
+        }
 
-    private static bool IsUniqueConstraintViolation(DbUpdateException ex)
-    {
-        // PostgreSQL error code 23505 = unique_violation
-        // SQLite error code 19 = SQLITE_CONSTRAINT (unique)
-        // SQL Server error code 2601 / 2627 = unique constraint
-        var inner = ex.InnerException;
-        if (inner == null) return false;
-        var msg = inner.Message;
-        return msg.Contains("23505")       // PostgreSQL
-            || msg.Contains("UNIQUE")      // SQLite
-            || msg.Contains("unique")      // SQLite / generic
-            || msg.Contains("2601")        // SQL Server
-            || msg.Contains("2627");       // SQL Server
+        await inboxProcessor.TriggerAsync(cancellationToken);
     }
 }

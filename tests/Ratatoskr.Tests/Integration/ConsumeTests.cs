@@ -182,7 +182,7 @@ public class ConsumeTests(
             services.AddRatatoskr(bus =>
             {
                 ConfigureBus(bus, QueueName);
-                bus.AddHandler<TestEvent, NoOpHandler>(cfg => cfg.WithInbox("consume-noop"));
+                bus.AddHandler<TestEvent, NoOpTestEventHandler>(cfg => cfg.WithInbox("consume-noop"));
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
             });
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -196,27 +196,27 @@ public class ConsumeTests(
         });
 
         // Act — publish to RabbitMQ, consumer receives and accepts to inbox
-        var eventId = Guid.NewGuid().ToString();
         await PublishToRabbitMqAsync(exchange: "", routingKey: QueueName,
-            new TestEvent { Id = eventId, Data = "inbox via rmq" });
+            new TestEvent { Id = "inbox-rmq-1", Data = "inbox via rmq" });
 
         // Assert — message appears in inbox DB with RabbitMQ transport name
+        // Note: InboxMessageEntity.Id is MessageProperties.Id (from BasicProperties.MessageId),
+        // NOT TestEvent.Id. We query for any inbox message instead.
         await WaitForConditionAsync(
             async () => await InScopeAsync(async ctx =>
             {
                 var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-                return await db.Set<InboxMessageEntity>().AnyAsync(m => m.Id == eventId);
+                return await db.Set<InboxMessageEntity>().AnyAsync();
             }),
             TimeSpan.FromSeconds(10));
 
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var inboxMessage = await db.Set<InboxMessageEntity>().SingleAsync(m => m.Id == eventId);
+            var inboxMessage = await db.Set<InboxMessageEntity>().SingleAsync();
             inboxMessage.TransportName.Should().Be("rabbitmq");
 
-            var status = await db.Set<InboxHandlerStatusEntity>()
-                .SingleAsync(s => s.MessageId == eventId);
+            var status = await db.Set<InboxHandlerStatusEntity>().SingleAsync();
             status.HandlerKey.Should().Be("consume-noop");
             status.CompletedAt.Should().BeNull("background processing is disabled");
         });
@@ -295,9 +295,4 @@ public class ConsumeTests(
         await channel.BasicPublishAsync(exchange: "", routingKey: routingKey, mandatory: false, basicProperties: props, body: body);
     }
 
-    private class NoOpHandler : IMessageHandler<TestEvent>
-    {
-        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
-            => Task.CompletedTask;
-    }
 }
