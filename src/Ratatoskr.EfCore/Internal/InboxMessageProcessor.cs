@@ -61,10 +61,38 @@ internal class InboxMessageProcessor<TDbContext>(
             .Where(m => messageIds.Contains(m.Id))
             .ToDictionaryAsync(m => m.Id, cancellationToken);
 
-        // Mark all as processing before invoking
+        // Claim statuses with optimistic concurrency. If another worker already
+        // claimed some of these rows, their Version column has changed and EF Core
+        // throws DbUpdateConcurrencyException. We reload the conflicting entries
+        // (which resets them to Unchanged) and retry with the remaining entries.
         foreach (var status in statuses)
             status.MarkAsProcessing(timeProvider);
-        await dbContext.SaveChangesAsync(cancellationToken);
+
+        while (true)
+        {
+            try
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+                break;
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                var conflictIds = new HashSet<Guid>();
+                foreach (var entry in ex.Entries)
+                {
+                    conflictIds.Add(((InboxHandlerStatusEntity)entry.Entity).Id);
+                    await entry.ReloadAsync(cancellationToken);
+                }
+
+                logger.LogDebug(
+                    "Skipped {ConflictCount} inbox handler status(es) already claimed by another worker",
+                    conflictIds.Count);
+
+                statuses = statuses.Where(s => !conflictIds.Contains(s.Id)).ToArray();
+                if (statuses.Length == 0)
+                    return 0;
+            }
+        }
 
         RatatoskrDiagnostics.InboxBatchSize.Record(statuses.Length);
 

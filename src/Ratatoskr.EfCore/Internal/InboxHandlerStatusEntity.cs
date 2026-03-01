@@ -38,6 +38,12 @@ internal class InboxHandlerStatusEntity
     /// <summary>When this handler status row was created.</summary>
     public DateTimeOffset CreatedAt { get; private set; }
 
+    /// <summary>
+    /// Optimistic concurrency token. Incremented on every state mutation to prevent
+    /// two concurrent processors from claiming and processing the same row.
+    /// </summary>
+    public uint Version { get; private set; }
+
     private InboxHandlerStatusEntity() { }
 
     public static InboxHandlerStatusEntity Create(string messageId, string handlerKey, TimeProvider timeProvider)
@@ -56,12 +62,14 @@ internal class InboxHandlerStatusEntity
     public void MarkAsProcessing(TimeProvider timeProvider)
     {
         ProcessingStartedAt = timeProvider.GetUtcNow();
+        Version++;
     }
 
     public void MarkAsCompleted(TimeProvider timeProvider)
     {
         CompletedAt = timeProvider.GetUtcNow();
         ProcessingStartedAt = null;
+        Version++;
     }
 
     public void MarkAsFailed(string error, TimeProvider timeProvider, int maxRetries, TimeSpan maxRetryDelay)
@@ -69,6 +77,7 @@ internal class InboxHandlerStatusEntity
         ErrorCount++;
         LastError = error.Length > 2000 ? error[..2000] : error;
         ProcessingStartedAt = null;
+        Version++;
 
         if (ErrorCount >= maxRetries)
         {
@@ -93,5 +102,6 @@ internal class InboxHandlerStatusEntity
         ProcessingStartedAt = null;
         IsPoisoned = true;
         NextAttemptAt = null;
+        Version++;
     }
 }

@@ -1173,6 +1173,61 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
     }
 
     [Test]
+    public async Task Inbox_ConcurrentProcessors_EachStatusProcessedExactlyOnce()
+    {
+        // Arrange: publish several messages with a counting handler
+        var counter = new InvocationCounter();
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton(counter);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
+                bus.AddHandler<TestEvent, CountingHandler>(cfg => cfg.WithInbox("counting"));
+                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await InitializeDatabase();
+
+        for (var i = 0; i < 5; i++)
+        {
+            var index = i;
+            await InScopeAsync(async ctx =>
+            {
+                var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+                await bus.PublishDirectAsync(
+                    new TestEvent { Id = $"business-concurrent-proc-{index}" },
+                    new MessageProperties { Id = $"concurrent-proc-{index}" });
+            });
+        }
+
+        // Act: run two processors concurrently — they race to claim the same rows.
+        // The optimistic concurrency token prevents double-processing.
+        await Task.WhenAll(
+            InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider)),
+            InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider))
+        );
+
+        // Assert: each message was handled exactly once (no double-processing)
+        counter.Count.Should().Be(5);
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var statuses = await db.Set<InboxHandlerStatusEntity>().ToArrayAsync();
+            statuses.Should().HaveCount(5);
+            statuses.Should().AllSatisfy(s => s.CompletedAt.Should().NotBeNull());
+        });
+    }
+
+    [Test]
     public async Task Inbox_CancellationToken_PropagatedToHandler()
     {
         // Arrange: handler that blocks until a semaphore is released
