@@ -222,7 +222,7 @@ internal class InboxMessageProcessor<TDbContext>(
             await dbContext.SaveChangesAsync(CancellationToken.None);
 
             // Fire InboxDispatched observer — always fires (props always available here)
-            await NotifyObserversAsync(new MessageActivity
+            await observers.NotifyAsync(new MessageActivity
             {
                 Stage = MessageStage.InboxDispatched,
                 Properties = props,
@@ -231,13 +231,13 @@ internal class InboxMessageProcessor<TDbContext>(
                 IsSuccess = handlerException == null,
                 Exception = handlerException,
                 Timestamp = timeProvider.GetUtcNow(),
-            });
+            }, logger);
 
             // Fire InboxPoisoned observer when max retries are exceeded
             if (status.IsPoisoned)
             {
                 RatatoskrDiagnostics.InboxPoisonCount.Add(1);
-                await NotifyObserversAsync(new MessageActivity
+                await observers.NotifyAsync(new MessageActivity
                 {
                     Stage = MessageStage.InboxPoisoned,
                     Properties = props,
@@ -245,27 +245,12 @@ internal class InboxMessageProcessor<TDbContext>(
                     TransportName = inboxMessage.TransportName,
                     Exception = handlerException,
                     Timestamp = timeProvider.GetUtcNow(),
-                });
+                }, logger);
             }
         }
 
         RatatoskrDiagnostics.InboxProcessDuration.Record(Stopwatch.GetElapsedTime(batchStartTimestamp).TotalSeconds);
 
         return statuses.Length;
-    }
-
-    private async Task NotifyObserversAsync(MessageActivity activity)
-    {
-        foreach (var observer in observers)
-        {
-            try
-            {
-                await observer.OnMessageActivity(activity);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Observer failed at {Stage} stage", activity.Stage);
-            }
-        }
     }
 }

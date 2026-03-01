@@ -42,26 +42,15 @@ internal class LocalTransportConsumer(
 
         var transportMessage = LocalTransportMessageSnapshotFactory.Create(message.Content, message.Properties);
 
-        foreach (var observer in observers)
+        await observers.NotifyAsync(new MessageActivity
         {
-            try
-            {
-                await observer.OnMessageActivity(new MessageActivity
-                {
-                    Stage = MessageStage.Received,
-                    Properties = message.Properties,
-                    SerializedBody = message.Content,
-                    TransportName = LocalTransportConstants.TransportName,
-                    TransportMessage = transportMessage,
-                    Timestamp = receivedTimestamp,
-                });
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Message activity observer failed at {Stage}",
-                    MessageStage.Received);
-            }
-        }
+            Stage = MessageStage.Received,
+            Properties = message.Properties,
+            SerializedBody = message.Content,
+            TransportName = LocalTransportConstants.TransportName,
+            TransportMessage = transportMessage,
+            Timestamp = receivedTimestamp,
+        }, logger);
 
         var tags = new TagList
         {

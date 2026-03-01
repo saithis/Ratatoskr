@@ -62,27 +62,17 @@ public class Ratatoskr(
                 exceptions.Add(ex);
             }
 
-            foreach (var observer in observers)
+            await observers.NotifyAsync(new MessageActivity
             {
-                try
-                {
-                    await observer.OnMessageActivity(new MessageActivity
-                    {
-                        Stage = MessageStage.Published,
-                        Properties = props,
-                        SerializedBody = serializedMessage,
-                        Message = message,
-                        MessageType = typeof(TMessage),
-                        TransportName = sender.TransportName,
-                        Exception = sendException,
-                        Timestamp = timeProvider.GetUtcNow(),
-                    });
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Message activity observer failed at the {Stage} stage", MessageStage.Published);
-                }
-            }
+                Stage = MessageStage.Published,
+                Properties = props,
+                SerializedBody = serializedMessage,
+                Message = message,
+                MessageType = typeof(TMessage),
+                TransportName = sender.TransportName,
+                Exception = sendException,
+                Timestamp = timeProvider.GetUtcNow(),
+            }, logger);
         }
 
         if (exceptions is { Count: > 0 })

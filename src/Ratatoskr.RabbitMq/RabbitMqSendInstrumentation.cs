@@ -1,22 +1,27 @@
 using System.Diagnostics;
-using Microsoft.Extensions.Logging;
 using Ratatoskr.Core;
+using Ratatoskr.RabbitMq.Config;
 
-namespace Ratatoskr.Local;
+namespace Ratatoskr.RabbitMq;
 
 /// <summary>
-/// Shared OTel instrumentation logic for local transport senders.
-/// Used by both <see cref="LocalMessageSender"/> and the durable variant in Ratatoskr.EfCore.
+/// Shared OTel instrumentation logic for RabbitMQ senders.
+/// Mirrors <see cref="Ratatoskr.Local.LocalSendInstrumentation"/> for the RabbitMQ transport.
 /// </summary>
-internal static class LocalSendInstrumentation
+internal static class RabbitMqSendInstrumentation
 {
     /// <summary>
-    /// Starts a "send local" activity and sets trace context on the message properties.
+    /// Starts a "send {destination}" activity and sets trace context on the message properties.
     /// </summary>
-    public static Activity? StartSendActivity(MessageProperties props, int contentLength)
+    public static Activity? StartSendActivity(
+        MessageProperties props,
+        int contentLength,
+        string destination,
+        string routingKey,
+        RabbitMqOptions options)
     {
         var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
-            "send local",
+            $"send {destination}",
             ActivityKind.Client,
             Activity.Current?.Context ?? default);
 
@@ -27,9 +32,13 @@ internal static class LocalSendInstrumentation
 
             activity.SetTag(MessagingSemanticConventions.OperationName, "send");
             activity.SetTag(MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeSend);
-            activity.SetTag(MessagingSemanticConventions.System, "local");
+            activity.SetTag(MessagingSemanticConventions.System, "rabbitmq");
+            activity.SetTag(MessagingSemanticConventions.DestinationName, destination);
+            activity.SetTag(MessagingSemanticConventions.RabbitMqRoutingKey, routingKey);
             activity.SetTag(MessagingSemanticConventions.MessageId, props.Id);
             activity.SetTag(MessagingSemanticConventions.MessageBodySize, contentLength);
+            activity.SetTag(MessagingSemanticConventions.ServerAddress, options.ConnectionString?.Host);
+            activity.SetTag(MessagingSemanticConventions.ServerPort, options.ConnectionString?.Port);
         }
 
         return activity;
@@ -42,19 +51,26 @@ internal static class LocalSendInstrumentation
         long startTimestamp,
         Exception? sendException,
         MessageProperties props,
-        byte[] content,
+        byte[] wireBody,
         string transportName,
         TransportMessageSnapshot transportMessage,
+        string destination,
+        string routingKey,
+        RabbitMqOptions options,
         IEnumerable<IMessageActivityObserver> observers,
-        TimeProvider timeProvider,
-        ILogger? logger = null)
+        TimeProvider timeProvider)
     {
         var duration = Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds;
+
         var tags = new TagList
         {
-            { MessagingSemanticConventions.System, "local" },
+            { MessagingSemanticConventions.System, "rabbitmq" },
             { MessagingSemanticConventions.OperationName, "send" },
             { MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeSend },
+            { MessagingSemanticConventions.DestinationName, destination },
+            { MessagingSemanticConventions.RabbitMqRoutingKey, routingKey },
+            { MessagingSemanticConventions.ServerAddress, options.ConnectionString?.Host },
+            { MessagingSemanticConventions.ServerPort, options.ConnectionString?.Port },
         };
 
         if (sendException != null)
@@ -67,12 +83,12 @@ internal static class LocalSendInstrumentation
         {
             Stage = MessageStage.Sent,
             Properties = props,
-            SerializedBody = content,
+            SerializedBody = wireBody,
             TransportName = transportName,
             TransportMessage = transportMessage,
             Exception = sendException,
             Timestamp = timeProvider.GetUtcNow(),
-        }, logger);
+        });
     }
 
     /// <summary>

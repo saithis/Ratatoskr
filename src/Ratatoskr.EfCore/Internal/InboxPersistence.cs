@@ -95,24 +95,14 @@ internal static class InboxPersistence
             messageId, handlers.Count);
 
         // Notify observers that the message has been accepted into the inbox
-        foreach (var observer in observers)
+        await observers.NotifyAsync(new MessageActivity
         {
-            try
-            {
-                await observer.OnMessageActivity(new MessageActivity
-                {
-                    Stage = MessageStage.InboxQueued,
-                    Properties = properties,
-                    SerializedBody = body,
-                    TransportName = transportName,
-                    Timestamp = timeProvider.GetUtcNow(),
-                });
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Observer failed at {Stage} stage", MessageStage.InboxQueued);
-            }
-        }
+            Stage = MessageStage.InboxQueued,
+            Properties = properties,
+            SerializedBody = body,
+            TransportName = transportName,
+            Timestamp = timeProvider.GetUtcNow(),
+        }, logger);
 
         await triggerProcessing(cancellationToken);
 

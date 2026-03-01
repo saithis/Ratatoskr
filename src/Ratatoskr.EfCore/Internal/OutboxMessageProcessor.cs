@@ -134,24 +134,14 @@ internal class OutboxMessageProcessor<TDbContext>(
 
             if (sentProps != null)
             {
-                foreach (var observer in observers)
+                await observers.NotifyAsync(new MessageActivity
                 {
-                    try
-                    {
-                        await observer.OnMessageActivity(new MessageActivity
-                        {
-                            Stage = MessageStage.OutboxSent,
-                            Properties = sentProps,
-                            SerializedBody = message.Content,
-                            TransportName = message.TransportName,
-                            Timestamp = timeProvider.GetUtcNow(),
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(ex, "Message activity observer failed at the {Stage} stage", MessageStage.OutboxSent);
-                    }
-                }
+                    Stage = MessageStage.OutboxSent,
+                    Properties = sentProps,
+                    SerializedBody = message.Content,
+                    TransportName = message.TransportName,
+                    Timestamp = timeProvider.GetUtcNow(),
+                }, logger);
             }
         }
 

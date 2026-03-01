@@ -181,25 +181,15 @@ internal class RabbitMqConsumer(
 
             var receivedTimestamp = timeProvider.GetUtcNow();
 
-            foreach (var observer in observers)
+            await observers.NotifyAsync(new MessageActivity
             {
-                try
-                {
-                    await observer.OnMessageActivity(new MessageActivity
-                    {
-                        Stage = MessageStage.Received,
-                        Properties = props,
-                        SerializedBody = body,
-                        TransportName = RabbitMqConstants.TransportName,
-                        TransportMessage = transportMessage,
-                        Timestamp = receivedTimestamp,
-                    });
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Message activity observer failed at the {Stage} stage", MessageStage.Received);
-                }
-            }
+                Stage = MessageStage.Received,
+                Properties = props,
+                SerializedBody = body,
+                TransportName = RabbitMqConstants.TransportName,
+                TransportMessage = transportMessage,
+                Timestamp = receivedTimestamp,
+            }, logger);
 
             tags = CreateTags(ea, props, queueName);
 
