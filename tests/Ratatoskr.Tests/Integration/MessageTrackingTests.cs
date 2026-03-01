@@ -502,11 +502,12 @@ public class MessageTrackingTests(
         // Arrange: local transport + inbox, tracking session captures InboxQueued
         await StartTestAsync(services =>
         {
+            var channelName = $"track-inbox-events-{TestId}";
             services.AddRatatoskr(bus =>
             {
                 bus.UseLocalTransport();
-                bus.AddEventPublishChannel("track-inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("track-inbox-events", c => c.Consumes<TestEvent>());
+                bus.AddEventPublishChannel(channelName, c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventConsumeChannel(channelName, c => c.Consumes<TestEvent>());
                 bus.AddHandler<TestEvent, NoOpTestEventHandler>(cfg => cfg.WithInbox("no-op"));
                 bus.UseEfCoreInbox<TestDbContext>();
             });
@@ -538,11 +539,12 @@ public class MessageTrackingTests(
         // Arrange
         await StartTestAsync(services =>
         {
+            var channelName = $"track-inbox-disp-{TestId}";
             services.AddRatatoskr(bus =>
             {
                 bus.UseLocalTransport();
-                bus.AddEventPublishChannel("track-inbox-disp", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("track-inbox-disp", c => c.Consumes<TestEvent>());
+                bus.AddEventPublishChannel(channelName, c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventConsumeChannel(channelName, c => c.Consumes<TestEvent>());
                 bus.AddHandler<TestEvent, NoOpTestEventHandler>(cfg => cfg.WithInbox("no-op"));
                 bus.UseEfCoreInbox<TestDbContext>();
             });

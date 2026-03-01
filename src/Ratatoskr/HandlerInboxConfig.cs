@@ -27,6 +27,7 @@ public class HandlerInboxConfig
     public HandlerInboxConfig WithInbox()
     {
         UseInboxExplicit = true;
+        Key = null;
         return this;
     }
 
@@ -37,6 +38,7 @@ public class HandlerInboxConfig
     public HandlerInboxConfig WithoutInbox()
     {
         UseInboxExplicit = false;
+        Key = null;
         return this;
     }
 }

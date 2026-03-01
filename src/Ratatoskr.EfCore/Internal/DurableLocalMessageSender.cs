@@ -47,7 +47,7 @@ internal class DurableLocalMessageSender<TDbContext>(
             // Step 1: Write inbox-managed handlers to DB (crash-safe at this point)
             var inboxHandlers = props.Type != null
                 ? inboxHandlerRegistry.GetByWireTypeName(props.Type)
-                : Array.Empty<InboxHandlerRegistration>();
+                : [];
 
             if (inboxHandlers.Count > 0)
             {
@@ -78,8 +78,11 @@ internal class DurableLocalMessageSender<TDbContext>(
         IReadOnlyList<InboxHandlerRegistration> inboxHandlers,
         CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(props.Id))
+            throw new InvalidOperationException("Inbox delivery requires MessageProperties.Id for deduplication.");
+        
         await InboxPersistence.PersistAsync<TDbContext>(
-            scopeFactory, props.Id!, LocalTransportConstants.TransportName,
+            scopeFactory, props.Id, LocalTransportConstants.TransportName,
             content, props, inboxHandlers, timeProvider,
             observers, inboxProcessor.TriggerAsync, logger, cancellationToken);
     }

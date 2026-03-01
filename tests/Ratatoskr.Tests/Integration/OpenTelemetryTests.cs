@@ -501,11 +501,9 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         var publishActivity = activities.FirstOrDefault(a =>
             a.OperationName == "publish" &&
             a.TagObjects.Any(t => t.Key == "messaging.message.id" && (string?)t.Value == eventId));
-        if (publishActivity != null)
-        {
-            deliverActivity.TraceId.Should().Be(publishActivity.TraceId,
-                "inbox delivery must propagate the original message trace ID");
-        }
+        publishActivity.Should().NotBeNull("publish span should exist for the same message");
+        deliverActivity.TraceId.Should().Be(publishActivity.TraceId, 
+            "inbox delivery must propagate the original message trace ID");
 
         // Verify no error status on successful delivery
         deliverActivity.Status.Should().Be(ActivityStatusCode.Unset);

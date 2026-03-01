@@ -135,6 +135,18 @@ public static class InboxPublicApiExtensions
                 return msg.MessageTypeName;
         }
 
-        return messageType.GetCustomAttribute<RatatoskrMessageAttribute>()?.Type;
+        var names = registry.GetConsumeChannels()
+            .SelectMany(c => c.Messages.Where(m => m.MessageType == messageType)
+            .Select(m => m.MessageTypeName))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        return names.Length switch
+        {
+            > 1 => throw new InvalidOperationException(
+                $"Message type '{messageType.FullName}' is mapped to multiple wire names: {string.Join(", ", names)}."),
+            1 => names[0],
+            _ => messageType.GetCustomAttribute<RatatoskrMessageAttribute>()?.Type
+        };
     }
 }

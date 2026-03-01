@@ -49,6 +49,9 @@ internal class InboxMessageEntity
         MessageProperties props,
         TimeProvider timeProvider)
     {
+        ArgumentNullException.ThrowIfNull(content);
+        ArgumentNullException.ThrowIfNull(props);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
         ArgumentException.ThrowIfNullOrWhiteSpace(transportName);
         ValidateIdLength(messageId);

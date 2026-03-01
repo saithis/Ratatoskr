@@ -239,7 +239,3 @@ WHERE NOT EXISTS (
     WHERE "MessageId" = "InboxMessages"."Id"
 );
 ```
-
-## Requirements
-
-`Ratatoskr.EfCore` uses C# 14 extension member syntax. Ensure your project targets .NET 10+ or sets `<LangVersion>14</LangVersion>` in your `.csproj`.
