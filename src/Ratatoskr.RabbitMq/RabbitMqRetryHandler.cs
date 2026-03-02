@@ -50,10 +50,10 @@ internal class RabbitMqRetryHandler(RabbitMqTelemetry telemetry, RabbitMqOptions
                 "Message '{MessageId}' will be retried (attempt {RetryCount}/{MaxRetries})",
                 messageId, retryCount + 1, config.Retry.MaxRetries);
 
-            telemetry.RecordRetry(ea, queueName);
-
             // Reject without requeue - DLX will route to retry queue
             await channel.BasicNackAsync(ea.DeliveryTag, false, false, cancellationToken);
+
+            telemetry.RecordRetry(ea, queueName);
         }
     }
 
@@ -64,8 +64,6 @@ internal class RabbitMqRetryHandler(RabbitMqTelemetry telemetry, RabbitMqOptions
         string queueName,
         CancellationToken cancellationToken)
     {
-        telemetry.RecordDeadLetter(ea, queueName);
-
         // Need to manually publish to DLQ since we can't conditionally route via DLX
         if (config.Retry.UseManaged)
         {
@@ -101,6 +99,8 @@ internal class RabbitMqRetryHandler(RabbitMqTelemetry telemetry, RabbitMqOptions
             // Just reject without requeue - let DLX handle it
             await channel.BasicNackAsync(ea.DeliveryTag, false, false, cancellationToken);
         }
+        
+        telemetry.RecordDeadLetter(ea, queueName);
     }
 
     private static int GetRetryCount(IDictionary<string, object?>? headers)
