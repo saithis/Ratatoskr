@@ -53,25 +53,15 @@ internal class OutboxTriggerInterceptor<TDbContext>(
             // Only dequeue after successful serialization
             outboxDbContext.OutboxMessages.Queue.TryDequeue(out _);
 
-            foreach (var observer in observers)
+            await observers.NotifyAsync(new MessageActivity
             {
-                try
-                {
-                    await observer.OnMessageActivity(new MessageActivity
-                    {
-                        Stage = MessageStage.OutboxStaged,
-                        Properties = enrichedProperties,
-                        SerializedBody = serializedMessage,
-                        Message = item.Message,
-                        MessageType = item.Message.GetType(),
-                        Timestamp = timeProvider.GetUtcNow(),
-                    });
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Message activity observer failed at the {Stage} stage", MessageStage.OutboxStaged);
-                }
-            }
+                Stage = MessageStage.OutboxStaged,
+                Properties = enrichedProperties,
+                SerializedBody = serializedMessage,
+                Message = item.Message,
+                MessageType = item.Message.GetType(),
+                Timestamp = timeProvider.GetUtcNow(),
+            }, logger);
         }
 
         return result;

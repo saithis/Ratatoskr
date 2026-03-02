@@ -20,6 +20,7 @@ public static class LocalTransportExtensions
             configure?.Invoke(options);
 
             builder.Services.AddSingleton(options);
+            builder.Services.AddSingleton<LocalTelemetry>();
 
             builder.Services.AddSingleton(_ =>
                 Channel.CreateBounded<LocalMessage>(

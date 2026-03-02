@@ -12,6 +12,7 @@ namespace Ratatoskr.EfCore.Internal;
 internal class OutboxMessageProcessor<TDbContext>(
     TDbContext dbContext,
     IEnumerable<IMessageSender> senders,
+    OutboxTelemetry telemetry,
     TimeProvider timeProvider,
     OutboxOptions options,
     IEnumerable<IMessageActivityObserver> observers,
@@ -49,7 +50,7 @@ internal class OutboxMessageProcessor<TDbContext>(
             .Take(options.BatchSize)
             .ToArrayAsync(cancellationToken);
 
-        RatatoskrDiagnostics.OutboxBatchSize.Record(messages.Length);
+        telemetry.RecordBatchSize(messages.Length);
 
         logger.LogInformation("Found {Count} messages to send", messages.Length);
 
@@ -75,22 +76,7 @@ internal class OutboxMessageProcessor<TDbContext>(
             {
                 var props = message.GetProperties();
 
-                // Extract parent tracing context
-                ActivityContext.TryParse(props.TraceParent, props.TraceState, out var parentContext);
-
-                // https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/
-                using var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
-                    "create outbox",
-                    ActivityKind.Producer,
-                    parentContext);
-
-                if (activity != null)
-                {
-                    activity.SetTag(MessagingSemanticConventions.OperationName, "create");
-                    activity.SetTag(MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeCreate);
-                    activity.SetTag(MessagingSemanticConventions.System, "ratatoskr");
-                    activity.SetTag(MessagingSemanticConventions.MessageId, props.Id);
-                }
+                using var activity = telemetry.StartCreateActivity(props);
 
                 logger.LogInformation("Processing message '{Id}' for transport '{Transport}'", message.Id, message.TransportName);
 
@@ -111,7 +97,7 @@ internal class OutboxMessageProcessor<TDbContext>(
                 }
                 message.MarkAsProcessed(timeProvider);
                 processedCount++;
-                RatatoskrDiagnostics.OutboxProcessCount.Add(1, new TagList { { "status", "success" } });
+                telemetry.RecordProcessed(success: true);
                 sentProps = props;
             }
             catch (Exception e)
@@ -120,7 +106,7 @@ internal class OutboxMessageProcessor<TDbContext>(
                     message.Id, message.ErrorCount + 1);
                 message.PublishFailed(e.Message, timeProvider,
                     options.MaxRetries, options.MaxRetryDelay);
-                RatatoskrDiagnostics.OutboxProcessCount.Add(1, new TagList { { "status", "failure" } });
+                telemetry.RecordProcessed(success: false);
 
                 if (message.IsPoisoned)
                 {
@@ -134,28 +120,18 @@ internal class OutboxMessageProcessor<TDbContext>(
 
             if (sentProps != null)
             {
-                foreach (var observer in observers)
+                await observers.NotifyAsync(new MessageActivity
                 {
-                    try
-                    {
-                        await observer.OnMessageActivity(new MessageActivity
-                        {
-                            Stage = MessageStage.OutboxSent,
-                            Properties = sentProps,
-                            SerializedBody = message.Content,
-                            TransportName = message.TransportName,
-                            Timestamp = timeProvider.GetUtcNow(),
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(ex, "Message activity observer failed at the {Stage} stage", MessageStage.OutboxSent);
-                    }
-                }
+                    Stage = MessageStage.OutboxSent,
+                    Properties = sentProps,
+                    SerializedBody = message.Content,
+                    TransportName = message.TransportName,
+                    Timestamp = timeProvider.GetUtcNow(),
+                }, logger);
             }
         }
 
-        RatatoskrDiagnostics.OutboxProcessDuration.Record(Stopwatch.GetElapsedTime(batchStartTimestamp).TotalSeconds);
+        telemetry.RecordBatchDuration(batchStartTimestamp);
 
         return processedCount;
     }

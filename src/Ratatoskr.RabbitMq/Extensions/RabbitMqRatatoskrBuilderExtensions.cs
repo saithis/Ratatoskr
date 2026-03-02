@@ -21,6 +21,7 @@ public static class RabbitMqRatatoskrBuilderExtensions
         builder.Services.AddSingleton<RabbitMqConnectionManager>();
         builder.Services.AddSingleton<IRabbitMqEnvelopeMapper, CloudEventsAmqpMapper>();
         builder.Services.AddSingleton<RabbitMqTopologyManager>();
+        builder.Services.AddSingleton<RabbitMqTelemetry>();
 
         // Sending
         builder.Services.AddSingleton<ITransportMessageMetadataEnricher, RabbitMqMessageMetadataEnricher>();

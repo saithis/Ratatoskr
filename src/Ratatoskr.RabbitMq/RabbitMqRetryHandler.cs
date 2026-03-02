@@ -10,7 +10,7 @@ namespace Ratatoskr.RabbitMq;
 /// <summary>
 /// Handles retry logic for failed messages.
 /// </summary>
-internal class RabbitMqRetryHandler(RabbitMqOptions options, TimeProvider timeProvider, ILogger<RabbitMqRetryHandler> logger)
+internal class RabbitMqRetryHandler(RabbitMqTelemetry telemetry, RabbitMqOptions options, TimeProvider timeProvider, ILogger<RabbitMqRetryHandler> logger)
 {
 
     /// <summary>
@@ -50,25 +50,10 @@ internal class RabbitMqRetryHandler(RabbitMqOptions options, TimeProvider timePr
                 "Message '{MessageId}' will be retried (attempt {RetryCount}/{MaxRetries})",
                 messageId, retryCount + 1, config.Retry.MaxRetries);
 
-            var (destinationName, routingKey) = RabbitMqHeaderHelper.GetOriginalDestinationFromHeaders(ea.BasicProperties.Headers);
-            destinationName ??= ea.Exchange;
-            routingKey ??= ea.RoutingKey;
-
-            var tags = new TagList
-            {
-                { MessagingSemanticConventions.System, "rabbitmq" },
-                { MessagingSemanticConventions.OperationName, "process" },
-                { MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeProcess },
-                { MessagingSemanticConventions.DestinationSubscriptionName, queueName },
-                { MessagingSemanticConventions.DestinationName, destinationName },
-                { MessagingSemanticConventions.RabbitMqRoutingKey, routingKey },
-                { MessagingSemanticConventions.ServerAddress, options.ConnectionString?.Host },
-                { MessagingSemanticConventions.ServerPort, options.ConnectionString?.Port },
-            };
-            RatatoskrDiagnostics.RetryMessages.Add(1, tags);
-
             // Reject without requeue - DLX will route to retry queue
             await channel.BasicNackAsync(ea.DeliveryTag, false, false, cancellationToken);
+
+            telemetry.RecordRetry(ea, queueName);
         }
     }
 
@@ -79,23 +64,6 @@ internal class RabbitMqRetryHandler(RabbitMqOptions options, TimeProvider timePr
         string queueName,
         CancellationToken cancellationToken)
     {
-        var (destinationName, routingKey) = RabbitMqHeaderHelper.GetOriginalDestinationFromHeaders(ea.BasicProperties.Headers);
-        destinationName ??= ea.Exchange;
-        routingKey ??= ea.RoutingKey;
-
-        var tags = new TagList
-        {
-            { MessagingSemanticConventions.System, "rabbitmq" },
-            { MessagingSemanticConventions.OperationName, "process" },
-            { MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeProcess },
-            { MessagingSemanticConventions.DestinationSubscriptionName, queueName },
-            { MessagingSemanticConventions.DestinationName, destinationName },
-            { MessagingSemanticConventions.RabbitMqRoutingKey, routingKey },
-            { MessagingSemanticConventions.ServerAddress, options.ConnectionString?.Host },
-            { MessagingSemanticConventions.ServerPort, options.ConnectionString?.Port },
-        };
-        RatatoskrDiagnostics.DeadLetterMessages.Add(1, tags);
-
         // Need to manually publish to DLQ since we can't conditionally route via DLX
         if (config.Retry.UseManaged)
         {
@@ -131,6 +99,8 @@ internal class RabbitMqRetryHandler(RabbitMqOptions options, TimeProvider timePr
             // Just reject without requeue - let DLX handle it
             await channel.BasicNackAsync(ea.DeliveryTag, false, false, cancellationToken);
         }
+        
+        telemetry.RecordDeadLetter(ea, queueName);
     }
 
     private static int GetRetryCount(IDictionary<string, object?>? headers)

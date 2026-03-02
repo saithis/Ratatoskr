@@ -130,27 +130,17 @@ public class MessageDispatcher(
                 logger.LogError(ex, "Inbox interceptor failed for message '{Id}' of type '{Type}'. " +
                     "Aborting dispatch — transport will redeliver.", properties.Id, properties.Type);
 
-                foreach (var observer in observers)
+                await observers.NotifyAsync(new MessageActivity
                 {
-                    try
-                    {
-                        await observer.OnMessageActivity(new MessageActivity
-                        {
-                            Stage = MessageStage.Dispatched,
-                            Properties = properties,
-                            SerializedBody = body,
-                            Message = message,
-                            MessageType = messageType,
-                            DispatchResult = DispatchResult.RecoverableError,
-                            Exception = ex,
-                            Timestamp = timeProvider.GetUtcNow(),
-                        });
-                    }
-                    catch (Exception observerEx)
-                    {
-                        logger.LogWarning(observerEx, "Message activity observer failed at the {Stage} stage", MessageStage.Dispatched);
-                    }
-                }
+                    Stage = MessageStage.Dispatched,
+                    Properties = properties,
+                    SerializedBody = body,
+                    Message = message,
+                    MessageType = messageType,
+                    DispatchResult = DispatchResult.RecoverableError,
+                    Exception = ex,
+                    Timestamp = timeProvider.GetUtcNow(),
+                }, logger);
 
                 return DispatchResult.RecoverableError;
             }
@@ -199,32 +189,22 @@ public class MessageDispatcher(
             result = DispatchResult.Success;
         }
 
-        foreach (var observer in observers)
+        await observers.NotifyAsync(new MessageActivity
         {
-            try
+            Stage = MessageStage.Dispatched,
+            Properties = properties,
+            SerializedBody = body,
+            Message = message,
+            MessageType = messageType,
+            DispatchResult = result,
+            Exception = exceptions switch
             {
-                await observer.OnMessageActivity(new MessageActivity
-                {
-                    Stage = MessageStage.Dispatched,
-                    Properties = properties,
-                    SerializedBody = body,
-                    Message = message,
-                    MessageType = messageType,
-                    DispatchResult = result,
-                    Exception = exceptions switch
-                    {
-                        null => null,
-                        [var single] => single,
-                        _ => new AggregateException(exceptions)
-                    },
-                    Timestamp = timeProvider.GetUtcNow(),
-                });
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Message activity observer failed at the {Stage} stage", MessageStage.Dispatched);
-            }
-        }
+                null => null,
+                [var single] => single,
+                _ => new AggregateException(exceptions)
+            },
+            Timestamp = timeProvider.GetUtcNow(),
+        }, logger);
 
         return result;
     }

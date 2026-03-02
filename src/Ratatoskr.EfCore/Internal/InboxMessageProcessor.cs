@@ -15,6 +15,7 @@ internal class InboxMessageProcessor<TDbContext>(
     TDbContext dbContext,
     IServiceScopeFactory scopeFactory,
     InboxHandlerRegistry handlerRegistry,
+    InboxTelemetry telemetry,
     TimeProvider timeProvider,
     InboxOptions options,
     IEnumerable<IMessageActivityObserver> observers,
@@ -94,7 +95,7 @@ internal class InboxMessageProcessor<TDbContext>(
             }
         }
 
-        RatatoskrDiagnostics.InboxBatchSize.Record(statuses.Length);
+        telemetry.RecordBatchSize(statuses.Length);
 
         var batchStartTimestamp = Stopwatch.GetTimestamp();
 
@@ -105,7 +106,7 @@ internal class InboxMessageProcessor<TDbContext>(
                 logger.LogError("InboxMessage '{MessageId}' not found for handler status '{StatusId}'. Poisoning status.",
                     status.MessageId, status.Id);
                 status.MarkAsPoisoned("InboxMessage record not found — likely deleted.", timeProvider);
-                RatatoskrDiagnostics.InboxPoisonCount.Add(1);
+                telemetry.RecordPoisoned();
                 await dbContext.SaveChangesAsync(cancellationToken);
                 continue;
             }
@@ -119,7 +120,7 @@ internal class InboxMessageProcessor<TDbContext>(
                 status.MarkAsPoisoned(
                     $"Handler key '{status.HandlerKey}' is not registered. The handler may have been removed or renamed.",
                     timeProvider);
-                RatatoskrDiagnostics.InboxPoisonCount.Add(1);
+                telemetry.RecordPoisoned();
                 await dbContext.SaveChangesAsync(cancellationToken);
                 continue;
             }
@@ -135,7 +136,7 @@ internal class InboxMessageProcessor<TDbContext>(
                 logger.LogError(ex, "Failed to deserialize properties for InboxMessage '{MessageId}'. Poisoning status '{StatusId}'.",
                     status.MessageId, status.Id);
                 status.MarkAsPoisoned($"Properties deserialization failed: {ex.Message}", timeProvider);
-                RatatoskrDiagnostics.InboxPoisonCount.Add(1);
+                telemetry.RecordPoisoned();
                 await dbContext.SaveChangesAsync(cancellationToken);
                 continue;
             }
@@ -144,18 +145,7 @@ internal class InboxMessageProcessor<TDbContext>(
             Exception? handlerException = null;
             try
             {
-                // Start a Consumer span, parented to the original message trace
-                ActivityContext.TryParse(props.TraceParent, props.TraceState, out var parentContext);
-                deliverActivity = RatatoskrDiagnostics.ActivitySource.StartActivity(
-                    "deliver inbox", ActivityKind.Consumer, parentContext);
-                if (deliverActivity != null)
-                {
-                    deliverActivity.SetTag(MessagingSemanticConventions.OperationName, "deliver");
-                    deliverActivity.SetTag(MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeProcess);
-                    deliverActivity.SetTag(MessagingSemanticConventions.System, "ratatoskr");
-                    deliverActivity.SetTag(MessagingSemanticConventions.MessageId, props.Id);
-                    deliverActivity.SetTag("ratatoskr.inbox.handler.key", status.HandlerKey);
-                }
+                deliverActivity = telemetry.StartDeliverActivity(props, status.HandlerKey);
 
                 // Resolve handler in a fresh DI scope (matches MessageDispatcher behaviour)
                 using var handlerScope = scopeFactory.CreateScope();
@@ -182,7 +172,7 @@ internal class InboxMessageProcessor<TDbContext>(
                 }
 
                 status.MarkAsCompleted(timeProvider);
-                RatatoskrDiagnostics.InboxDeliverCount.Add(1, new TagList { { "status", "success" } });
+                telemetry.RecordDelivered(success: true);
 
                 logger.LogDebug("Inbox handler '{HandlerKey}' completed for message '{MessageId}'",
                     status.HandlerKey, status.MessageId);
@@ -201,7 +191,7 @@ internal class InboxMessageProcessor<TDbContext>(
             {
                 handlerException = ex;
                 deliverActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                RatatoskrDiagnostics.InboxDeliverCount.Add(1, new TagList { { "status", "failure" } });
+                telemetry.RecordDelivered(success: false);
                 logger.LogWarning(ex,
                     "Inbox handler '{HandlerKey}' failed for message '{MessageId}', attempt {Attempt}",
                     status.HandlerKey, status.MessageId, status.ErrorCount + 1);
@@ -222,7 +212,7 @@ internal class InboxMessageProcessor<TDbContext>(
             await dbContext.SaveChangesAsync(CancellationToken.None);
 
             // Fire InboxDispatched observer — always fires (props always available here)
-            await NotifyObserversAsync(new MessageActivity
+            await observers.NotifyAsync(new MessageActivity
             {
                 Stage = MessageStage.InboxDispatched,
                 Properties = props,
@@ -231,13 +221,13 @@ internal class InboxMessageProcessor<TDbContext>(
                 IsSuccess = handlerException == null,
                 Exception = handlerException,
                 Timestamp = timeProvider.GetUtcNow(),
-            });
+            }, logger);
 
             // Fire InboxPoisoned observer when max retries are exceeded
             if (status.IsPoisoned)
             {
-                RatatoskrDiagnostics.InboxPoisonCount.Add(1);
-                await NotifyObserversAsync(new MessageActivity
+                telemetry.RecordPoisoned();
+                await observers.NotifyAsync(new MessageActivity
                 {
                     Stage = MessageStage.InboxPoisoned,
                     Properties = props,
@@ -245,27 +235,12 @@ internal class InboxMessageProcessor<TDbContext>(
                     TransportName = inboxMessage.TransportName,
                     Exception = handlerException,
                     Timestamp = timeProvider.GetUtcNow(),
-                });
+                }, logger);
             }
         }
 
-        RatatoskrDiagnostics.InboxProcessDuration.Record(Stopwatch.GetElapsedTime(batchStartTimestamp).TotalSeconds);
+        telemetry.RecordBatchDuration(batchStartTimestamp);
 
         return statuses.Length;
-    }
-
-    private async Task NotifyObserversAsync(MessageActivity activity)
-    {
-        foreach (var observer in observers)
-        {
-            try
-            {
-                await observer.OnMessageActivity(activity);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Observer failed at {Stage} stage", activity.Stage);
-            }
-        }
     }
 }
