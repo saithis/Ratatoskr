@@ -28,10 +28,10 @@ internal class RabbitMqMessageSender(
         var routingKey = props.GetRoutingKey() ?? props.Type ?? "";
         var destination = string.IsNullOrEmpty(exchange) ? routingKey : exchange;
 
+        using var activity = telemetry.StartSendActivity(props, content.Length, destination, routingKey);
+
         // Use envelope mapper to map properties and potentially wrap content
         var bodyToSend = envelopeMapper.MapOutgoing(content, props, basicProps);
-
-        using var activity = telemetry.StartSendActivity(props, bodyToSend.Length, destination, routingKey);
 
         // Capture transport-level wire format after envelope mapping
         var transportMessage = RabbitMqTransportMessageSnapshotFactory.FromBasicProperties(
