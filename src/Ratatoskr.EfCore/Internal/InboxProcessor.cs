@@ -10,6 +10,7 @@ namespace Ratatoskr.EfCore.Internal;
 internal class InboxProcessor<TDbContext>(
     IServiceScopeFactory serviceScopeFactory,
     IDistributedLockProvider distributedLockProvider,
+    InboxTelemetry telemetry,
     TimeProvider timeProvider,
     IOptions<InboxOptions> options,
     ILogger<InboxProcessor<TDbContext>> logger)
@@ -38,7 +39,7 @@ internal class InboxProcessor<TDbContext>(
             var messageSerializer = sp.GetRequiredService<IMessageSerializer>();
 
             var processor = new InboxMessageProcessor<TDbContext>(
-                dbContext, serviceScopeFactory, handlerRegistry, timeProvider,
+                dbContext, serviceScopeFactory, handlerRegistry, telemetry, timeProvider,
                 _options, observers, messageSerializer, logger);
 
             logger.LogDebug("Checking inbox for pending handler deliveries");

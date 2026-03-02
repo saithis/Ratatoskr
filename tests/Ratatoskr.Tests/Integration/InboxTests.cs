@@ -1277,7 +1277,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             var messageSerializer = ctx.ServiceProvider.GetRequiredService<IMessageSerializer>();
 
             var processor = new InboxMessageProcessor<TestDbContext>(
-                dbContext, scopeFactory, handlerRegistry, timeProvider,
+                dbContext, scopeFactory, handlerRegistry, new InboxTelemetry(), timeProvider,
                 options.Value, observers, messageSerializer,
                 NullLogger<InboxMessageProcessor<TestDbContext>>.Instance);
 
@@ -1459,7 +1459,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             var messageSerializer = sp.GetRequiredService<IMessageSerializer>();
 
             var processor = new InboxMessageProcessor<TestDbContext>(
-                dbContext, scopeFactory, handlerRegistry, timeProvider,
+                dbContext, scopeFactory, handlerRegistry, new InboxTelemetry(), timeProvider,
                 options.Value, observers, messageSerializer,
                 NullLogger<InboxMessageProcessor<TestDbContext>>.Instance);
 
@@ -2172,6 +2172,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             dbContext,
             scopeFactory,
             handlerRegistry,
+            new InboxTelemetry(),
             timeProvider,
             options.Value,
             observers,

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using Ratatoskr.Core;
 using Ratatoskr.RabbitMq.Config;
@@ -6,12 +7,14 @@ using Ratatoskr.RabbitMq.Extensions;
 
 namespace Ratatoskr.RabbitMq;
 
-public class RabbitMqMessageSender(
+internal class RabbitMqMessageSender(
     RabbitMqConnectionManager connectionManager,
     RabbitMqOptions options,
     IRabbitMqEnvelopeMapper envelopeMapper,
+    RabbitMqTelemetry telemetry,
     TimeProvider timeProvider,
-    IEnumerable<IMessageActivityObserver> observers)
+    IEnumerable<IMessageActivityObserver> observers,
+    ILogger<RabbitMqMessageSender> logger)
     : IMessageSender, IAsyncDisposable
 {
     public string TransportName => RabbitMqConstants.TransportName;
@@ -25,7 +28,7 @@ public class RabbitMqMessageSender(
         var routingKey = props.GetRoutingKey() ?? props.Type ?? "";
         var destination = string.IsNullOrEmpty(exchange) ? routingKey : exchange;
 
-        using var activity = RabbitMqSendInstrumentation.StartSendActivity(props, content.Length, destination, routingKey, options);
+        using var activity = telemetry.StartSendActivity(props, content.Length, destination, routingKey);
 
         // Use envelope mapper to map properties and potentially wrap content
         var bodyToSend = envelopeMapper.MapOutgoing(content, props, basicProps);
@@ -50,15 +53,23 @@ public class RabbitMqMessageSender(
         catch (Exception ex)
         {
             publishException = ex;
-            RabbitMqSendInstrumentation.SetActivityError(activity, ex);
+            RabbitMqTelemetry.SetActivityError(activity, ex);
             throw;
         }
         finally
         {
-            await RabbitMqSendInstrumentation.RecordSendMetricsAndNotifyAsync(
-                startTimestamp, publishException, props, bodyToSend,
-                TransportName, transportMessage, destination, routingKey,
-                options, observers, timeProvider);
+            telemetry.RecordSent(startTimestamp, publishException, destination, routingKey);
+
+            await observers.NotifyAsync(new MessageActivity
+            {
+                Stage = MessageStage.Sent,
+                Properties = props,
+                SerializedBody = bodyToSend,
+                TransportName = TransportName,
+                TransportMessage = transportMessage,
+                Exception = publishException,
+                Timestamp = timeProvider.GetUtcNow(),
+            }, logger);
         }
     }
 

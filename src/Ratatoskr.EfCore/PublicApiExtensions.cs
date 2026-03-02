@@ -38,9 +38,10 @@ public static class PublicApiExtensions
             // Register options
             builder.Services.AddSingleton(Options.Create(outboxBuilder.Options));
         
+            builder.Services.AddSingleton<OutboxTelemetry>();
             builder.Services.AddSingleton<OutboxProcessor<TDbContext>>();
             builder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<OutboxProcessor<TDbContext>>());
-        
+
             return builder;
         }
 
@@ -51,7 +52,8 @@ public static class PublicApiExtensions
             where TDbContext : DbContext, IOutboxDbContext
         {
             builder.Services.Configure<OutboxOptions>(configuration.GetSection(OutboxOptions.SectionName));
-        
+
+            builder.Services.AddSingleton<OutboxTelemetry>();
             builder.Services.AddSingleton<OutboxProcessor<TDbContext>>();
             builder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<OutboxProcessor<TDbContext>>());
         

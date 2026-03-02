@@ -46,6 +46,87 @@ The core library provides the abstractions (`IRatatoskr`, `IMessageSender`, `IMe
 
 ---
 
+## End-to-End Flow
+
+The following diagram shows the complete message lifecycle — from publishing through transport to consumption and handler invocation. The sections below detail each step.
+
+```mermaid
+flowchart TD
+    subgraph Publish ["Publishing"]
+        App["Application"]
+        Direct["IRatatoskr.PublishDirectAsync\nEnrich, serialize, send to matching transports"]
+        Outbox["DbContext.OutboxMessages.Add\n+ SaveChangesAsync"]
+
+        App --> Direct
+        App --> Outbox
+    end
+
+    subgraph OutboxPipeline ["Outbox Pipeline"]
+        Interceptor["OutboxTriggerInterceptor\nEnrich, serialize, persist in same DB transaction"]
+        OutboxDB[("Database\nOutboxMessageEntity")]
+        OutboxProc["OutboxProcessor\nBackground service, distributed lock"]
+
+        Outbox --> Interceptor
+        Interceptor --> OutboxDB
+        OutboxDB --> OutboxProc
+    end
+
+    subgraph Transport ["Transport Layer"]
+        SenderInterface["IMessageSender\nRoutes by TransportName"]
+        Local["LocalMessageSender\nIn-memory channel"]
+        Durable["DurableLocalMessageSender\nPersist to inbox DB, then channel"]
+        RmqSend["RabbitMqMessageSender\nAMQP publish"]
+
+        Direct --> SenderInterface
+        OutboxProc --> SenderInterface
+        SenderInterface -.-> Local
+        SenderInterface -.-> Durable
+        SenderInterface -.-> RmqSend
+    end
+
+    subgraph Consume ["Consumption"]
+        InMemCh[/"In-Memory Channel"/]
+        RmqQueue[/"RabbitMQ Queue"/]
+        LocalConsumer["LocalTransportConsumer\nBackgroundService"]
+        RmqConsumer["RabbitMqConsumer\nBackgroundService"]
+
+        Local --> InMemCh
+        Durable --> InMemCh
+        RmqSend --> RmqQueue
+        InMemCh --> LocalConsumer
+        RmqQueue --> RmqConsumer
+    end
+
+    subgraph Dispatch ["Message Dispatch"]
+        Dispatcher["MessageDispatcher\nResolve type, deserialize,\ndiscover handlers"]
+        InboxCheck{"Inbox-managed\nhandlers?"}
+        FireForget["Invoke fire-and-forget handlers\neach in own DI scope"]
+        InboxIntercept["InboxInterceptor\nPersist message + handler\nstatuses to DB"]
+
+        LocalConsumer --> Dispatcher
+        RmqConsumer --> Dispatcher
+        Dispatcher --> InboxCheck
+        InboxCheck -->|No| FireForget
+        InboxCheck -->|Yes| InboxIntercept
+        InboxIntercept --> FireForget
+    end
+
+    subgraph Inbox ["Inbox Processing"]
+        InboxDB[("Database\nInboxMessageEntity\nInboxHandlerStatusEntity")]
+        InboxProc["InboxProcessor\nBackground service, distributed lock"]
+        Handler["IMessageHandler‹T›\nPer-handler retry, isolated DI scope"]
+
+        Durable -.->|"Persist inbox\nhandlers first"| InboxDB
+        InboxIntercept --> InboxDB
+        InboxDB --> InboxProc
+        InboxProc --> Handler
+    end
+
+    FireForget --> Handler
+```
+
+---
+
 ## Publishing
 
 There are two ways to publish messages: directly via `IRatatoskr`, or transactionally via the EF Core Outbox.
@@ -85,7 +166,7 @@ sequenceDiagram
     App->>Db: OutboxMessages.Add(message)
     App->>Db: SaveChangesAsync()
     activate Int
-    Int->>Int: Serialize & create OutboxMessageEntity
+    Int->>Int: Enrich, serialize & create OutboxMessageEntity
     Int->>DB: Save business data + outbox entries (same transaction)
     Int->>OP: TriggerAsync()
     deactivate Int

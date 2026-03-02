@@ -187,6 +187,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
                     .Produces<TestEvent>());
             });
             // Register outbox processor without hosted service for manual control
+            services.AddSingleton<OutboxTelemetry>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
             services.AddSingleton(Options.Create(new OutboxOptions()));
             services.AddDbContext<TestDbContext>((sp, options) =>
@@ -284,6 +285,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
                     .Produces<TestEvent>());
             });
             // Register outbox processor without hosted service for manual control
+            services.AddSingleton<OutboxTelemetry>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
             services.AddSingleton(Options.Create(new OutboxOptions { MaxRetries = 3 }));
             services.AddDbContext<TestDbContext>((sp, options) =>
@@ -578,6 +580,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
                     .WithRabbitMq(r => r.WithTopicExchange())
                     .Produces<TestEvent>());
             });
+            services.AddSingleton<OutboxTelemetry>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
             services.AddSingleton(Options.Create(new OutboxOptions()));
             services.AddDbContext<TestDbContext>((sp, options) =>
@@ -637,6 +640,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
                     .WithRabbitMq(r => r.WithTopicExchange())
                     .Produces<TestEvent>());
             });
+            services.AddSingleton<OutboxTelemetry>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
             services.AddSingleton(Options.Create(new OutboxOptions { SendTimeout = TimeSpan.FromMilliseconds(100) }));
             services.AddDbContext<TestDbContext>((sp, options) =>
@@ -692,6 +696,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
                     .WithRabbitMq(r => r.WithTopicExchange())
                     .Produces<TestEvent>());
             });
+            services.AddSingleton<OutboxTelemetry>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
             services.AddSingleton(Options.Create(new OutboxOptions
             {
@@ -736,7 +741,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             var logger = NullLogger<OutboxMessageProcessor<TestDbContext>>.Instance;
             var observers = ctx.ServiceProvider.GetServices<IMessageActivityObserver>();
             var processor = new OutboxMessageProcessor<TestDbContext>(
-                dbContext, messageSenders, timeProvider, options.Value, observers, logger);
+                dbContext, messageSenders, new OutboxTelemetry(), timeProvider, options.Value, observers, logger);
 
             var count = await processor.ProcessBatchAsync(includeStuckMessageDetection: true, CancellationToken.None);
             count.Should().Be(0, "message is stuck for only 1 minute — not yet considered stuck");
@@ -755,7 +760,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             var logger = NullLogger<OutboxMessageProcessor<TestDbContext>>.Instance;
             var observers = ctx.ServiceProvider.GetServices<IMessageActivityObserver>();
             var processor = new OutboxMessageProcessor<TestDbContext>(
-                dbContext, messageSenders, timeProvider, options.Value, observers, logger);
+                dbContext, messageSenders, new OutboxTelemetry(), timeProvider, options.Value, observers, logger);
 
             var count = await processor.ProcessBatchAsync(includeStuckMessageDetection: true, CancellationToken.None);
             count.Should().BeGreaterThan(0);
@@ -801,7 +806,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
 
         var activityObservers = serviceProvider.GetServices<IMessageActivityObserver>();
         var processor = new OutboxMessageProcessor<TDbContext>(
-            dbContext, messageSenders, timeProvider, options.Value, activityObservers, logger);
+            dbContext, messageSenders, new OutboxTelemetry(), timeProvider, options.Value, activityObservers, logger);
 
         var totalProcessed = 0;
         while (true)

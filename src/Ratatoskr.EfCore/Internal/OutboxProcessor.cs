@@ -10,6 +10,7 @@ namespace Ratatoskr.EfCore.Internal;
 internal class OutboxProcessor<TDbContext>(
     IServiceScopeFactory serviceScopeFactory,
     IDistributedLockProvider distributedLockProvider,
+    OutboxTelemetry telemetry,
     TimeProvider timeProvider,
     IOptions<OutboxOptions> options,
     ILogger<OutboxProcessor<TDbContext>> logger)
@@ -36,7 +37,7 @@ internal class OutboxProcessor<TDbContext>(
             var activityObservers = batchScope.ServiceProvider.GetServices<IMessageActivityObserver>();
 
             var processor = new OutboxMessageProcessor<TDbContext>(
-                dbContext, messageSenders, timeProvider, _options, activityObservers, logger);
+                dbContext, messageSenders, telemetry, timeProvider, _options, activityObservers, logger);
 
             logger.LogDebug("Checking outbox for unsent messages");
             var processedCount = await processor.ProcessBatchAsync(

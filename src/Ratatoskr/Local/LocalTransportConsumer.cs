@@ -9,6 +9,7 @@ namespace Ratatoskr.Local;
 internal class LocalTransportConsumer(
     Channel<LocalMessage> messageChannel,
     MessageDispatcher dispatcher,
+    LocalTelemetry telemetry,
     TimeProvider timeProvider,
     LocalTransportOptions options,
     IEnumerable<IMessageActivityObserver> observers,
@@ -52,45 +53,13 @@ internal class LocalTransportConsumer(
             Timestamp = receivedTimestamp,
         }, logger);
 
-        var tags = new TagList
-        {
-            { MessagingSemanticConventions.System, "local" },
-            { MessagingSemanticConventions.OperationName, "process" },
-            { MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeProcess },
-        };
+        telemetry.RecordReceived(message.Properties.Time, receivedTimestamp);
 
-        RatatoskrDiagnostics.ClientConsumedMessages.Add(1, tags);
-
-        if (message.Properties.Time.HasValue)
-        {
-            var receiveLag = (receivedTimestamp - message.Properties.Time.Value).TotalSeconds;
-            RatatoskrDiagnostics.ReceiveLag.Record(receiveLag, tags);
-        }
-
-        // Restore trace context from message
-        ActivityContext.TryParse(
-            message.Properties.TraceParent,
-            message.Properties.TraceState,
-            out var parentContext);
-
-        using var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
-            "process local",
-            ActivityKind.Consumer,
-            parentContext);
-
-        if (activity != null)
-        {
-            activity.SetTag(MessagingSemanticConventions.OperationName, "process");
-            activity.SetTag(MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeProcess);
-            activity.SetTag(MessagingSemanticConventions.System, "local");
-            activity.SetTag(MessagingSemanticConventions.MessageId, message.Properties.Id);
-            activity.SetTag(MessagingSemanticConventions.MessageBodySize, message.Content.Length);
-        }
+        using var activity = telemetry.StartConsumeActivity(message.Properties, message.Content.Length);
 
         var startTimestamp = Stopwatch.GetTimestamp();
         var result = await dispatcher.DispatchAsync(
             message.Content, message.Properties, cancellationToken);
-        var duration = Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds;
 
         var errorType = result switch
         {
@@ -101,16 +70,11 @@ internal class LocalTransportConsumer(
 
         if (errorType != null)
         {
-            tags.Add(MessagingSemanticConventions.ErrorType, errorType);
+            activity?.SetTag(MessagingSemanticConventions.ErrorType, errorType);
+            activity?.SetStatus(ActivityStatusCode.Error, errorType);
         }
 
-        RatatoskrDiagnostics.ProcessDuration.Record(duration, tags);
-
-        if (message.Properties.Time.HasValue)
-        {
-            var processLag = (timeProvider.GetUtcNow() - message.Properties.Time.Value).TotalSeconds;
-            RatatoskrDiagnostics.ProcessLag.Record(processLag, tags);
-        }
+        telemetry.RecordProcessed(startTimestamp, message.Properties.Time, errorType);
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)

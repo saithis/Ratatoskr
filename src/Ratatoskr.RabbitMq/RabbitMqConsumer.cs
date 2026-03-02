@@ -15,6 +15,7 @@ internal class RabbitMqConsumer(
     RabbitMqTopologyManager topologyManager,
     MessageDispatcher dispatcher,
     IRabbitMqEnvelopeMapper envelopeMapper,
+    RabbitMqTelemetry telemetry,
     RabbitMqRetryHandler retryHandler,
     RabbitMqOptions options,
     TimeProvider timeProvider,
@@ -191,18 +192,11 @@ internal class RabbitMqConsumer(
                 Timestamp = receivedTimestamp,
             }, logger);
 
-            tags = CreateTags(ea, props, queueName);
+            tags = telemetry.CreateConsumeTags(ea, props, queueName);
 
-            RatatoskrDiagnostics.ClientConsumedMessages.Add(1, tags);
+            telemetry.RecordReceived(tags, messageTime, receivedTimestamp);
 
-            if (messageTime.HasValue)
-            {
-                // Avoid negative lag due to clock skew
-                var lag = Math.Max((receivedTimestamp - messageTime.Value).TotalSeconds, 0);
-                RatatoskrDiagnostics.ReceiveLag.Record(lag, tags);
-            }
-
-            activity = StartActivity(props, tags, body.Length, ea.DeliveryTag);
+            activity = telemetry.StartConsumeActivity(props, tags, body.Length, ea.DeliveryTag);
 
             var result = await dispatcher.DispatchAsync(body, props, cancellationToken, channelName, RabbitMqConstants.TransportName);
 
@@ -236,7 +230,7 @@ internal class RabbitMqConsumer(
 
             if (tags.Count == 0)
             {
-                tags = CreateFallbackTags(ea, queueName);
+                tags = telemetry.CreateConsumeFallbackTags(ea, queueName);
             }
 
             if (!channelOptions.AutoAck)
@@ -252,83 +246,12 @@ internal class RabbitMqConsumer(
 
              if (tags.Count > 0)
              {
-                 if (errorType != null)
-                 {
-                     tags.Add(MessagingSemanticConventions.ErrorType, errorType);
-                 }
-
-                 RatatoskrDiagnostics.ProcessDuration.Record(Stopwatch.GetElapsedTime(processStartTimestamp).TotalSeconds, tags);
-
-                 if (messageTime.HasValue)
-                 {
-                      var lag = Math.Max((timeProvider.GetUtcNow() - messageTime.Value).TotalSeconds, 0);
-                      RatatoskrDiagnostics.ProcessLag.Record(lag, tags);
-                 }
+                 telemetry.RecordProcessed(tags, processStartTimestamp, messageTime, errorType);
              }
         }
     }
 
-    private TagList CreateTags(BasicDeliverEventArgs ea, MessageProperties props, string queueName)
-    {
-        var (originalExchange, originalRoutingKey) = RabbitMqHeaderHelper.GetOriginalDestinationFromHeaders(ea.BasicProperties.Headers);
-        var destinationName = props.GetExchange() ?? originalExchange ?? ea.Exchange;
-        var routingKey = props.GetRoutingKey() ?? originalRoutingKey ?? ea.RoutingKey;
 
-        return BuildTagList(destinationName, routingKey, queueName);
-    }
-
-    private TagList CreateFallbackTags(BasicDeliverEventArgs ea, string queueName)
-    {
-        var (originalExchange, originalRoutingKey) = RabbitMqHeaderHelper.GetOriginalDestinationFromHeaders(ea.BasicProperties.Headers);
-        var destinationName = originalExchange ?? ea.Exchange;
-        var routingKey = originalRoutingKey ?? ea.RoutingKey;
-
-        return BuildTagList(destinationName, routingKey, queueName);
-    }
-
-    private TagList BuildTagList(string destinationName, string routingKey, string queueName)
-    {
-        return new TagList
-        {
-            { MessagingSemanticConventions.System, "rabbitmq" },
-            { MessagingSemanticConventions.OperationName, "process" },
-            { MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeProcess },
-            { MessagingSemanticConventions.DestinationSubscriptionName, queueName },
-            { MessagingSemanticConventions.DestinationName, destinationName },
-            { MessagingSemanticConventions.RabbitMqRoutingKey, routingKey },
-            { MessagingSemanticConventions.ServerAddress, options.ConnectionString?.Host },
-            { MessagingSemanticConventions.ServerPort, options.ConnectionString?.Port },
-        };
-    }
-
-    private Activity? StartActivity(MessageProperties props, TagList tags, int bodySize, ulong deliveryTag)
-    {
-        ActivityContext.TryParse(props.TraceParent, props.TraceState, out var parentContext);
-
-        var destinationName = tags.FirstOrDefault(t => t.Key == MessagingSemanticConventions.DestinationName).Value as string;
-        var destination = string.IsNullOrEmpty(destinationName)
-            ? tags.FirstOrDefault(t => t.Key == MessagingSemanticConventions.DestinationSubscriptionName).Value as string
-            : destinationName;
-
-        var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
-            $"process {destination}",
-            ActivityKind.Consumer,
-            parentContext);
-
-        if (activity != null)
-        {
-            // https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/#messaging-attributes
-            // https://opentelemetry.io/docs/specs/semconv/messaging/rabbitmq/
-            foreach (var tag in tags)
-            {
-                activity.SetTag(tag.Key, tag.Value);
-            }
-            activity.SetTag(MessagingSemanticConventions.MessageId, props.Id);
-            activity.SetTag(MessagingSemanticConventions.MessageBodySize, bodySize);
-            activity.SetTag(MessagingSemanticConventions.RabbitMqDeliveryTag, (long)deliveryTag);
-        }
-        return activity;
-    }
 
     private async Task HandleDispatchResultAsync(
         IChannel channel,

@@ -7,6 +7,7 @@ namespace Ratatoskr.Local;
 
 internal class LocalMessageSender(
     Channel<LocalMessage> messageChannel,
+    LocalTelemetry telemetry,
     TimeProvider timeProvider,
     IEnumerable<IMessageActivityObserver> observers,
     ILogger<LocalMessageSender> logger)
@@ -17,7 +18,7 @@ internal class LocalMessageSender(
     public async Task SendAsync(byte[] content, MessageProperties props, CancellationToken cancellationToken)
     {
         var startTimestamp = Stopwatch.GetTimestamp();
-        using var activity = LocalSendInstrumentation.StartSendActivity(props, content.Length);
+        using var activity = telemetry.StartSendActivity(props, content.Length);
         var transportMessage = LocalTransportMessageSnapshotFactory.Create(content, props);
         Exception? sendException = null;
 
@@ -28,14 +29,23 @@ internal class LocalMessageSender(
         catch (Exception ex)
         {
             sendException = ex;
-            LocalSendInstrumentation.SetActivityError(activity, ex);
+            LocalTelemetry.SetActivityError(activity, ex);
             throw;
         }
         finally
         {
-            await LocalSendInstrumentation.RecordSendMetricsAndNotifyAsync(
-                startTimestamp, sendException, props, content,
-                TransportName, transportMessage, observers, timeProvider, logger);
+            telemetry.RecordSent(startTimestamp, sendException);
+
+            await observers.NotifyAsync(new MessageActivity
+            {
+                Stage = MessageStage.Sent,
+                Properties = props,
+                SerializedBody = content,
+                TransportName = TransportName,
+                TransportMessage = transportMessage,
+                Exception = sendException,
+                Timestamp = timeProvider.GetUtcNow(),
+            }, logger);
         }
     }
 }

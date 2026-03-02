@@ -16,7 +16,7 @@ internal static class ObserverNotifier
     public static async ValueTask NotifyAsync(
         this IEnumerable<IMessageActivityObserver> observers,
         MessageActivity activity,
-        ILogger? logger = null)
+        ILogger logger)
     {
         foreach (var observer in observers)
         {
@@ -26,7 +26,7 @@ internal static class ObserverNotifier
             }
             catch (Exception ex)
             {
-                logger?.LogWarning(ex, "Message activity observer failed at the {Stage} stage", activity.Stage);
+                logger.LogWarning(ex, "Message activity observer failed at the {Stage} stage", activity.Stage);
             }
         }
     }

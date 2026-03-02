@@ -45,10 +45,18 @@ public class RabbitMqTopologyManager(
 
     private async Task ProvisionChannelAsync(IChannel channel, ChannelRegistration reg, CancellationToken token)
     {
-        var channelOpts = reg.GetRabbitMqChannelOptions()
-                          ?? new RabbitMqChannelOptions();
+        var channelOpts = reg.GetRabbitMqChannelOptions() ?? new RabbitMqChannelOptions();
 
-        // 1. Exchange Logic
+        await DeclareOrValidateExchangeAsync(channel, reg, channelOpts, token);
+
+        if (reg.Intent == ChannelType.CommandConsume || reg.Intent == ChannelType.EventConsume)
+        {
+            await ProvisionQueueAndBindingsAsync(channel, reg, channelOpts, token);
+        }
+    }
+
+    private async Task DeclareOrValidateExchangeAsync(IChannel channel, ChannelRegistration reg, RabbitMqChannelOptions channelOpts, CancellationToken token)
+    {
         if (reg.Intent == ChannelType.EventPublish || reg.Intent == ChannelType.CommandConsume)
         {
             // We OWN the exchange -> Declare it
@@ -75,99 +83,109 @@ public class RabbitMqTopologyManager(
                 throw;
             }
         }
+    }
 
-        if (reg.Intent == ChannelType.CommandConsume || reg.Intent == ChannelType.EventConsume)
+    private async Task ProvisionQueueAndBindingsAsync(IChannel channel, ChannelRegistration reg, RabbitMqChannelOptions channelOpts, CancellationToken token)
+    {
+        string queueName = channelOpts.QueueName ?? throw new InvalidOperationException($"Queue name must be specified for consumer channel '{reg.ChannelName}'");
+
+        IDictionary<string, object?> queueArgs = new Dictionary<string, object?>(channelOpts.QueueArguments);
+        if (channelOpts.QueueType == QueueType.Quorum)
         {
-            string queueName = channelOpts.QueueName ?? throw new InvalidOperationException($"Queue name must be specified for consumer channel '{reg.ChannelName}'");
-
-            IDictionary<string, object?> queueArgs = new Dictionary<string, object?>(channelOpts.QueueArguments);
-            if (channelOpts.QueueType == QueueType.Quorum)
-            {
-                queueArgs["x-queue-type"] = "quorum";
-            }
-
-            if (channelOpts.Retry.UseManaged)
-            {
-                var dlqName = $"{queueName}{channelOpts.Retry.DeadLetterSuffix}";
-                var retryQueueName = $"{queueName}{channelOpts.Retry.RetrySuffix}";
-
-                logger.LogInformation("Provisioning retry topology for queue '{Queue}' (DLQ: {Dlq}, Retry: {Retry})", queueName, dlqName, retryQueueName);
-
-                // 1. Declare DLQ Exchange (Fanout)
-                await channel.ExchangeDeclareAsync(
-                    exchange: dlqName,
-                    type: RabbitMQ.Client.ExchangeType.Fanout,
-                    durable: true,
-                    autoDelete: false,
-                    arguments: null,
-                    cancellationToken: token);
-
-                // 2. Declare DLQ Queue
-                var dlqArgs = new Dictionary<string, object?>(queueArgs);
-                dlqArgs.Remove("x-dead-letter-exchange");
-                dlqArgs.Remove("x-dead-letter-routing-key");
-                await channel.QueueDeclareAsync(
-                    queue: dlqName,
-                    durable: true, // DLQ should usually be durable to prevent data loss
-                    exclusive: false,
-                    autoDelete: false,
-                    arguments: dlqArgs, // Use same type/args as main queue
-                    cancellationToken: token);
-
-                // 3. Bind DLQ Queue to DLQ Exchange
-                await channel.QueueBindAsync(
-                    queue: dlqName,
-                    exchange: dlqName,
-                    routingKey: "",
-                    cancellationToken: token);
-
-                // 4. Declare Retry Queue (TTL -> Main Queue)
-                var retryArgs = new Dictionary<string, object?>(queueArgs)
-                {
-                    ["x-dead-letter-exchange"] = "",
-                    ["x-dead-letter-routing-key"] = queueName,
-                    ["x-message-ttl"] = (long)channelOpts.Retry.Delay.TotalMilliseconds
-                };
-
-                await channel.QueueDeclareAsync(
-                    queue: retryQueueName,
-                    durable: true,
-                    exclusive: false,
-                    autoDelete: false,
-                    arguments: retryArgs,
-                    cancellationToken: token);
-
-                // 5. Configure Main Queue to Dead-Letter to Retry Queue
-                queueArgs["x-dead-letter-exchange"] = "";
-                queueArgs["x-dead-letter-routing-key"] = retryQueueName;
-            }
-
-            logger.LogInformation("Declaring queue '{Queue}' for channel '{Channel}'", queueName, reg.ChannelName);
-
-            await channel.QueueDeclareAsync(
-                queue: queueName,
-                durable: channelOpts.QueueDurable,
-                exclusive: channelOpts.QueueExclusive,
-                autoDelete: channelOpts.QueueAutoDelete,
-                arguments: queueArgs,
-                cancellationToken: token);
-
-            // 4. Bindings
-            foreach (var msg in reg.Messages)
-            {
-                var msgOpts = msg.GetRabbitMqOptions();
-
-                string routingKey = msgOpts?.RoutingKey ?? msg.MessageTypeName;
-
-                logger.LogInformation("Binding queue '{Queue}' to exchange '{Exchange}' with key '{Key}'", queueName, reg.ChannelName, routingKey);
-
-                await channel.QueueBindAsync(
-                    queue: queueName,
-                    exchange: reg.ChannelName,
-                    routingKey: routingKey,
-                    arguments: null,
-                    cancellationToken: token);
-            }
+            queueArgs["x-queue-type"] = "quorum";
         }
+
+        if (channelOpts.Retry.UseManaged)
+        {
+            await ProvisionRetryTopologyAsync(channel, queueName, queueArgs, channelOpts, token);
+        }
+
+        logger.LogInformation("Declaring queue '{Queue}' for channel '{Channel}'", queueName, reg.ChannelName);
+
+        await channel.QueueDeclareAsync(
+            queue: queueName,
+            durable: channelOpts.QueueDurable,
+            exclusive: channelOpts.QueueExclusive,
+            autoDelete: channelOpts.QueueAutoDelete,
+            arguments: queueArgs,
+            cancellationToken: token);
+
+        // Bindings
+        foreach (var msg in reg.Messages)
+        {
+            var msgOpts = msg.GetRabbitMqOptions();
+
+            string routingKey = msgOpts?.RoutingKey ?? msg.MessageTypeName;
+
+            logger.LogInformation("Binding queue '{Queue}' to exchange '{Exchange}' with key '{Key}'", queueName, reg.ChannelName, routingKey);
+
+            await channel.QueueBindAsync(
+                queue: queueName,
+                exchange: reg.ChannelName,
+                routingKey: routingKey,
+                arguments: null,
+                cancellationToken: token);
+        }
+    }
+
+    private async Task ProvisionRetryTopologyAsync(
+        IChannel channel,
+        string queueName,
+        IDictionary<string, object?> mainQueueArgs,
+        RabbitMqChannelOptions channelOpts,
+        CancellationToken token)
+    {
+        var dlqName = $"{queueName}{channelOpts.Retry.DeadLetterSuffix}";
+        var retryQueueName = $"{queueName}{channelOpts.Retry.RetrySuffix}";
+
+        logger.LogInformation("Provisioning retry topology for queue '{Queue}' (DLQ: {Dlq}, Retry: {Retry})", queueName, dlqName, retryQueueName);
+
+        // 1. Declare DLQ Exchange (Fanout)
+        await channel.ExchangeDeclareAsync(
+            exchange: dlqName,
+            type: RabbitMQ.Client.ExchangeType.Fanout,
+            durable: true,
+            autoDelete: false,
+            arguments: null,
+            cancellationToken: token);
+
+        // 2. Declare DLQ Queue
+        var dlqArgs = new Dictionary<string, object?>(mainQueueArgs);
+        dlqArgs.Remove("x-dead-letter-exchange");
+        dlqArgs.Remove("x-dead-letter-routing-key");
+        await channel.QueueDeclareAsync(
+            queue: dlqName,
+            durable: true, // DLQ should usually be durable to prevent data loss
+            exclusive: false,
+            autoDelete: false,
+            arguments: dlqArgs, // Use same type/args as main queue
+            cancellationToken: token);
+
+        // 3. Bind DLQ Queue to DLQ Exchange
+        await channel.QueueBindAsync(
+            queue: dlqName,
+            exchange: dlqName,
+            routingKey: "",
+            cancellationToken: token);
+
+        // 4. Declare Retry Queue (TTL -> Main Queue)
+        var retryArgs = new Dictionary<string, object?>(mainQueueArgs)
+        {
+            ["x-dead-letter-exchange"] = "",
+            ["x-dead-letter-routing-key"] = queueName,
+            ["x-message-ttl"] = (long)channelOpts.Retry.Delay.TotalMilliseconds
+        };
+
+        await channel.QueueDeclareAsync(
+            queue: retryQueueName,
+            durable: true,
+            exclusive: false,
+            autoDelete: false,
+            arguments: retryArgs,
+            cancellationToken: token);
+
+        // 5. Configure Main Queue to Dead-Letter to Retry Queue
+        mainQueueArgs["x-dead-letter-exchange"] = "";
+        mainQueueArgs["x-dead-letter-routing-key"] = retryQueueName;
     }
 }
