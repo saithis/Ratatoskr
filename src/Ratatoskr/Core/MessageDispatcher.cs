@@ -6,8 +6,8 @@ namespace Ratatoskr.Core;
 /// <summary>
 /// Dispatches incoming messages to all registered handlers.
 /// Supports multiple handlers per message type, each invoked in its own DI scope.
-/// Handlers listed in <see cref="InboxHandlerRegistry"/> are skipped — they are
-/// delivered separately by the inbox processor.
+/// Handlers excluded by <see cref="IHandlerFilter"/> are skipped — they are
+/// delivered separately by external infrastructure (e.g. the inbox processor).
 /// </summary>
 public class MessageDispatcher(
     ChannelRegistry channelRegistry,
@@ -17,7 +17,7 @@ public class MessageDispatcher(
     TimeProvider timeProvider,
     IEnumerable<IMessageActivityObserver> observers,
     ILogger<MessageDispatcher> logger,
-    InboxHandlerRegistry? inboxHandlerRegistry = null)
+    IHandlerFilter? handlerFilter = null)
 {
     /// <summary>
     /// Dispatches a message to all registered handlers, each in its own DI scope.
@@ -100,11 +100,11 @@ public class MessageDispatcher(
         }
 
         // 4. Invoke each handler in its own DI scope for full isolation.
-        //    Skip inbox-managed handlers — they are delivered by InboxProcessor.
+        //    Skip handlers excluded by the handler filter (e.g. inbox-managed handlers).
         var invoked = 0;
         foreach (var handlerType in handlerTypes)
         {
-            if (inboxHandlerRegistry?.GetByHandlerType(handlerType) != null)
+            if (handlerFilter?.ShouldSkip(handlerType) == true)
                 continue;
 
             try
@@ -129,7 +129,7 @@ public class MessageDispatcher(
         if (exceptions != null)
             result = DispatchResult.RecoverableError;
         else if (invoked == 0 && handlerTypes.Length > 0)
-            result = DispatchResult.NoHandlers; // All handlers were inbox-managed
+            result = DispatchResult.NoHandlers; // All handlers were filtered out
         else
             result = DispatchResult.Success;
 
@@ -162,8 +162,7 @@ public enum DispatchResult
     PermanentError,
 
     /// <summary>
-    /// All handlers for this message were inbox-managed and have been queued to durable storage.
-    /// They will be delivered asynchronously by the InboxProcessor.
+    /// All handlers for this message have been accepted for deferred processing.
     /// Transports should treat this the same as <see cref="Success"/> (ack the message).
     /// </summary>
     Queued,

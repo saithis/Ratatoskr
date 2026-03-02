@@ -6,9 +6,8 @@ using Ratatoskr.Core;
 namespace Ratatoskr.EfCore.Internal;
 
 /// <summary>
-/// Single entry point for inbox persistence. Called by transport consumers (e.g.
-/// <c>RabbitMqConsumer</c>) and <c>DurableLocalMessageSender</c> to persist
-/// inbox-managed handler statuses to the database before message dispatch.
+/// Single entry point for inbox persistence. Called by <see cref="InboxRouteInterceptor{TDbContext}"/>
+/// to persist inbox-managed handler statuses to the database before message dispatch.
 /// </summary>
 internal class InboxAcceptor<TDbContext>(
     IServiceScopeFactory scopeFactory,
@@ -17,7 +16,6 @@ internal class InboxAcceptor<TDbContext>(
     TimeProvider timeProvider,
     IEnumerable<IMessageActivityObserver> observers,
     ILogger<InboxAcceptor<TDbContext>> logger)
-    : IInboxAcceptor
     where TDbContext : DbContext, IInboxDbContext
 {
     public async Task<bool> AcceptAsync(

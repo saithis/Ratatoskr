@@ -39,30 +39,23 @@ public static class InboxPublicApiExtensions
             var inboxBuilder = new InboxBuilder<TDbContext>();
             configure?.Invoke(inboxBuilder);
 
+            var inboxHandlerRegistry = new InboxHandlerRegistry();
+
             builder.Services.AddSingleton(Options.Create(inboxBuilder.Options));
             builder.Services.AddSingleton<InboxTelemetry>();
+            builder.Services.AddSingleton(inboxHandlerRegistry);
             builder.Services.AddSingleton<InboxProcessor<TDbContext>>();
+            builder.Services.AddSingleton<IProcessorTrigger>(sp => sp.GetRequiredService<InboxProcessor<TDbContext>>());
             if (inboxBuilder.RegisterBackgroundService)
                 builder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<InboxProcessor<TDbContext>>());
-            builder.Services.AddSingleton<IInboxAcceptor, InboxAcceptor<TDbContext>>();
+            builder.Services.AddSingleton<InboxAcceptor<TDbContext>>();
+            builder.Services.AddSingleton<IMessageRouteInterceptor, InboxRouteInterceptor<TDbContext>>();
+            builder.Services.AddSingleton<IHandlerFilter, InboxHandlerFilter>();
 
             // Deferred: runs after the full configure() callback, so UseEfCoreInbox can be called
             // before or after UseLocalTransport() without breaking anything.
             builder.AddDeferredServiceAction(services =>
             {
-                // Replace LocalMessageSender with the durable version if local transport is configured.
-                var localSenderDescriptor = services.FirstOrDefault(
-                    d => d.ServiceType == typeof(IMessageSender)
-                      && d.ImplementationType == typeof(LocalMessageSender));
-
-                if (localSenderDescriptor != null)
-                {
-                    services.Remove(localSenderDescriptor);
-                    services.AddSingleton<IMessageSender, DurableLocalMessageSender<TDbContext>>();
-                }
-
-                // Finalize inbox handler registrations now that global config (DefaultHandlerInboxEnabled)
-                // and ChannelRegistry (wire type names) are both fully known.
                 // Finalize inbox handler registrations now that global config (DefaultHandlerInboxEnabled)
                 // and ChannelRegistry (wire type names) are both fully known.
                 var defaultEnabled = inboxBuilder.Options.DefaultHandlerInboxEnabled;
@@ -78,12 +71,12 @@ public static class InboxPublicApiExtensions
                     // overrides), fall back to [RatatoskrMessage] attribute.
                     var wireTypeName = ResolveWireTypeName(builder.ChannelRegistry, pending.MessageType);
 
-                    builder.InboxHandlerRegistry.Register(key, pending.MessageType, pending.HandlerType, wireTypeName);
+                    inboxHandlerRegistry.Register(key, pending.MessageType, pending.HandlerType, wireTypeName);
                 }
             });
 
             // Startup validation runs after deferred actions (InboxHandlerRegistry is fully populated).
-            builder.AddValidator(cr => InboxConfigurationValidator.Validate(cr, builder.InboxHandlerRegistry));
+            builder.AddValidator(cr => InboxConfigurationValidator.Validate(cr, inboxHandlerRegistry));
 
             return builder;
         }

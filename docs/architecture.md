@@ -22,7 +22,7 @@ graph LR
         OutboxProcessor["OutboxProcessor"]
         InboxProcessor["InboxProcessor"]
         InboxAcceptor["InboxAcceptor"]
-        DurableLocalSender["DurableLocalMessageSender"]
+        InboxInterceptor["InboxRouteInterceptor"]
         OutboxInterceptor["OutboxTriggerInterceptor"]
     end
 
@@ -35,12 +35,10 @@ graph LR
     IRatatoskr --> IMessageSender
     IMessageSender -.-> LocalSender
     IMessageSender -.-> RmqSender
-    IMessageSender -.-> DurableLocalSender
-    DurableLocalSender --> LocalSender
-    DurableLocalSender --> InboxAcceptor
     LocalConsumer --> MessageRouter
     RmqConsumer --> MessageRouter
-    MessageRouter --> InboxAcceptor
+    MessageRouter -.-> InboxInterceptor
+    InboxInterceptor --> InboxAcceptor
     MessageRouter --> MessageDispatcher
     MessageDispatcher --> HandlerInvoker
     InboxProcessor --> HandlerInvoker
@@ -67,7 +65,7 @@ flowchart TD
     end
 
     subgraph OutboxPipeline ["Outbox Pipeline"]
-        Interceptor["OutboxTriggerInterceptor\nEnrich, serialize, persist in same DB transaction"]
+        Interceptor["OutboxTriggerInterceptor\nEnrich, serialize, persist in same DB transaction\n(+ inbox entries for local transport)"]
         OutboxDB[("Database\nOutboxMessageEntity")]
         OutboxProc["OutboxProcessor\nBackground service, distributed lock"]
 
@@ -79,13 +77,11 @@ flowchart TD
     subgraph Transport ["Transport Layer"]
         SenderInterface["IMessageSender\nRoutes by TransportName"]
         Local["LocalMessageSender\nIn-memory channel"]
-        Durable["DurableLocalMessageSender\nPersist to inbox DB, then channel"]
         RmqSend["RabbitMqMessageSender\nAMQP publish"]
 
         Direct --> SenderInterface
         OutboxProc --> SenderInterface
         SenderInterface -.-> Local
-        SenderInterface -.-> Durable
         SenderInterface -.-> RmqSend
     end
 
@@ -96,15 +92,14 @@ flowchart TD
         RmqConsumer["RabbitMqConsumer\nBackgroundService"]
 
         Local --> InMemCh
-        Durable --> InMemCh
         RmqSend --> RmqQueue
         InMemCh --> LocalConsumer
         RmqQueue --> RmqConsumer
     end
 
     subgraph Dispatch ["Message Dispatch"]
-        Router["MessageRouter\nAccept inbox handlers,\nthen dispatch"]
-        Dispatcher["MessageDispatcher\nResolve type, deserialize,\nskip inbox handlers"]
+        Router["MessageRouter\nCall IMessageRouteInterceptor,\nthen dispatch"]
+        Dispatcher["MessageDispatcher\nResolve type, deserialize,\nskip filtered handlers"]
 
         LocalConsumer --> Router
         RmqConsumer --> Router
@@ -116,7 +111,7 @@ flowchart TD
         InboxDB[("Database\nInboxMessageEntity\nInboxHandlerStatusEntity")]
         InboxProc["InboxProcessor\nBackground service, distributed lock"]
 
-        Durable --> InboxAccept
+        Interceptor --> InboxDB
         Router --> InboxAccept
         InboxAccept --> InboxDB
         InboxDB --> InboxProc
@@ -189,7 +184,7 @@ On failure, the outbox retries with exponential backoff. After exceeding the max
 
 ## Consuming & Dispatch
 
-All transports follow the same consumption path: messages are routed through the `MessageRouter` (which handles inbox acceptance) and then through the `MessageDispatcher`, which resolves handlers and invokes them.
+All transports follow the same consumption path: messages are routed through the `MessageRouter`, which calls an optional `IMessageRouteInterceptor` (e.g. the inbox acceptor provided by the EfCore package) before dispatching to the `MessageDispatcher`. The core package has no inbox awareness — inbox behavior is injected by the EfCore package through these generic extension points.
 
 ### RabbitMQ Transport
 
@@ -224,7 +219,7 @@ sequenceDiagram
 
 On startup, `RabbitMqTopologyManager` provisions exchanges, queues, and bindings. The `RabbitMqConsumer` background service subscribes to configured queues. When a message arrives, the CloudEvents AMQP mapper extracts `MessageProperties` and the body from AMQP headers, then passes them to the `MessageRouter`.
 
-The `MessageRouter` handles inbox acceptance (persisting inbox-managed handler statuses to the database if configured) and delegates to `MessageDispatcher` for non-inbox handler invocation. The consumer has no inbox awareness — it just calls `RouteAsync` and acts on the result. On errors, `RabbitMqRetryHandler` either requeues with a delay or routes to a Dead Letter Queue.
+The `MessageRouter` calls the `IMessageRouteInterceptor` (if registered) to handle inbox acceptance, then delegates to `MessageDispatcher` for non-inbox handler invocation. The consumer has no inbox awareness — it just calls `RouteAsync` and acts on the result. On errors, `RabbitMqRetryHandler` either requeues with a delay or routes to a Dead Letter Queue.
 
 ### Local Transport
 
@@ -247,7 +242,7 @@ sequenceDiagram
 
 The local transport uses an in-memory `System.Threading.Channels.Channel<T>`. `LocalMessageSender` writes to the channel, and `LocalTransportConsumer` (a `BackgroundService`) reads from it and routes messages through the `MessageRouter` — the same pipeline used by the RabbitMQ consumer. The router handles inbox acceptance (if configured) before delegating to `MessageDispatcher` for non-inbox handler invocation.
 
-> **Note:** When `UseEfCoreInbox` and `UseLocalTransport` are both configured, the local sender is automatically replaced with `DurableLocalMessageSender`, which writes inbox entries to the database **before** writing to the in-memory channel. This means local publishes will have database-level latency and require database availability. See the [Inbox — Crash safety](inbox.md#crash-safety-local-transport) section for details.
+> **Note:** `PublishDirectAsync` with the local transport uses an in-memory channel — messages can be lost if the process crashes before the consumer processes them. For full durability, use the transactional outbox: when both inbox and outbox are configured, the `OutboxTriggerInterceptor` writes inbox entries in the **same database transaction** as the outbox entry, guaranteeing crash safety.
 
 ### Message Dispatch
 
@@ -256,14 +251,14 @@ flowchart TD
     D[MessageDispatcher.DispatchAsync] --> Resolve[Resolve message CLR type<br/>from ChannelRegistry]
     Resolve --> Deserialize[Deserialize body to message object]
     Deserialize --> FindHandlers[Find all registered<br/>IMessageHandler&lt;T&gt; implementations]
-    FindHandlers --> SkipInbox[Skip inbox-managed handlers<br/>via InboxHandlerRegistry]
-    SkipInbox --> InvokeAll[Invoke remaining handlers<br/>via HandlerInvoker]
+    FindHandlers --> SkipFiltered[Skip filtered handlers<br/>via IHandlerFilter]
+    SkipFiltered --> InvokeAll[Invoke remaining handlers<br/>via HandlerInvoker]
     InvokeAll --> ReturnResult[Return DispatchResult]
 ```
 
-The `MessageDispatcher` resolves the message type from the `ChannelRegistry`, deserializes it, then delegates to `HandlerInvoker` for each non-inbox handler. Inbox-managed handlers are skipped — they have already been persisted to the database by the `InboxAcceptor` (called by the `MessageRouter` before dispatch) and will be delivered later by the `InboxProcessor`, which also uses `HandlerInvoker`.
+The `MessageDispatcher` resolves the message type from the `ChannelRegistry`, deserializes it, then delegates to `HandlerInvoker` for each handler not filtered by `IHandlerFilter`. The EfCore package registers an `InboxHandlerFilter` that skips inbox-managed handlers — these have already been persisted to the database by the `InboxAcceptor` (called via `IMessageRouteInterceptor` by the `MessageRouter` before dispatch) and will be delivered later by the `InboxProcessor`, which also uses `HandlerInvoker`.
 
-If all handlers are inbox-managed, the dispatcher returns `NoHandlers`. The `MessageRouter` combines this with the `InboxAcceptor` result to determine the final outcome (treating it as success when inbox handlers were persisted).
+If all handlers are filtered out, the dispatcher returns `NoHandlers`. The `MessageRouter` combines this with the interceptor result to determine the final outcome (treating it as success when the interceptor accepted handlers).
 
 ---
 
@@ -312,29 +307,35 @@ sequenceDiagram
 
 The `InboxProcessor` runs as a background service with a distributed lock. It queries pending `InboxHandlerStatusEntity` records, claims them via optimistic concurrency (Version increment), and invokes each handler via the shared `HandlerInvoker` (same component used by `MessageDispatcher`). Progress is saved per handler — a failure in one handler does not affect others.
 
-### Durable Local Transport
+### Inbox Durability with Local Transport
 
-When both the local transport and inbox are enabled, `UseEfCoreInbox` automatically replaces the `LocalMessageSender` with `DurableLocalMessageSender`:
+When using the **outbox** with the local transport and inbox, the `OutboxTriggerInterceptor` writes inbox entries (message + handler statuses) in the **same database transaction** as the outbox entry. This provides full crash safety:
 
 ```mermaid
 sequenceDiagram
     participant App as Application
-    participant DLS as DurableLocalMessageSender
+    participant Db as DbContext
+    participant Int as OutboxTriggerInterceptor
     participant DB as Database
+    participant OP as OutboxProcessor
+    participant S as LocalMessageSender
     participant Ch as In-Memory Channel
+    participant C as LocalTransportConsumer
+    participant R as MessageRouter
     participant IP as InboxProcessor
     participant H as IMessageHandler
 
-    App->>DLS: SendAsync(bytes, props)
-    DLS->>DB: InboxAcceptor.AcceptAsync()
-    Note over DLS,DB: Inbox handlers written to DB first
-    DLS->>Ch: WriteAsync(message)
-    Note over DLS,Ch: Non-inbox handlers via channel
-    Note over DB,IP: InboxProcessor picks up<br/>persisted handlers on next poll
+    App->>Db: OutboxMessages.Add(message)
+    App->>Db: SaveChangesAsync()
+    Int->>DB: Save outbox + inbox entries (same transaction)
+    OP->>S: SendAsync(bytes, props)
+    S->>Ch: WriteAsync(message)
+    Ch->>C: ReadAsync
+    C->>R: RouteAsync (InboxAcceptor is idempotent, entries already exist)
     IP->>H: HandleAsync(message, props)
 ```
 
-The durable sender delegates to `InboxAcceptor` to write inbox-managed handler statuses to the database **before** writing to the in-memory channel. This ensures crash safety: if the process dies after the DB write but before the channel write, the `InboxProcessor` still picks up the handlers on restart.
+When using `PublishDirectAsync` with the local transport, inbox entries are written by the consumer-side `InboxRouteInterceptor` **after** the message is read from the in-memory channel. This means messages can be lost if the process crashes between the channel write and the consumer processing. For full durability, use the outbox.
 
 ### Retry & Backoff
 

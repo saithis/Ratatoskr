@@ -14,7 +14,7 @@ internal class InboxProcessor<TDbContext>(
     TimeProvider timeProvider,
     IOptions<InboxOptions> options,
     ILogger<InboxProcessor<TDbContext>> logger)
-    : PollingBackgroundService(distributedLockProvider, timeProvider, logger)
+    : PollingBackgroundService(distributedLockProvider, timeProvider, logger), IProcessorTrigger
     where TDbContext : DbContext, IInboxDbContext
 {
     private readonly InboxOptions _options = options.Value;

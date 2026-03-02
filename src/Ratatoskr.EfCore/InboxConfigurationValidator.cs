@@ -1,4 +1,5 @@
 using Ratatoskr.Core;
+using Ratatoskr.EfCore.Internal;
 
 namespace Ratatoskr.EfCore;
 

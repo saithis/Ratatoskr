@@ -112,6 +112,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 new MessageProperties { Id = "isolation-1" });
         });
 
+        await WaitForInboxEntriesAsync(2);
+
         // Act — first processing: succeeding completes, failing records an error
         await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
 
@@ -189,6 +191,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 new TestEvent { Id = "business-backoff-1" },
                 new MessageProperties { Id = "backoff-1" });
         });
+
+        await WaitForInboxEntriesAsync(1);
 
         // Attempt 1: ErrorCount=1, base = 2^1 = 2s, jitter range = [1s, 2s)
         await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
@@ -269,6 +273,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 new TestEvent { Id = "business-poison-1" },
                 new MessageProperties { Id = "poison-1" });
         });
+
+        await WaitForInboxEntriesAsync(1);
 
         // Process MaxRetries times with time advances between each attempt
         for (int i = 0; i < 3; i++)
@@ -751,6 +757,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 new MessageProperties { Id = "retry-succeed-1" });
         });
 
+        await WaitForInboxEntriesAsync(1);
+
         // Attempt 1: fails (ErrorCount=1)
         await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
         fakeTime.Advance(TimeSpan.FromMinutes(1));
@@ -812,6 +820,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 new TestEvent { Id = "business-cap-1" },
                 new MessageProperties { Id = "cap-1" });
         });
+
+        await WaitForInboxEntriesAsync(1);
 
         // Process 10 times (2^10 = 1024s without cap, but cap is 30s)
         for (int i = 0; i < 10; i++)
@@ -915,6 +925,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 new MessageProperties { Id = "long-error-1" });
         });
 
+        await WaitForInboxEntriesAsync(1);
+
         await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
 
         await InScopeAsync(async ctx =>
@@ -961,6 +973,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                     new MessageProperties { Id = $"accum-{i}" });
             });
         }
+
+        await WaitForInboxEntriesAsync(5);
 
         // Verify nothing is completed yet
         await InScopeAsync(async ctx =>
@@ -1090,6 +1104,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 new MessageProperties { Id = cloudEventsId });
         });
 
+        await WaitForInboxEntriesAsync(1);
+
         // Verify the stored message can be deserialized back
         await InScopeAsync(async ctx =>
         {
@@ -1212,6 +1228,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             });
         }
 
+        await WaitForInboxEntriesAsync(5);
+
         // Act: run two processors concurrently — they race to claim the same rows.
         // The optimistic concurrency token prevents double-processing.
         await Task.WhenAll(
@@ -1262,6 +1280,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 new TestEvent { Id = "business-cancel-1" },
                 new MessageProperties { Id = "cancel-1" });
         });
+
+        await WaitForInboxEntriesAsync(1);
 
         // Act: start processing with a cancellable token, then cancel mid-handler.
         // Call ProcessBatchAsync directly (not the looping helper) to avoid a second
@@ -1342,6 +1362,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                     new MessageProperties { Id = $"batch-{i}" });
             });
         }
+
+        await WaitForInboxEntriesAsync(5);
 
         // Act: process all batches (should take at least 2 batch iterations: 3 + 2)
         await InScopeAsync(async ctx =>
@@ -1447,6 +1469,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 new MessageProperties { Id = "cancel-1" });
         });
 
+        await WaitForInboxEntriesAsync(1);
+
         // Process with a cancellable token — cancel while handler is running
         var processTask = InScopeAsync(async ctx =>
         {
@@ -1517,6 +1541,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 new MessageProperties { Id = "nokey-1" });
         });
 
+        await WaitForInboxEntriesAsync(1);
+
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
@@ -1556,6 +1582,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 new TestEvent { Id = "business-explicit-1" },
                 new MessageProperties { Id = "explicit-1" });
         });
+
+        await WaitForInboxEntriesAsync(1);
 
         await InScopeAsync(async ctx =>
         {
@@ -1599,6 +1627,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 new TestEvent { Id = "business-maxretries1-1" },
                 new MessageProperties { Id = "maxretries1-1" });
         });
+
+        await WaitForInboxEntriesAsync(1);
 
         await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
 
@@ -1644,6 +1674,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 new TestEvent { Id = "business-persist-1" },
                 new MessageProperties { Id = "persist-1" });
         });
+
+        await WaitForInboxEntriesAsync(2);
 
         await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
 
@@ -1693,6 +1725,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 new MessageProperties { Id = longId });
         });
 
+        await WaitForInboxEntriesAsync(1);
+
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
@@ -1704,6 +1738,9 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
     [Test]
     public async Task Inbox_MessageIdExceeds200Chars_Throws()
     {
+        // When using the outbox with local transport, the OutboxTriggerInterceptor writes
+        // inbox entries in the same DB transaction. InboxMessageEntity.Create validates
+        // the ID length and throws synchronously during SaveChangesAsync.
         var tooLongId = new string('a', 201);
 
         await StartTestAsync(services =>
@@ -1714,21 +1751,26 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
                 bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("handler-a"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
+                bus.AddEfCoreOutbox<TestDbContext>();
+                bus.UseEfCoreInbox<TestDbContext>();
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
+            {
+                opts.UseNpgsql(PostgresConnectionString);
+                opts.RegisterOutbox<TestDbContext>(sp);
+            });
         });
 
         await InitializeDatabase();
 
         var act = () => InScopeAsync(async ctx =>
         {
-            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
-            await bus.PublishDirectAsync(
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            db.OutboxMessages.Add(
                 new TestEvent { Id = "business-toolong-1" },
                 new MessageProperties { Id = tooLongId });
+            await db.SaveChangesAsync();
         });
 
         await act.Should().ThrowAsync<InvalidOperationException>()
@@ -1769,6 +1811,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 new TestEvent { Id = "business-errorcount-1" },
                 new MessageProperties { Id = "errorcount-1" });
         });
+
+        await WaitForInboxEntriesAsync(1);
 
         // Attempt 1: fails
         await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
@@ -1820,6 +1864,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 new MessageProperties { Id = "created-1" });
         });
 
+        await WaitForInboxEntriesAsync(1);
+
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
@@ -1867,6 +1913,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 new TestEvent { Id = "business-unrecoverable-1" },
                 new MessageProperties { Id = "unrecoverable-1" });
         });
+
+        await WaitForInboxEntriesAsync(1);
 
         // Simulate a deployment that removed/renamed the handler:
         // change the handler key in the DB to something that's no longer registered.
@@ -1989,12 +2037,12 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
     }
 
     [Test]
-    public async Task Inbox_AcceptorFailure_DoesNotRunNonInboxHandlers()
+    public async Task Inbox_InterceptorFailure_DoesNotRunNonInboxHandlers()
     {
-        // Verifies that when InboxAcceptor fails during DurableLocalMessageSender.SendAsync,
-        // the exception propagates before the in-memory channel write, so the non-inbox handler
-        // never executes (the message never reaches LocalTransportConsumer).
+        // Verifies that when the route interceptor fails, the MessageDispatcher never runs,
+        // so non-inbox handlers are not invoked for that message.
         var nonInboxCounter = new InvocationCounter();
+        var failingInterceptor = new AlwaysFailingInterceptor();
 
         await StartTestAsync(services =>
         {
@@ -2009,9 +2057,9 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 bus.UseEfCoreInbox<TestDbContext>();
             });
 
-            // Replace the real IInboxAcceptor with one that always throws.
-            services.RemoveAll<IInboxAcceptor>();
-            services.AddSingleton<IInboxAcceptor>(new AlwaysFailingAcceptor());
+            // Replace the real IMessageRouteInterceptor with one that always throws.
+            services.RemoveAll<IMessageRouteInterceptor>();
+            services.AddSingleton<IMessageRouteInterceptor>(failingInterceptor);
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
                 opts.UseNpgsql(PostgresConnectionString));
@@ -2019,9 +2067,9 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
 
         await InitializeDatabase();
 
-        // Act — publish a message. DurableLocalMessageSender calls InboxAcceptor first;
-        // the AlwaysFailingAcceptor throws, so the channel write never happens.
-        var act = () => InScopeAsync(async ctx =>
+        // Act — publish a message. PublishDirectAsync succeeds (writes to in-memory channel),
+        // but the consumer-side interceptor throws before dispatch.
+        await InScopeAsync(async ctx =>
         {
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             await bus.PublishDirectAsync(
@@ -2029,11 +2077,13 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 new MessageProperties { Id = "accept-fail-1" });
         });
 
-        await act.Should().ThrowAsync<InvalidOperationException>();
+        // Wait for the interceptor to be called (deterministic, no arbitrary delay)
+        await failingInterceptor.WaitForCallAsync(TimeSpan.FromSeconds(5));
 
-        // Assert — non-inbox handler should NOT have been called
+        // Assert — non-inbox handler should NOT have been called because the interceptor
+        // threw before MessageDispatcher ran.
         nonInboxCounter.Count.Should().Be(0,
-            "non-inbox handlers must not execute when inbox acceptance fails");
+            "non-inbox handlers must not execute when route interception fails");
     }
 
     [Test]
@@ -2070,6 +2120,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 new TestEvent { Id = "business-timeout-1" },
                 new MessageProperties { Id = "timeout-1" });
         });
+
+        await WaitForInboxEntriesAsync(1);
 
         // Act — process; the handler will be cancelled by the timeout
         await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
@@ -2122,6 +2174,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 new MessageProperties { Id = "timeout-poison-1" });
         });
 
+        await WaitForInboxEntriesAsync(1);
+
         // Process MaxRetries times with time advances between each attempt
         for (int i = 0; i < 2; i++)
         {
@@ -2151,6 +2205,24 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             await db.Database.EnsureCreatedAsync();
         });
+    }
+
+    /// <summary>
+    /// Waits for the expected number of inbox handler status entries to appear in the database.
+    /// With the new architecture, inbox entries are written by the consumer-side <see cref="InboxRouteInterceptor{TDbContext}"/>,
+    /// which runs asynchronously after <c>PublishDirectAsync</c> writes to the in-memory channel.
+    /// </summary>
+    private async Task WaitForInboxEntriesAsync(int expectedCount, TimeSpan? timeout = null)
+    {
+        await WaitForConditionAsync(
+            async () => await InScopeAsync(async ctx =>
+            {
+                var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                var count = await db.Set<InboxHandlerStatusEntity>().CountAsync();
+                return count >= expectedCount;
+            }),
+            timeout ?? TimeSpan.FromSeconds(10),
+            $"Expected {expectedCount} inbox handler status entries to appear within timeout");
     }
 
     private async Task<int> ProcessInboxAsync(
@@ -2361,13 +2433,18 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
         }
     }
 
-    /// <summary>Acceptor that always throws, used to test inbox acceptance failure behavior.</summary>
-    private class AlwaysFailingAcceptor : IInboxAcceptor
+    /// <summary>Interceptor that always throws, used to test route interception failure behavior.</summary>
+    private class AlwaysFailingInterceptor : IMessageRouteInterceptor
     {
-        public Task<bool> AcceptAsync(byte[] body, MessageProperties properties,
+        private readonly TaskCompletionSource _called = new();
+
+        public Task WaitForCallAsync(TimeSpan timeout) => _called.Task.WaitAsync(timeout);
+
+        public Task<RouteInterceptResult> BeforeDispatchAsync(byte[] body, MessageProperties properties,
             string transportName, CancellationToken cancellationToken)
         {
-            throw new InvalidOperationException("Simulated acceptor failure");
+            _called.TrySetResult();
+            throw new InvalidOperationException("Simulated interceptor failure");
         }
     }
 

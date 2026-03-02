@@ -1,17 +1,19 @@
-namespace Ratatoskr.Core;
+using Ratatoskr.Core;
+
+namespace Ratatoskr.EfCore.Internal;
 
 /// <summary>
 /// In-memory registry of handlers with stable keys for inbox-based durable delivery.
-/// Populated at startup; used at runtime by <see cref="MessageDispatcher"/> and the inbox processor.
+/// Populated at startup; used at runtime by <see cref="IHandlerFilter"/> and the inbox processor.
 /// </summary>
-public class InboxHandlerRegistry
+internal class InboxHandlerRegistry
 {
     private readonly Dictionary<string, InboxHandlerRegistration> _byKey = new();
     private readonly Dictionary<Type, List<InboxHandlerRegistration>> _byMessageType = new();
     private readonly Dictionary<string, List<InboxHandlerRegistration>> _byWireTypeName = new();
     private readonly Dictionary<Type, InboxHandlerRegistration> _byHandlerType = new();
 
-    internal void Register(string key, Type messageType, Type handlerType, string? wireTypeName)
+    public void Register(string key, Type messageType, Type handlerType, string? wireTypeName)
     {
         if (_byKey.TryGetValue(key, out var existing))
             throw new InvalidOperationException(
@@ -63,7 +65,6 @@ public class InboxHandlerRegistry
 
     /// <summary>
     /// Returns the inbox registration for a given handler CLR type, or null if the handler has no inbox key.
-    /// Used by <see cref="MessageDispatcher"/> to detect which handlers to skip during synchronous dispatch.
     /// </summary>
     public InboxHandlerRegistration? GetByHandlerType(Type handlerType) =>
         _byHandlerType.GetValueOrDefault(handlerType);
