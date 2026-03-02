@@ -10,10 +10,12 @@ internal static class MessageTypeMatcher
 {
     public static bool Matches<T>(MessageActivity activity)
     {
-        if (activity.MessageType == typeof(T))
+        var messageType = GetMessageType(activity);
+        if (messageType == typeof(T))
             return true;
 
-        if (activity.Message is T)
+        var message = GetMessage(activity);
+        if (message is T)
             return true;
 
         var typeName = GetTypeName(typeof(T));
@@ -25,10 +27,12 @@ internal static class MessageTypeMatcher
 
     public static bool Matches(MessageActivity activity, Type expectedType)
     {
-        if (activity.MessageType == expectedType)
+        var messageType = GetMessageType(activity);
+        if (messageType == expectedType)
             return true;
 
-        if (activity.Message != null && expectedType.IsInstanceOfType(activity.Message))
+        var message = GetMessage(activity);
+        if (message != null && expectedType.IsInstanceOfType(message))
             return true;
 
         var typeName = GetTypeName(expectedType);
@@ -46,4 +50,20 @@ internal static class MessageTypeMatcher
             .FirstOrDefault() as RatatoskrMessageAttribute;
         return attr?.Type;
     }
+
+    internal static Type? GetMessageType(MessageActivity activity) => activity switch
+    {
+        MessagePublished a => a.MessageType,
+        OutboxMessageStaged a => a.MessageType,
+        MessageDispatched a => a.MessageType,
+        _ => null
+    };
+
+    internal static object? GetMessage(MessageActivity activity) => activity switch
+    {
+        MessagePublished a => a.Message,
+        OutboxMessageStaged a => a.Message,
+        MessageDispatched a => a.Message,
+        _ => null
+    };
 }

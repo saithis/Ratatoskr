@@ -143,6 +143,11 @@ msg.Stage              // MessageStage.Dispatched
 
 // Trace ID for correlation
 msg.TraceId            // W3C trace ID string
+
+// Cast to the specific activity type for full type safety
+var dispatched = msg.As<MessageDispatched>();
+dispatched.DispatchResult  // non-nullable, guaranteed available
+dispatched.Message         // non-nullable, guaranteed available
 ```
 
 ## Action-Based API
@@ -240,14 +245,16 @@ transport.Body.Should().NotBeEmpty();
 
 ### Stage availability
 
-| Stage | `TransportMessage` | `TransportName` | Notes |
+Each stage emits a specific sealed record type. The table below shows which properties are available on each type:
+
+| Record Type | `TransportMessage` | `TransportName` | Notes |
 |:---|:---|:---|:---|
-| Published | `null` | set | Per-transport; includes `Exception` on failure |
-| **Sent** | **populated** | set | After envelope mapping — AMQP properties + wire body |
-| OutboxStaged | `null` | `null` | No transport involved yet |
-| OutboxSent | `null` | set | Transport details captured in the corresponding Sent activity |
-| **Received** | **populated** | set | Before envelope mapping — raw AMQP delivery + wire body |
-| Dispatched | `null` | `null` | No transport at this stage |
+| `MessagePublished` | — | set | Per-transport; includes `Exception` on failure |
+| **`MessageSent`** | **populated** | set | After envelope mapping — AMQP properties + wire body |
+| `OutboxMessageStaged` | — | — | No transport involved yet |
+| `OutboxMessageSent` | — | set | Transport details captured in the corresponding Sent activity |
+| **`MessageReceived`** | **populated** | set | Before envelope mapping — raw AMQP delivery + wire body |
+| `MessageDispatched` | — | — | No transport at this stage |
 
 ### Legacy: RawBody
 

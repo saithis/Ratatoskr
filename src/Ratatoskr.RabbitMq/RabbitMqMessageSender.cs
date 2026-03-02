@@ -60,9 +60,8 @@ internal class RabbitMqMessageSender(
         {
             telemetry.RecordSent(startTimestamp, publishException, destination, routingKey);
 
-            await observers.NotifyAsync(new MessageActivity
+            await observers.NotifyAsync(new MessageSent
             {
-                Stage = MessageStage.Sent,
                 Properties = props,
                 SerializedBody = bodyToSend,
                 TransportName = TransportName,

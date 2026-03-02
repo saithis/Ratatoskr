@@ -55,51 +55,16 @@ public enum MessageStage
 }
 
 /// <summary>
-/// Represents an observed message activity at a specific pipeline stage.
+/// Abstract base for all message activity records. Each pipeline stage has its own
+/// sealed record subtype with exactly the properties relevant to that stage.
+/// Use pattern matching to access stage-specific data.
 /// </summary>
-public class MessageActivity
+public abstract record MessageActivity
 {
-    /// <summary>
-    /// The pipeline stage where this activity was captured.
-    /// </summary>
-    public required MessageStage Stage { get; init; }
-
     /// <summary>
     /// The message properties at the time of capture.
     /// </summary>
     public required MessageProperties Properties { get; init; }
-
-    /// <summary>
-    /// The serialized message body (raw bytes). May be null for some stages.
-    /// At the Sent stage, this is the exact bytes sent to the transport (including CloudEvents envelope in structured mode).
-    /// </summary>
-    public byte[]? SerializedBody { get; init; }
-
-    /// <summary>
-    /// The deserialized message object. Available at Published, OutboxStaged, and Dispatched stages.
-    /// </summary>
-    public object? Message { get; init; }
-
-    /// <summary>
-    /// The CLR type of the message.
-    /// </summary>
-    public Type? MessageType { get; init; }
-
-    /// <summary>
-    /// The dispatch result. Only set at the Dispatched stage.
-    /// </summary>
-    public DispatchResult? DispatchResult { get; init; }
-
-    /// <summary>
-    /// Whether the operation succeeded. Set at the <see cref="MessageStage.InboxDispatched"/> stage:
-    /// <c>true</c> on success, <c>false</c> on failure. <c>null</c> for other stages.
-    /// </summary>
-    public bool? IsSuccess { get; init; }
-
-    /// <summary>
-    /// Any exception that occurred. Set when dispatch fails.
-    /// </summary>
-    public Exception? Exception { get; init; }
 
     /// <summary>
     /// When this activity was captured.
@@ -107,18 +72,194 @@ public class MessageActivity
     public required DateTimeOffset Timestamp { get; init; }
 
     /// <summary>
-    /// The transport name this activity relates to (e.g. "rabbitmq", "local").
-    /// Set at Published, Sent, Received, and OutboxSent stages where a specific transport is involved.
+    /// The serialized message body (raw bytes).
+    /// At the Sent stage, this is the exact bytes sent to the transport (including CloudEvents envelope in structured mode).
     /// </summary>
-    public string? TransportName { get; init; }
+    public required byte[] SerializedBody { get; init; }
 
     /// <summary>
-    /// The transport-level wire representation of the message.
-    /// Present for Sent and Received stages where transport data is available.
-    /// For Sent: captured after envelope mapping (what was published to the transport).
-    /// For Received: captured before envelope mapping (what arrived from the transport).
+    /// The pipeline stage, derived from the concrete record type.
     /// </summary>
-    public TransportMessageSnapshot? TransportMessage { get; init; }
+    public MessageStage Stage => this switch
+    {
+        MessagePublished => MessageStage.Published,
+        MessageSent => MessageStage.Sent,
+        OutboxMessageStaged => MessageStage.OutboxStaged,
+        OutboxMessageSent => MessageStage.OutboxSent,
+        MessageReceived => MessageStage.Received,
+        MessageDispatched => MessageStage.Dispatched,
+        InboxMessageQueued => MessageStage.InboxQueued,
+        InboxMessageDispatched => MessageStage.InboxDispatched,
+        InboxMessagePoisoned => MessageStage.InboxPoisoned,
+        _ => throw new InvalidOperationException($"Unknown activity type: {GetType().Name}")
+    };
+}
+
+/// <summary>
+/// Fired once per transport after each IMessageSender.SendAsync attempt during PublishDirectAsync.
+/// </summary>
+public sealed record MessagePublished : MessageActivity
+{
+    /// <summary>
+    /// The transport this publish attempt targeted (e.g. "rabbitmq", "local").
+    /// </summary>
+    public required string TransportName { get; init; }
+
+    /// <summary>
+    /// The deserialized message object.
+    /// </summary>
+    public required object Message { get; init; }
+
+    /// <summary>
+    /// The CLR type of the message.
+    /// </summary>
+    public required Type MessageType { get; init; }
+
+    /// <summary>
+    /// The exception if the send failed for this transport; null on success.
+    /// </summary>
+    public Exception? Exception { get; init; }
+}
+
+/// <summary>
+/// Fired inside each IMessageSender.SendAsync after bytes are on the wire.
+/// </summary>
+public sealed record MessageSent : MessageActivity
+{
+    /// <summary>
+    /// The transport that sent the message (e.g. "rabbitmq", "local").
+    /// </summary>
+    public required string TransportName { get; init; }
+
+    /// <summary>
+    /// The transport-level wire representation.
+    /// Captured after envelope mapping (what was published to the transport).
+    /// </summary>
+    public required TransportMessageSnapshot TransportMessage { get; init; }
+
+    /// <summary>
+    /// The exception if the send failed; null on success.
+    /// </summary>
+    public Exception? Exception { get; init; }
+}
+
+/// <summary>
+/// Fired once per message when serialized into an outbox entity during SaveChanges.
+/// </summary>
+public sealed record OutboxMessageStaged : MessageActivity
+{
+    /// <summary>
+    /// The deserialized message object.
+    /// </summary>
+    public required object Message { get; init; }
+
+    /// <summary>
+    /// The CLR type of the message.
+    /// </summary>
+    public required Type MessageType { get; init; }
+}
+
+/// <summary>
+/// Fired once per outbox row when the outbox processor successfully sends to a transport.
+/// </summary>
+public sealed record OutboxMessageSent : MessageActivity
+{
+    /// <summary>
+    /// The transport the outbox message was sent to.
+    /// </summary>
+    public required string TransportName { get; init; }
+}
+
+/// <summary>
+/// Fired once per transport when a consumer receives a message, before dispatch.
+/// </summary>
+public sealed record MessageReceived : MessageActivity
+{
+    /// <summary>
+    /// The transport that received the message (e.g. "rabbitmq", "local").
+    /// </summary>
+    public required string TransportName { get; init; }
+
+    /// <summary>
+    /// The transport-level wire representation.
+    /// Captured before envelope mapping (what arrived from the transport).
+    /// </summary>
+    public required TransportMessageSnapshot TransportMessage { get; init; }
+}
+
+/// <summary>
+/// Fired once after MessageDispatcher completes handler invocation for a message.
+/// </summary>
+public sealed record MessageDispatched : MessageActivity
+{
+    /// <summary>
+    /// The deserialized message object.
+    /// </summary>
+    public required object Message { get; init; }
+
+    /// <summary>
+    /// The CLR type of the message.
+    /// </summary>
+    public required Type MessageType { get; init; }
+
+    /// <summary>
+    /// The aggregate dispatch result across all handlers.
+    /// </summary>
+    public required DispatchResult DispatchResult { get; init; }
+
+    /// <summary>
+    /// The exception if dispatch failed; null on success.
+    /// </summary>
+    public Exception? Exception { get; init; }
+}
+
+/// <summary>
+/// Fired once when a message is accepted into the inbox (persisted to DB).
+/// Inbox-managed handlers will be invoked asynchronously by the InboxProcessor.
+/// </summary>
+public sealed record InboxMessageQueued : MessageActivity
+{
+    /// <summary>
+    /// The transport that delivered the message.
+    /// </summary>
+    public required string TransportName { get; init; }
+}
+
+/// <summary>
+/// Fired once per handler per delivery attempt by the InboxProcessor.
+/// </summary>
+public sealed record InboxMessageDispatched : MessageActivity
+{
+    /// <summary>
+    /// The transport that originally delivered the message.
+    /// </summary>
+    public required string TransportName { get; init; }
+
+    /// <summary>
+    /// Whether the handler invocation succeeded.
+    /// </summary>
+    public required bool IsSuccess { get; init; }
+
+    /// <summary>
+    /// The exception if the handler failed; null on success.
+    /// </summary>
+    public Exception? Exception { get; init; }
+}
+
+/// <summary>
+/// Fired when a handler status is marked as poisoned after exceeding the maximum retry count.
+/// </summary>
+public sealed record InboxMessagePoisoned : MessageActivity
+{
+    /// <summary>
+    /// The transport that originally delivered the message.
+    /// </summary>
+    public required string TransportName { get; init; }
+
+    /// <summary>
+    /// The exception from the final failed attempt.
+    /// </summary>
+    public Exception? Exception { get; init; }
 }
 
 /// <summary>
@@ -130,6 +271,7 @@ public interface IMessageActivityObserver
 {
     /// <summary>
     /// Called when a message activity occurs at any pipeline stage.
+    /// Use pattern matching on the <paramref name="activity"/> to access stage-specific properties.
     /// </summary>
     ValueTask OnMessageActivity(MessageActivity activity);
 }

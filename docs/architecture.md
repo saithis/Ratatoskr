@@ -431,7 +431,23 @@ Ratatoskr integrates with OpenTelemetry via `System.Diagnostics.Activity`:
 
 ### Message Activity Observers
 
-`IMessageActivityObserver` implementations are notified at various pipeline stages (`Published`, `Received`, `Dispatched`, `OutboxStaged`, `OutboxSent`, `InboxQueued`, `InboxDispatched`, `InboxPoisoned`). Observers are designed for **testing and instrumentation** — they are not a mechanism for reliable side effects:
+`IMessageActivityObserver` implementations are notified at various pipeline stages. Each stage emits a **sealed record type** that carries exactly the properties relevant to that stage — use pattern matching to access stage-specific data:
+
+| Record Type | Properties | Emitted |
+|:---|:---|:---|
+| `MessagePublished` | `TransportName`, `Message`, `MessageType`, `Exception?` | Once per transport during `PublishDirectAsync` |
+| `MessageSent` | `TransportName`, `TransportMessage`, `Exception?` | Inside each `IMessageSender.SendAsync` |
+| `OutboxMessageStaged` | `Message`, `MessageType` | Once per message during `SaveChanges` |
+| `OutboxMessageSent` | `TransportName` | Once per outbox row on successful send |
+| `MessageReceived` | `TransportName`, `TransportMessage` | Once per transport when consumer receives |
+| `MessageDispatched` | `Message`, `MessageType`, `DispatchResult`, `Exception?` | Once after all handlers complete |
+| `InboxMessageQueued` | `TransportName` | Once when persisted to inbox |
+| `InboxMessageDispatched` | `TransportName`, `IsSuccess`, `Exception?` | Once per handler per attempt |
+| `InboxMessagePoisoned` | `TransportName`, `Exception?` | Once when max retries exceeded |
+
+All types inherit from the abstract `MessageActivity` base record which provides `Properties`, `Timestamp`, `SerializedBody`, and a computed `Stage` property.
+
+Observers are designed for **testing and instrumentation** — they are not a mechanism for reliable side effects:
 
 - Observer exceptions are always caught and logged at `Warning` level. They never affect the message pipeline.
 - If an observer throws, the message is still processed normally.
