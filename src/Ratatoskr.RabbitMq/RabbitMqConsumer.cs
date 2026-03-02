@@ -13,7 +13,7 @@ internal class RabbitMqConsumer(
     RabbitMqConnectionManager connectionManager,
     ChannelRegistry registry,
     RabbitMqTopologyManager topologyManager,
-    MessageDispatcher dispatcher,
+    MessageRouter router,
     IRabbitMqEnvelopeMapper envelopeMapper,
     RabbitMqTelemetry telemetry,
     RabbitMqRetryHandler retryHandler,
@@ -198,7 +198,7 @@ internal class RabbitMqConsumer(
 
             activity = telemetry.StartConsumeActivity(props, tags, body.Length, ea.DeliveryTag);
 
-            var result = await dispatcher.DispatchAsync(body, props, cancellationToken, channelName, RabbitMqConstants.TransportName);
+            var result = await router.RouteAsync(body, props, RabbitMqConstants.TransportName, cancellationToken, channelName);
 
             errorType = result switch
             {

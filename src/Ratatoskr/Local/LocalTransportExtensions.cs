@@ -36,7 +36,9 @@ public static class LocalTransportExtensions
             builder.Services.AddSingleton<IMessageSender, LocalMessageSender>();
 
             // Consuming
+            builder.Services.TryAddSingleton<HandlerInvoker>();
             builder.Services.TryAddSingleton<MessageDispatcher>();
+            builder.Services.TryAddSingleton<MessageRouter>();
             builder.Services.AddHostedService<LocalTransportConsumer>();
 
             return builder;

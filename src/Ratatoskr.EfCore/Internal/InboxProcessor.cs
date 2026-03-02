@@ -38,8 +38,10 @@ internal class InboxProcessor<TDbContext>(
             var observers = sp.GetServices<IMessageActivityObserver>();
             var messageSerializer = sp.GetRequiredService<IMessageSerializer>();
 
+            var handlerInvoker = sp.GetRequiredService<HandlerInvoker>();
+
             var processor = new InboxMessageProcessor<TDbContext>(
-                dbContext, serviceScopeFactory, handlerRegistry, telemetry, timeProvider,
+                dbContext, handlerInvoker, handlerRegistry, telemetry, timeProvider,
                 _options, observers, messageSerializer, logger);
 
             logger.LogDebug("Checking inbox for pending handler deliveries");

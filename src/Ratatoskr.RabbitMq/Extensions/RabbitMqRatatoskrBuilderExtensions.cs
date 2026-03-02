@@ -28,7 +28,9 @@ public static class RabbitMqRatatoskrBuilderExtensions
         builder.Services.AddSingleton<IMessageSender, RabbitMqMessageSender>();
 
         // Consuming
+        builder.Services.TryAddSingleton<HandlerInvoker>();
         builder.Services.AddSingleton<MessageDispatcher>();
+        builder.Services.TryAddSingleton<MessageRouter>();
         builder.Services.AddSingleton<RabbitMqRetryHandler>();
         builder.Services.AddHostedService<RabbitMqConsumer>();
 

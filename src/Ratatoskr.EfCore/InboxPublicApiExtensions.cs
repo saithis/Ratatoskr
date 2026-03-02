@@ -44,7 +44,7 @@ public static class InboxPublicApiExtensions
             builder.Services.AddSingleton<InboxProcessor<TDbContext>>();
             if (inboxBuilder.RegisterBackgroundService)
                 builder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<InboxProcessor<TDbContext>>());
-            builder.Services.AddSingleton<IInboxInterceptor, InboxInterceptor<TDbContext>>();
+            builder.Services.AddSingleton<IInboxAcceptor, InboxAcceptor<TDbContext>>();
 
             // Deferred: runs after the full configure() callback, so UseEfCoreInbox can be called
             // before or after UseLocalTransport() without breaking anything.
@@ -61,6 +61,8 @@ public static class InboxPublicApiExtensions
                     services.AddSingleton<IMessageSender, DurableLocalMessageSender<TDbContext>>();
                 }
 
+                // Finalize inbox handler registrations now that global config (DefaultHandlerInboxEnabled)
+                // and ChannelRegistry (wire type names) are both fully known.
                 // Finalize inbox handler registrations now that global config (DefaultHandlerInboxEnabled)
                 // and ChannelRegistry (wire type names) are both fully known.
                 var defaultEnabled = inboxBuilder.Options.DefaultHandlerInboxEnabled;

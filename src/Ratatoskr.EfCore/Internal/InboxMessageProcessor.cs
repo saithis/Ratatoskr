@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Ratatoskr.Core;
 
@@ -13,7 +12,7 @@ namespace Ratatoskr.EfCore.Internal;
 /// </summary>
 internal class InboxMessageProcessor<TDbContext>(
     TDbContext dbContext,
-    IServiceScopeFactory scopeFactory,
+    HandlerInvoker handlerInvoker,
     InboxHandlerRegistry handlerRegistry,
     InboxTelemetry telemetry,
     TimeProvider timeProvider,
@@ -147,29 +146,17 @@ internal class InboxMessageProcessor<TDbContext>(
             {
                 deliverActivity = telemetry.StartDeliverActivity(props, status.HandlerKey);
 
-                // Resolve handler in a fresh DI scope (matches MessageDispatcher behaviour)
-                using var handlerScope = scopeFactory.CreateScope();
-                var handler = handlerScope.ServiceProvider.GetRequiredService(registration.HandlerType);
-
                 // Deserialize message body
                 var message = messageSerializer.Deserialize(inboxMessage.Content, registration.MessageType)
                               ?? throw new InvalidOperationException(
                                   $"Deserialized message of type '{registration.MessageType.Name}' was null.");
 
-                // Invoke handler via compiled delegate (no per-call reflection overhead).
-                // When HandlerTimeout is configured, wrap in a linked CTS that fires after the timeout.
+                // Invoke handler in a fresh DI scope via compiled delegate.
                 // Timeout cancellation falls into the general catch (not the shutdown catch) because
                 // the outer cancellationToken is NOT cancelled — only the timeout CTS is.
-                if (options.HandlerTimeout.HasValue)
-                {
-                    using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                    timeoutCts.CancelAfter(options.HandlerTimeout.Value);
-                    await registration.Invoke(handler, message, props, timeoutCts.Token);
-                }
-                else
-                {
-                    await registration.Invoke(handler, message, props, cancellationToken);
-                }
+                await handlerInvoker.InvokeAsync(
+                    registration.HandlerType, message, props,
+                    cancellationToken, options.HandlerTimeout);
 
                 status.MarkAsCompleted(timeProvider);
                 telemetry.RecordDelivered(success: true);

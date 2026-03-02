@@ -6,9 +6,8 @@ using Ratatoskr.Core;
 namespace Ratatoskr.EfCore.Internal;
 
 /// <summary>
-/// Shared inbox persistence logic used by both <see cref="DurableLocalMessageSender{TDbContext}"/>
-/// and <see cref="InboxInterceptor{TDbContext}"/>. Extracts the duplicated message/handler-status
-/// upsert logic, observer notification, and processing trigger into a single place.
+/// Shared inbox persistence logic used by <see cref="InboxAcceptor{TDbContext}"/>.
+/// Handles message/handler-status upsert, observer notification, and processing trigger.
 /// </summary>
 internal static class InboxPersistence
 {

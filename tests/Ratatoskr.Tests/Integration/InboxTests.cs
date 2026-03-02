@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -1277,7 +1278,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             var messageSerializer = ctx.ServiceProvider.GetRequiredService<IMessageSerializer>();
 
             var processor = new InboxMessageProcessor<TestDbContext>(
-                dbContext, scopeFactory, handlerRegistry, new InboxTelemetry(), timeProvider,
+                dbContext, new HandlerInvoker(scopeFactory), handlerRegistry, new InboxTelemetry(), timeProvider,
                 options.Value, observers, messageSerializer,
                 NullLogger<InboxMessageProcessor<TestDbContext>>.Instance);
 
@@ -1459,7 +1460,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             var messageSerializer = sp.GetRequiredService<IMessageSerializer>();
 
             var processor = new InboxMessageProcessor<TestDbContext>(
-                dbContext, scopeFactory, handlerRegistry, new InboxTelemetry(), timeProvider,
+                dbContext, new HandlerInvoker(scopeFactory), handlerRegistry, new InboxTelemetry(), timeProvider,
                 options.Value, observers, messageSerializer,
                 NullLogger<InboxMessageProcessor<TestDbContext>>.Instance);
 
@@ -1988,13 +1989,12 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
     }
 
     [Test]
-    public async Task Inbox_InterceptorFailure_DoesNotRunNonInboxHandlers()
+    public async Task Inbox_AcceptorFailure_DoesNotRunNonInboxHandlers()
     {
-        // Verifies the fix: when an inbox interceptor throws, non-inbox handlers must NOT run.
-        // Before the fix, the dispatcher would still call non-inbox handlers after interceptor failure,
-        // causing duplicate execution when the transport retries the message.
+        // Verifies that when InboxAcceptor fails during DurableLocalMessageSender.SendAsync,
+        // the exception propagates before the in-memory channel write, so the non-inbox handler
+        // never executes (the message never reaches LocalTransportConsumer).
         var nonInboxCounter = new InvocationCounter();
-        var dispatchObserver = new DispatchCompletionObserver();
 
         await StartTestAsync(services =>
         {
@@ -2009,10 +2009,9 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 bus.UseEfCoreInbox<TestDbContext>();
             });
 
-            // Register a failing interceptor — the dispatcher iterates all IInboxInterceptor instances.
-            // DurableLocalMessageSender persists inbox entries via InboxPersistence directly (unaffected).
-            services.AddSingleton<IInboxInterceptor>(new AlwaysFailingInterceptor());
-            services.AddSingleton<IMessageActivityObserver>(dispatchObserver);
+            // Replace the real IInboxAcceptor with one that always throws.
+            services.RemoveAll<IInboxAcceptor>();
+            services.AddSingleton<IInboxAcceptor>(new AlwaysFailingAcceptor());
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
                 opts.UseNpgsql(PostgresConnectionString));
@@ -2020,22 +2019,21 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
 
         await InitializeDatabase();
 
-        // Act — publish a message. DurableLocalMessageSender persists inbox entries, then writes to channel.
-        // LocalTransportConsumer dispatches, but the AlwaysFailingInterceptor causes an abort.
-        await InScopeAsync(async ctx =>
+        // Act — publish a message. DurableLocalMessageSender calls InboxAcceptor first;
+        // the AlwaysFailingAcceptor throws, so the channel write never happens.
+        var act = () => InScopeAsync(async ctx =>
         {
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             await bus.PublishDirectAsync(
-                new TestEvent { Id = "business-intercept-fail-1" },
-                new MessageProperties { Id = "intercept-fail-1" });
+                new TestEvent { Id = "business-accept-fail-1" },
+                new MessageProperties { Id = "accept-fail-1" });
         });
 
-        // Wait for the dispatch to complete (observer fires even on interceptor failure)
-        await dispatchObserver.WaitForDispatchAsync(TimeSpan.FromSeconds(10));
+        await act.Should().ThrowAsync<InvalidOperationException>();
 
         // Assert — non-inbox handler should NOT have been called
         nonInboxCounter.Count.Should().Be(0,
-            "non-inbox handlers must not execute when an inbox interceptor fails");
+            "non-inbox handlers must not execute when inbox acceptance fails");
     }
 
     [Test]
@@ -2170,7 +2168,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
 
         var processor = new InboxMessageProcessor<TestDbContext>(
             dbContext,
-            scopeFactory,
+            new HandlerInvoker(scopeFactory),
             handlerRegistry,
             new InboxTelemetry(),
             timeProvider,
@@ -2363,14 +2361,13 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
         }
     }
 
-    /// <summary>Interceptor that always throws, used to test interceptor failure abort behavior.</summary>
-    private class AlwaysFailingInterceptor : IInboxInterceptor
+    /// <summary>Acceptor that always throws, used to test inbox acceptance failure behavior.</summary>
+    private class AlwaysFailingAcceptor : IInboxAcceptor
     {
-        public Task AcceptAsync(byte[] body, MessageProperties properties,
-            IReadOnlyList<InboxHandlerRegistration> managedHandlers, string transportName,
-            CancellationToken cancellationToken)
+        public Task<bool> AcceptAsync(byte[] body, MessageProperties properties,
+            string transportName, CancellationToken cancellationToken)
         {
-            throw new InvalidOperationException("Simulated interceptor failure");
+            throw new InvalidOperationException("Simulated acceptor failure");
         }
     }
 
