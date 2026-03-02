@@ -35,11 +35,78 @@ internal class InboxAcceptor<TDbContext>(
 
         if (string.IsNullOrWhiteSpace(properties.Id))
             throw new InvalidOperationException("Inbox delivery requires MessageProperties.Id for deduplication.");
+        
+        if (string.IsNullOrWhiteSpace(properties.Id))
+        {
+            logger.LogError("Cannot persist to inbox: message has no Id. Type: '{Type}'", properties.Type);
+            throw new InvalidOperationException("Messages must have a non-empty Id for inbox deduplication.");
+        }
+        
+        var inboxMessage = InboxMessageEntity.Create(properties.Id, transportName, body, properties, timeProvider);
 
-        await InboxPersistence.PersistAsync<TDbContext>(
-            scopeFactory, properties.Id, transportName,
-            body, properties, inboxHandlers, timeProvider,
-            observers, inboxProcessor.TriggerAsync, logger, cancellationToken);
+        using var scope = scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<TDbContext>();
+        // Best-effort optimization: skip inserting the message if it already exists.
+        // On concurrent delivery the unique constraint is the real dedup mechanism.
+        var messageExists = await dbContext.Set<InboxMessageEntity>()
+            .AnyAsync(m => m.Id == properties.Id, cancellationToken);
+
+        if (!messageExists)
+        {
+            dbContext.Set<InboxMessageEntity>().Add(inboxMessage);
+            logger.LogDebug("Accepted new inbox message '{MessageId}' of type '{Type}'", properties.Id, properties.Type);
+        }
+        else
+        {
+            logger.LogDebug("Inbox message '{MessageId}' already exists (duplicate delivery), updating handler statuses only", properties.Id);
+        }
+
+        // Insert InboxHandlerStatuses for handlers not yet present (dedup per handler key).
+        // On concurrent delivery, the unique constraint on (MessageId, HandlerKey) prevents duplicates.
+        var existingKeys = await dbContext.Set<InboxHandlerStatusEntity>()
+            .Where(s => s.MessageId == properties.Id)
+            .Select(s => s.HandlerKey)
+            .ToHashSetAsync(cancellationToken);
+
+        foreach (var handler in inboxHandlers.Where(h => !existingKeys.Contains(h.Key)))
+        {
+            dbContext.Set<InboxHandlerStatusEntity>().Add(
+                InboxHandlerStatusEntity.Create(properties.Id, handler.Key, timeProvider));
+            logger.LogDebug("Created inbox handler status for key '{HandlerKey}' on message '{MessageId}'",
+                handler.Key, properties.Id);
+        }
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (DbExceptionHelper.IsUniqueConstraintViolation(ex))
+        {
+            // Another instance raced us — the deduplication constraint fired.
+            // This is expected and safe: the other instance will process the handlers.
+            // Clear the change tracker to avoid corrupting the DbContext state for any
+            // subsequent operations in the same scope.
+            dbContext.ChangeTracker.Clear();
+            logger.LogDebug(
+                "Inbox entries for message '{MessageId}' were already inserted by a concurrent instance (unique constraint). Ignoring.",
+                properties.Id);
+            return false;
+        }
+
+        logger.LogDebug("Persisted inbox entries for message '{MessageId}', {HandlerCount} handler(s)",
+            properties.Id, inboxHandlers.Count);
+
+        // Notify observers that the message has been accepted into the inbox
+        await observers.NotifyAsync(new MessageActivity
+        {
+            Stage = MessageStage.InboxQueued,
+            Properties = properties,
+            SerializedBody = body,
+            TransportName = transportName,
+            Timestamp = timeProvider.GetUtcNow(),
+        }, logger);
+
+        await inboxProcessor.TriggerAsync(cancellationToken);
 
         return true;
     }

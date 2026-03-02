@@ -38,7 +38,7 @@ graph LR
     IMessageSender -.-> DurableLocalSender
     DurableLocalSender --> LocalSender
     DurableLocalSender --> InboxAcceptor
-    LocalConsumer --> MessageDispatcher
+    LocalConsumer --> MessageRouter
     RmqConsumer --> MessageRouter
     MessageRouter --> InboxAcceptor
     MessageRouter --> MessageDispatcher
@@ -106,7 +106,7 @@ flowchart TD
         Router["MessageRouter\nAccept inbox handlers,\nthen dispatch"]
         Dispatcher["MessageDispatcher\nResolve type, deserialize,\nskip inbox handlers"]
 
-        LocalConsumer --> Dispatcher
+        LocalConsumer --> Router
         RmqConsumer --> Router
         Router --> Dispatcher
     end
@@ -189,7 +189,7 @@ On failure, the outbox retries with exponential backoff. After exceeding the max
 
 ## Consuming & Dispatch
 
-When a message arrives on any transport, it is routed through the `MessageRouter` (which handles inbox acceptance) and then through the `MessageDispatcher`, which resolves handlers and invokes them.
+All transports follow the same consumption path: messages are routed through the `MessageRouter` (which handles inbox acceptance) and then through the `MessageDispatcher`, which resolves handlers and invokes them.
 
 ### RabbitMQ Transport
 
@@ -233,16 +233,19 @@ sequenceDiagram
     participant S as LocalMessageSender
     participant Ch as In-Memory Channel
     participant C as LocalTransportConsumer
+    participant R as MessageRouter
     participant D as MessageDispatcher
     participant H as IMessageHandler
 
     S->>Ch: WriteAsync(message)
     Ch->>C: ReadAsync (BackgroundService)
-    C->>D: DispatchAsync(body, props)
-    D->>H: HandleAsync(message, props)
+    C->>R: RouteAsync(body, props)
+    Note over R: Accept inbox handlers (if configured),<br/>then dispatch
+    R->>D: DispatchAsync(body, props)
+    D->>H: HandleAsync (non-inbox handlers only)
 ```
 
-The local transport uses an in-memory `System.Threading.Channels.Channel<T>`. `LocalMessageSender` writes to the channel, and `LocalTransportConsumer` (a `BackgroundService`) reads from it and calls `MessageDispatcher`.
+The local transport uses an in-memory `System.Threading.Channels.Channel<T>`. `LocalMessageSender` writes to the channel, and `LocalTransportConsumer` (a `BackgroundService`) reads from it and routes messages through the `MessageRouter` — the same pipeline used by the RabbitMQ consumer. The router handles inbox acceptance (if configured) before delegating to `MessageDispatcher` for non-inbox handler invocation.
 
 > **Note:** When `UseEfCoreInbox` and `UseLocalTransport` are both configured, the local sender is automatically replaced with `DurableLocalMessageSender`, which writes inbox entries to the database **before** writing to the in-memory channel. This means local publishes will have database-level latency and require database availability. See the [Inbox — Crash safety](inbox.md#crash-safety-local-transport) section for details.
 
