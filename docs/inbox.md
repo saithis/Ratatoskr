@@ -180,13 +180,13 @@ When using RabbitMQ, the `InboxInterceptor` is called by `MessageDispatcher` bef
 
 ## Observability
 
-Three `MessageStage` values are emitted to all registered `IMessageActivityObserver` implementations:
+Three sealed record types are emitted to all registered `IMessageActivityObserver` implementations:
 
-| Stage | When |
-|---|---|
-| `MessageStage.InboxQueued` | Message accepted into inbox (interceptor called). |
-| `MessageStage.InboxDispatched` | A single handler status was attempted by `InboxProcessor` (success or failure). `IsSuccess` is `true` on success, `false` on failure. `Exception` is set on failure. |
-| `MessageStage.InboxPoisoned` | A handler status exceeded `MaxRetries` and was marked as poisoned. |
+| Record Type | When | Key Properties |
+|---|---|---|
+| `InboxMessageQueued` | Message accepted into inbox (interceptor called). | `TransportName` |
+| `InboxMessageDispatched` | A single handler status was attempted by `InboxProcessor` (success or failure). | `TransportName`, `IsSuccess`, `Exception?` |
+| `InboxMessagePoisoned` | A handler status exceeded `MaxRetries` and was marked as poisoned. | `TransportName`, `Exception?` |
 
 The `ratatoskr.inbox.poison.count` metric counter is incremented each time a handler status is poisoned.
 

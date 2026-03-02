@@ -182,9 +182,8 @@ internal class RabbitMqConsumer(
 
             var receivedTimestamp = timeProvider.GetUtcNow();
 
-            await observers.NotifyAsync(new MessageActivity
+            await observers.NotifyAsync(new MessageReceived
             {
-                Stage = MessageStage.Received,
                 Properties = props,
                 SerializedBody = body,
                 TransportName = RabbitMqConstants.TransportName,

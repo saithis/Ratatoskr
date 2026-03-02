@@ -212,9 +212,8 @@ internal class InboxMessageProcessor<TDbContext>(
             await dbContext.SaveChangesAsync(CancellationToken.None);
 
             // Fire InboxDispatched observer — always fires (props always available here)
-            await observers.NotifyAsync(new MessageActivity
+            await observers.NotifyAsync(new InboxMessageDispatched
             {
-                Stage = MessageStage.InboxDispatched,
                 Properties = props,
                 SerializedBody = inboxMessage.Content,
                 TransportName = inboxMessage.TransportName,
@@ -227,9 +226,8 @@ internal class InboxMessageProcessor<TDbContext>(
             if (status.IsPoisoned)
             {
                 telemetry.RecordPoisoned();
-                await observers.NotifyAsync(new MessageActivity
+                await observers.NotifyAsync(new InboxMessagePoisoned
                 {
-                    Stage = MessageStage.InboxPoisoned,
                     Properties = props,
                     SerializedBody = inboxMessage.Content,
                     TransportName = inboxMessage.TransportName,

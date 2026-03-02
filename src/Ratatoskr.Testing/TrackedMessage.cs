@@ -23,12 +23,12 @@ public class TrackedMessage
     /// <summary>
     /// The raw serialized body bytes. At the Sent stage, this is the exact bytes on the wire.
     /// </summary>
-    public byte[]? RawBody => Activity.SerializedBody;
+    public byte[] RawBody => Activity.SerializedBody;
 
     /// <summary>
     /// The dispatch result. Only set at the Dispatched stage.
     /// </summary>
-    public DispatchResult? Result => Activity.DispatchResult;
+    public DispatchResult? Result => Activity is MessageDispatched d ? d.DispatchResult : null;
 
     /// <summary>
     /// The pipeline stage where this message was captured.
@@ -43,29 +43,51 @@ public class TrackedMessage
     /// <summary>
     /// Any exception that occurred during processing.
     /// </summary>
-    public Exception? Exception => Activity.Exception;
+    public Exception? Exception => Activity switch
+    {
+        MessagePublished a => a.Exception,
+        MessageSent a => a.Exception,
+        MessageDispatched a => a.Exception,
+        InboxMessageDispatched a => a.Exception,
+        InboxMessagePoisoned a => a.Exception,
+        _ => null
+    };
 
     /// <summary>
     /// The CLR type of the message, if available.
     /// </summary>
-    public Type? MessageType => Activity.MessageType;
+    public Type? MessageType => MessageTypeMatcher.GetMessageType(Activity);
 
     /// <summary>
     /// The transport-level wire representation of the message.
     /// Available at Sent (after envelope mapping) and Received (before envelope mapping) stages.
     /// </summary>
-    public TransportMessageSnapshot? TransportMessage => Activity.TransportMessage;
+    public TransportMessageSnapshot? TransportMessage => Activity switch
+    {
+        MessageSent a => a.TransportMessage,
+        MessageReceived a => a.TransportMessage,
+        _ => null
+    };
 
     /// <summary>
     /// Whether the operation succeeded. Set at the InboxDispatched stage.
     /// </summary>
-    public bool? IsSuccess => Activity.IsSuccess;
+    public bool? IsSuccess => Activity is InboxMessageDispatched d ? d.IsSuccess : null;
 
     /// <summary>
     /// The transport that delivered this message (e.g. "rabbitmq", "local").
-    /// Set at InboxQueued and InboxDispatched stages.
     /// </summary>
-    public string? TransportName => Activity.TransportName;
+    public string? TransportName => Activity switch
+    {
+        MessagePublished a => a.TransportName,
+        MessageSent a => a.TransportName,
+        OutboxMessageSent a => a.TransportName,
+        MessageReceived a => a.TransportName,
+        InboxMessageQueued a => a.TransportName,
+        InboxMessageDispatched a => a.TransportName,
+        InboxMessagePoisoned a => a.TransportName,
+        _ => null
+    };
 
     /// <summary>
     /// The trace ID extracted from the message's TraceParent header.
@@ -73,20 +95,30 @@ public class TrackedMessage
     public string? TraceId => MessageTracker.ExtractTraceId(Activity.Properties.TraceParent);
 
     /// <summary>
+    /// Casts the underlying activity to a specific stage type.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown if the activity is not of the expected type.</exception>
+    public T As<T>() where T : MessageActivity =>
+        Activity as T ?? throw new InvalidOperationException(
+            $"Activity is {Activity.GetType().Name}, not {typeof(T).Name}.");
+
+    /// <summary>
     /// Gets the deserialized message as the specified type.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown if the message is not available or not of the expected type.</exception>
     public T GetMessage<T>() where T : notnull
     {
-        if (Activity.Message == null)
-            throw new InvalidOperationException(
-                $"Message object is not available at the {Stage} stage. " +
-                "Deserialized messages are available at Published, OutboxStaged, and Dispatched stages.");
+        var message = MessageTypeMatcher.GetMessage(Activity);
 
-        if (Activity.Message is T typed)
+        if (message is T typed)
             return typed;
 
+        if (message == null)
+            throw new InvalidOperationException(
+                $"Message object is not available at the {Activity.GetType().Name} stage. " +
+                "Deserialized messages are available at Published, OutboxStaged, and Dispatched stages.");
+
         throw new InvalidOperationException(
-            $"Message is of type {Activity.Message.GetType().Name}, not {typeof(T).Name}.");
+            $"Message is of type {message.GetType().Name}, not {typeof(T).Name}.");
     }
 }

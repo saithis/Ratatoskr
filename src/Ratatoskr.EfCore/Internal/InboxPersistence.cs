@@ -95,9 +95,8 @@ internal static class InboxPersistence
             messageId, handlers.Count);
 
         // Notify observers that the message has been accepted into the inbox
-        await observers.NotifyAsync(new MessageActivity
+        await observers.NotifyAsync(new InboxMessageQueued
         {
-            Stage = MessageStage.InboxQueued,
             Properties = properties,
             SerializedBody = body,
             TransportName = transportName,

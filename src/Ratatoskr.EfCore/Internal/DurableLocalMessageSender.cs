@@ -69,9 +69,8 @@ internal class DurableLocalMessageSender<TDbContext>(
         {
             telemetry.RecordSent(startTimestamp, sendException);
 
-            await observers.NotifyAsync(new MessageActivity
+            await observers.NotifyAsync(new MessageSent
             {
-                Stage = MessageStage.Sent,
                 Properties = props,
                 SerializedBody = content,
                 TransportName = TransportName,

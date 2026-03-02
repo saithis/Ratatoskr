@@ -120,9 +120,8 @@ internal class OutboxMessageProcessor<TDbContext>(
 
             if (sentProps != null)
             {
-                await observers.NotifyAsync(new MessageActivity
+                await observers.NotifyAsync(new OutboxMessageSent
                 {
-                    Stage = MessageStage.OutboxSent,
                     Properties = sentProps,
                     SerializedBody = message.Content,
                     TransportName = message.TransportName,

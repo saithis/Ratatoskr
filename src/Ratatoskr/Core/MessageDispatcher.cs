@@ -130,9 +130,8 @@ public class MessageDispatcher(
                 logger.LogError(ex, "Inbox interceptor failed for message '{Id}' of type '{Type}'. " +
                     "Aborting dispatch — transport will redeliver.", properties.Id, properties.Type);
 
-                await observers.NotifyAsync(new MessageActivity
+                await observers.NotifyAsync(new MessageDispatched
                 {
-                    Stage = MessageStage.Dispatched,
                     Properties = properties,
                     SerializedBody = body,
                     Message = message,
@@ -189,9 +188,8 @@ public class MessageDispatcher(
             result = DispatchResult.Success;
         }
 
-        await observers.NotifyAsync(new MessageActivity
+        await observers.NotifyAsync(new MessageDispatched
         {
-            Stage = MessageStage.Dispatched,
             Properties = properties,
             SerializedBody = body,
             Message = message,

@@ -62,9 +62,8 @@ public class Ratatoskr(
                 exceptions.Add(ex);
             }
 
-            await observers.NotifyAsync(new MessageActivity
+            await observers.NotifyAsync(new MessagePublished
             {
-                Stage = MessageStage.Published,
                 Properties = props,
                 SerializedBody = serializedMessage,
                 Message = message,

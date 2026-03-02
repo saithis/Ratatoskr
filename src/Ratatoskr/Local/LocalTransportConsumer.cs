@@ -43,9 +43,8 @@ internal class LocalTransportConsumer(
 
         var transportMessage = LocalTransportMessageSnapshotFactory.Create(message.Content, message.Properties);
 
-        await observers.NotifyAsync(new MessageActivity
+        await observers.NotifyAsync(new MessageReceived
         {
-            Stage = MessageStage.Received,
             Properties = message.Properties,
             SerializedBody = message.Content,
             TransportName = LocalTransportConstants.TransportName,

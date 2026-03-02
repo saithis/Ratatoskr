@@ -53,9 +53,8 @@ internal class OutboxTriggerInterceptor<TDbContext>(
             // Only dequeue after successful serialization
             outboxDbContext.OutboxMessages.Queue.TryDequeue(out _);
 
-            await observers.NotifyAsync(new MessageActivity
+            await observers.NotifyAsync(new OutboxMessageStaged
             {
-                Stage = MessageStage.OutboxStaged,
                 Properties = enrichedProperties,
                 SerializedBody = serializedMessage,
                 Message = item.Message,
