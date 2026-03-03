@@ -414,8 +414,8 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("otel-inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("otel-inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, NoOpTestEventHandler>(cfg => cfg.WithInbox("otel-noop"));
+                bus.AddEventConsumeChannel("otel-inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddHandler<TestEvent, NoOpTestEventHandler>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithPollingInterval(TimeSpan.FromMilliseconds(500)));
             });
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -458,8 +458,8 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("otel-inbox-trace", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("otel-inbox-trace", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, NoOpTestEventHandler>(cfg => cfg.WithInbox("otel-trace-noop"));
+                bus.AddEventConsumeChannel("otel-inbox-trace", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddHandler<TestEvent, NoOpTestEventHandler>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithPollingInterval(TimeSpan.FromMilliseconds(500)));
             });
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -494,7 +494,7 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         deliverActivity.TagObjects.Should().Contain(t => t.Key == "messaging.system" && (string?)t.Value == "ratatoskr");
         deliverActivity.TagObjects.Should().Contain(t => t.Key == "messaging.operation.name" && (string?)t.Value == "deliver");
         deliverActivity.TagObjects.Should().Contain(t => t.Key == "messaging.operation.type" && (string?)t.Value == "process");
-        deliverActivity.TagObjects.Should().Contain(t => t.Key == "ratatoskr.inbox.handler.key" && (string?)t.Value == "otel-trace-noop");
+        deliverActivity.TagObjects.Should().Contain(t => t.Key == "ratatoskr.inbox.handler.key" && (string?)t.Value == typeof(NoOpTestEventHandler).FullName);
 
         // Verify trace context propagation: the deliver span lives in the same trace as the original publish.
         // Filter by message ID to avoid picking up a publish activity from another parallel test.

@@ -25,7 +25,6 @@ graph LR
         InboxProcessor["InboxProcessor"]
         InboxAcceptor["InboxAcceptor"]
         InboxInterceptor["InboxRouteInterceptor"]
-        InboxFilter["InboxHandlerFilter"]
         OutboxInterceptor["OutboxTriggerInterceptor"]
     end
 
@@ -45,7 +44,6 @@ graph LR
     InboxInterceptor -->|"byte[], MessageProperties"| InboxAcceptor
     MessageRouter -->|"byte[], MessageProperties"| MessageDispatcher
     MessageDispatcher -->|"checks"| IHandlerFilter
-    IHandlerFilter -.->|"implements"| InboxFilter
     MessageDispatcher -->|"object, MessageProperties"| HandlerInvoker
     InboxProcessor -->|"object, MessageProperties"| HandlerInvoker
     OutboxProcessor -->|"byte[], MessageProperties"| IMessageSender
@@ -226,7 +224,7 @@ sequenceDiagram
 
 On startup, `RabbitMqTopologyManager` provisions exchanges, queues, and bindings. The `RabbitMqConsumer` background service subscribes to configured queues. When a message arrives, the CloudEvents AMQP mapper extracts `MessageProperties` and the body from AMQP headers, then passes them to the `MessageRouter`.
 
-The `MessageRouter` calls the `IMessageRouteInterceptor` (if registered) to handle inbox acceptance, then delegates to `MessageDispatcher` for non-inbox handler invocation. The consumer has no inbox awareness — it just calls `RouteAsync` and acts on the result. On errors, `RabbitMqRetryHandler` either requeues with a delay or routes to a Dead Letter Queue.
+The `MessageRouter` calls the `IMessageRouteInterceptor` (if registered) with the channel name and message to handle inbox acceptance. If the interceptor returns `SkipDispatch = true`, the router skips the `MessageDispatcher` entirely — this is the path for inbox-managed messages where all handlers are deferred. Otherwise, it delegates to `MessageDispatcher` for handler invocation. The consumer has no inbox awareness — it just calls `RouteAsync` and acts on the result. On errors, `RabbitMqRetryHandler` either requeues with a delay or routes to a Dead Letter Queue.
 
 ### Local Transport
 
@@ -263,26 +261,29 @@ flowchart TD
     InvokeAll --> ReturnResult[Return DispatchResult]
 ```
 
-The `MessageDispatcher` resolves the message type from the `ChannelRegistry`, deserializes it, then delegates to `HandlerInvoker` for each handler not filtered by `IHandlerFilter`. The EfCore package registers an `InboxHandlerFilter` that skips inbox-managed handlers — these have already been persisted to the database by the `InboxAcceptor` (called via `IMessageRouteInterceptor` by the `MessageRouter` before dispatch) and will be delivered later by the `InboxProcessor`, which also uses `HandlerInvoker`.
+The `MessageDispatcher` resolves the message type from the `ChannelRegistry`, deserializes it, then delegates to `HandlerInvoker` for each handler not filtered by `IHandlerFilter`. For inbox-managed message types, the dispatcher is entirely bypassed — the `InboxRouteInterceptor` returns `SkipDispatch = true`, and the `MessageRouter` skips the dispatcher. All handlers for inbox-managed messages are delivered later by the `InboxProcessor`, which uses the same `HandlerInvoker`.
 
-If all handlers are filtered out, the dispatcher returns `NoHandlers`. The `MessageRouter` combines this with the interceptor result to determine the outcome (treating it as success when the interceptor accepted handlers).
+If the interceptor returns `SkipDispatch = true`, the router returns success (when handlers were accepted) without calling the dispatcher. For non-inbox messages, the dispatcher runs normally.
 
 ---
 
 ## Inbox Pattern
 
-The inbox provides per-handler durability, deduplication, and isolated retry. Each handler registered with a stable key gets its own database entry and is processed independently.
+The inbox provides per-handler durability, deduplication, and isolated retry. When `UseInbox()` is set on a message type in a consume channel, all handlers for that type are automatically enrolled. Each handler gets its own database entry (keyed by the handler's CLR full name) and is processed independently.
 
 ### Registration
 
-Handlers opt into the inbox by providing a stable key:
+Inbox is enabled per message type on consume channels:
 
 ```csharp
-builder.AddHandler<OrderCreated, OrderCreatedHandler>(h =>
-    h.WithInbox("order-created-handler"));
+bus.AddEventConsumeChannel("orders", c =>
+    c.Consumes<OrderPlaced>(m => m.UseInbox()));
+
+bus.AddHandler<OrderPlaced, FulfillmentHandler>();
+bus.AddHandler<OrderPlaced, NotificationHandler>();
 ```
 
-Without a key, the handler is fire-and-forget — invoked inline by the dispatcher without durability guarantees.
+All handlers for `OrderPlaced` are automatically enrolled in the inbox. Handler keys are auto-generated from the handler type's CLR full name. Messages without `UseInbox()` are dispatched directly (fire-and-forget).
 
 ### Inbox Processing
 
@@ -395,6 +396,7 @@ If a handler has been in "processing" state longer than the configured threshold
 | Column | Description |
 |---|---|
 | `Id` | CloudEvents message ID (string, PK) |
+| `ChannelName` | Name of the consume channel that received this message |
 | `TransportName` | Source transport |
 | `Content` | Serialized message body |
 | `SerializedProperties` | JSON-encoded MessageProperties |

@@ -11,6 +11,7 @@ namespace Ratatoskr.EfCore.Internal;
 /// </summary>
 internal class InboxAcceptor<TDbContext>(
     IServiceScopeFactory scopeFactory,
+    InboxMessageRegistry inboxMessageRegistry,
     InboxHandlerRegistry inboxHandlerRegistry,
     InboxProcessor<TDbContext> inboxProcessor,
     TimeProvider timeProvider,
@@ -22,12 +23,14 @@ internal class InboxAcceptor<TDbContext>(
         byte[] body,
         MessageProperties properties,
         string transportName,
+        string channelName,
         CancellationToken cancellationToken)
     {
-        var inboxHandlers = properties.Type != null
-            ? inboxHandlerRegistry.GetByWireTypeName(properties.Type)
-            : [];
+        // Check if this message type is inbox-managed on this channel
+        if (properties.Type == null || !inboxMessageRegistry.IsInboxManaged(channelName, properties.Type))
+            return InboxAcceptOutcome.NoHandlers;
 
+        var inboxHandlers = inboxHandlerRegistry.GetByWireTypeName(properties.Type);
         if (inboxHandlers.Count == 0)
             return InboxAcceptOutcome.NoHandlers;
 
@@ -36,8 +39,8 @@ internal class InboxAcceptor<TDbContext>(
             logger.LogError("Cannot persist to inbox: message has no Id. Type: '{Type}'", properties.Type);
             throw new InvalidOperationException("Messages must have a non-empty Id for inbox deduplication.");
         }
-        
-        var inboxMessage = InboxMessageEntity.Create(properties.Id, transportName, body, properties, timeProvider);
+
+        var inboxMessage = InboxMessageEntity.Create(properties.Id, channelName, transportName, body, properties, timeProvider);
 
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<TDbContext>();
@@ -112,7 +115,7 @@ internal class InboxAcceptor<TDbContext>(
 /// </summary>
 internal enum InboxAcceptOutcome
 {
-    /// <summary>No inbox-managed handlers exist for this message type.</summary>
+    /// <summary>No inbox-managed handlers exist for this message type on this channel.</summary>
     NoHandlers,
 
     /// <summary>Inbox entries were successfully persisted for the first time.</summary>

@@ -23,8 +23,11 @@ public class MessageRouter(
         if (interceptor != null)
         {
             var interceptResult = await interceptor.BeforeDispatchAsync(
-                body, properties, transportName, cancellationToken);
+                body, properties, transportName, channelName, cancellationToken);
             handlersAccepted = interceptResult.HandlersAccepted;
+
+            if (interceptResult.SkipDispatch)
+                return handlersAccepted ? DispatchResult.Success : DispatchResult.NoHandlers;
         }
 
         var result = await dispatcher.DispatchAsync(

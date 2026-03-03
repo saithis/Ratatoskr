@@ -10,9 +10,11 @@ internal class OutboxTriggerInterceptor<TDbContext>(
     OutboxProcessor<TDbContext> outboxProcessor,
     IMessageSerializer messageSerializer,
     IMessagePropertiesEnricher enricher,
+    ChannelRegistry channelRegistry,
     IEnumerable<IMessageActivityObserver> observers,
     TimeProvider timeProvider,
     ILogger<OutboxTriggerInterceptor<TDbContext>> logger,
+    InboxMessageRegistry? inboxMessageRegistry = null,
     InboxHandlerRegistry? inboxHandlerRegistry = null,
     IProcessorTrigger? inboxProcessorTrigger = null)
     : SaveChangesInterceptor where TDbContext : DbContext, IOutboxDbContext
@@ -58,17 +60,26 @@ internal class OutboxTriggerInterceptor<TDbContext>(
             // outbox entry is created. This replaces the DurableLocalMessageSender approach.
             if (enrichedProperties.Transports.Contains(LocalTransportConstants.TransportName)
                 && context is IInboxDbContext
-                && inboxHandlerRegistry is { IsEmpty: false })
+                && inboxMessageRegistry is { IsEmpty: false }
+                && inboxHandlerRegistry is { IsEmpty: false }
+                && enrichedProperties.Type != null)
             {
-                var inboxHandlers = inboxHandlerRegistry.GetByMessageType(item.Message.GetType());
-                if (inboxHandlers.Count > 0)
+                // Find consume channels that handle this message type and have inbox enabled
+                foreach (var (channel, _) in channelRegistry.FindConsumeChannelsForType(enrichedProperties.Type))
                 {
+                    if (!inboxMessageRegistry.IsInboxManaged(channel.ChannelName, enrichedProperties.Type))
+                        continue;
+
+                    var inboxHandlers = inboxHandlerRegistry.GetByWireTypeName(enrichedProperties.Type);
+                    if (inboxHandlers.Count == 0)
+                        continue;
+
                     if (string.IsNullOrWhiteSpace(enrichedProperties.Id))
                         throw new InvalidOperationException($"Inbox requires a non-empty message id for '{item.Message.GetType().FullName}'.");
-                    
+
                     context.Set<InboxMessageEntity>().Add(
-                        InboxMessageEntity.Create(enrichedProperties.Id, LocalTransportConstants.TransportName,
-                            serializedMessage, enrichedProperties, timeProvider));
+                        InboxMessageEntity.Create(enrichedProperties.Id, channel.ChannelName,
+                            LocalTransportConstants.TransportName, serializedMessage, enrichedProperties, timeProvider));
 
                     foreach (var handler in inboxHandlers)
                     {
@@ -77,8 +88,8 @@ internal class OutboxTriggerInterceptor<TDbContext>(
                     }
 
                     logger.LogDebug(
-                        "Created inbox entries for local message '{MessageId}' with {HandlerCount} handler(s) in outbox transaction",
-                        enrichedProperties.Id, inboxHandlers.Count);
+                        "Created inbox entries for local message '{MessageId}' on channel '{ChannelName}' with {HandlerCount} handler(s) in outbox transaction",
+                        enrichedProperties.Id, channel.ChannelName, inboxHandlers.Count);
                 }
             }
 

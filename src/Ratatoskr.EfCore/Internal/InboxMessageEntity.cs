@@ -12,6 +12,9 @@ internal class InboxMessageEntity
     /// <summary>CloudEvents "id" of the received message. Primary key and deduplication key.</summary>
     public string Id { get; private set; } = string.Empty;
 
+    /// <summary>Name of the consume channel that received this message.</summary>
+    public string ChannelName { get; private set; } = string.Empty;
+
     /// <summary>Name of the transport that delivered the message (e.g. "local", "rabbitmq").</summary>
     public string TransportName { get; private set; } = string.Empty;
 
@@ -44,6 +47,7 @@ internal class InboxMessageEntity
 
     public static InboxMessageEntity Create(
         string messageId,
+        string channelName,
         string transportName,
         byte[] content,
         MessageProperties props,
@@ -53,11 +57,13 @@ internal class InboxMessageEntity
         ArgumentNullException.ThrowIfNull(props);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(channelName);
         ArgumentException.ThrowIfNullOrWhiteSpace(transportName);
         ValidateIdLength(messageId);
         return new InboxMessageEntity
         {
             Id = messageId,
+            ChannelName = channelName,
             TransportName = transportName,
             Content = content,
             SerializedProperties = JsonSerializer.Serialize(props),

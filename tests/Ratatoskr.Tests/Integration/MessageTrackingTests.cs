@@ -507,8 +507,8 @@ public class MessageTrackingTests(
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel(channelName, c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel(channelName, c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, NoOpTestEventHandler>(cfg => cfg.WithInbox("no-op"));
+                bus.AddEventConsumeChannel(channelName, c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddHandler<TestEvent, NoOpTestEventHandler>();
                 bus.UseEfCoreInbox<TestDbContext>();
             });
             services.AddRatatoskrTesting();
@@ -544,8 +544,8 @@ public class MessageTrackingTests(
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel(channelName, c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel(channelName, c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, NoOpTestEventHandler>(cfg => cfg.WithInbox("no-op"));
+                bus.AddEventConsumeChannel(channelName, c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddHandler<TestEvent, NoOpTestEventHandler>();
                 bus.UseEfCoreInbox<TestDbContext>();
             });
             services.AddRatatoskrTesting();

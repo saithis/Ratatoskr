@@ -13,9 +13,10 @@ internal class InboxRouteInterceptor<TDbContext>(
 {
     public async Task<RouteInterceptResult> BeforeDispatchAsync(
         byte[] body, MessageProperties properties, string transportName,
-        CancellationToken cancellationToken)
+        string channelName, CancellationToken cancellationToken)
     {
-        var outcome = await inboxAcceptor.AcceptAsync(body, properties, transportName, cancellationToken);
-        return new RouteInterceptResult(HandlersAccepted: outcome is InboxAcceptOutcome.Accepted or InboxAcceptOutcome.Duplicate);
+        var outcome = await inboxAcceptor.AcceptAsync(body, properties, transportName, channelName, cancellationToken);
+        var accepted = outcome is InboxAcceptOutcome.Accepted or InboxAcceptOutcome.Duplicate;
+        return new RouteInterceptResult(HandlersAccepted: accepted, SkipDispatch: accepted);
     }
 }

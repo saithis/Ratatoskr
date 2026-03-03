@@ -181,8 +181,12 @@ public class ConsumeTests(
         {
             services.AddRatatoskr(bus =>
             {
-                ConfigureBus(bus, QueueName);
-                bus.AddHandler<TestEvent, NoOpTestEventHandler>(cfg => cfg.WithInbox("consume-noop"));
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddCommandConsumeChannel(QueueName, c => c
+                    .WithRabbitMq(o => o.WithQueueName(QueueName).WithAutoAck(false).WithTransientQueue()
+                        .WithQueueType(QueueType.Classic))
+                    .Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddHandler<TestEvent, NoOpTestEventHandler>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
             });
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -217,7 +221,7 @@ public class ConsumeTests(
             inboxMessage.TransportName.Should().Be("rabbitmq");
 
             var status = await db.Set<InboxHandlerStatusEntity>().SingleAsync();
-            status.HandlerKey.Should().Be("consume-noop");
+            status.HandlerKey.Should().Be(typeof(NoOpTestEventHandler).FullName);
             status.CompletedAt.Should().BeNull("background processing is disabled");
         });
     }

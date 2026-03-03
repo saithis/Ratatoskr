@@ -9,28 +9,35 @@ namespace Ratatoskr.EfCore;
 /// </summary>
 internal static class InboxConfigurationValidator
 {
-    public static void Validate(ChannelRegistry channelRegistry, InboxHandlerRegistry inboxRegistry)
+    public static void Validate(
+        ChannelRegistry channelRegistry,
+        InboxMessageRegistry inboxMessageRegistry,
+        InboxHandlerRegistry inboxHandlerRegistry)
     {
-        if (inboxRegistry.IsEmpty)
+        if (inboxMessageRegistry.IsEmpty)
             return;
 
-        foreach (var handler in inboxRegistry.GetAll())
+        // Validate that every inbox-managed message type has at least one handler registered.
+        foreach (var channelName in inboxMessageRegistry.GetChannelNames())
+        {
+            foreach (var wireTypeName in inboxMessageRegistry.GetWireTypeNames(channelName))
+            {
+                var handlers = inboxHandlerRegistry.GetByWireTypeName(wireTypeName);
+                if (handlers.Count == 0)
+                    throw new InvalidOperationException(
+                        $"Message type '{wireTypeName}' on channel '{channelName}' is configured for inbox " +
+                        $"(UseInbox()), but no handlers are registered for it. " +
+                        $"Add at least one handler via AddHandler<TMsg, THandler>().");
+            }
+        }
+
+        // Validate that all handler keys are non-empty (should always be true with auto-generated keys).
+        foreach (var handler in inboxHandlerRegistry.GetAll())
         {
             if (string.IsNullOrWhiteSpace(handler.Key))
                 throw new InvalidOperationException(
                     $"Inbox handler for '{handler.HandlerType.Name}' has an empty stable key. " +
-                    $"Provide a non-empty key via AddHandler<TMsg, THandler>(h => h.WithInbox(\"key\")).");
-
-            // Verify the message type is registered in at least one consume channel.
-            // Without this, MessageDispatcher cannot route incoming messages to the handler.
-            var hasConsumeChannel = channelRegistry.GetConsumeChannels()
-                .Any(ch => ch.Messages.Any(m => m.MessageType == handler.MessageType));
-
-            if (!hasConsumeChannel)
-                throw new InvalidOperationException(
-                    $"Inbox handler '{handler.Key}' handles '{handler.MessageType.Name}', " +
-                    $"but that type is not registered in any consume channel. " +
-                    $"Add it with .Consumes<{handler.MessageType.Name}>() on a consume channel.");
+                    $"This is an internal error — handler keys should be auto-generated from the handler type name.");
         }
     }
 }

@@ -9,12 +9,12 @@ using Ratatoskr;
 using Ratatoskr.Config;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore.Internal;
-using Ratatoskr.Local;
 
 namespace Ratatoskr.EfCore;
 
 /// <summary>
-/// Extension methods to enable the inbox pattern for durable, per-handler message delivery.
+/// Extension methods to enable the inbox pattern for durable message delivery.
+/// Inbox is configured per message type on consume channels.
 /// </summary>
 public static class InboxPublicApiExtensions
 {
@@ -40,10 +40,12 @@ public static class InboxPublicApiExtensions
             configure?.Invoke(inboxBuilder);
 
             var inboxHandlerRegistry = new InboxHandlerRegistry();
+            var inboxMessageRegistry = new InboxMessageRegistry();
 
             builder.Services.AddSingleton(Options.Create(inboxBuilder.Options));
             builder.Services.AddSingleton<InboxTelemetry>();
             builder.Services.AddSingleton(inboxHandlerRegistry);
+            builder.Services.AddSingleton(inboxMessageRegistry);
             builder.Services.AddTransient<InboxMessageProcessor<TDbContext>>();
             builder.Services.AddSingleton<InboxProcessor<TDbContext>>();
             builder.Services.AddSingleton<IProcessorTrigger>(sp => sp.GetRequiredService<InboxProcessor<TDbContext>>());
@@ -51,22 +53,34 @@ public static class InboxPublicApiExtensions
                 builder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<InboxProcessor<TDbContext>>());
             builder.Services.AddSingleton<InboxAcceptor<TDbContext>>();
             builder.Services.AddSingleton<IMessageRouteInterceptor, InboxRouteInterceptor<TDbContext>>();
-            builder.Services.AddSingleton<IHandlerFilter, InboxHandlerFilter>();
 
             // Deferred: runs after the full configure() callback, so UseEfCoreInbox can be called
             // before or after UseLocalTransport() without breaking anything.
             builder.AddDeferredServiceAction(services =>
             {
-                // Finalize inbox handler registrations now that global config (DefaultHandlerInboxEnabled)
-                // and ChannelRegistry (wire type names) are both fully known.
-                var defaultEnabled = inboxBuilder.Options.DefaultHandlerInboxEnabled;
+                // 1. Populate InboxMessageRegistry from consume channel message configuration.
+                var inboxMessageTypes = new HashSet<Type>();
+                foreach (var channel in builder.ChannelRegistry.GetConsumeChannels())
+                {
+                    foreach (var message in channel.Messages)
+                    {
+                        var inboxOpts = message.GetExtension<InboxMessageOptions>();
+                        if (inboxOpts is { UseInbox: true })
+                        {
+                            inboxMessageRegistry.Register(channel.ChannelName, message.MessageTypeName);
+                            inboxMessageTypes.Add(message.MessageType);
+                        }
+                    }
+                }
+
+                // 2. Register ALL handlers for inbox-managed message types in the handler registry.
+                //    Keys are auto-generated from handler type full name.
                 foreach (var pending in builder.PendingHandlers)
                 {
-                    var inboxOptions = pending.Registration.GetExtension<InboxHandlerOptions>();
-                    var useInbox = inboxOptions?.UseInboxExplicit ?? defaultEnabled;
-                    if (!useInbox) continue;
+                    if (!inboxMessageTypes.Contains(pending.MessageType))
+                        continue;
 
-                    var key = inboxOptions?.Key ?? pending.HandlerType.FullName!;
+                    var key = pending.HandlerType.FullName!;
 
                     // Resolve wire type name: prefer ChannelRegistry config (accounts for per-message
                     // overrides), fall back to [RatatoskrMessage] attribute.
@@ -76,42 +90,23 @@ public static class InboxPublicApiExtensions
                 }
             });
 
-            // Startup validation runs after deferred actions (InboxHandlerRegistry is fully populated).
-            builder.AddValidator(cr => InboxConfigurationValidator.Validate(cr, inboxHandlerRegistry));
+            // Startup validation runs after deferred actions.
+            builder.AddValidator(cr => InboxConfigurationValidator.Validate(cr, inboxMessageRegistry, inboxHandlerRegistry));
 
             return builder;
         }
     }
 
-    extension(HandlerBuilder builder)
+    extension(MessageBuilder builder)
     {
         /// <summary>
-        /// Routes this handler through the durable inbox with the given stable key.
-        /// The key is persisted to the database — it must remain stable across deployments.
+        /// Routes this message type through the durable inbox on its consume channel.
+        /// All handlers for this message type will be invoked by the inbox processor
+        /// with independent retry and poison tracking per handler.
         /// </summary>
-        public HandlerBuilder WithInbox(string stableKey)
+        public MessageBuilder UseInbox()
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(stableKey);
-            builder.WithExtension(new InboxHandlerOptions { UseInboxExplicit = true, Key = stableKey });
-            return builder;
-        }
-
-        /// <summary>
-        /// Routes this handler through the durable inbox, using the handler's CLR full name as the stable key.
-        /// </summary>
-        public HandlerBuilder WithInbox()
-        {
-            builder.WithExtension(new InboxHandlerOptions { UseInboxExplicit = true });
-            return builder;
-        }
-
-        /// <summary>
-        /// Explicitly opts this handler out of the inbox. The handler will be called synchronously (fire-and-forget),
-        /// even when a global default inbox is configured.
-        /// </summary>
-        public HandlerBuilder WithoutInbox()
-        {
-            builder.WithExtension(new InboxHandlerOptions { UseInboxExplicit = false });
+            builder.MessageRegistration.SetExtension(new InboxMessageOptions { UseInbox = true });
             return builder;
         }
     }
@@ -139,6 +134,7 @@ public static class InboxPublicApiExtensions
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.ChannelName).HasMaxLength(200).IsRequired();
             entity.Property(e => e.TransportName).HasMaxLength(50).IsRequired();
             entity.Property(e => e.Content).IsRequired();
             entity.Property(e => e.SerializedProperties).IsRequired();
@@ -178,7 +174,7 @@ public static class InboxPublicApiExtensions
     /// 1. Checking all registered consume channels (accounts for per-message config overrides).
     /// 2. Falling back to the [RatatoskrMessage] attribute on the CLR type.
     /// </summary>
-    private static string? ResolveWireTypeName(ChannelRegistry registry, Type messageType)
+    internal static string? ResolveWireTypeName(ChannelRegistry registry, Type messageType)
     {
         var names = registry.GetConsumeChannels()
             .SelectMany(c => c.Messages.Where(m => m.MessageType == messageType)
