@@ -29,7 +29,7 @@ public static class RabbitMqRatatoskrBuilderExtensions
 
         // Consuming
         builder.Services.TryAddSingleton<HandlerInvoker>();
-        builder.Services.AddSingleton<MessageDispatcher>();
+        builder.Services.TryAddSingleton<MessageDispatcher>();
         builder.Services.TryAddSingleton<MessageRouter>();
         builder.Services.AddSingleton<RabbitMqRetryHandler>();
         builder.Services.AddHostedService<RabbitMqConsumer>();

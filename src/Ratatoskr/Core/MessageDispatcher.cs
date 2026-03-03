@@ -160,10 +160,4 @@ public enum DispatchResult
     NoHandlers,
     RecoverableError,
     PermanentError,
-
-    /// <summary>
-    /// All handlers for this message have been accepted for deferred processing.
-    /// Transports should treat this the same as <see cref="Success"/> (ack the message).
-    /// </summary>
-    Queued,
 }

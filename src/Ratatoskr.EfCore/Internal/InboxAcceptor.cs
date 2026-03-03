@@ -18,7 +18,7 @@ internal class InboxAcceptor<TDbContext>(
     ILogger<InboxAcceptor<TDbContext>> logger)
     where TDbContext : DbContext, IInboxDbContext
 {
-    public async Task<bool> AcceptAsync(
+    public async Task<InboxAcceptOutcome> AcceptAsync(
         byte[] body,
         MessageProperties properties,
         string transportName,
@@ -29,11 +29,8 @@ internal class InboxAcceptor<TDbContext>(
             : [];
 
         if (inboxHandlers.Count == 0)
-            return false;
+            return InboxAcceptOutcome.NoHandlers;
 
-        if (string.IsNullOrWhiteSpace(properties.Id))
-            throw new InvalidOperationException("Inbox delivery requires MessageProperties.Id for deduplication.");
-        
         if (string.IsNullOrWhiteSpace(properties.Id))
         {
             logger.LogError("Cannot persist to inbox: message has no Id. Type: '{Type}'", properties.Type);
@@ -88,7 +85,7 @@ internal class InboxAcceptor<TDbContext>(
             logger.LogDebug(
                 "Inbox entries for message '{MessageId}' were already inserted by a concurrent instance (unique constraint). Ignoring.",
                 properties.Id);
-            return false;
+            return InboxAcceptOutcome.Duplicate;
         }
 
         logger.LogDebug("Persisted inbox entries for message '{MessageId}', {HandlerCount} handler(s)",
@@ -106,6 +103,21 @@ internal class InboxAcceptor<TDbContext>(
 
         await inboxProcessor.TriggerAsync(cancellationToken);
 
-        return true;
+        return InboxAcceptOutcome.Accepted;
     }
+}
+
+/// <summary>
+/// Outcome of <see cref="InboxAcceptor{TDbContext}.AcceptAsync"/>.
+/// </summary>
+internal enum InboxAcceptOutcome
+{
+    /// <summary>No inbox-managed handlers exist for this message type.</summary>
+    NoHandlers,
+
+    /// <summary>Inbox entries were successfully persisted for the first time.</summary>
+    Accepted,
+
+    /// <summary>A concurrent instance already persisted the inbox entries (unique constraint race).</summary>
+    Duplicate,
 }

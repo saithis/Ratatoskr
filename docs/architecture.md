@@ -10,6 +10,8 @@ graph LR
         IRatatoskr["IRatatoskr"]
         IMessageSender["IMessageSender"]
         IMessageHandler["IMessageHandler&lt;T&gt;"]
+        IRouteInterceptor["IMessageRouteInterceptor"]
+        IHandlerFilter["IHandlerFilter"]
         MessageRouter["MessageRouter"]
         MessageDispatcher["MessageDispatcher"]
         HandlerInvoker["HandlerInvoker"]
@@ -23,6 +25,7 @@ graph LR
         InboxProcessor["InboxProcessor"]
         InboxAcceptor["InboxAcceptor"]
         InboxInterceptor["InboxRouteInterceptor"]
+        InboxFilter["InboxHandlerFilter"]
         OutboxInterceptor["OutboxTriggerInterceptor"]
     end
 
@@ -32,17 +35,21 @@ graph LR
         TopologyManager["RabbitMqTopologyManager"]
     end
 
-    IRatatoskr --> IMessageSender
-    IMessageSender -.-> LocalSender
-    IMessageSender -.-> RmqSender
-    LocalConsumer --> MessageRouter
-    RmqConsumer --> MessageRouter
-    MessageRouter -.-> InboxInterceptor
-    InboxInterceptor --> InboxAcceptor
-    MessageRouter --> MessageDispatcher
-    MessageDispatcher --> HandlerInvoker
-    InboxProcessor --> HandlerInvoker
-    HandlerInvoker --> IMessageHandler
+    IRatatoskr -->|"byte[], MessageProperties"| IMessageSender
+    IMessageSender -.->|"implements"| LocalSender
+    IMessageSender -.->|"implements"| RmqSender
+    LocalConsumer -->|"byte[], MessageProperties"| MessageRouter
+    RmqConsumer -->|"byte[], MessageProperties"| MessageRouter
+    MessageRouter -->|"byte[], MessageProperties"| IRouteInterceptor
+    IRouteInterceptor -.->|"implements"| InboxInterceptor
+    InboxInterceptor -->|"byte[], MessageProperties"| InboxAcceptor
+    MessageRouter -->|"byte[], MessageProperties"| MessageDispatcher
+    MessageDispatcher -->|"checks"| IHandlerFilter
+    IHandlerFilter -.->|"implements"| InboxFilter
+    MessageDispatcher -->|"object, MessageProperties"| HandlerInvoker
+    InboxProcessor -->|"object, MessageProperties"| HandlerInvoker
+    OutboxProcessor -->|"byte[], MessageProperties"| IMessageSender
+    HandlerInvoker -->|"TMessage, MessageProperties"| IMessageHandler
 ```
 
 The core library provides the abstractions (`IRatatoskr`, `IMessageSender`, `IMessageHandler<T>`, `MessageDispatcher`) and a built-in local (in-process) transport. The EfCore package adds outbox/inbox durability. The RabbitMq package provides a RabbitMQ transport.
@@ -57,71 +64,71 @@ The following diagram shows the complete message lifecycle — from publishing t
 flowchart TD
     subgraph Publish ["Publishing"]
         App["Application"]
-        Direct["IRatatoskr.PublishDirectAsync\nEnrich, serialize, send to matching transports"]
-        Outbox["DbContext.OutboxMessages.Add\n+ SaveChangesAsync"]
+        Direct["IRatatoskr.PublishDirectAsync<br/>Enrich, serialize, send to matching transports"]
+        Outbox["DbContext.OutboxMessages.Add<br/>+ SaveChangesAsync"]
 
-        App --> Direct
-        App --> Outbox
+        App -->|"TMessage"| Direct
+        App -->|"OutboxMessage"| Outbox
     end
 
     subgraph OutboxPipeline ["Outbox Pipeline"]
-        Interceptor["OutboxTriggerInterceptor\nEnrich, serialize, persist in same DB transaction\n(+ inbox entries for local transport)"]
-        OutboxDB[("Database\nOutboxMessageEntity")]
-        OutboxProc["OutboxProcessor\nBackground service, distributed lock"]
+        Interceptor["OutboxTriggerInterceptor<br/>Enrich, serialize, persist in same DB transaction<br/>(+ inbox entries for local transport)"]
+        OutboxDB[("Database<br/>OutboxMessageEntity")]
+        OutboxProc["OutboxProcessor<br/>Background service, distributed lock"]
 
         Outbox --> Interceptor
-        Interceptor --> OutboxDB
-        OutboxDB --> OutboxProc
+        Interceptor -->|"OutboxMessageEntity"| OutboxDB
+        OutboxDB -->|"OutboxMessageEntity"| OutboxProc
     end
 
     subgraph Transport ["Transport Layer"]
-        SenderInterface["IMessageSender\nRoutes by TransportName"]
-        Local["LocalMessageSender\nIn-memory channel"]
-        RmqSend["RabbitMqMessageSender\nAMQP publish"]
+        SenderInterface["IMessageSender<br/>Routes by TransportName"]
+        Local["LocalMessageSender<br/>In-memory channel"]
+        RmqSend["RabbitMqMessageSender<br/>AMQP publish"]
 
-        Direct --> SenderInterface
-        OutboxProc --> SenderInterface
-        SenderInterface -.-> Local
-        SenderInterface -.-> RmqSend
+        Direct -->|"byte[], MessageProperties"| SenderInterface
+        OutboxProc -->|"byte[], MessageProperties"| SenderInterface
+        SenderInterface -.->|"byte[], MessageProperties"| Local
+        SenderInterface -.->|"byte[], MessageProperties"| RmqSend
     end
 
     subgraph Consume ["Consumption"]
         InMemCh[/"In-Memory Channel"/]
         RmqQueue[/"RabbitMQ Queue"/]
-        LocalConsumer["LocalTransportConsumer\nBackgroundService"]
-        RmqConsumer["RabbitMqConsumer\nBackgroundService"]
+        LocalConsumer["LocalTransportConsumer<br/>BackgroundService"]
+        RmqConsumer["RabbitMqConsumer<br/>BackgroundService"]
 
-        Local --> InMemCh
-        RmqSend --> RmqQueue
-        InMemCh --> LocalConsumer
-        RmqQueue --> RmqConsumer
+        Local -->|"LocalMessage"| InMemCh
+        RmqSend -->|"BasicProperties, byte[]"| RmqQueue
+        InMemCh -->|"LocalMessage"| LocalConsumer
+        RmqQueue -->|"BasicDeliverEventArgs"| RmqConsumer
     end
 
     subgraph Dispatch ["Message Dispatch"]
-        Router["MessageRouter\nCall IMessageRouteInterceptor,\nthen dispatch"]
-        Dispatcher["MessageDispatcher\nResolve type, deserialize,\nskip filtered handlers"]
+        Router["MessageRouter<br/>Call IMessageRouteInterceptor,<br/>then dispatch"]
+        Dispatcher["MessageDispatcher<br/>Resolve type, deserialize,<br/>skip filtered handlers"]
 
-        LocalConsumer --> Router
-        RmqConsumer --> Router
-        Router --> Dispatcher
+        LocalConsumer -->|"byte[], MessageProperties"| Router
+        RmqConsumer -->|"byte[], MessageProperties"| Router
+        Router -->|"byte[], MessageProperties"| Dispatcher
     end
 
     subgraph Inbox ["Inbox Processing"]
-        InboxAccept["InboxAcceptor\nPersist message + handler\nstatuses to DB"]
-        InboxDB[("Database\nInboxMessageEntity\nInboxHandlerStatusEntity")]
-        InboxProc["InboxProcessor\nBackground service, distributed lock"]
+        InboxAccept["InboxAcceptor<br/>Persist message + handler<br/>statuses to DB"]
+        InboxDB[("Database<br/>InboxMessageEntity<br/>InboxHandlerStatusEntity")]
+        InboxProc["InboxProcessor<br/>Background service, distributed lock"]
 
-        Interceptor --> InboxDB
-        Router --> InboxAccept
-        InboxAccept --> InboxDB
-        InboxDB --> InboxProc
+        Interceptor -->|"InboxMessageEntity"| InboxDB
+        Router -->|"byte[], MessageProperties"| InboxAccept
+        InboxAccept -->|"InboxMessageEntity"| InboxDB
+        InboxDB -->|"InboxHandlerStatusEntity"| InboxProc
     end
 
-    Invoker["HandlerInvoker\nResolve handler in DI scope,\ninvoke via compiled delegate"]
+    Invoker["HandlerInvoker<br/>Resolve handler in DI scope,<br/>invoke via compiled delegate"]
     Handler["IMessageHandler‹T›"]
-    Dispatcher --> Invoker
-    InboxProc --> Invoker
-    Invoker --> Handler
+    Dispatcher -->|"object, MessageProperties"| Invoker
+    InboxProc -->|"object, MessageProperties"| Invoker
+    Invoker -->|"TMessage, MessageProperties"| Handler
 ```
 
 ---
@@ -258,7 +265,7 @@ flowchart TD
 
 The `MessageDispatcher` resolves the message type from the `ChannelRegistry`, deserializes it, then delegates to `HandlerInvoker` for each handler not filtered by `IHandlerFilter`. The EfCore package registers an `InboxHandlerFilter` that skips inbox-managed handlers — these have already been persisted to the database by the `InboxAcceptor` (called via `IMessageRouteInterceptor` by the `MessageRouter` before dispatch) and will be delivered later by the `InboxProcessor`, which also uses `HandlerInvoker`.
 
-If all handlers are filtered out, the dispatcher returns `NoHandlers`. The `MessageRouter` combines this with the interceptor result to determine the final outcome (treating it as success when the interceptor accepted handlers).
+If all handlers are filtered out, the dispatcher returns `NoHandlers`. The `MessageRouter` combines this with the interceptor result to determine the outcome (treating it as success when the interceptor accepted handlers).
 
 ---
 

@@ -203,7 +203,6 @@ internal class RabbitMqConsumer(
             errorType = result switch
             {
                 DispatchResult.Success => null,
-                DispatchResult.Queued => null,
                 DispatchResult.NoHandlers => "NoHandlerError",
                 _ => "ProcessingError"
             };
@@ -264,7 +263,6 @@ internal class RabbitMqConsumer(
         switch (result)
         {
             case DispatchResult.Success:
-            case DispatchResult.Queued:
                 await channel.BasicAckAsync(ea.DeliveryTag, false, cancellationToken);
                 break;
 

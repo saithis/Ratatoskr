@@ -19,7 +19,7 @@ public class HandlerInvoker(IServiceScopeFactory scopeFactory)
         CancellationToken cancellationToken,
         TimeSpan? timeout = null)
     {
-        using var scope = scopeFactory.CreateScope();
+        await using var scope = scopeFactory.CreateAsyncScope();
         var handler = scope.ServiceProvider.GetRequiredService(handlerType);
         var invoke = HandlerInvokerCache.Get(message.GetType());
 

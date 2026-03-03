@@ -2203,12 +2203,12 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
         bool includeStuckDetection = false,
         CancellationToken cancellationToken = default)
     {
-        var processor = serviceProvider.GetRequiredService<InboxMessageProcessor<TestDbContext>>();
-
         var token = cancellationToken == default ? CancellationToken.None : cancellationToken;
         var total = 0;
         while (true)
         {
+            using var scope = serviceProvider.CreateScope();
+            var processor = scope.ServiceProvider.GetRequiredService<InboxMessageProcessor<TestDbContext>>();
             var count = await processor.ProcessBatchAsync(includeStuckDetection, token);
             total += count;
             if (count == 0) break;

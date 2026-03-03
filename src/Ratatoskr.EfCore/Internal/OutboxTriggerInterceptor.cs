@@ -61,8 +61,11 @@ internal class OutboxTriggerInterceptor<TDbContext>(
                 && inboxHandlerRegistry is { IsEmpty: false })
             {
                 var inboxHandlers = inboxHandlerRegistry.GetByMessageType(item.Message.GetType());
-                if (inboxHandlers.Count > 0 && !string.IsNullOrWhiteSpace(enrichedProperties.Id))
+                if (inboxHandlers.Count > 0)
                 {
+                    if (string.IsNullOrWhiteSpace(enrichedProperties.Id))
+                        throw new InvalidOperationException($"Inbox requires a non-empty message id for '{item.Message.GetType().FullName}'.");
+                    
                     context.Set<InboxMessageEntity>().Add(
                         InboxMessageEntity.Create(enrichedProperties.Id, LocalTransportConstants.TransportName,
                             serializedMessage, enrichedProperties, timeProvider));
