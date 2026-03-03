@@ -34,3 +34,21 @@ public class TestDbContext : DbContext, IOutboxDbContext, IInboxDbContext
         modelBuilder.AddInboxEntities();
     }
 }
+
+/// <summary>
+/// Second inbox-only DbContext for multi-DbContext integration tests.
+/// Uses the same database but a separate DbContext type to verify
+/// that the inbox pattern supports multiple DbContexts.
+/// </summary>
+public class SecondInboxDbContext : DbContext, IInboxDbContext
+{
+    public SecondInboxDbContext(DbContextOptions<SecondInboxDbContext> options) : base(options)
+    {
+    }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+        modelBuilder.AddInboxEntities();
+    }
+}

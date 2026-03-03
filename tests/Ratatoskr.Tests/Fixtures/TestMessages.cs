@@ -85,6 +85,7 @@ public class ThrowingTestEventHandler : IMessageHandler<TestEvent>
 /// <summary>
 /// No-op handler that always succeeds — used in inbox, tracking, and OTel tests.
 /// </summary>
+[HandlerKey("no-op")]
 public class NoOpTestEventHandler : IMessageHandler<TestEvent>
 {
     public Task HandleAsync(TestEvent message, MessageProperties context, CancellationToken cancellationToken)

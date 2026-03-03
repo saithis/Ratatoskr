@@ -49,4 +49,9 @@ internal class InboxTelemetry
     {
         RatatoskrDiagnostics.InboxProcessDuration.Record(Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds);
     }
+
+    public void RecordCleanup(int count, string category)
+    {
+        RatatoskrDiagnostics.InboxCleanupCount.Add(count, new TagList { { "category", category } });
+    }
 }

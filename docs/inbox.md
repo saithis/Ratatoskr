@@ -25,7 +25,7 @@ A unique constraint on `(MessageId, HandlerKey)` is the **deduplication key**: t
 ### Processing flow
 
 1. A message arrives (from RabbitMQ, the outbox, or a direct publish).
-2. The `InboxRouteInterceptor` checks if the message type is inbox-managed on this channel. If so, the message and one `InboxHandlerStatus` row per handler are written to the database, and the interceptor returns `SkipDispatch = true` — the `MessageDispatcher` is entirely bypassed for this message.
+2. The `CompositeInboxRouteInterceptor` checks if the message type is inbox-managed on this channel. If so, it routes the message to the correct `InboxAcceptor` (based on the channel's DbContext), which writes the message and one `InboxHandlerStatus` row per handler to the database. The interceptor returns `SkipDispatch = true` — the `MessageDispatcher` is entirely bypassed for this message.
 3. The background `InboxProcessor` polls (and is also woken up via a trigger channel) for pending handler statuses and delivers them in batches.
 4. On success: `CompletedAt` is set on the status row. Each handler's result is **persisted immediately** — completed handlers are not lost if a subsequent handler or the process fails.
 5. On failure: `ErrorCount` is incremented, `NextAttemptAt` is set using exponential backoff (`2^n` seconds, capped at `MaxRetryDelay`).
@@ -37,7 +37,9 @@ A unique constraint on `(MessageId, HandlerKey)` is the **deduplication key**: t
 
 When using the outbox with local transport and inbox, the `OutboxTriggerInterceptor` writes inbox entries to the database **in the same transaction** as the outbox entry. Combined with the inbox's deduplication, this guarantees no message loss at any crash point in the pipeline.
 
-> **Important:** When using `PublishDirectAsync` with the local transport, inbox entries are written by the consumer-side `InboxRouteInterceptor` **after** the message is read from the in-memory channel. This means messages can be lost if the process crashes between the channel write and the consumer processing. For full durability, use the outbox.
+> **Important:** The direct-to-inbox transaction optimization only works when the outbox and inbox use the **same DbContext type**. If they use different DbContext types, the outbox creates a normal outbox entry for the local transport, and the consumer-side interceptor writes inbox entries separately. This is still safe (the outbox guarantees delivery), but involves two separate transactions instead of one.
+
+> **Important:** When using `PublishDirectAsync` with the local transport, inbox entries are written by the consumer-side `CompositeInboxRouteInterceptor` **after** the message is read from the in-memory channel. This means messages can be lost if the process crashes between the channel write and the consumer processing. For full durability, use the outbox.
 
 ## Setup
 
@@ -78,10 +80,10 @@ services.AddRatatoskr(bus =>
         c.Consumes<OrderUpdated>();                       // fire-and-forget (all handlers)
     });
 
-    // Handlers — no inbox config needed (determined by message type)
-    bus.AddHandler<OrderPlaced, FulfillmentHandler>();
-    bus.AddHandler<OrderPlaced, NotificationHandler>();
-    bus.AddHandler<OrderUpdated, AuditLogHandler>();
+    // Handlers — stable keys required for inbox-managed message types
+    bus.AddHandler<OrderPlaced, FulfillmentHandler>("fulfillment");
+    bus.AddHandler<OrderPlaced, NotificationHandler>("notification");
+    bus.AddHandler<OrderUpdated, AuditLogHandler>();  // not inbox-managed, no key needed
 });
 
 services.AddDbContext<AppDbContext>((sp, opts) =>
@@ -90,9 +92,46 @@ services.AddDbContext<AppDbContext>((sp, opts) =>
 });
 ```
 
+### Multiple DbContexts
+
+Different consume channels can use different DbContext types for inbox storage. Use `UseInbox<TDbContext>()` on the consume channel to specify which DbContext to use:
+
+```csharp
+services.AddRatatoskr(bus =>
+{
+    bus.UseLocalTransport();
+
+    // Optional: configure per-DbContext options
+    bus.UseEfCoreInbox<OrdersDbContext>(inbox => inbox.WithMaxRetries(10));
+    bus.UseEfCoreInbox<PaymentsDbContext>();
+
+    // Each channel specifies its DbContext
+    bus.AddEventConsumeChannel("orders", c =>
+    {
+        c.UseInbox<OrdersDbContext>();
+        c.Consumes<OrderPlaced>(m => m.UseInbox());
+    });
+
+    bus.AddEventConsumeChannel("payments", c =>
+    {
+        c.UseInbox<PaymentsDbContext>();
+        c.Consumes<PaymentReceived>(m => m.UseInbox());
+    });
+
+    bus.AddHandler<OrderPlaced, FulfillmentHandler>("fulfillment");
+    bus.AddHandler<PaymentReceived, PaymentHandler>("payment");
+});
+```
+
+Each DbContext type gets its own `InboxProcessor` background service with an independent distributed lock (auto-named `InboxProcessor-{DbContextTypeName}`).
+
+If `UseEfCoreInbox<TDbContext>()` is called globally but `UseInbox<TDbContext>()` is **not** called on a channel, the globally registered DbContext is used as a default for that channel. If `UseInbox<TDbContext>()` is used on a channel without calling `UseEfCoreInbox<TDbContext>()`, the infrastructure is auto-registered with default options.
+
+> **Validation**: At startup, the system validates that every channel with inbox-managed messages has a DbContext mapping — either from `UseInbox<TDbContext>()` on the channel or from a global `UseEfCoreInbox<TDbContext>()` default.
+
 ### 3. Enable inbox per message type
 
-Inbox is configured at the **message level** on consume channels. When `UseInbox()` is called on a message, **all handlers** for that message type are automatically enrolled in the inbox with auto-generated handler keys (based on the handler's CLR full name).
+Inbox is configured at the **message level** on consume channels. When `UseInbox()` is called on a message, **all handlers** for that message type are automatically enrolled in the inbox.
 
 ```csharp
 // Inbox-managed: all handlers go through durable inbox delivery
@@ -104,9 +143,33 @@ bus.AddEventConsumeChannel("notifications", c =>
     c.Consumes<NotificationSent>());
 ```
 
-The **handler key** is auto-generated from the handler type's CLR full name (e.g. `MyApp.Handlers.FulfillmentHandler`). This key is persisted in the database and must remain stable — renaming or moving the handler class will cause existing in-flight messages to be poisoned with an "unknown handler key" error.
+### 4. Assign stable handler keys
 
-> **Validation**: At startup, the system validates that every inbox-managed message type has at least one handler registered. Missing handlers will cause an `InvalidOperationException`.
+Every inbox handler **must** have a stable key. The key is persisted in the database and used as the deduplication and retry key. There are two ways to assign a key:
+
+**Option 1: `[HandlerKey]` attribute** (recommended for most cases)
+
+```csharp
+[HandlerKey("fulfillment")]
+public class FulfillmentHandler : IMessageHandler<OrderPlaced>
+{
+    public Task HandleAsync(OrderPlaced message, MessageProperties props, CancellationToken ct) => ...;
+}
+
+bus.AddHandler<OrderPlaced, FulfillmentHandler>();
+```
+
+**Option 2: `AddHandler` parameter** (overrides the attribute if both are set)
+
+```csharp
+bus.AddHandler<OrderPlaced, FulfillmentHandler>("fulfillment");
+```
+
+If both are provided, the `AddHandler` parameter takes precedence. If neither is provided, startup fails with an `InvalidOperationException`.
+
+> **Why stable keys?** If a handler is renamed or moved to a different namespace, the key must remain the same so that existing in-flight messages continue to be processed. Using an explicit key decouples the identity from the CLR type name.
+
+> **Validation**: At startup, the system validates that every inbox-managed message type has at least one handler registered and that all inbox handlers have a stable key. Missing handlers or keys will cause an `InvalidOperationException`.
 
 ## Configuration Options
 
@@ -137,7 +200,7 @@ bus.UseEfCoreInbox<AppDbContext>(inbox =>
 | `WithHandlerTimeout(TimeSpan)` | *none* | Maximum time a handler is allowed to run. Timeout cancellation counts as a failure (increments ErrorCount). |
 | `WithRestartDelay(TimeSpan)` | `5 seconds` | Delay before restarting the processor after an unexpected crash. |
 | `WithLockAcquireTimeout(TimeSpan)` | `60 seconds` | Timeout for acquiring the distributed lock. |
-| `WithLockName(string)` | `"InboxProcessor"` | Distributed lock name. Change if you run multiple inboxes or conflict with the outbox lock. |
+| `WithLockName(string)` | `"InboxProcessor-{DbContextName}"` | Distributed lock name. Auto-generated per DbContext type. Override if you need a custom name. |
 
 ## Per-Message Inbox Semantics
 
@@ -145,7 +208,7 @@ When `UseInbox()` is set on a message type:
 
 - **All handlers** for that message type are automatically enrolled in the inbox.
 - The `MessageDispatcher` is **entirely skipped** for that message (via `SkipDispatch`).
-- Handler keys are auto-generated from the handler type's CLR full name.
+- Each handler must have a stable key (via `[HandlerKey]` attribute or `AddHandler` parameter).
 
 This means you cannot have a mix of inbox-managed and fire-and-forget handlers for the same message type. If you need both durable and fire-and-forget processing for the same event, use separate message types.
 
@@ -208,7 +271,7 @@ services.AddRatatoskr(bus =>
     bus.UseLocalTransport();
     bus.AddEventConsumeChannel("orders", c =>
         c.Consumes<OrderPlaced>(m => m.UseInbox()));
-    bus.AddHandler<OrderPlaced, FulfillmentHandler>();
+    bus.AddHandler<OrderPlaced, FulfillmentHandler>("fulfillment");
     bus.UseEfCoreInbox<AppDbContext>(inbox => inbox.WithoutBackgroundProcessing());
 });
 
@@ -219,25 +282,30 @@ await processor.ProcessBatchAsync(includeStuckMessageDetection: false, Cancellat
 
 ## Data Retention
 
-The `InboxMessages` and `InboxHandlerStatuses` tables grow unbounded as messages are processed. Completed and poisoned rows are never deleted automatically — you should implement periodic cleanup based on your retention requirements.
+Inbox messages are automatically cleaned up by the `InboxCleanupProcessor` background service based on configurable retention periods:
 
-Example SQL for PostgreSQL:
+| Fluent Method | Default | Description |
+|---|---|---|
+| `WithCompletedRetention(TimeSpan?)` | `7 days` | How long to keep fully completed messages (all handlers succeeded). Set to `null` to disable. |
+| `WithPoisonedRetention(TimeSpan?)` | `30 days` | How long to keep poisoned messages (at least one handler poisoned, all terminal). Set to `null` to disable. |
+| `WithCleanupInterval(TimeSpan)` | `1 hour` | How often the cleanup processor runs. |
+| `WithoutCleanup()` | — | Disables all automatic cleanup. |
 
-```sql
--- Delete handler statuses completed more than 30 days ago
-DELETE FROM "InboxHandlerStatuses"
-WHERE "CompletedAt" IS NOT NULL
-  AND "CompletedAt" < NOW() - INTERVAL '30 days';
-
--- Delete poisoned statuses older than 30 days
-DELETE FROM "InboxHandlerStatuses"
-WHERE "IsPoisoned" = true
-  AND "CreatedAt" < NOW() - INTERVAL '30 days';
-
--- Delete orphaned inbox messages (no remaining handler statuses)
-DELETE FROM "InboxMessages"
-WHERE NOT EXISTS (
-    SELECT 1 FROM "InboxHandlerStatuses"
-    WHERE "MessageId" = "InboxMessages"."Id"
-);
+```csharp
+bus.UseEfCoreInbox<AppDbContext>(inbox =>
+{
+    inbox.WithCompletedRetention(TimeSpan.FromDays(14));  // keep completed for 2 weeks
+    inbox.WithPoisonedRetention(TimeSpan.FromDays(90));   // keep poisoned for 3 months
+    inbox.WithCleanupInterval(TimeSpan.FromHours(6));     // run every 6 hours
+});
 ```
+
+**Cleanup logic:**
+
+- **Completed messages**: Deleted when ALL handler statuses are completed (none poisoned, none pending) and the message's `ReceivedAt` is older than `CompletedRetention`. Cascade delete on the foreign key removes handler status rows automatically.
+- **Poisoned messages**: Deleted when ALL handler statuses are terminal (completed or poisoned), at least one is poisoned, and the message's `ReceivedAt` is older than `PoisonedRetention`.
+- **Partially completed messages**: Messages with any still-pending handler status are never cleaned up, regardless of age.
+
+The cleanup processor acquires a distributed lock (`InboxCleanup-{DbContextName}`) to prevent concurrent cleanup from multiple instances. The `ratatoskr.inbox.cleanup.count` metric counter tracks deletions by category (`completed` or `poisoned`).
+
+The outbox has matching cleanup options (`WithCompletedRetention`, `WithPoisonedRetention`, `WithCleanupInterval`, `WithoutCleanup`) on the `OutboxBuilder`.

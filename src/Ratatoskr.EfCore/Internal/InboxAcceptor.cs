@@ -6,7 +6,7 @@ using Ratatoskr.Core;
 namespace Ratatoskr.EfCore.Internal;
 
 /// <summary>
-/// Single entry point for inbox persistence. Called by <see cref="InboxRouteInterceptor{TDbContext}"/>
+/// Single entry point for inbox persistence. Called by <see cref="CompositeInboxRouteInterceptor"/>
 /// to persist inbox-managed handler statuses to the database before message dispatch.
 /// </summary>
 internal class InboxAcceptor<TDbContext>(
@@ -17,8 +17,9 @@ internal class InboxAcceptor<TDbContext>(
     TimeProvider timeProvider,
     IEnumerable<IMessageActivityObserver> observers,
     ILogger<InboxAcceptor<TDbContext>> logger)
-    where TDbContext : DbContext, IInboxDbContext
+    : IInboxAcceptor where TDbContext : DbContext, IInboxDbContext
 {
+    public Type DbContextType => typeof(TDbContext);
     public async Task<InboxAcceptOutcome> AcceptAsync(
         byte[] body,
         MessageProperties properties,

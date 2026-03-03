@@ -42,6 +42,13 @@ public static class PublicApiExtensions
             builder.Services.AddSingleton<OutboxProcessor<TDbContext>>();
             builder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<OutboxProcessor<TDbContext>>());
 
+            // Register cleanup processor if any retention is configured
+            if (outboxBuilder.Options.CompletedRetention != null || outboxBuilder.Options.PoisonedRetention != null)
+            {
+                builder.Services.AddSingleton<OutboxCleanupProcessor<TDbContext>>();
+                builder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<OutboxCleanupProcessor<TDbContext>>());
+            }
+
             return builder;
         }
 
@@ -58,7 +65,11 @@ public static class PublicApiExtensions
             builder.Services.AddTransient<OutboxMessageProcessor<TDbContext>>();
             builder.Services.AddSingleton<OutboxProcessor<TDbContext>>();
             builder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<OutboxProcessor<TDbContext>>());
-        
+
+            // Cleanup processor — configuration-based outbox always registers with defaults (cleanup enabled)
+            builder.Services.AddSingleton<OutboxCleanupProcessor<TDbContext>>();
+            builder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<OutboxCleanupProcessor<TDbContext>>());
+
             return builder;
         }
     }

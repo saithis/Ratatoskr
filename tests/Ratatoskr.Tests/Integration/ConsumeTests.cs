@@ -221,7 +221,7 @@ public class ConsumeTests(
             inboxMessage.TransportName.Should().Be("rabbitmq");
 
             var status = await db.Set<InboxHandlerStatusEntity>().SingleAsync();
-            status.HandlerKey.Should().Be(typeof(NoOpTestEventHandler).FullName);
+            status.HandlerKey.Should().Be("no-op");
             status.CompletedAt.Should().BeNull("background processing is disabled");
         });
     }

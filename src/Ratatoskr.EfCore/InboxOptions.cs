@@ -66,4 +66,24 @@ public class InboxOptions
     /// Default: null (no timeout).
     /// </summary>
     public TimeSpan? HandlerTimeout { get; set; }
+
+    /// <summary>
+    /// How long to keep fully completed inbox messages (all handlers completed, none poisoned)
+    /// before automatic cleanup. Set to null to disable cleanup of completed messages.
+    /// Default: 7 days.
+    /// </summary>
+    public TimeSpan? CompletedRetention { get; set; } = TimeSpan.FromDays(7);
+
+    /// <summary>
+    /// How long to keep poisoned inbox messages (at least one handler poisoned, all terminal)
+    /// before automatic cleanup. Set to null to disable cleanup of poisoned messages.
+    /// Default: 30 days.
+    /// </summary>
+    public TimeSpan? PoisonedRetention { get; set; } = TimeSpan.FromDays(30);
+
+    /// <summary>
+    /// How often the cleanup processor runs to delete old completed/poisoned messages.
+    /// Default: 1 hour.
+    /// </summary>
+    public TimeSpan CleanupInterval { get; set; } = TimeSpan.FromHours(1);
 }

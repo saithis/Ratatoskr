@@ -105,6 +105,51 @@ public class InboxBuilder<TDbContext> where TDbContext : DbContext, IInboxDbCont
     }
 
     /// <summary>
+    /// Sets how long to keep fully completed inbox messages before automatic cleanup.
+    /// Default: 7 days. Set to null to disable cleanup of completed messages.
+    /// </summary>
+    public InboxBuilder<TDbContext> WithCompletedRetention(TimeSpan? retention)
+    {
+        if (retention.HasValue)
+            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(retention.Value, TimeSpan.Zero, nameof(retention));
+        Options.CompletedRetention = retention;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets how long to keep poisoned inbox messages before automatic cleanup.
+    /// Default: 30 days. Set to null to disable cleanup of poisoned messages.
+    /// </summary>
+    public InboxBuilder<TDbContext> WithPoisonedRetention(TimeSpan? retention)
+    {
+        if (retention.HasValue)
+            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(retention.Value, TimeSpan.Zero, nameof(retention));
+        Options.PoisonedRetention = retention;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets how often the cleanup processor runs.
+    /// Default: 1 hour.
+    /// </summary>
+    public InboxBuilder<TDbContext> WithCleanupInterval(TimeSpan interval)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(interval, TimeSpan.Zero, nameof(interval));
+        Options.CleanupInterval = interval;
+        return this;
+    }
+
+    /// <summary>
+    /// Disables automatic cleanup of completed and poisoned inbox messages.
+    /// </summary>
+    public InboxBuilder<TDbContext> WithoutCleanup()
+    {
+        Options.CompletedRetention = null;
+        Options.PoisonedRetention = null;
+        return this;
+    }
+
+    /// <summary>
     /// Prevents the <see cref="InboxProcessor{TDbContext}"/> from being registered as a hosted service.
     /// Use this in integration tests where you want deterministic control over when inbox processing runs
     /// (e.g. by calling <c>InboxMessageProcessor.ProcessBatchAsync</c> directly).

@@ -1,8 +1,17 @@
 namespace Ratatoskr.Core;
 
-public class HandlerRegistration
+public class HandlerRegistration(Type handlerType, Type messageType, string? key)
 {
     private readonly Dictionary<Type, object> _extensions = new();
+
+    /// <summary>
+    /// Stable handler key set via <c>AddHandler</c> or <see cref="HandlerKeyAttribute"/>.
+    /// Priority: AddHandler parameter &gt; <see cref="HandlerKeyAttribute"/> &gt; <c>null</c>.
+    /// </summary>
+    internal string? Key { get; init; } = key;
+
+    internal Type MessageType { get; init; } = messageType;
+    internal Type HandlerType { get; init; } = handlerType;
 
     /// <summary>Gets a typed extension object, or null if not set.</summary>
     public T? GetExtension<T>() where T : class =>

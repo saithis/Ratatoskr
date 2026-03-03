@@ -16,7 +16,8 @@ internal class OutboxTriggerInterceptor<TDbContext>(
     ILogger<OutboxTriggerInterceptor<TDbContext>> logger,
     InboxMessageRegistry? inboxMessageRegistry = null,
     InboxHandlerRegistry? inboxHandlerRegistry = null,
-    IProcessorTrigger? inboxProcessorTrigger = null)
+    InboxChannelMap? inboxChannelMap = null,
+    InboxProcessorTriggerRegistry? inboxProcessorTriggerRegistry = null)
     : SaveChangesInterceptor where TDbContext : DbContext, IOutboxDbContext
 {
     public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
@@ -56,18 +57,25 @@ internal class OutboxTriggerInterceptor<TDbContext>(
             }
 
             // For local transport messages: write inbox entries in the same transaction
-            // so that inbox-managed handlers are guaranteed to be persisted when the
-            // outbox entry is created. This replaces the DurableLocalMessageSender approach.
+            // when the outbox DbContext IS the inbox DbContext for the target channel.
+            // This guarantees crash-safe inbox acceptance.
             if (enrichedProperties.Transports.Contains(LocalTransportConstants.TransportName)
                 && context is IInboxDbContext
                 && inboxMessageRegistry is { IsEmpty: false }
                 && inboxHandlerRegistry is { IsEmpty: false }
+                && inboxChannelMap != null
                 && enrichedProperties.Type != null)
             {
                 // Find consume channels that handle this message type and have inbox enabled
                 foreach (var (channel, _) in channelRegistry.FindConsumeChannelsForType(enrichedProperties.Type))
                 {
                     if (!inboxMessageRegistry.IsInboxManaged(channel.ChannelName, enrichedProperties.Type))
+                        continue;
+
+                    // Only write inbox entries if the inbox DbContext matches the outbox DbContext.
+                    // When they differ, the consumer-side interceptor handles inbox acceptance.
+                    var inboxDbContextType = inboxChannelMap.GetDbContextType(channel.ChannelName);
+                    if (inboxDbContextType != typeof(TDbContext))
                         continue;
 
                     var inboxHandlers = inboxHandlerRegistry.GetByWireTypeName(enrichedProperties.Type);
@@ -125,13 +133,17 @@ internal class OutboxTriggerInterceptor<TDbContext>(
             await outboxProcessor.TriggerAsync(cancellationToken);
         }
 
-        // Trigger inbox processor if inbox handler statuses were created in this transaction
-        if (inboxProcessorTrigger != null)
+        // Trigger inbox processor if inbox handler statuses were created in this transaction.
+        // Since we only write inbox entries when the outbox DbContext matches the inbox DbContext,
+        // the correct trigger is for our own DbContext type.
+        if (inboxProcessorTriggerRegistry != null)
         {
             var inboxStatuses = eventData.Context?.ChangeTracker.Entries<InboxHandlerStatusEntity>() ?? [];
             if (inboxStatuses.Any(e => e.Entity.CompletedAt == null))
             {
-                await inboxProcessorTrigger.TriggerAsync(cancellationToken);
+                var trigger = inboxProcessorTriggerRegistry.Get(typeof(TDbContext));
+                if (trigger != null)
+                    await trigger.TriggerAsync(cancellationToken);
             }
         }
 

@@ -494,7 +494,7 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         deliverActivity.TagObjects.Should().Contain(t => t.Key == "messaging.system" && (string?)t.Value == "ratatoskr");
         deliverActivity.TagObjects.Should().Contain(t => t.Key == "messaging.operation.name" && (string?)t.Value == "deliver");
         deliverActivity.TagObjects.Should().Contain(t => t.Key == "messaging.operation.type" && (string?)t.Value == "process");
-        deliverActivity.TagObjects.Should().Contain(t => t.Key == "ratatoskr.inbox.handler.key" && (string?)t.Value == typeof(NoOpTestEventHandler).FullName);
+        deliverActivity.TagObjects.Should().Contain(t => t.Key == "ratatoskr.inbox.handler.key" && (string?)t.Value == "no-op");
 
         // Verify trace context propagation: the deliver span lives in the same trace as the original publish.
         // Filter by message ID to avoid picking up a publish activity from another parallel test.

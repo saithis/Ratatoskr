@@ -66,4 +66,24 @@ public class OutboxOptions
     /// Default: null (no timeout).
     /// </summary>
     public TimeSpan? SendTimeout { get; set; }
+
+    /// <summary>
+    /// How long to keep successfully processed outbox messages before automatic cleanup.
+    /// Set to null to disable cleanup of processed messages.
+    /// Default: 7 days.
+    /// </summary>
+    public TimeSpan? CompletedRetention { get; set; } = TimeSpan.FromDays(7);
+
+    /// <summary>
+    /// How long to keep poisoned outbox messages before automatic cleanup.
+    /// Set to null to disable cleanup of poisoned messages.
+    /// Default: 30 days.
+    /// </summary>
+    public TimeSpan? PoisonedRetention { get; set; } = TimeSpan.FromDays(30);
+
+    /// <summary>
+    /// How often the cleanup processor runs to delete old processed/poisoned messages.
+    /// Default: 1 hour.
+    /// </summary>
+    public TimeSpan CleanupInterval { get; set; } = TimeSpan.FromHours(1);
 }

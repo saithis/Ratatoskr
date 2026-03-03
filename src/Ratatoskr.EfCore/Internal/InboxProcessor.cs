@@ -2,7 +2,6 @@ using Medallion.Threading;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace Ratatoskr.EfCore.Internal;
 
@@ -10,14 +9,14 @@ internal class InboxProcessor<TDbContext>(
     IServiceScopeFactory serviceScopeFactory,
     IDistributedLockProvider distributedLockProvider,
     TimeProvider timeProvider,
-    IOptions<InboxOptions> options,
+    InboxOptionsRegistry optionsRegistry,
     ILogger<InboxProcessor<TDbContext>> logger)
     : PollingBackgroundService(distributedLockProvider, timeProvider, logger), IProcessorTrigger
     where TDbContext : DbContext, IInboxDbContext
 {
-    private readonly InboxOptions _options = options.Value;
+    private readonly InboxOptions _options = optionsRegistry.Get(typeof(TDbContext));
 
-    protected override string ProcessorName => "InboxProcessor";
+    protected override string ProcessorName => $"InboxProcessor<{typeof(TDbContext).Name}>";
     protected override TimeSpan PollingInterval => _options.PollingInterval;
     protected override TimeSpan RestartDelay => _options.RestartDelay;
     protected override TimeSpan LockAcquireTimeout => _options.LockAcquireTimeout;

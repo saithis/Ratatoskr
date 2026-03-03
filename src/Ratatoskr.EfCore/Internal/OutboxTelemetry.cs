@@ -46,4 +46,9 @@ internal class OutboxTelemetry
     {
         RatatoskrDiagnostics.OutboxProcessDuration.Record(Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds);
     }
+
+    public void RecordCleanup(int count, string category)
+    {
+        RatatoskrDiagnostics.OutboxCleanupCount.Add(count, new TagList { { "category", category } });
+    }
 }

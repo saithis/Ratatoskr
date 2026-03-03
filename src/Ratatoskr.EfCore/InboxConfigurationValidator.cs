@@ -12,7 +12,8 @@ internal static class InboxConfigurationValidator
     public static void Validate(
         ChannelRegistry channelRegistry,
         InboxMessageRegistry inboxMessageRegistry,
-        InboxHandlerRegistry inboxHandlerRegistry)
+        InboxHandlerRegistry inboxHandlerRegistry,
+        InboxChannelMap inboxChannelMap)
     {
         if (inboxMessageRegistry.IsEmpty)
             return;
@@ -31,13 +32,24 @@ internal static class InboxConfigurationValidator
             }
         }
 
-        // Validate that all handler keys are non-empty (should always be true with auto-generated keys).
+        // Validate that all handler keys are non-empty.
         foreach (var handler in inboxHandlerRegistry.GetAll())
         {
             if (string.IsNullOrWhiteSpace(handler.Key))
                 throw new InvalidOperationException(
-                    $"Inbox handler for '{handler.HandlerType.Name}' has an empty stable key. " +
-                    $"This is an internal error — handler keys should be auto-generated from the handler type name.");
+                    $"Inbox handler '{handler.HandlerType.Name}' has an empty stable key. " +
+                    $"Add [HandlerKey(\"...\")] to the handler class or pass a key to AddHandler(\"...\").");
+        }
+
+        // Validate that UseInbox<T>() on a channel is not called more than once.
+        // (This is enforced at config time by SetExtension overwriting, but we also check
+        // that every inbox-managed channel has a mapped DbContext type.)
+        foreach (var channelName in inboxMessageRegistry.GetChannelNames())
+        {
+            if (inboxChannelMap.GetDbContextType(channelName) == null)
+                throw new InvalidOperationException(
+                    $"Channel '{channelName}' has inbox-managed messages but no DbContext mapping. " +
+                    $"This is an internal error — the deferred action should have set this up.");
         }
     }
 }

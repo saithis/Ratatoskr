@@ -21,11 +21,11 @@ graph LR
     end
 
     subgraph EfCore ["Ratatoskr.EfCore"]
-        OutboxProcessor["OutboxProcessor"]
-        InboxProcessor["InboxProcessor"]
-        InboxAcceptor["InboxAcceptor"]
-        InboxInterceptor["InboxRouteInterceptor"]
-        OutboxInterceptor["OutboxTriggerInterceptor"]
+        OutboxProcessor["OutboxProcessor&lt;TDbContext&gt;"]
+        InboxProcessor["InboxProcessor&lt;TDbContext&gt;"]
+        InboxAcceptor["InboxAcceptor&lt;TDbContext&gt;"]
+        InboxInterceptor["CompositeInboxRouteInterceptor"]
+        OutboxInterceptor["OutboxTriggerInterceptor&lt;TDbContext&gt;"]
     end
 
     subgraph RabbitMq ["Ratatoskr.RabbitMq"]
@@ -224,7 +224,7 @@ sequenceDiagram
 
 On startup, `RabbitMqTopologyManager` provisions exchanges, queues, and bindings. The `RabbitMqConsumer` background service subscribes to configured queues. When a message arrives, the CloudEvents AMQP mapper extracts `MessageProperties` and the body from AMQP headers, then passes them to the `MessageRouter`.
 
-The `MessageRouter` calls the `IMessageRouteInterceptor` (if registered) with the channel name and message to handle inbox acceptance. If the interceptor returns `SkipDispatch = true`, the router skips the `MessageDispatcher` entirely — this is the path for inbox-managed messages where all handlers are deferred. Otherwise, it delegates to `MessageDispatcher` for handler invocation. The consumer has no inbox awareness — it just calls `RouteAsync` and acts on the result. On errors, `RabbitMqRetryHandler` either requeues with a delay or routes to a Dead Letter Queue.
+The `MessageRouter` calls the `IMessageRouteInterceptor` (if registered) with the channel name and message to handle inbox acceptance. The `CompositeInboxRouteInterceptor` maps the channel name to the correct `InboxAcceptor<TDbContext>` and persists the message. If the interceptor returns `SkipDispatch = true`, the router skips the `MessageDispatcher` entirely — this is the path for inbox-managed messages where all handlers are deferred. Otherwise, it delegates to `MessageDispatcher` for handler invocation. The consumer has no inbox awareness — it just calls `RouteAsync` and acts on the result. On errors, `RabbitMqRetryHandler` either requeues with a delay or routes to a Dead Letter Queue.
 
 ### Local Transport
 
@@ -261,7 +261,7 @@ flowchart TD
     InvokeAll --> ReturnResult[Return DispatchResult]
 ```
 
-The `MessageDispatcher` resolves the message type from the `ChannelRegistry`, deserializes it, then delegates to `HandlerInvoker` for each handler not filtered by `IHandlerFilter`. For inbox-managed message types, the dispatcher is entirely bypassed — the `InboxRouteInterceptor` returns `SkipDispatch = true`, and the `MessageRouter` skips the dispatcher. All handlers for inbox-managed messages are delivered later by the `InboxProcessor`, which uses the same `HandlerInvoker`.
+The `MessageDispatcher` resolves the message type from the `ChannelRegistry`, deserializes it, then delegates to `HandlerInvoker` for each handler not filtered by `IHandlerFilter`. For inbox-managed message types, the dispatcher is entirely bypassed — the `CompositeInboxRouteInterceptor` returns `SkipDispatch = true`, and the `MessageRouter` skips the dispatcher. All handlers for inbox-managed messages are delivered later by the `InboxProcessor`, which uses the same `HandlerInvoker`.
 
 If the interceptor returns `SkipDispatch = true`, the router returns success (when handlers were accepted) without calling the dispatcher. For non-inbox messages, the dispatcher runs normally.
 
@@ -279,11 +279,11 @@ Inbox is enabled per message type on consume channels:
 bus.AddEventConsumeChannel("orders", c =>
     c.Consumes<OrderPlaced>(m => m.UseInbox()));
 
-bus.AddHandler<OrderPlaced, FulfillmentHandler>();
-bus.AddHandler<OrderPlaced, NotificationHandler>();
+bus.AddHandler<OrderPlaced, FulfillmentHandler>("fulfillment");
+bus.AddHandler<OrderPlaced, NotificationHandler>("notification");
 ```
 
-All handlers for `OrderPlaced` are automatically enrolled in the inbox. Handler keys are auto-generated from the handler type's CLR full name. Messages without `UseInbox()` are dispatched directly (fire-and-forget).
+All handlers for `OrderPlaced` are automatically enrolled in the inbox. Each inbox handler must have a stable key — either via `[HandlerKey("...")]` on the handler class or as the first parameter of `AddHandler`. Messages without `UseInbox()` are dispatched directly (fire-and-forget).
 
 ### Inbox Processing
 
@@ -343,7 +343,9 @@ sequenceDiagram
     IP->>H: HandleAsync(message, props)
 ```
 
-When using `PublishDirectAsync` with the local transport, inbox entries are written by the consumer-side `InboxRouteInterceptor` **after** the message is read from the in-memory channel. This means messages can be lost if the process crashes between the channel write and the consumer processing. For full durability, use the outbox.
+When using `PublishDirectAsync` with the local transport, inbox entries are written by the consumer-side `CompositeInboxRouteInterceptor` **after** the message is read from the in-memory channel. This means messages can be lost if the process crashes between the channel write and the consumer processing. For full durability, use the outbox.
+
+> **Note:** The direct-to-inbox transaction optimization requires the outbox and inbox to use the **same DbContext type**. When they use different DbContext types, the outbox creates a normal outbox entry and the consumer-side interceptor writes inbox entries in a separate transaction.
 
 ### Retry & Backoff
 
@@ -425,7 +427,7 @@ The unique constraint on `(MessageId, HandlerKey)` provides deduplication — co
 
 Ratatoskr is designed for multi-instance deployment:
 
-- **Distributed locks** (via Medallion.Threading) — Both `OutboxProcessor` and `InboxProcessor` acquire a named lock before processing. Only one instance processes at a time.
+- **Distributed locks** (via Medallion.Threading) — `OutboxProcessor`, `InboxProcessor`, and their cleanup counterparts (`OutboxCleanupProcessor`, `InboxCleanupProcessor`) each acquire a named lock before processing. Only one instance processes at a time per lock.
 - **Optimistic concurrency** — `InboxHandlerStatusEntity.Version` prevents two workers from processing the same handler status simultaneously.
 - **Idempotent persistence** — The inbox acceptor uses unique constraints for deduplication. Concurrent inserts safely resolve via constraint violations.
 

@@ -834,4 +834,219 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             await Task.Delay(Timeout.Infinite, cancellationToken);
         }
     }
+
+    #region Cleanup Tests
+
+    [Test]
+    public async Task OutboxCleanup_ProcessedMessagesOlderThanRetention_AreDeleted()
+    {
+        var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var noOpSender = new NoOpMessageSender("rabbitmq");
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TimeProvider>(fakeTime);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddEventPublishChannel(ExchangeName, c => c
+                    .WithRabbitMq(r => r.WithTopicExchange())
+                    .Produces<TestEvent>());
+                bus.AddEfCoreOutbox<TestDbContext>(outbox =>
+                {
+                    outbox.WithCompletedRetention(TimeSpan.FromDays(7));
+                });
+            });
+
+            services.RemoveAll<IMessageSender>();
+            services.AddSingleton<IMessageSender>(noOpSender);
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+            {
+                opts.UseNpgsql(PostgresConnectionString);
+                opts.RegisterOutbox<TestDbContext>(sp);
+            });
+        });
+
+        await InitializeDatabase();
+
+        // Create and process an outbox message
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            db.OutboxMessages.Add(
+                new TestEvent { Id = "cleanup-outbox-1", Data = "test" },
+                new MessageProperties { Id = "cleanup-outbox-msg" });
+            await db.SaveChangesAsync();
+        });
+
+        // Wait for the outbox processor to process it
+        await WaitForConditionAsync(
+            async () => await InScopeAsync(async ctx =>
+            {
+                var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                var msg = await db.Set<OutboxMessageEntity>().SingleAsync();
+                return msg.ProcessedAt != null;
+            }),
+            TimeSpan.FromSeconds(10));
+
+        // Advance time past retention
+        fakeTime.Advance(TimeSpan.FromDays(8));
+
+        // Run cleanup
+        await InScopeAsync(async ctx =>
+        {
+            var cleanup = ctx.ServiceProvider.GetRequiredService<OutboxCleanupProcessor<TestDbContext>>();
+            await cleanup.RunOnceAsync(CancellationToken.None);
+        });
+
+        // Assert: processed message should be deleted
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var count = await db.Set<OutboxMessageEntity>().CountAsync();
+            count.Should().Be(0);
+        });
+    }
+
+    [Test]
+    public async Task OutboxCleanup_ProcessedMessagesWithinRetention_AreKept()
+    {
+        var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var noOpSender = new NoOpMessageSender("rabbitmq");
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TimeProvider>(fakeTime);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddEventPublishChannel(ExchangeName, c => c
+                    .WithRabbitMq(r => r.WithTopicExchange())
+                    .Produces<TestEvent>());
+                bus.AddEfCoreOutbox<TestDbContext>(outbox =>
+                {
+                    outbox.WithCompletedRetention(TimeSpan.FromDays(7));
+                });
+            });
+
+            services.RemoveAll<IMessageSender>();
+            services.AddSingleton<IMessageSender>(noOpSender);
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+            {
+                opts.UseNpgsql(PostgresConnectionString);
+                opts.RegisterOutbox<TestDbContext>(sp);
+            });
+        });
+
+        await InitializeDatabase();
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            db.OutboxMessages.Add(
+                new TestEvent { Id = "cleanup-outbox-within-1", Data = "test" },
+                new MessageProperties { Id = "cleanup-outbox-within-msg" });
+            await db.SaveChangesAsync();
+        });
+
+        await WaitForConditionAsync(
+            async () => await InScopeAsync(async ctx =>
+            {
+                var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                var msg = await db.Set<OutboxMessageEntity>().SingleAsync();
+                return msg.ProcessedAt != null;
+            }),
+            TimeSpan.FromSeconds(10));
+
+        // Advance time within retention (3 days < 7 days)
+        fakeTime.Advance(TimeSpan.FromDays(3));
+
+        await InScopeAsync(async ctx =>
+        {
+            var cleanup = ctx.ServiceProvider.GetRequiredService<OutboxCleanupProcessor<TestDbContext>>();
+            await cleanup.RunOnceAsync(CancellationToken.None);
+        });
+
+        // Assert: message should still exist
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var count = await db.Set<OutboxMessageEntity>().CountAsync();
+            count.Should().Be(1);
+        });
+    }
+
+    [Test]
+    public async Task OutboxCleanup_WithoutCleanup_NoMessagesDeleted()
+    {
+        var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var noOpSender = new NoOpMessageSender("rabbitmq");
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TimeProvider>(fakeTime);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddEventPublishChannel(ExchangeName, c => c
+                    .WithRabbitMq(r => r.WithTopicExchange())
+                    .Produces<TestEvent>());
+                bus.AddEfCoreOutbox<TestDbContext>(outbox =>
+                {
+                    outbox.WithoutCleanup();
+                });
+            });
+
+            services.RemoveAll<IMessageSender>();
+            services.AddSingleton<IMessageSender>(noOpSender);
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+            {
+                opts.UseNpgsql(PostgresConnectionString);
+                opts.RegisterOutbox<TestDbContext>(sp);
+            });
+        });
+
+        await InitializeDatabase();
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            db.OutboxMessages.Add(
+                new TestEvent { Id = "cleanup-outbox-disabled-1", Data = "test" },
+                new MessageProperties { Id = "cleanup-outbox-disabled-msg" });
+            await db.SaveChangesAsync();
+        });
+
+        await WaitForConditionAsync(
+            async () => await InScopeAsync(async ctx =>
+            {
+                var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                var msg = await db.Set<OutboxMessageEntity>().SingleAsync();
+                return msg.ProcessedAt != null;
+            }),
+            TimeSpan.FromSeconds(10));
+
+        fakeTime.Advance(TimeSpan.FromDays(365));
+
+        // WithoutCleanup means OutboxCleanupProcessor is NOT registered.
+        // Verify the message still exists (cleanup service wasn't started).
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var count = await db.Set<OutboxMessageEntity>().CountAsync();
+            count.Should().Be(1, "cleanup is disabled — no messages should be deleted");
+        });
+    }
+
+    private class NoOpMessageSender(string transportName) : IMessageSender
+    {
+        public string TransportName => transportName;
+        public Task SendAsync(byte[] content, MessageProperties props, CancellationToken cancellationToken)
+            => Task.CompletedTask;
+    }
+
+    #endregion
 }

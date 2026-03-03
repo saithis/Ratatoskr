@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Ratatoskr.AsyncApi.Config;
@@ -22,7 +23,7 @@ public class RatatoskrBuilder
     /// Finalized by <see cref="UseEfCoreInbox"/> via a deferred action once the global
     /// inbox configuration is known.
     /// </summary>
-    internal List<PendingHandlerRegistration> PendingHandlers { get; } = new();
+    internal List<HandlerRegistration> PendingHandlers { get; } = new();
 
     internal RatatoskrBuilder(IServiceCollection services)
     {
@@ -108,6 +109,18 @@ public class RatatoskrBuilder
     }
 
     /// <summary>
+    /// Registers a message handler with a stable key.
+    /// The key is used by the inbox as the deduplication and retry key.
+    /// </summary>
+    public RatatoskrBuilder AddHandler<TMessage, THandler>(string key, Action<HandlerBuilder>? configure = null)
+        where TMessage : notnull
+        where THandler : class, IMessageHandler<TMessage>
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        return AddHandlerCore<TMessage, THandler>(key, configure);
+    }
+
+    /// <summary>
     /// Registers a message handler.
     /// Use <paramref name="configure"/> to attach infrastructure-specific options
     /// (e.g. inbox participation via the <c>Ratatoskr.EfCore</c> package).
@@ -116,17 +129,25 @@ public class RatatoskrBuilder
         where TMessage : notnull
         where THandler : class, IMessageHandler<TMessage>
     {
+        return AddHandlerCore<TMessage, THandler>(key: null, configure);
+    }
+
+    private RatatoskrBuilder AddHandlerCore<TMessage, THandler>(string? key, Action<HandlerBuilder>? configure)
+        where TMessage : notnull
+        where THandler : class, IMessageHandler<TMessage>
+    {
         Services.AddScoped<THandler>();
         Services.AddScoped<IMessageHandler<TMessage>>(sp => sp.GetRequiredService<THandler>());
 
-        var registration = new HandlerRegistration();
+        key ??= typeof(THandler).GetCustomAttribute<HandlerKeyAttribute>()?.Key;
+        var registration = new HandlerRegistration(typeof(THandler), typeof(TMessage), key);
         if (configure != null)
         {
             var builder = new HandlerBuilder(registration);
             configure(builder);
         }
 
-        PendingHandlers.Add(new PendingHandlerRegistration(typeof(TMessage), typeof(THandler), registration));
+        PendingHandlers.Add(registration);
 
         return this;
     }
@@ -145,12 +166,3 @@ public class RatatoskrBuilder
         return this;
     }
 }
-
-/// <summary>
-/// Holds a pending handler registration that will be finalized by infrastructure packages
-/// (e.g. inbox) once the global configuration is known.
-/// </summary>
-internal record PendingHandlerRegistration(
-    Type MessageType,
-    Type HandlerType,
-    HandlerRegistration Registration);

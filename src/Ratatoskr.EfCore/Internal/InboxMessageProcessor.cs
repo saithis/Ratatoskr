@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Ratatoskr.Core;
 
 namespace Ratatoskr.EfCore.Internal;
@@ -17,13 +16,13 @@ internal class InboxMessageProcessor<TDbContext>(
     InboxHandlerRegistry handlerRegistry,
     InboxTelemetry telemetry,
     TimeProvider timeProvider,
-    IOptions<InboxOptions> options,
+    InboxOptionsRegistry optionsRegistry,
     IEnumerable<IMessageActivityObserver> observers,
     IMessageSerializer messageSerializer,
     ILogger<InboxMessageProcessor<TDbContext>> logger)
     where TDbContext : DbContext, IInboxDbContext
 {
-    private readonly InboxOptions _options = options.Value;
+    private readonly InboxOptions _options = optionsRegistry.Get(typeof(TDbContext));
     /// <summary>
     /// Processes a single batch of pending handler statuses.
     /// Returns the number of handler statuses picked up in the batch (0 means no work found).
