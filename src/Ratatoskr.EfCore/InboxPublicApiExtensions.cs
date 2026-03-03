@@ -44,6 +44,7 @@ public static class InboxPublicApiExtensions
             builder.Services.AddSingleton(Options.Create(inboxBuilder.Options));
             builder.Services.AddSingleton<InboxTelemetry>();
             builder.Services.AddSingleton(inboxHandlerRegistry);
+            builder.Services.AddTransient<InboxMessageProcessor<TDbContext>>();
             builder.Services.AddSingleton<InboxProcessor<TDbContext>>();
             builder.Services.AddSingleton<IProcessorTrigger>(sp => sp.GetRequiredService<InboxProcessor<TDbContext>>());
             if (inboxBuilder.RegisterBackgroundService)

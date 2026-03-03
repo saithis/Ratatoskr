@@ -3,9 +3,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Ratatoskr.Core;
 using Ratatoskr.EfCore.Internal;
 
 namespace Ratatoskr.EfCore;
@@ -39,6 +37,8 @@ public static class PublicApiExtensions
             builder.Services.AddSingleton(Options.Create(outboxBuilder.Options));
         
             builder.Services.AddSingleton<OutboxTelemetry>();
+            builder.Services.AddSingleton<OutboxTriggerInterceptor<TDbContext>>();
+            builder.Services.AddTransient<OutboxMessageProcessor<TDbContext>>();
             builder.Services.AddSingleton<OutboxProcessor<TDbContext>>();
             builder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<OutboxProcessor<TDbContext>>());
 
@@ -54,6 +54,8 @@ public static class PublicApiExtensions
             builder.Services.Configure<OutboxOptions>(configuration.GetSection(OutboxOptions.SectionName));
 
             builder.Services.AddSingleton<OutboxTelemetry>();
+            builder.Services.AddSingleton<OutboxTriggerInterceptor<TDbContext>>();
+            builder.Services.AddTransient<OutboxMessageProcessor<TDbContext>>();
             builder.Services.AddSingleton<OutboxProcessor<TDbContext>>();
             builder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<OutboxProcessor<TDbContext>>());
         
@@ -69,15 +71,7 @@ public static class PublicApiExtensions
         IServiceProvider serviceProvider)
         where TDbContext : DbContext, IOutboxDbContext
     {
-        var outboxProcessor = serviceProvider.GetRequiredService<OutboxProcessor<TDbContext>>();
-        var timeProvider = serviceProvider.GetRequiredService<TimeProvider>();
-        var messageSerializer = serviceProvider.GetRequiredService<IMessageSerializer>();
-        var enricher = serviceProvider.GetRequiredService<IMessagePropertiesEnricher>();
-        var observers = serviceProvider.GetServices<IMessageActivityObserver>();
-        var logger =  serviceProvider.GetRequiredService<ILogger<OutboxTriggerInterceptor<TDbContext>>>();
-        var inboxHandlerRegistry = serviceProvider.GetService<InboxHandlerRegistry>();
-        var inboxProcessorTrigger = serviceProvider.GetService<IProcessorTrigger>();
-        var interceptor = new OutboxTriggerInterceptor<TDbContext>(outboxProcessor, messageSerializer, enricher, observers, timeProvider, logger, inboxHandlerRegistry, inboxProcessorTrigger);
+        var interceptor = serviceProvider.GetRequiredService<OutboxTriggerInterceptor<TDbContext>>();
         return builder.AddInterceptors(interceptor);
     }
     

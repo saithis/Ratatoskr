@@ -3,14 +3,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Ratatoskr.Core;
 
 namespace Ratatoskr.EfCore.Internal;
 
 internal class OutboxProcessor<TDbContext>(
     IServiceScopeFactory serviceScopeFactory,
     IDistributedLockProvider distributedLockProvider,
-    OutboxTelemetry telemetry,
     TimeProvider timeProvider,
     IOptions<OutboxOptions> options,
     ILogger<OutboxProcessor<TDbContext>> logger)
@@ -31,13 +29,7 @@ internal class OutboxProcessor<TDbContext>(
         {
             // Create a fresh scope (and DbContext) per batch to avoid stale EF state
             using var batchScope = serviceScopeFactory.CreateScope();
-
-            var dbContext = batchScope.ServiceProvider.GetRequiredService<TDbContext>();
-            var messageSenders = batchScope.ServiceProvider.GetServices<IMessageSender>();
-            var activityObservers = batchScope.ServiceProvider.GetServices<IMessageActivityObserver>();
-
-            var processor = new OutboxMessageProcessor<TDbContext>(
-                dbContext, messageSenders, telemetry, timeProvider, _options, activityObservers, logger);
+            var processor = batchScope.ServiceProvider.GetRequiredService<OutboxMessageProcessor<TDbContext>>();
 
             logger.LogDebug("Checking outbox for unsent messages");
             var processedCount = await processor.ProcessBatchAsync(

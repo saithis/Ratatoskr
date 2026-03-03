@@ -2,8 +2,6 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
@@ -1289,19 +1287,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
         using var cts = new CancellationTokenSource();
         var processTask = InScopeAsync(async ctx =>
         {
-            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var scopeFactory = ctx.ServiceProvider.GetRequiredService<IServiceScopeFactory>();
-            var handlerRegistry = ctx.ServiceProvider.GetRequiredService<InboxHandlerRegistry>();
-            var timeProvider = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
-            var options = ctx.ServiceProvider.GetRequiredService<IOptions<InboxOptions>>();
-            var observers = ctx.ServiceProvider.GetServices<IMessageActivityObserver>();
-            var messageSerializer = ctx.ServiceProvider.GetRequiredService<IMessageSerializer>();
-
-            var processor = new InboxMessageProcessor<TestDbContext>(
-                dbContext, new HandlerInvoker(scopeFactory), handlerRegistry, new InboxTelemetry(), timeProvider,
-                options.Value, observers, messageSerializer,
-                NullLogger<InboxMessageProcessor<TestDbContext>>.Instance);
-
+            var processor = ctx.ServiceProvider.GetRequiredService<InboxMessageProcessor<TestDbContext>>();
             await processor.ProcessBatchAsync(false, cts.Token);
         });
 
@@ -1474,20 +1460,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
         // Process with a cancellable token — cancel while handler is running
         var processTask = InScopeAsync(async ctx =>
         {
-            var sp = ctx.ServiceProvider;
-            var dbContext = sp.GetRequiredService<TestDbContext>();
-            var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
-            var handlerRegistry = sp.GetRequiredService<InboxHandlerRegistry>();
-            var timeProvider = sp.GetRequiredService<TimeProvider>();
-            var options = sp.GetRequiredService<IOptions<InboxOptions>>();
-            var observers = sp.GetServices<IMessageActivityObserver>();
-            var messageSerializer = sp.GetRequiredService<IMessageSerializer>();
-
-            var processor = new InboxMessageProcessor<TestDbContext>(
-                dbContext, new HandlerInvoker(scopeFactory), handlerRegistry, new InboxTelemetry(), timeProvider,
-                options.Value, observers, messageSerializer,
-                NullLogger<InboxMessageProcessor<TestDbContext>>.Instance);
-
+            var processor = ctx.ServiceProvider.GetRequiredService<InboxMessageProcessor<TestDbContext>>();
             await processor.ProcessBatchAsync(false, cts.Token);
         });
 
@@ -2230,24 +2203,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
         bool includeStuckDetection = false,
         CancellationToken cancellationToken = default)
     {
-        var dbContext = serviceProvider.GetRequiredService<TestDbContext>();
-        var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
-        var handlerRegistry = serviceProvider.GetRequiredService<InboxHandlerRegistry>();
-        var timeProvider = serviceProvider.GetRequiredService<TimeProvider>();
-        var options = serviceProvider.GetRequiredService<IOptions<InboxOptions>>();
-        var observers = serviceProvider.GetServices<IMessageActivityObserver>();
-        var messageSerializer = serviceProvider.GetRequiredService<IMessageSerializer>();
-
-        var processor = new InboxMessageProcessor<TestDbContext>(
-            dbContext,
-            new HandlerInvoker(scopeFactory),
-            handlerRegistry,
-            new InboxTelemetry(),
-            timeProvider,
-            options.Value,
-            observers,
-            messageSerializer,
-            NullLogger<InboxMessageProcessor<TestDbContext>>.Instance);
+        var processor = serviceProvider.GetRequiredService<InboxMessageProcessor<TestDbContext>>();
 
         var token = cancellationToken == default ? CancellationToken.None : cancellationToken;
         var total = 0;

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Ratatoskr.Core;
 
 namespace Ratatoskr.EfCore.Internal;
@@ -16,12 +17,13 @@ internal class InboxMessageProcessor<TDbContext>(
     InboxHandlerRegistry handlerRegistry,
     InboxTelemetry telemetry,
     TimeProvider timeProvider,
-    InboxOptions options,
+    IOptions<InboxOptions> options,
     IEnumerable<IMessageActivityObserver> observers,
     IMessageSerializer messageSerializer,
-    ILogger logger)
+    ILogger<InboxMessageProcessor<TDbContext>> logger)
     where TDbContext : DbContext, IInboxDbContext
 {
+    private readonly InboxOptions _options = options.Value;
     /// <summary>
     /// Processes a single batch of pending handler statuses.
     /// Returns the number of handler statuses picked up in the batch (0 means no work found).
@@ -41,13 +43,13 @@ internal class InboxMessageProcessor<TDbContext>(
 
         if (includeStuckMessageDetection)
         {
-            var stuckThreshold = now - options.StuckMessageThreshold;
+            var stuckThreshold = now - _options.StuckMessageThreshold;
             query = query.Where(s => s.ProcessingStartedAt == null || s.ProcessingStartedAt < stuckThreshold);
         }
 
         var statuses = await query
             .OrderBy(s => s.MessageId)
-            .Take(options.BatchSize)
+            .Take(_options.BatchSize)
             .ToArrayAsync(cancellationToken);
 
         if (statuses.Length == 0)
@@ -110,21 +112,7 @@ internal class InboxMessageProcessor<TDbContext>(
                 continue;
             }
 
-            var registration = handlerRegistry.GetByKey(status.HandlerKey);
-            if (registration == null)
-            {
-                logger.LogWarning(
-                    "Handler key '{HandlerKey}' is no longer registered. Poisoning status '{StatusId}'.",
-                    status.HandlerKey, status.Id);
-                status.MarkAsPoisoned(
-                    $"Handler key '{status.HandlerKey}' is not registered. The handler may have been removed or renamed.",
-                    timeProvider);
-                telemetry.RecordPoisoned();
-                await dbContext.SaveChangesAsync(cancellationToken);
-                continue;
-            }
-
-            // Deserialize properties before the handler try-catch so observers always fire
+            // Deserialize properties before handler lookup so observers can fire for all poison paths
             MessageProperties props;
             try
             {
@@ -137,6 +125,30 @@ internal class InboxMessageProcessor<TDbContext>(
                 status.MarkAsPoisoned($"Properties deserialization failed: {ex.Message}", timeProvider);
                 telemetry.RecordPoisoned();
                 await dbContext.SaveChangesAsync(cancellationToken);
+                continue;
+            }
+
+            var registration = handlerRegistry.GetByKey(status.HandlerKey);
+            if (registration == null)
+            {
+                logger.LogWarning(
+                    "Handler key '{HandlerKey}' is no longer registered. Poisoning status '{StatusId}'.",
+                    status.HandlerKey, status.Id);
+                status.MarkAsPoisoned(
+                    $"Handler key '{status.HandlerKey}' is not registered. The handler may have been removed or renamed.",
+                    timeProvider);
+                telemetry.RecordPoisoned();
+                await dbContext.SaveChangesAsync(cancellationToken);
+
+                await observers.NotifyAsync(new MessageActivity
+                {
+                    Stage = MessageStage.InboxPoisoned,
+                    Properties = props,
+                    SerializedBody = inboxMessage.Content,
+                    TransportName = inboxMessage.TransportName,
+                    Timestamp = timeProvider.GetUtcNow(),
+                }, logger);
+
                 continue;
             }
 
@@ -156,7 +168,7 @@ internal class InboxMessageProcessor<TDbContext>(
                 // the outer cancellationToken is NOT cancelled — only the timeout CTS is.
                 await handlerInvoker.InvokeAsync(
                     registration.HandlerType, message, props,
-                    cancellationToken, options.HandlerTimeout);
+                    cancellationToken, _options.HandlerTimeout);
 
                 status.MarkAsCompleted(timeProvider);
                 telemetry.RecordDelivered(success: true);
@@ -182,7 +194,7 @@ internal class InboxMessageProcessor<TDbContext>(
                 logger.LogWarning(ex,
                     "Inbox handler '{HandlerKey}' failed for message '{MessageId}', attempt {Attempt}",
                     status.HandlerKey, status.MessageId, status.ErrorCount + 1);
-                status.MarkAsFailed(ex.Message, timeProvider, options.MaxRetries, options.MaxRetryDelay);
+                status.MarkAsFailed(ex.Message, timeProvider, _options.MaxRetries, _options.MaxRetryDelay);
 
                 if (status.IsPoisoned)
                 {
