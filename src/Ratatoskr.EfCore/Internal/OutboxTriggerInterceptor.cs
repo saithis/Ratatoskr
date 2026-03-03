@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Ratatoskr.Core;
+using Ratatoskr.Local;
 
 namespace Ratatoskr.EfCore.Internal;
 
@@ -11,7 +12,9 @@ internal class OutboxTriggerInterceptor<TDbContext>(
     IMessagePropertiesEnricher enricher,
     IEnumerable<IMessageActivityObserver> observers,
     TimeProvider timeProvider,
-    ILogger<OutboxTriggerInterceptor<TDbContext>> logger)
+    ILogger<OutboxTriggerInterceptor<TDbContext>> logger,
+    InboxHandlerRegistry? inboxHandlerRegistry = null,
+    IProcessorTrigger? inboxProcessorTrigger = null)
     : SaveChangesInterceptor where TDbContext : DbContext, IOutboxDbContext
 {
     public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
@@ -42,12 +45,41 @@ internal class OutboxTriggerInterceptor<TDbContext>(
                 logger.LogError("No transports found for message '{MessageType}'", item.Message.GetType());
                 throw new InvalidOperationException($"No transports found for message '{item.Message.GetType()}'.");
             }
-            
+
             // Create one outbox entity per transport
             foreach (var transport in enrichedProperties.Transports)
             {
                 var outboxMessage = OutboxMessageEntity.Create(serializedMessage, enrichedProperties, timeProvider, transport);
                 context.Set<OutboxMessageEntity>().Add(outboxMessage);
+            }
+
+            // For local transport messages: write inbox entries in the same transaction
+            // so that inbox-managed handlers are guaranteed to be persisted when the
+            // outbox entry is created. This replaces the DurableLocalMessageSender approach.
+            if (enrichedProperties.Transports.Contains(LocalTransportConstants.TransportName)
+                && context is IInboxDbContext
+                && inboxHandlerRegistry is { IsEmpty: false })
+            {
+                var inboxHandlers = inboxHandlerRegistry.GetByMessageType(item.Message.GetType());
+                if (inboxHandlers.Count > 0)
+                {
+                    if (string.IsNullOrWhiteSpace(enrichedProperties.Id))
+                        throw new InvalidOperationException($"Inbox requires a non-empty message id for '{item.Message.GetType().FullName}'.");
+                    
+                    context.Set<InboxMessageEntity>().Add(
+                        InboxMessageEntity.Create(enrichedProperties.Id, LocalTransportConstants.TransportName,
+                            serializedMessage, enrichedProperties, timeProvider));
+
+                    foreach (var handler in inboxHandlers)
+                    {
+                        context.Set<InboxHandlerStatusEntity>().Add(
+                            InboxHandlerStatusEntity.Create(enrichedProperties.Id, handler.Key, timeProvider));
+                    }
+
+                    logger.LogDebug(
+                        "Created inbox entries for local message '{MessageId}' with {HandlerCount} handler(s) in outbox transaction",
+                        enrichedProperties.Id, inboxHandlers.Count);
+                }
             }
 
             // Only dequeue after successful serialization
@@ -80,6 +112,16 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         if (outboxMessages.Any(e => e.Entity.ProcessedAt == null))
         {
             await outboxProcessor.TriggerAsync(cancellationToken);
+        }
+
+        // Trigger inbox processor if inbox handler statuses were created in this transaction
+        if (inboxProcessorTrigger != null)
+        {
+            var inboxStatuses = eventData.Context?.ChangeTracker.Entries<InboxHandlerStatusEntity>() ?? [];
+            if (inboxStatuses.Any(e => e.Entity.CompletedAt == null))
+            {
+                await inboxProcessorTrigger.TriggerAsync(cancellationToken);
+            }
         }
 
         return result;

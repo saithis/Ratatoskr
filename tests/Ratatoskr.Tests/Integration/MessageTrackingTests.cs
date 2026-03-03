@@ -527,7 +527,7 @@ public class MessageTrackingTests(
             await bus.PublishDirectAsync(new TestEvent { Id = "inbox-queue-1", Data = "track inbox" });
         });
 
-        // Assert — InboxQueued stage emitted by InboxInterceptor/DurableLocalMessageSender
+        // Assert — InboxQueued stage emitted by InboxAcceptor
         var queued = await session.WaitForInboxQueued<TestEvent>(TimeSpan.FromSeconds(10));
         queued.Properties.Id.Should().NotBeNullOrEmpty();
         queued.TransportName.Should().Be("local");

@@ -1,9 +1,11 @@
-namespace Ratatoskr.Core;
+using Ratatoskr.Core;
+
+namespace Ratatoskr.EfCore.Internal;
 
 /// <summary>
 /// Describes a handler registered for inbox-based durable delivery.
 /// </summary>
-public record InboxHandlerRegistration(
+internal record InboxHandlerRegistration(
     /// <summary>Stable user-assigned key, used as the deduplication and retry key.</summary>
     string Key,
     /// <summary>CLR type of the message this handler processes.</summary>

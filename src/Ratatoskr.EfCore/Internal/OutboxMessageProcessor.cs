@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Ratatoskr.Core;
 
 namespace Ratatoskr.EfCore.Internal;
@@ -14,11 +15,12 @@ internal class OutboxMessageProcessor<TDbContext>(
     IEnumerable<IMessageSender> senders,
     OutboxTelemetry telemetry,
     TimeProvider timeProvider,
-    OutboxOptions options,
+    IOptions<OutboxOptions> options,
     IEnumerable<IMessageActivityObserver> observers,
-    ILogger logger)
+    ILogger<OutboxMessageProcessor<TDbContext>> logger)
     where TDbContext : DbContext, IOutboxDbContext
 {
+    private readonly OutboxOptions _options = options.Value;
     private Dictionary<string, IMessageSender> _senderMap = senders.ToDictionary(x => x.TransportName);
 
     /// <summary>
@@ -41,13 +43,13 @@ internal class OutboxMessageProcessor<TDbContext>(
         // Add stuck message detection if needed (only for production background processing)
         if (includeStuckMessageDetection)
         {
-            var stuckThreshold = now - options.StuckMessageThreshold;
+            var stuckThreshold = now - _options.StuckMessageThreshold;
             query = query.Where(x => x.ProcessingStartedAt == null || x.ProcessingStartedAt < stuckThreshold);
         }
 
         var messages = await query
             .OrderBy(x => x.CreatedAt)
-            .Take(options.BatchSize)
+            .Take(_options.BatchSize)
             .ToArrayAsync(cancellationToken);
 
         telemetry.RecordBatchSize(messages.Length);
@@ -85,10 +87,10 @@ internal class OutboxMessageProcessor<TDbContext>(
                                    ?? throw new InvalidOperationException($"No sender found for transport '{message.TransportName}'");
 
                 // When SendTimeout is configured, wrap in a linked CTS that fires after the timeout.
-                if (options.SendTimeout.HasValue)
+                if (_options.SendTimeout.HasValue)
                 {
                     using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                    timeoutCts.CancelAfter(options.SendTimeout.Value);
+                    timeoutCts.CancelAfter(_options.SendTimeout.Value);
                     await targetSender.SendAsync(message.Content, props, timeoutCts.Token);
                 }
                 else
@@ -105,7 +107,7 @@ internal class OutboxMessageProcessor<TDbContext>(
                 logger.LogWarning(e, "Failed to send message '{Id}', attempt {Attempt}",
                     message.Id, message.ErrorCount + 1);
                 message.PublishFailed(e.Message, timeProvider,
-                    options.MaxRetries, options.MaxRetryDelay);
+                    _options.MaxRetries, _options.MaxRetryDelay);
                 telemetry.RecordProcessed(success: false);
 
                 if (message.IsPoisoned)

@@ -368,6 +368,7 @@ public class MessageDispatcherTests
         var dispatcher = new MessageDispatcher(
             channelRegistry,
             deserializer,
+            new HandlerInvoker(scopeFactory),
             scopeFactory,
             TimeProvider.System,
             [],

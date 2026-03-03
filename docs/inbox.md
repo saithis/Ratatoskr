@@ -160,7 +160,7 @@ bus.AddHandler<OrderPlaced, AuditLogHandler>();                                 
 
 - **Non-inbox handlers** are called synchronously during message dispatch, each in its own DI scope.
 - **Inbox-managed handlers** are queued to the database and delivered by `InboxProcessor`.
-- Each handler and the inbox interceptor run in **separate DI scopes**, so a failure or `ChangeTracker.Clear()` in one scope cannot affect another.
+- Each handler and the inbox acceptor run in **separate DI scopes**, so a failure or `ChangeTracker.Clear()` in one scope cannot affect another.
 
 > **Recommendation**: avoid mixing on the same consume channel where possible. If a non-inbox handler fails, the transport may redeliver the message; inbox handlers will deduplicate correctly, but non-inbox handlers will run again.
 
@@ -176,7 +176,7 @@ Deduplication is per **(message ID, handler key)**. If the same CloudEvents `id`
 
 ## RabbitMQ Integration
 
-When using RabbitMQ, the `InboxInterceptor` is called by `MessageDispatcher` before handler dispatch. The interceptor creates its own DI scope, so its `DbContext` is fully isolated from handler scopes. The message and handler statuses are persisted to the database, the broker message is acknowledged, and `InboxProcessor` delivers to each handler independently. Handler failures no longer affect broker acknowledgement.
+When using RabbitMQ, the `RabbitMqConsumer` delegates to `MessageRouter`, which calls `InboxAcceptor` before dispatching the message through `MessageDispatcher`. The consumer itself has no inbox awareness. The acceptor creates its own DI scope, so its `DbContext` is fully isolated from handler scopes. The message and handler statuses are persisted to the database, then the dispatcher invokes only non-inbox handlers. If all handlers are inbox-managed, the router treats this as success. `InboxProcessor` delivers inbox-managed handlers independently — failures in inbox-managed handlers no longer affect broker acknowledgement.
 
 ## Observability
 

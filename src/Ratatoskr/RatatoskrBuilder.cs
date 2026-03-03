@@ -13,7 +13,6 @@ public class RatatoskrBuilder
     internal CloudEventsOptions CloudEventsOptions { get; } = new();
     internal AsyncApiOptions AsyncApiOptions { get; } = new();
     internal ChannelRegistry ChannelRegistry { get; } = new();
-    internal InboxHandlerRegistry InboxHandlerRegistry { get; } = new();
 
     private readonly List<Action<ChannelRegistry>> _validators = new();
     private readonly List<Action<IServiceCollection>> _deferredServiceActions = new();

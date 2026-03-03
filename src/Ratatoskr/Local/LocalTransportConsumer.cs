@@ -8,7 +8,7 @@ namespace Ratatoskr.Local;
 
 internal class LocalTransportConsumer(
     Channel<LocalMessage> messageChannel,
-    MessageDispatcher dispatcher,
+    MessageRouter messageRouter,
     LocalTelemetry telemetry,
     TimeProvider timeProvider,
     LocalTransportOptions options,
@@ -58,8 +58,8 @@ internal class LocalTransportConsumer(
         using var activity = telemetry.StartConsumeActivity(message.Properties, message.Content.Length);
 
         var startTimestamp = Stopwatch.GetTimestamp();
-        var result = await dispatcher.DispatchAsync(
-            message.Content, message.Properties, cancellationToken);
+        var result = await messageRouter.RouteAsync(
+            message.Content, message.Properties, LocalTransportConstants.TransportName, cancellationToken);
 
         var errorType = result switch
         {

@@ -6,72 +6,69 @@ using Ratatoskr.Core;
 namespace Ratatoskr.EfCore.Internal;
 
 /// <summary>
-/// Shared inbox persistence logic used by both <see cref="DurableLocalMessageSender{TDbContext}"/>
-/// and <see cref="InboxInterceptor{TDbContext}"/>. Extracts the duplicated message/handler-status
-/// upsert logic, observer notification, and processing trigger into a single place.
+/// Single entry point for inbox persistence. Called by <see cref="InboxRouteInterceptor{TDbContext}"/>
+/// to persist inbox-managed handler statuses to the database before message dispatch.
 /// </summary>
-internal static class InboxPersistence
+internal class InboxAcceptor<TDbContext>(
+    IServiceScopeFactory scopeFactory,
+    InboxHandlerRegistry inboxHandlerRegistry,
+    InboxProcessor<TDbContext> inboxProcessor,
+    TimeProvider timeProvider,
+    IEnumerable<IMessageActivityObserver> observers,
+    ILogger<InboxAcceptor<TDbContext>> logger)
+    where TDbContext : DbContext, IInboxDbContext
 {
-    /// <summary>
-    /// Persists an inbox message and its handler statuses to the database.
-    /// On success, notifies observers with <see cref="MessageStage.InboxQueued"/> and triggers
-    /// background processing via <paramref name="triggerProcessing"/>.
-    /// Uses unique constraints as the real deduplication mechanism; the best-effort
-    /// AnyAsync check is an optimization to avoid unnecessary inserts.
-    /// </summary>
-    /// <returns>True if new rows were inserted; false if a concurrent instance already persisted them.</returns>
-    public static async Task<bool> PersistAsync<TDbContext>(
-        IServiceScopeFactory scopeFactory,
-        string messageId,
-        string transportName,
+    public async Task<InboxAcceptOutcome> AcceptAsync(
         byte[] body,
         MessageProperties properties,
-        IReadOnlyList<InboxHandlerRegistration> handlers,
-        TimeProvider timeProvider,
-        IEnumerable<IMessageActivityObserver> observers,
-        Func<CancellationToken, ValueTask> triggerProcessing,
-        ILogger logger,
+        string transportName,
         CancellationToken cancellationToken)
-        where TDbContext : DbContext, IInboxDbContext
     {
-        if (string.IsNullOrWhiteSpace(messageId))
+        var inboxHandlers = properties.Type != null
+            ? inboxHandlerRegistry.GetByWireTypeName(properties.Type)
+            : [];
+
+        if (inboxHandlers.Count == 0)
+            return InboxAcceptOutcome.NoHandlers;
+
+        if (string.IsNullOrWhiteSpace(properties.Id))
         {
             logger.LogError("Cannot persist to inbox: message has no Id. Type: '{Type}'", properties.Type);
             throw new InvalidOperationException("Messages must have a non-empty Id for inbox deduplication.");
         }
         
-        var inboxMessage = InboxMessageEntity.Create(messageId, transportName, body, properties, timeProvider);
+        var inboxMessage = InboxMessageEntity.Create(properties.Id, transportName, body, properties, timeProvider);
 
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<TDbContext>();
         // Best-effort optimization: skip inserting the message if it already exists.
         // On concurrent delivery the unique constraint is the real dedup mechanism.
         var messageExists = await dbContext.Set<InboxMessageEntity>()
-            .AnyAsync(m => m.Id == messageId, cancellationToken);
+            .AnyAsync(m => m.Id == properties.Id, cancellationToken);
 
         if (!messageExists)
         {
             dbContext.Set<InboxMessageEntity>().Add(inboxMessage);
-            logger.LogDebug("Accepted new inbox message '{MessageId}' of type '{Type}'", messageId, properties.Type);
+            logger.LogDebug("Accepted new inbox message '{MessageId}' of type '{Type}'", properties.Id, properties.Type);
         }
         else
         {
-            logger.LogDebug("Inbox message '{MessageId}' already exists (duplicate delivery), updating handler statuses only", messageId);
+            logger.LogDebug("Inbox message '{MessageId}' already exists (duplicate delivery), updating handler statuses only", properties.Id);
         }
 
         // Insert InboxHandlerStatuses for handlers not yet present (dedup per handler key).
         // On concurrent delivery, the unique constraint on (MessageId, HandlerKey) prevents duplicates.
         var existingKeys = await dbContext.Set<InboxHandlerStatusEntity>()
-            .Where(s => s.MessageId == messageId)
+            .Where(s => s.MessageId == properties.Id)
             .Select(s => s.HandlerKey)
             .ToHashSetAsync(cancellationToken);
 
-        foreach (var handler in handlers.Where(h => !existingKeys.Contains(h.Key)))
+        foreach (var handler in inboxHandlers.Where(h => !existingKeys.Contains(h.Key)))
         {
             dbContext.Set<InboxHandlerStatusEntity>().Add(
-                InboxHandlerStatusEntity.Create(messageId, handler.Key, timeProvider));
+                InboxHandlerStatusEntity.Create(properties.Id, handler.Key, timeProvider));
             logger.LogDebug("Created inbox handler status for key '{HandlerKey}' on message '{MessageId}'",
-                handler.Key, messageId);
+                handler.Key, properties.Id);
         }
 
         try
@@ -87,12 +84,12 @@ internal static class InboxPersistence
             dbContext.ChangeTracker.Clear();
             logger.LogDebug(
                 "Inbox entries for message '{MessageId}' were already inserted by a concurrent instance (unique constraint). Ignoring.",
-                messageId);
-            return false;
+                properties.Id);
+            return InboxAcceptOutcome.Duplicate;
         }
 
         logger.LogDebug("Persisted inbox entries for message '{MessageId}', {HandlerCount} handler(s)",
-            messageId, handlers.Count);
+            properties.Id, inboxHandlers.Count);
 
         // Notify observers that the message has been accepted into the inbox
         await observers.NotifyAsync(new MessageActivity
@@ -104,8 +101,23 @@ internal static class InboxPersistence
             Timestamp = timeProvider.GetUtcNow(),
         }, logger);
 
-        await triggerProcessing(cancellationToken);
+        await inboxProcessor.TriggerAsync(cancellationToken);
 
-        return true;
+        return InboxAcceptOutcome.Accepted;
     }
+}
+
+/// <summary>
+/// Outcome of <see cref="InboxAcceptor{TDbContext}.AcceptAsync"/>.
+/// </summary>
+internal enum InboxAcceptOutcome
+{
+    /// <summary>No inbox-managed handlers exist for this message type.</summary>
+    NoHandlers,
+
+    /// <summary>Inbox entries were successfully persisted for the first time.</summary>
+    Accepted,
+
+    /// <summary>A concurrent instance already persisted the inbox entries (unique constraint race).</summary>
+    Duplicate,
 }
