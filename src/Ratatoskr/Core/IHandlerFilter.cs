@@ -8,7 +8,8 @@ namespace Ratatoskr.Core;
 public interface IHandlerFilter
 {
     /// <summary>
-    /// Returns true if the given handler type should be skipped during inline dispatch.
+    /// Returns true if the given handler type should be skipped during inline dispatch
+    /// for the specified message type.
     /// </summary>
-    bool ShouldSkip(Type handlerType);
+    bool ShouldSkip(Type handlerType, Type messageType);
 }

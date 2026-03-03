@@ -8,6 +8,6 @@ namespace Ratatoskr.EfCore.Internal;
 /// </summary>
 internal class InboxHandlerFilter(InboxHandlerRegistry registry) : IHandlerFilter
 {
-    public bool ShouldSkip(Type handlerType) =>
-        registry.GetByHandlerType(handlerType) != null;
+    public bool ShouldSkip(Type handlerType, Type messageType) =>
+        registry.GetByHandlerType(handlerType) is { MessageType: var mt } && mt == messageType;
 }

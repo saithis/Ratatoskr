@@ -104,7 +104,7 @@ public class MessageDispatcher(
         var invoked = 0;
         foreach (var handlerType in handlerTypes)
         {
-            if (handlerFilter?.ShouldSkip(handlerType) == true)
+            if (handlerFilter?.ShouldSkip(handlerType, messageType) == true)
                 continue;
 
             try
