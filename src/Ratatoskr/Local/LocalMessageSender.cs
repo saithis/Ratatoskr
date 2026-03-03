@@ -7,6 +7,7 @@ namespace Ratatoskr.Local;
 
 internal class LocalMessageSender(
     Channel<LocalMessage> messageChannel,
+    ChannelRegistry channelRegistry,
     LocalTelemetry telemetry,
     TimeProvider timeProvider,
     IEnumerable<IMessageActivityObserver> observers,
@@ -24,7 +25,15 @@ internal class LocalMessageSender(
 
         try
         {
-            await messageChannel.Writer.WriteAsync(new LocalMessage(content, props), cancellationToken);
+            var consumeChannels = props.Type != null
+                ? channelRegistry.FindConsumeChannelsForType(props.Type)
+                : [];
+
+            foreach (var (channel, _) in consumeChannels)
+            {
+                await messageChannel.Writer.WriteAsync(
+                    new LocalMessage(content, props, channel.ChannelName), cancellationToken);
+            }
         }
         catch (Exception ex)
         {

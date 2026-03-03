@@ -22,7 +22,7 @@ public class MessageDispatcher(
     /// <summary>
     /// Dispatches a message to all registered handlers, each in its own DI scope.
     /// </summary>
-    public async Task<DispatchResult> DispatchAsync(byte[] body, MessageProperties properties, CancellationToken cancellationToken, string? channelName = null, string? transportName = null)
+    public async Task<DispatchResult> DispatchAsync(byte[] body, MessageProperties properties, CancellationToken cancellationToken, string channelName, string transportName)
     {
         if (properties.Type == null)
         {
@@ -34,17 +34,14 @@ public class MessageDispatcher(
         Type? messageType = null;
 
         // Try ChannelRegistry first (Topology based)
-        if (channelName != null)
+        var channel = channelRegistry.GetConsumeChannel(channelName);
+        var msgReg = channel?.Messages.FirstOrDefault(m => m.MessageTypeName == properties.Type);
+        if (msgReg != null)
         {
-            var channel = channelRegistry.GetConsumeChannel(channelName);
-            var msgReg = channel?.Messages.FirstOrDefault(m => m.MessageTypeName == properties.Type);
-            if (msgReg != null)
-            {
-                messageType = msgReg.MessageType;
-            }
+            messageType = msgReg.MessageType;
         }
 
-        // Try global lookup in ChannelRegistry if not found in channel (or channel not provided)
+        // Try global lookup in ChannelRegistry if not found in channel
         if (messageType == null)
         {
              // Find any consumer channel that handles this type

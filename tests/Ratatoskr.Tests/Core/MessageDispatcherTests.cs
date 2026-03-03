@@ -38,7 +38,7 @@ public class MessageDispatcherTests
         };
         
         // Act
-        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None);
+        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "local");
         
         // Assert
         result.Should().Be(DispatchResult.Success);
@@ -77,7 +77,7 @@ public class MessageDispatcherTests
         };
         
         // Act
-        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None);
+        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "local");
         
         // Assert
         result.Should().Be(DispatchResult.Success);
@@ -102,7 +102,7 @@ public class MessageDispatcherTests
         };
         
         // Act
-        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None);
+        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "local");
         
         // Assert
         result.Should().Be(DispatchResult.NoHandlers);
@@ -133,7 +133,7 @@ public class MessageDispatcherTests
         };
         
         // Act
-        var result = await dispatcher.DispatchAsync(invalidBody, context, CancellationToken.None);
+        var result = await dispatcher.DispatchAsync(invalidBody, context, CancellationToken.None, "test", "local");
         
         // Assert
         result.Should().Be(DispatchResult.PermanentError);
@@ -166,7 +166,7 @@ public class MessageDispatcherTests
         };
         
         // Act
-        var result =  await dispatcher.DispatchAsync(body, context, CancellationToken.None);
+        var result =  await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "local");
         
         // Assert
         result.Should().Be(DispatchResult.RecoverableError);
@@ -202,7 +202,7 @@ public class MessageDispatcherTests
         };
         
         // Act
-        var result =  await dispatcher.DispatchAsync(body, context, CancellationToken.None);
+        var result =  await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "local");
         
         // Assert
         result.Should().Be(DispatchResult.RecoverableError);
@@ -236,8 +236,8 @@ public class MessageDispatcherTests
         };
 
         // Act - Dispatch twice
-        await dispatcher.DispatchAsync(body, context, CancellationToken.None);
-        await dispatcher.DispatchAsync(body, context, CancellationToken.None);
+        await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "local");
+        await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "local");
 
         // Assert - Each dispatch creates a new scope, so scoped service is new each time
         collector.ServiceIds.Should().HaveCount(2);
@@ -273,7 +273,7 @@ public class MessageDispatcherTests
         };
         
         // Act
-        await dispatcher.DispatchAsync(body, context, CancellationToken.None);
+        await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "local");
         
         // Assert
         handler.CapturedContext.Should().NotBeNull();
@@ -313,7 +313,7 @@ public class MessageDispatcherTests
         cts.Cancel();
 
         // Act
-        var result = await dispatcher.DispatchAsync(body, context, cts.Token);
+        var result = await dispatcher.DispatchAsync(body, context, cts.Token, "test", "local");
 
         // Assert - OperationCanceledException from handler is treated as RecoverableError
         result.Should().Be(DispatchResult.RecoverableError);
@@ -343,7 +343,7 @@ public class MessageDispatcherTests
         };
 
         // Act
-        var result = await dispatcher.DispatchAsync(null!, context, CancellationToken.None);
+        var result = await dispatcher.DispatchAsync(null!, context, CancellationToken.None, "test", "local");
 
         // Assert - null body causes deserialization failure → PermanentError
         result.Should().Be(DispatchResult.PermanentError);

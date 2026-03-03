@@ -17,7 +17,7 @@ public class MessageRouter(
         MessageProperties properties,
         string transportName,
         CancellationToken cancellationToken,
-        string? channelName = null)
+        string channelName)
     {
         var handlersAccepted = false;
         if (interceptor != null)

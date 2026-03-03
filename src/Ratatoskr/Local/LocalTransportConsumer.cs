@@ -59,7 +59,7 @@ internal class LocalTransportConsumer(
 
         var startTimestamp = Stopwatch.GetTimestamp();
         var result = await messageRouter.RouteAsync(
-            message.Content, message.Properties, LocalTransportConstants.TransportName, cancellationToken);
+            message.Content, message.Properties, LocalTransportConstants.TransportName, cancellationToken, message.ChannelName);
 
         var errorType = result switch
         {
