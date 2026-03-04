@@ -15,13 +15,13 @@ internal class InboxCleanupProcessor<TDbContext>(
     IServiceScopeFactory serviceScopeFactory,
     IDistributedLockProvider distributedLockProvider,
     TimeProvider timeProvider,
-    InboxOptionsRegistry optionsRegistry,
+    InboxDbContextRegistry dbContextRegistry,
     InboxTelemetry telemetry,
     ILogger<InboxCleanupProcessor<TDbContext>> logger)
     : PollingBackgroundService(distributedLockProvider, timeProvider, logger)
     where TDbContext : DbContext, IInboxDbContext
 {
-    private readonly InboxOptions _options = optionsRegistry.Get(typeof(TDbContext));
+    private readonly InboxOptions _options = dbContextRegistry.GetOptions(typeof(TDbContext));
 
     protected override string ProcessorName => $"InboxCleanupProcessor<{typeof(TDbContext).Name}>";
     protected override TimeSpan PollingInterval => _options.CleanupInterval;

@@ -146,7 +146,9 @@ For tests that need fine-grained control (retry/poison scenarios), register `Out
 
 ```csharp
 services.AddSingleton<OutboxProcessor<TestDbContext>>();
-services.AddSingleton(Options.Create(new OutboxOptions()));
+var registry = new OutboxOptionsRegistry();
+registry.Register(typeof(TestDbContext), new OutboxOptions());
+services.AddSingleton(registry);
 services.AddDbContext<TestDbContext>((sp, options) =>
 {
     options.UseNpgsql(PostgresConnectionString);

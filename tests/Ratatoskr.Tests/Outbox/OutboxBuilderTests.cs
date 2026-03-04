@@ -1,5 +1,4 @@
 using AwesomeAssertions;
-using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.EfCore;
 using Ratatoskr.Tests.Fixtures;
 using TUnit.Core;
@@ -8,8 +7,7 @@ namespace Ratatoskr.Tests.Outbox;
 
 public class OutboxBuilderTests
 {
-    private static OutboxBuilder<TestDbContext> CreateBuilder() =>
-        new(new ServiceCollection());
+    private static OutboxBuilder<TestDbContext> CreateBuilder() => new();
 
     [Test]
     public void DefaultOptions_HaveSensibleDefaults()

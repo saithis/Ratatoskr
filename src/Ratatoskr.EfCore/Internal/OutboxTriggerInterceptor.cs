@@ -14,10 +14,9 @@ internal class OutboxTriggerInterceptor<TDbContext>(
     IEnumerable<IMessageActivityObserver> observers,
     TimeProvider timeProvider,
     ILogger<OutboxTriggerInterceptor<TDbContext>> logger,
-    InboxMessageRegistry? inboxMessageRegistry = null,
     InboxHandlerRegistry? inboxHandlerRegistry = null,
-    InboxChannelMap? inboxChannelMap = null,
-    InboxProcessorTriggerRegistry? inboxProcessorTriggerRegistry = null)
+    InboxRoutingTable? inboxRoutingTable = null,
+    InboxDbContextRegistry? inboxDbContextRegistry = null)
     : SaveChangesInterceptor where TDbContext : DbContext, IOutboxDbContext
 {
     public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
@@ -61,20 +60,19 @@ internal class OutboxTriggerInterceptor<TDbContext>(
             // This guarantees crash-safe inbox acceptance.
             if (enrichedProperties.Transports.Contains(LocalTransportConstants.TransportName)
                 && context is IInboxDbContext
-                && inboxMessageRegistry is { IsEmpty: false }
+                && inboxRoutingTable is { IsEmpty: false }
                 && inboxHandlerRegistry is { IsEmpty: false }
-                && inboxChannelMap != null
                 && enrichedProperties.Type != null)
             {
                 // Find consume channels that handle this message type and have inbox enabled
                 foreach (var (channel, _) in channelRegistry.FindConsumeChannelsForType(enrichedProperties.Type))
                 {
-                    if (!inboxMessageRegistry.IsInboxManaged(channel.ChannelName, enrichedProperties.Type))
+                    if (!inboxRoutingTable.IsInboxManaged(channel.ChannelName, enrichedProperties.Type))
                         continue;
 
                     // Only write inbox entries if the inbox DbContext matches the outbox DbContext.
                     // When they differ, the consumer-side interceptor handles inbox acceptance.
-                    var inboxDbContextType = inboxChannelMap.GetDbContextType(channel.ChannelName);
+                    var inboxDbContextType = inboxRoutingTable.GetDbContextType(channel.ChannelName);
                     if (inboxDbContextType != typeof(TDbContext))
                         continue;
 
@@ -136,12 +134,12 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         // Trigger inbox processor if inbox handler statuses were created in this transaction.
         // Since we only write inbox entries when the outbox DbContext matches the inbox DbContext,
         // the correct trigger is for our own DbContext type.
-        if (inboxProcessorTriggerRegistry != null)
+        if (inboxDbContextRegistry != null)
         {
             var inboxStatuses = eventData.Context?.ChangeTracker.Entries<InboxHandlerStatusEntity>() ?? [];
             if (inboxStatuses.Any(e => e.Entity.CompletedAt == null))
             {
-                var trigger = inboxProcessorTriggerRegistry.Get(typeof(TDbContext));
+                var trigger = inboxDbContextRegistry.GetTrigger(typeof(TDbContext));
                 if (trigger != null)
                     await trigger.TriggerAsync(cancellationToken);
             }

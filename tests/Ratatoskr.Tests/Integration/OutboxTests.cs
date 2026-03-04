@@ -3,7 +3,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Options;
+
 using Microsoft.Extensions.Time.Testing;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
@@ -189,7 +189,9 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
-            services.AddSingleton(Options.Create(new OutboxOptions()));
+            var registry = new OutboxOptionsRegistry();
+            registry.Register(typeof(TestDbContext), new OutboxOptions());
+            services.AddSingleton(registry);
             services.AddDbContext<TestDbContext>((sp, options) =>
             {
                 options.UseNpgsql(PostgresConnectionString);
@@ -289,7 +291,9 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
-            services.AddSingleton(Options.Create(new OutboxOptions { MaxRetries = 3 }));
+            var registry = new OutboxOptionsRegistry();
+            registry.Register(typeof(TestDbContext), new OutboxOptions { MaxRetries = 3 });
+            services.AddSingleton(registry);
             services.AddDbContext<TestDbContext>((sp, options) =>
             {
                 options.UseNpgsql(PostgresConnectionString);
@@ -586,7 +590,9 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
-            services.AddSingleton(Options.Create(new OutboxOptions()));
+            var registry = new OutboxOptionsRegistry();
+            registry.Register(typeof(TestDbContext), new OutboxOptions());
+            services.AddSingleton(registry);
             services.AddDbContext<TestDbContext>((sp, options) =>
             {
                 options.UseNpgsql(PostgresConnectionString);
@@ -648,7 +654,9 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
-            services.AddSingleton(Options.Create(new OutboxOptions { SendTimeout = TimeSpan.FromMilliseconds(100) }));
+            var registry = new OutboxOptionsRegistry();
+            registry.Register(typeof(TestDbContext), new OutboxOptions { SendTimeout = TimeSpan.FromMilliseconds(100) });
+            services.AddSingleton(registry);
             services.AddDbContext<TestDbContext>((sp, options) =>
             {
                 options.UseNpgsql(PostgresConnectionString);
@@ -706,10 +714,12 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
-            services.AddSingleton(Options.Create(new OutboxOptions
+            var registry = new OutboxOptionsRegistry();
+            registry.Register(typeof(TestDbContext), new OutboxOptions
             {
                 StuckMessageThreshold = TimeSpan.FromMinutes(5)
-            }));
+            });
+            services.AddSingleton(registry);
             services.AddDbContext<TestDbContext>((sp, options) =>
             {
                 options.UseNpgsql(PostgresConnectionString);

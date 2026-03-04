@@ -9,12 +9,12 @@ internal class InboxProcessor<TDbContext>(
     IServiceScopeFactory serviceScopeFactory,
     IDistributedLockProvider distributedLockProvider,
     TimeProvider timeProvider,
-    InboxOptionsRegistry optionsRegistry,
+    InboxDbContextRegistry dbContextRegistry,
     ILogger<InboxProcessor<TDbContext>> logger)
     : PollingBackgroundService(distributedLockProvider, timeProvider, logger), IProcessorTrigger
     where TDbContext : DbContext, IInboxDbContext
 {
-    private readonly InboxOptions _options = optionsRegistry.Get(typeof(TDbContext));
+    private readonly InboxOptions _options = dbContextRegistry.GetOptions(typeof(TDbContext));
 
     protected override string ProcessorName => $"InboxProcessor<{typeof(TDbContext).Name}>";
     protected override TimeSpan PollingInterval => _options.PollingInterval;

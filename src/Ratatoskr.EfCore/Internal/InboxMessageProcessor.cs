@@ -16,13 +16,13 @@ internal class InboxMessageProcessor<TDbContext>(
     InboxHandlerRegistry handlerRegistry,
     InboxTelemetry telemetry,
     TimeProvider timeProvider,
-    InboxOptionsRegistry optionsRegistry,
+    InboxDbContextRegistry dbContextRegistry,
     IEnumerable<IMessageActivityObserver> observers,
     IMessageSerializer messageSerializer,
     ILogger<InboxMessageProcessor<TDbContext>> logger)
     where TDbContext : DbContext, IInboxDbContext
 {
-    private readonly InboxOptions _options = optionsRegistry.Get(typeof(TDbContext));
+    private readonly InboxOptions _options = dbContextRegistry.GetOptions(typeof(TDbContext));
     /// <summary>
     /// Processes a single batch of pending handler statuses.
     /// Returns the number of handler statuses picked up in the batch (0 means no work found).

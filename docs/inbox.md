@@ -76,6 +76,7 @@ services.AddRatatoskr(bus =>
     // Consume channel — enable inbox per message type
     bus.AddEventConsumeChannel("orders", c =>
     {
+        c.UseInbox<AppDbContext>();
         c.Consumes<OrderPlaced>(m => m.UseInbox());     // inbox-managed (all handlers)
         c.Consumes<OrderUpdated>();                       // fire-and-forget (all handlers)
     });
@@ -125,9 +126,9 @@ services.AddRatatoskr(bus =>
 
 Each DbContext type gets its own `InboxProcessor` background service with an independent distributed lock (auto-named `InboxProcessor-{DbContextTypeName}`).
 
-If `UseEfCoreInbox<TDbContext>()` is called globally but `UseInbox<TDbContext>()` is **not** called on a channel, the globally registered DbContext is used as a default for that channel. If `UseInbox<TDbContext>()` is used on a channel without calling `UseEfCoreInbox<TDbContext>()`, the infrastructure is auto-registered with default options.
+Every consume channel that has inbox-managed messages **must** have an explicit `UseInbox<TDbContext>()` call. If `UseInbox<TDbContext>()` is used on a channel without calling `UseEfCoreInbox<TDbContext>()`, the infrastructure is auto-registered with default options.
 
-> **Validation**: At startup, the system validates that every channel with inbox-managed messages has a DbContext mapping — either from `UseInbox<TDbContext>()` on the channel or from a global `UseEfCoreInbox<TDbContext>()` default.
+> **Validation**: At startup, the system validates that every channel with inbox-managed messages has an explicit `UseInbox<TDbContext>()` on the channel. Channels without this mapping will cause a startup error.
 
 ### 3. Enable inbox per message type
 
@@ -135,8 +136,9 @@ Inbox is configured at the **message level** on consume channels. When `UseInbox
 
 ```csharp
 // Inbox-managed: all handlers go through durable inbox delivery
-bus.AddEventConsumeChannel("orders", c =>
-    c.Consumes<OrderPlaced>(m => m.UseInbox()));
+bus.AddEventConsumeChannel("orders", c => c
+    .UseInbox<AppDbContext>()
+    .Consumes<OrderPlaced>(m => m.UseInbox()));
 
 // Fire-and-forget: synchronous dispatch, no deduplication
 bus.AddEventConsumeChannel("notifications", c =>
@@ -217,6 +219,7 @@ You **can** mix inbox-managed and fire-and-forget message types on the same chan
 ```csharp
 bus.AddEventConsumeChannel("orders", c =>
 {
+    c.UseInbox<AppDbContext>();
     c.Consumes<OrderPlaced>(m => m.UseInbox());  // durable, per-handler retry
     c.Consumes<OrderUpdated>();                    // fire-and-forget, direct dispatch
 });
@@ -269,8 +272,9 @@ Use `WithoutBackgroundProcessing()` to disable the `InboxProcessor` background s
 services.AddRatatoskr(bus =>
 {
     bus.UseLocalTransport();
-    bus.AddEventConsumeChannel("orders", c =>
-        c.Consumes<OrderPlaced>(m => m.UseInbox()));
+    bus.AddEventConsumeChannel("orders", c => c
+        .UseInbox<AppDbContext>()
+        .Consumes<OrderPlaced>(m => m.UseInbox()));
     bus.AddHandler<OrderPlaced, FulfillmentHandler>("fulfillment");
     bus.UseEfCoreInbox<AppDbContext>(inbox => inbox.WithoutBackgroundProcessing());
 });

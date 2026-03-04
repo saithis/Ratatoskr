@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,25 +20,20 @@ public static class InboxPublicApiExtensions
     /// <summary>
     /// Build-time state for inbox configuration, shared across all
     /// <c>UseEfCoreInbox</c> and <c>UseInbox</c> calls on the same builder.
-    /// Uses <see cref="ConditionalWeakTable{TKey,TValue}"/> to avoid leaking memory.
+    /// Stored in the builder's extension bag via <see cref="RatatoskrBuilder.GetOrSetExtension{T}"/>.
     /// </summary>
-    private static readonly ConditionalWeakTable<RatatoskrBuilder, InboxBuildTimeState> s_state = new();
-
     private class InboxBuildTimeState
     {
         public InboxHandlerRegistry HandlerRegistry { get; } = new();
-        public InboxMessageRegistry MessageRegistry { get; } = new();
-        public InboxChannelMap ChannelMap { get; } = new();
-        public InboxOptionsRegistry OptionsRegistry { get; } = new();
-        public InboxProcessorTriggerRegistry TriggerRegistry { get; } = new();
+        public InboxRoutingTable RoutingTable { get; } = new();
+        public InboxDbContextRegistry DbContextRegistry { get; } = new();
         public HashSet<Type> RegisteredDbContextTypes { get; } = new();
         public Dictionary<Type, bool> RegisterBackgroundService { get; } = new();
-        public Type? DefaultDbContextType { get; set; }
         public bool SharedRegistrationDone { get; set; }
     }
 
     private static InboxBuildTimeState GetOrCreateState(RatatoskrBuilder builder) =>
-        s_state.GetOrCreateValue(builder);
+        builder.GetOrSetExtension(() => new InboxBuildTimeState());
 
     extension(RatatoskrBuilder builder)
     {
@@ -60,17 +54,21 @@ public static class InboxPublicApiExtensions
         public RatatoskrBuilder UseEfCoreInbox<TDbContext>(Action<InboxBuilder<TDbContext>>? configure)
             where TDbContext : DbContext, IInboxDbContext
         {
+            var state = GetOrCreateState(builder);
+
+            if (state.DbContextRegistry.ContainsOptions(typeof(TDbContext)))
+                throw new InvalidOperationException(
+                    $"UseEfCoreInbox<{typeof(TDbContext).Name}>() has already been called. " +
+                    $"Each DbContext type can only be registered once for the inbox.");
+
             var inboxBuilder = new InboxBuilder<TDbContext>();
             configure?.Invoke(inboxBuilder);
-
-            var state = GetOrCreateState(builder);
 
             // Set lock name per DbContext type if still the default
             if (inboxBuilder.Options.LockName == "InboxProcessor")
                 inboxBuilder.Options.LockName = $"InboxProcessor-{typeof(TDbContext).Name}";
 
-            state.OptionsRegistry.Register(typeof(TDbContext), inboxBuilder.Options);
-            state.DefaultDbContextType ??= typeof(TDbContext);
+            state.DbContextRegistry.RegisterOptions(typeof(TDbContext), inboxBuilder.Options);
             state.RegisterBackgroundService[typeof(TDbContext)] = inboxBuilder.RegisterBackgroundService;
 
             // Register per-DbContext infrastructure (idempotent per type)
@@ -128,7 +126,7 @@ public static class InboxPublicApiExtensions
         builder.Services.AddSingleton(sp =>
         {
             var processor = ActivatorUtilities.CreateInstance<InboxProcessor<TDbContext>>(sp);
-            sp.GetRequiredService<InboxProcessorTriggerRegistry>().Register(typeof(TDbContext), processor);
+            sp.GetRequiredService<InboxDbContextRegistry>().RegisterTrigger(typeof(TDbContext), processor);
             return processor;
         });
 
@@ -161,7 +159,7 @@ public static class InboxPublicApiExtensions
         services.AddSingleton(bgProcessorType, sp =>
         {
             var processor = ActivatorUtilities.CreateInstance(sp, bgProcessorType);
-            sp.GetRequiredService<InboxProcessorTriggerRegistry>().Register(dbContextType, (IProcessorTrigger)processor);
+            sp.GetRequiredService<InboxDbContextRegistry>().RegisterTrigger(dbContextType, (IProcessorTrigger)processor);
             return processor;
         });
 
@@ -175,8 +173,8 @@ public static class InboxPublicApiExtensions
         state.RegisterBackgroundService[dbContextType] = true;
 
         // Default options with auto-generated lock name
-        if (!state.OptionsRegistry.Contains(dbContextType))
-            state.OptionsRegistry.Register(dbContextType, new InboxOptions { LockName = $"InboxProcessor-{dbContextType.Name}" });
+        if (!state.DbContextRegistry.ContainsOptions(dbContextType))
+            state.DbContextRegistry.RegisterOptions(dbContextType, new InboxOptions { LockName = $"InboxProcessor-{dbContextType.Name}" });
     }
 
     /// <summary>
@@ -191,10 +189,8 @@ public static class InboxPublicApiExtensions
 
         // Register shared singletons (eagerly created instances)
         builder.Services.AddSingleton(state.HandlerRegistry);
-        builder.Services.AddSingleton(state.MessageRegistry);
-        builder.Services.AddSingleton(state.ChannelMap);
-        builder.Services.AddSingleton(state.OptionsRegistry);
-        builder.Services.AddSingleton(state.TriggerRegistry);
+        builder.Services.AddSingleton(state.RoutingTable);
+        builder.Services.AddSingleton(state.DbContextRegistry);
         builder.Services.TryAddSingleton<InboxTelemetry>();
 
         // Register the composite route interceptor
@@ -203,7 +199,22 @@ public static class InboxPublicApiExtensions
         // Deferred action: runs after all configuration calls complete
         builder.AddDeferredServiceAction(services =>
         {
-            // 1. Populate InboxMessageRegistry, InboxChannelMap from consume channel config
+            // 0. Validate UseInbox() is not used on publish channels
+            foreach (var channel in builder.ChannelRegistry.GetPublishChannels())
+            {
+                foreach (var message in channel.Messages)
+                {
+                    var msgOpts = message.GetExtension<InboxMessageOptions>();
+                    if (msgOpts is { UseInbox: true })
+                    {
+                        throw new InvalidOperationException(
+                            $"UseInbox() was called on message type '{message.MessageTypeName}' on publish channel " +
+                            $"'{channel.ChannelName}'. UseInbox() is only supported on consume channels.");
+                    }
+                }
+            }
+
+            // 1. Populate InboxRoutingTable from consume channel config
             var inboxMessageTypes = new HashSet<Type>();
 
             foreach (var channel in builder.ChannelRegistry.GetConsumeChannels())
@@ -216,7 +227,7 @@ public static class InboxPublicApiExtensions
                     var msgOpts = message.GetExtension<InboxMessageOptions>();
                     if (msgOpts is { UseInbox: true })
                     {
-                        state.MessageRegistry.Register(channel.ChannelName, message.MessageTypeName);
+                        state.RoutingTable.RegisterMessage(channel.ChannelName, message.MessageTypeName);
                         inboxMessageTypes.Add(message.MessageType);
                         hasInboxMessages = true;
                     }
@@ -225,17 +236,16 @@ public static class InboxPublicApiExtensions
                 if (!hasInboxMessages)
                     continue;
 
-                // Resolve the DbContext type for this channel
-                var dbContextType = channelInboxOpts?.DbContextType ?? state.DefaultDbContextType;
+                // Resolve the DbContext type for this channel — requires explicit UseInbox<TDbContext>()
+                var dbContextType = channelInboxOpts?.DbContextType;
                 if (dbContextType == null)
                 {
                     throw new InvalidOperationException(
                         $"Channel '{channel.ChannelName}' has inbox-managed messages (UseInbox()) " +
-                        $"but no DbContext is configured. Either call UseInbox<TDbContext>() on the " +
-                        $"channel or UseEfCoreInbox<TDbContext>() globally.");
+                        $"but no DbContext is configured. Call UseInbox<TDbContext>() on the channel.");
                 }
 
-                state.ChannelMap.Register(channel.ChannelName, dbContextType);
+                state.RoutingTable.RegisterChannel(channel.ChannelName, dbContextType);
 
                 // Auto-register infrastructure if this DbContext wasn't explicitly configured
                 AutoRegisterPerDbContextServices(services, state, dbContextType);
@@ -251,7 +261,7 @@ public static class InboxPublicApiExtensions
                 }
 
                 // Register cleanup processor as hosted service if any retention is configured
-                var opts = state.OptionsRegistry.Get(dbContextType);
+                var opts = state.DbContextRegistry.GetOptions(dbContextType);
                 if (opts.CompletedRetention != null || opts.PoisonedRetention != null)
                 {
                     var cleanupType = typeof(InboxCleanupProcessor<>).MakeGenericType(dbContextType);
@@ -277,7 +287,7 @@ public static class InboxPublicApiExtensions
 
         // Startup validation
         builder.AddValidator(cr =>
-            InboxConfigurationValidator.Validate(cr, state.MessageRegistry, state.HandlerRegistry, state.ChannelMap));
+            InboxConfigurationValidator.Validate(cr, state.RoutingTable, state.HandlerRegistry));
     }
 
     /// <summary>

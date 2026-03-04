@@ -11,7 +11,7 @@ namespace Ratatoskr.EfCore.Internal;
 /// </summary>
 internal class InboxAcceptor<TDbContext>(
     IServiceScopeFactory scopeFactory,
-    InboxMessageRegistry inboxMessageRegistry,
+    InboxRoutingTable routingTable,
     InboxHandlerRegistry inboxHandlerRegistry,
     InboxProcessor<TDbContext> inboxProcessor,
     TimeProvider timeProvider,
@@ -28,7 +28,7 @@ internal class InboxAcceptor<TDbContext>(
         CancellationToken cancellationToken)
     {
         // Check if this message type is inbox-managed on this channel
-        if (properties.Type == null || !inboxMessageRegistry.IsInboxManaged(channelName, properties.Type))
+        if (properties.Type == null || !routingTable.IsInboxManaged(channelName, properties.Type))
             return InboxAcceptOutcome.NoHandlers;
 
         var inboxHandlers = inboxHandlerRegistry.GetByWireTypeName(properties.Type);

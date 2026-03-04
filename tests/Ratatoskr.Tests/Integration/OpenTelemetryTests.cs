@@ -414,7 +414,7 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("otel-inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("otel-inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("otel-inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, NoOpTestEventHandler>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithPollingInterval(TimeSpan.FromMilliseconds(500)));
             });
@@ -458,7 +458,7 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("otel-inbox-trace", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("otel-inbox-trace", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("otel-inbox-trace", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, NoOpTestEventHandler>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithPollingInterval(TimeSpan.FromMilliseconds(500)));
             });

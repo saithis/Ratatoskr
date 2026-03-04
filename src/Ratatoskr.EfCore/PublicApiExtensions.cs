@@ -2,8 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Options;
 using Ratatoskr.EfCore.Internal;
 
 namespace Ratatoskr.EfCore;
@@ -13,6 +13,14 @@ namespace Ratatoskr.EfCore;
 /// </summary>
 public static class PublicApiExtensions
 {
+    private class OutboxBuildTimeState
+    {
+        public OutboxOptionsRegistry OptionsRegistry { get; } = new();
+    }
+
+    private static OutboxBuildTimeState GetOrCreateState(RatatoskrBuilder builder) =>
+        builder.GetOrSetExtension(() => new OutboxBuildTimeState());
+
     extension(RatatoskrBuilder builder)
     {
         /// <summary>
@@ -30,24 +38,22 @@ public static class PublicApiExtensions
         public RatatoskrBuilder AddEfCoreOutbox<TDbContext>(Action<OutboxBuilder<TDbContext>>? configure)
             where TDbContext : DbContext, IOutboxDbContext
         {
-            var outboxBuilder = new OutboxBuilder<TDbContext>(builder.Services);
-            configure?.Invoke(outboxBuilder);
-        
-            // Register options
-            builder.Services.AddSingleton(Options.Create(outboxBuilder.Options));
-        
-            builder.Services.AddSingleton<OutboxTelemetry>();
-            builder.Services.AddSingleton<OutboxTriggerInterceptor<TDbContext>>();
-            builder.Services.AddTransient<OutboxMessageProcessor<TDbContext>>();
-            builder.Services.AddSingleton<OutboxProcessor<TDbContext>>();
-            builder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<OutboxProcessor<TDbContext>>());
+            var state = GetOrCreateState(builder);
 
-            // Register cleanup processor if any retention is configured
-            if (outboxBuilder.Options.CompletedRetention != null || outboxBuilder.Options.PoisonedRetention != null)
-            {
-                builder.Services.AddSingleton<OutboxCleanupProcessor<TDbContext>>();
-                builder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<OutboxCleanupProcessor<TDbContext>>());
-            }
+            if (state.OptionsRegistry.Contains(typeof(TDbContext)))
+                throw new InvalidOperationException(
+                    $"AddEfCoreOutbox<{typeof(TDbContext).Name}>() has already been called. " +
+                    $"Each DbContext type can only be registered once for the outbox.");
+
+            var outboxBuilder = new OutboxBuilder<TDbContext>();
+            configure?.Invoke(outboxBuilder);
+
+            // Auto-assign per-DbContext lock name if still default
+            if (outboxBuilder.Options.LockName == "OutboxProcessor")
+                outboxBuilder.Options.LockName = $"OutboxProcessor-{typeof(TDbContext).Name}";
+
+            state.OptionsRegistry.Register(typeof(TDbContext), outboxBuilder.Options);
+            RegisterOutboxServices<TDbContext>(builder, state, outboxBuilder.Options);
 
             return builder;
         }
@@ -58,19 +64,42 @@ public static class PublicApiExtensions
         public RatatoskrBuilder AddEfCoreOutbox<TDbContext>(IConfiguration configuration)
             where TDbContext : DbContext, IOutboxDbContext
         {
-            builder.Services.Configure<OutboxOptions>(configuration.GetSection(OutboxOptions.SectionName));
+            var state = GetOrCreateState(builder);
 
-            builder.Services.AddSingleton<OutboxTelemetry>();
-            builder.Services.AddSingleton<OutboxTriggerInterceptor<TDbContext>>();
-            builder.Services.AddTransient<OutboxMessageProcessor<TDbContext>>();
-            builder.Services.AddSingleton<OutboxProcessor<TDbContext>>();
-            builder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<OutboxProcessor<TDbContext>>());
+            if (state.OptionsRegistry.Contains(typeof(TDbContext)))
+                throw new InvalidOperationException(
+                    $"AddEfCoreOutbox<{typeof(TDbContext).Name}>() has already been called. " +
+                    $"Each DbContext type can only be registered once for the outbox.");
 
-            // Cleanup processor — configuration-based outbox always registers with defaults (cleanup enabled)
-            builder.Services.AddSingleton<OutboxCleanupProcessor<TDbContext>>();
-            builder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<OutboxCleanupProcessor<TDbContext>>());
+            var options = new OutboxOptions { LockName = $"OutboxProcessor-{typeof(TDbContext).Name}" };
+            configuration.GetSection(OutboxOptions.SectionName).Bind(options);
+
+            state.OptionsRegistry.Register(typeof(TDbContext), options);
+            RegisterOutboxServices<TDbContext>(builder, state, options);
 
             return builder;
+        }
+    }
+
+    private static void RegisterOutboxServices<TDbContext>(
+        RatatoskrBuilder builder, OutboxBuildTimeState state, OutboxOptions options)
+        where TDbContext : DbContext, IOutboxDbContext
+    {
+        // Register shared singletons (idempotent)
+        builder.Services.TryAddSingleton(state.OptionsRegistry);
+        builder.Services.TryAddSingleton<OutboxTelemetry>();
+
+        // Register per-DbContext services
+        builder.Services.AddSingleton<OutboxTriggerInterceptor<TDbContext>>();
+        builder.Services.AddTransient<OutboxMessageProcessor<TDbContext>>();
+        builder.Services.AddSingleton<OutboxProcessor<TDbContext>>();
+        builder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<OutboxProcessor<TDbContext>>());
+
+        // Register cleanup processor if any retention is configured
+        if (options.CompletedRetention != null || options.PoisonedRetention != null)
+        {
+            builder.Services.AddSingleton<OutboxCleanupProcessor<TDbContext>>();
+            builder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<OutboxCleanupProcessor<TDbContext>>());
         }
     }
 
@@ -85,7 +114,7 @@ public static class PublicApiExtensions
         var interceptor = serviceProvider.GetRequiredService<OutboxTriggerInterceptor<TDbContext>>();
         return builder.AddInterceptors(interceptor);
     }
-    
+
     /// <summary>
     /// Adds the necessary outbox entities to the DB model.
     /// </summary>

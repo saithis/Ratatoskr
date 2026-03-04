@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Ratatoskr.Core;
 
 namespace Ratatoskr.EfCore.Internal;
@@ -15,12 +14,12 @@ internal class OutboxMessageProcessor<TDbContext>(
     IEnumerable<IMessageSender> senders,
     OutboxTelemetry telemetry,
     TimeProvider timeProvider,
-    IOptions<OutboxOptions> options,
+    OutboxOptionsRegistry optionsRegistry,
     IEnumerable<IMessageActivityObserver> observers,
     ILogger<OutboxMessageProcessor<TDbContext>> logger)
     where TDbContext : DbContext, IOutboxDbContext
 {
-    private readonly OutboxOptions _options = options.Value;
+    private readonly OutboxOptions _options = optionsRegistry.Get(typeof(TDbContext));
     private Dictionary<string, IMessageSender> _senderMap = senders.ToDictionary(x => x.TransportName);
 
     /// <summary>

@@ -15,6 +15,7 @@ public class RatatoskrBuilder
     internal AsyncApiOptions AsyncApiOptions { get; } = new();
     internal ChannelRegistry ChannelRegistry { get; } = new();
 
+    private readonly Dictionary<Type, object> _extensions = new();
     private readonly List<Action<ChannelRegistry>> _validators = new();
     private readonly List<Action<IServiceCollection>> _deferredServiceActions = new();
 
@@ -28,6 +29,24 @@ public class RatatoskrBuilder
     internal RatatoskrBuilder(IServiceCollection services)
     {
         Services = services;
+    }
+
+    /// <summary>Gets a typed extension object, or null if not set.</summary>
+    internal T? GetExtension<T>() where T : class =>
+        _extensions.TryGetValue(typeof(T), out var value) ? (T)value : null;
+
+    /// <summary>Sets a typed extension object.</summary>
+    internal void SetExtension<T>(T value) where T : class =>
+        _extensions[typeof(T)] = value;
+
+    /// <summary>Gets an existing extension or creates and stores one using the factory.</summary>
+    internal T GetOrSetExtension<T>(Func<T> factory) where T : class
+    {
+        if (_extensions.TryGetValue(typeof(T), out var value))
+            return (T)value;
+        var created = factory();
+        _extensions[typeof(T)] = created;
+        return created;
     }
 
     /// <summary>
@@ -136,6 +155,11 @@ public class RatatoskrBuilder
         where TMessage : notnull
         where THandler : class, IMessageHandler<TMessage>
     {
+        if (PendingHandlers.Any(h => h.HandlerType == typeof(THandler) && h.MessageType == typeof(TMessage)))
+            throw new InvalidOperationException(
+                $"Handler '{typeof(THandler).Name}' is already registered for message type '{typeof(TMessage).Name}'. " +
+                $"Each handler type can only be registered once per message type.");
+
         Services.AddScoped<THandler>();
         Services.AddScoped<IMessageHandler<TMessage>>(sp => sp.GetRequiredService<THandler>());
 

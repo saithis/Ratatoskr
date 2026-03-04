@@ -185,6 +185,7 @@ public class ConsumeTests(
                 bus.AddCommandConsumeChannel(QueueName, c => c
                     .WithRabbitMq(o => o.WithQueueName(QueueName).WithAutoAck(false).WithTransientQueue()
                         .WithQueueType(QueueType.Classic))
+                    .UseInbox<TestDbContext>()
                     .Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, NoOpTestEventHandler>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());

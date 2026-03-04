@@ -12,7 +12,7 @@ internal class CompositeInboxRouteInterceptor : IMessageRouteInterceptor
     private readonly Dictionary<string, IInboxAcceptor> _acceptorsByChannel;
 
     public CompositeInboxRouteInterceptor(
-        InboxChannelMap channelMap,
+        InboxRoutingTable routingTable,
         IEnumerable<IInboxAcceptor> acceptors)
     {
         // Build a lookup from DbContext type to acceptor
@@ -22,7 +22,7 @@ internal class CompositeInboxRouteInterceptor : IMessageRouteInterceptor
 
         // Map each inbox-managed channel to its acceptor
         _acceptorsByChannel = new Dictionary<string, IInboxAcceptor>(StringComparer.Ordinal);
-        foreach (var (channelName, dbContextType) in channelMap.GetAll())
+        foreach (var (channelName, dbContextType) in routingTable.GetAllChannelMappings())
         {
             if (acceptorsByType.TryGetValue(dbContextType, out var acceptor))
                 _acceptorsByChannel[channelName] = acceptor;

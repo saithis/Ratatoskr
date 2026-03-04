@@ -2,7 +2,6 @@ using Medallion.Threading;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace Ratatoskr.EfCore.Internal;
 
@@ -15,19 +14,19 @@ internal class OutboxCleanupProcessor<TDbContext>(
     IServiceScopeFactory serviceScopeFactory,
     IDistributedLockProvider distributedLockProvider,
     TimeProvider timeProvider,
-    IOptions<OutboxOptions> options,
+    OutboxOptionsRegistry optionsRegistry,
     OutboxTelemetry telemetry,
     ILogger<OutboxCleanupProcessor<TDbContext>> logger)
     : PollingBackgroundService(distributedLockProvider, timeProvider, logger)
     where TDbContext : DbContext, IOutboxDbContext
 {
-    private readonly OutboxOptions _options = options.Value;
+    private readonly OutboxOptions _options = optionsRegistry.Get(typeof(TDbContext));
 
-    protected override string ProcessorName => "OutboxCleanupProcessor";
+    protected override string ProcessorName => $"OutboxCleanupProcessor<{typeof(TDbContext).Name}>";
     protected override TimeSpan PollingInterval => _options.CleanupInterval;
     protected override TimeSpan RestartDelay => _options.RestartDelay;
     protected override TimeSpan LockAcquireTimeout => _options.LockAcquireTimeout;
-    protected override string LockName => "OutboxCleanup";
+    protected override string LockName => $"OutboxCleanup-{typeof(TDbContext).Name}";
 
     /// <summary>
     /// Runs one cleanup pass without requiring the background service infrastructure.

@@ -27,7 +27,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, InboxHandlerA>();
                 bus.AddHandler<TestEvent, InboxHandlerB>();
                 bus.UseEfCoreInbox<TestDbContext>();
@@ -90,7 +90,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, InboxHandlerA>();
                 bus.AddHandler<TestEvent, AlwaysFailingHandler>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
@@ -167,7 +167,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, AlwaysFailingHandler>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox =>
                 {
@@ -249,7 +249,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, AlwaysFailingHandler>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox =>
                 {
@@ -313,7 +313,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, CountingHandler>();
                 bus.UseEfCoreInbox<TestDbContext>();
             });
@@ -383,7 +383,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, InboxHandlerA>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox =>
                 {
@@ -468,6 +468,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                     .Produces<OrderCreatedEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c =>
                 {
+                    c.UseInbox<TestDbContext>();
                     c.Consumes<TestEvent>(m => m.UseInbox()); // inbox-managed
                     c.Consumes<OrderCreatedEvent>();           // fire-and-forget
                 });
@@ -531,7 +532,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, InboxHandlerA>();
                 bus.AddEfCoreOutbox<TestDbContext>();
                 bus.UseEfCoreInbox<TestDbContext>();
@@ -592,7 +593,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, InboxHandlerA>();
                 bus.AddHandler<TestEvent, InboxHandlerB>();
                 bus.UseEfCoreInbox<TestDbContext>();
@@ -645,7 +646,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 bus.UseEfCoreInbox<TestDbContext>();
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, InboxHandlerA>();
             });
 
@@ -688,7 +689,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, FailsThenSucceedsHandler>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox =>
                 {
@@ -751,7 +752,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, AlwaysFailingHandler>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox =>
                 {
@@ -808,7 +809,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 services.AddRatatoskr(bus =>
                 {
                     bus.UseLocalTransport();
-                    bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                    bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                     // No handlers registered for TestEvent!
                     bus.UseEfCoreInbox<TestDbContext>();
                 });
@@ -819,7 +820,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
         };
 
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*no handlers are registered*");
+            .WithMessage("*no inbox-eligible handlers are registered*");
     }
 
     [Test]
@@ -834,7 +835,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, LongErrorHandler>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
             });
@@ -879,7 +880,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, InboxHandlerA>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
             });
@@ -945,6 +946,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                     .Produces<OrderCreatedEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c =>
                 {
+                    c.UseInbox<TestDbContext>();
                     c.Consumes<TestEvent>(m => m.UseInbox());
                     c.Consumes<OrderCreatedEvent>(m => m.UseInbox());
                 });
@@ -1009,7 +1011,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, InboxHandlerA>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
             });
@@ -1063,7 +1065,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, InboxHandlerA>();
                 bus.UseEfCoreInbox<TestDbContext>();
             });
@@ -1133,7 +1135,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, CountingHandler>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
             });
@@ -1190,7 +1192,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, CancellableHandler>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
             });
@@ -1252,7 +1254,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, InboxHandlerA>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox =>
                 {
@@ -1366,7 +1368,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, CancellableHandler>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
             });
@@ -1426,7 +1428,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, AlwaysFailingHandler>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox =>
                 {
@@ -1476,7 +1478,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, InboxHandlerA>();
                 bus.AddHandler<TestEvent, AlwaysFailingHandler>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
@@ -1527,7 +1529,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, InboxHandlerA>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
             });
@@ -1570,7 +1572,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, InboxHandlerA>();
                 bus.AddEfCoreOutbox<TestDbContext>();
                 bus.UseEfCoreInbox<TestDbContext>();
@@ -1614,7 +1616,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, FailsThenSucceedsHandler>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
             });
@@ -1666,7 +1668,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, InboxHandlerA>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
             });
@@ -1712,7 +1714,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, InboxHandlerA>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox =>
                 {
@@ -1814,7 +1816,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, CountingHandler>();
                 bus.UseEfCoreInbox<TestDbContext>();
             });
@@ -1860,7 +1862,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, SlowHandler>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox =>
                 {
@@ -1912,7 +1914,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, SlowHandler>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox =>
                 {
@@ -2007,10 +2009,9 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
     }
 
     [Test]
-    public async Task Inbox_ChannelLevelUseInbox_WithoutGlobalUseEfCoreInbox_AutoRegisters()
+    public async Task Inbox_ChannelLevelUseInbox_WithExplicitGlobalConfig_WorksCorrectly()
     {
-        // Arrange: UseInbox<T>() on channel without calling UseEfCoreInbox<T>() globally.
-        // Infrastructure should be auto-registered with default options.
+        // Arrange: UseInbox<T>() on channel alongside global UseEfCoreInbox<T>() config.
         await StartTestAsync(services =>
         {
             services.AddRatatoskr(bus =>
@@ -2021,9 +2022,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                     .UseInbox<TestDbContext>()
                     .Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, InboxHandlerA>();
-                // Note: NO UseEfCoreInbox<TestDbContext>() call!
-                // But we still need WithoutBackgroundProcessing behavior...
-                // So we DO call UseEfCoreInbox but we need the channel-level to be the primary.
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
             });
 
@@ -2150,11 +2148,11 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
     }
 
     [Test]
-    public async Task Inbox_GlobalUseEfCoreInbox_UsedAsDefaultForChannelsWithoutExplicitUseInbox()
+    public async Task Inbox_ChannelWithoutUseInbox_ThrowsAtStartup()
     {
-        // Arrange: UseEfCoreInbox<T>() is called globally, channel does NOT call UseInbox<T>()
-        // but has messages with UseInbox(). The global DbContext should be used as default.
-        await StartTestAsync(services =>
+        // Arrange: channel has UseInbox() messages but no UseInbox<T>() on the channel.
+        // This should throw at startup — explicit DbContext mapping is required.
+        var act = async () => await StartTestAsync(services =>
         {
             services.AddRatatoskr(bus =>
             {
@@ -2162,7 +2160,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m.UseInbox()));
-                // No UseInbox<T>() on channel — but global UseEfCoreInbox<T>() below acts as default
+                // No UseInbox<T>() on channel — should throw
                 bus.AddHandler<TestEvent, InboxHandlerA>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
             });
@@ -2171,27 +2169,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 opts.UseNpgsql(PostgresConnectionString));
         });
 
-        await InitializeDatabase();
-
-        // Act
-        await InScopeAsync(async ctx =>
-        {
-            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
-            await bus.PublishDirectAsync(
-                new TestEvent { Id = "default-db-1", Data = "test" },
-                new MessageProperties { Id = "default-db-msg-1" });
-        });
-
-        await WaitForInboxEntriesAsync(1);
-        await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
-
-        // Assert — uses default TestDbContext
-        await InScopeAsync(async ctx =>
-        {
-            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var status = await db.Set<InboxHandlerStatusEntity>().SingleAsync();
-            status.CompletedAt.Should().NotBeNull();
-        });
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*has inbox-managed messages*but no DbContext is configured*UseInbox<TDbContext>()*");
     }
 
     #endregion
@@ -2210,7 +2189,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, InboxHandlerA>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox =>
                 {
@@ -2274,7 +2253,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, InboxHandlerA>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox =>
                 {
@@ -2327,7 +2306,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, AlwaysFailingHandler>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox =>
                 {
@@ -2392,7 +2371,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, InboxHandlerA>();
                 bus.AddHandler<TestEvent, AlwaysFailingHandler>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox =>
@@ -2448,7 +2427,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, InboxHandlerA>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox =>
                 {
@@ -2498,7 +2477,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, InboxHandlerA>("explicit-key");
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
             });
@@ -2538,7 +2517,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, InboxHandlerA>();
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
             });
@@ -2578,7 +2557,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, InboxHandlerA>("override-key");
                 bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
             });
@@ -2617,7 +2596,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             services.AddRatatoskr(bus =>
             {
                 bus.UseLocalTransport();
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
                 bus.AddHandler<TestEvent, HandlerWithoutKey>();
                 bus.UseEfCoreInbox<TestDbContext>();
             });
