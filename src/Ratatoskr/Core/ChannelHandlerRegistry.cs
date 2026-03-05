@@ -41,10 +41,13 @@ public class ChannelHandlerRegistry
 
                         if (handler.InboxKey != null)
                         {
-                            if (inboxByKey.ContainsKey(handler.InboxKey))
+                            if (inboxByKey.TryGetValue(handler.InboxKey, out var existing))
                                 throw new InvalidOperationException(
-                                    $"Duplicate inbox handler key '{handler.InboxKey}' registered. " +
-                                    $"Each inbox handler must have a unique stable key.");
+                                    $"Duplicate inbox handler key '{handler.InboxKey}' registered on channel '{channel.ChannelName}' " +
+                                    $"for handler '{handler.HandlerType.Name}'. " +
+                                    $"Key is already used by handler '{existing.HandlerType.Name}'. " +
+                                    $"Inbox handler keys must be globally unique because the inbox processor " +
+                                    $"looks up handlers by key across all channels and DbContexts.");
 
                             inboxByKey[handler.InboxKey] = handler;
                         }

@@ -96,7 +96,7 @@ Handlers are registered inside the `Consumes<T>()` builder. Inbox-managed handle
 
 The **handler key** (`"fulfillment"`) is persisted in the database. It must be stable across deployments — renaming the key will cause existing in-flight messages to be poisoned with an "unknown handler key" error.
 
-> **Validation**: Each handler key must be unique within a channel. Registering two handlers with the same key throws `InvalidOperationException` at startup.
+> **Validation**: Handler keys must be **globally unique** across all channels and DbContexts, because the inbox processor looks up handlers by key when processing batches. Registering two handlers with the same key throws `InvalidOperationException` at startup.
 
 #### Handler registration API
 
@@ -245,7 +245,7 @@ Each `DbContext` type gets its own:
 - `InboxAcceptor<TDbContext>` for persistence
 - Distributed lock (auto-named `InboxProcessor_{DbContextTypeName}`)
 
-Per-DbContext services are registered once (idempotent), so multiple channels sharing the same `DbContext` reuse the same processor and options.
+Per-DbContext services are registered once (idempotent), so multiple channels sharing the same `DbContext` reuse the same processor and options. If the first channel configures options via `UseInbox<TDbContext>(inbox => ...)`, subsequent channels sharing the same `DbContext` must call `UseInbox<TDbContext>()` **without** a configure callback — passing conflicting options throws `InvalidOperationException` at startup.
 
 > **Important:** Each `DbContext` type is expected to have its own database. The `InboxMessageProcessor` queries all pending handler statuses from its database — if two `DbContext` types share a database, they will see each other's data.
 

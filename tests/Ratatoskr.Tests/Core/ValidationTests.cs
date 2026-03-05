@@ -148,6 +148,65 @@ public class ValidationTests
         fafHandlers[0].InboxKey.Should().BeNull();
         registry.GetInboxHandlers("test-channel").Should().BeEmpty();
     }
+    [Test]
+    public void WithHandler_FireAndForget_WithConfig_RegistersAsFireAndForget()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var builder = new RatatoskrBuilder(services);
+        builder.AddEventConsumeChannel("test-channel", c => c
+            .Consumes<TestEvent>(m => m
+                .WithHandler<TestEventHandler>(h => { /* no-op config */ })));
+
+        // Act
+        var registry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
+
+        // Assert
+        var fafHandlers = registry.GetFireAndForgetHandlers("test-channel", typeof(TestEvent));
+        fafHandlers.Should().HaveCount(1);
+        fafHandlers[0].IsInbox.Should().BeFalse();
+        registry.GetInboxHandlers("test-channel").Should().BeEmpty();
+    }
+
+    [Test]
+    public void SameHandlerType_OnTwoChannels_BothRegistered()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var builder = new RatatoskrBuilder(services);
+        builder.AddEventConsumeChannel("channel-a", c => c
+            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+        builder.AddEventConsumeChannel("channel-b", c => c
+            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+
+        // Act
+        var registry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
+
+        // Assert - both channels have the handler
+        registry.GetFireAndForgetHandlers("channel-a", typeof(TestEvent)).Should().HaveCount(1);
+        registry.GetFireAndForgetHandlers("channel-b", typeof(TestEvent)).Should().HaveCount(1);
+    }
+
+    [Test]
+    public void SameHandlerType_OnTwoChannels_ResolvedFromDI()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var builder = new RatatoskrBuilder(services);
+        builder.AddEventConsumeChannel("channel-a", c => c
+            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+        builder.AddEventConsumeChannel("channel-b", c => c
+            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+
+        var provider = services.BuildServiceProvider();
+
+        // Act - resolve in a scope
+        using var scope = provider.CreateScope();
+        var handler = scope.ServiceProvider.GetService<TestEventHandler>();
+
+        // Assert - handler is resolvable (TryAddScoped ensures single registration)
+        handler.Should().NotBeNull();
+    }
 }
 
 /// <summary>

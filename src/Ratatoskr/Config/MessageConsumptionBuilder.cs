@@ -13,9 +13,7 @@ public class MessageConsumptionBuilder<TMessage> where TMessage : notnull
     private readonly IServiceCollection _services;
     internal List<ChannelHandlerRegistration> HandlerRegistrations { get; } = new();
 
-    internal MessageConsumptionBuilder(
-        IServiceCollection services,
-        MessageRegistration messageRegistration)
+    internal MessageConsumptionBuilder(IServiceCollection services)
     {
         _services = services;
     }

@@ -29,7 +29,10 @@ internal class InboxAcceptor<TDbContext>(
     {
         // Check if this channel's inbox DbContext matches our TDbContext
         var channel = channelRegistry.GetConsumeChannel(channelName);
-        var inboxConfig = channel?.GetExtension<ChannelInboxConfig>();
+        if (channel == null)
+            return InboxAcceptOutcome.NoHandlers;
+
+        var inboxConfig = channel.GetExtension<ChannelInboxConfig>();
         if (inboxConfig == null || inboxConfig.DbContextType != typeof(TDbContext))
             return InboxAcceptOutcome.NoHandlers;
 
@@ -37,7 +40,7 @@ internal class InboxAcceptor<TDbContext>(
         if (properties.Type == null)
             return InboxAcceptOutcome.NoHandlers;
 
-        var msgReg = channel!.Messages.FirstOrDefault(m => m.MessageTypeName == properties.Type);
+        var msgReg = channel.Messages.FirstOrDefault(m => m.MessageTypeName == properties.Type);
         if (msgReg == null)
             return InboxAcceptOutcome.NoHandlers;
 

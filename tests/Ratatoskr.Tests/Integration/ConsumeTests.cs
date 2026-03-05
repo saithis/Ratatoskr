@@ -226,7 +226,7 @@ public class ConsumeTests(
     }
 
     private void ConfigureBus(RatatoskrBuilder bus, string queueName,
-        Action<MessageConsumptionBuilder<TestEvent>>? configureHandler = null,
+        Action<MessageConsumptionBuilder<TestEvent>> configureHandler,
         Action<InboxBuilder<TestDbContext>>? configureInbox = null)
     {
         bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
@@ -234,21 +234,14 @@ public class ConsumeTests(
         {
             c.WithRabbitMq(o => o.WithQueueName(queueName).WithAutoAck(false).WithTransientQueue()
                 .WithQueueType(QueueType.Classic));
-            if (configureHandler != null)
-            {
-                var channel = c.Consumes<TestEvent>(configureHandler);
-                if (configureInbox != null)
-                    channel.UseInbox<TestDbContext>(configureInbox);
-            }
-            else
-            {
-                c.Consumes<TestEvent>();
-            }
+            var channel = c.Consumes<TestEvent>(configureHandler);
+            if (configureInbox != null)
+                channel.UseInbox<TestDbContext>(configureInbox);
         });
     }
 
     private void ConfigureBusWithRetry(RatatoskrBuilder bus, string queueName, int maxRetries,
-        Action<MessageConsumptionBuilder<TestEvent>>? configureHandler = null)
+        Action<MessageConsumptionBuilder<TestEvent>> configureHandler)
     {
         bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
         bus.AddCommandConsumeChannel(queueName, c =>
@@ -259,7 +252,7 @@ public class ConsumeTests(
                 .WithRetry(r => r.WithMaxRetries(maxRetries).WithDelay(TimeSpan.FromMilliseconds(50)))
                 .WithTransientQueue()
                 .WithQueueType(QueueType.Classic));
-            c.Consumes<TestEvent>(configureHandler ?? (_ => {}));
+            c.Consumes<TestEvent>(configureHandler);
         });
     }
 

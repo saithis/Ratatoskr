@@ -47,10 +47,11 @@ public class RatatoskrBuilderTests
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        
+
         // Act
-        builder.AddEventConsumeChannel("test-channel", c => c.Consumes<TestEvent>());
-        
+        builder.AddEventConsumeChannel("test-channel", c => c
+            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+
         // Assert
         var channel = builder.ChannelRegistry.GetConsumeChannel("test-channel");
         channel.Should().NotBeNull();

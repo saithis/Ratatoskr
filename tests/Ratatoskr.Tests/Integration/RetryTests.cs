@@ -50,10 +50,10 @@ public class RetryTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
     }
 
     [Test]
-    public async Task Consume_NoHandler_MovesToDlq()
+    public async Task Consume_UnknownEventType_MovesToDlq()
     {
-        // Arrange - No handlers registered
-        await StartTestAsync(services => ConfigureRetryConsumer(services, maxRetries: 2, addHandler: false));
+        // Arrange - Handler registered for TestEvent, but we'll send an unknown event type
+        await StartTestAsync(services => ConfigureRetryConsumer(services, maxRetries: 2));
 
         // Act - Send unknown event type
         await PublishToRabbitMqAsync(exchange: "", routingKey: QueueName, new TestEvent { Id = "nohandler", Data = "fail" }, type: "unknown.event");
@@ -62,7 +62,7 @@ public class RetryTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
         await WaitForConditionAsync(async () => await GetMessageCountAsync(DlqName) == 1, TimeSpan.FromSeconds(5), "Message did not move to DLQ");
     }
 
-    private void ConfigureRetryConsumer(IServiceCollection services, int maxRetries, bool addHandler = true)
+    private void ConfigureRetryConsumer(IServiceCollection services, int maxRetries)
     {
         services.AddRatatoskr(bus =>
         {
@@ -74,9 +74,7 @@ public class RetryTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                     .WithRetry(r => r.WithMaxRetries(maxRetries).WithDelay(TimeSpan.FromMilliseconds(50)))
                     .WithTransientQueue()
                     .WithQueueType(QueueType.Classic))
-                .Consumes<TestEvent>(addHandler
-                    ? m => m.WithHandler<ThrowingTestEventHandler>()
-                    : _ => {}));
+                .Consumes<TestEvent>(m => m.WithHandler<ThrowingTestEventHandler>()));
         });
     }
 }

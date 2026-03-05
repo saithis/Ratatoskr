@@ -92,4 +92,52 @@ public class InboxConfigurationValidatorTests
         var act = () => InboxConfigurationValidator.Validate(channelRegistry, handlerRegistry);
         act.Should().NotThrow();
     }
+
+    [Test]
+    public void UseInbox_TwoChannelsSameDbContext_SecondWithoutOptions_DoesNotThrow()
+    {
+        // Arrange - two channels sharing the same DbContext;
+        // first configures options, second calls UseInbox without configure callback
+        var services = new ServiceCollection();
+
+        // Act & Assert
+        var act = () => services.AddRatatoskr(bus =>
+        {
+            bus.AddEventConsumeChannel("channel-a", c => c
+                .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("key-a"))
+                .UseInbox<TestDbContext>(inbox => inbox.WithPollingInterval(TimeSpan.FromSeconds(5))));
+            bus.AddEventConsumeChannel("channel-b", c => c
+                .Consumes<OrderCreatedEvent>(m => m.WithHandler<NoOpOrderCreatedHandler>("key-b"))
+                .UseInbox<TestDbContext>());
+        });
+
+        act.Should().NotThrow();
+    }
+
+    [Test]
+    public void UseInbox_TwoChannelsSameDbContext_WithConflictingOptions_ThrowsInvalidOperationException()
+    {
+        // Arrange - two channels sharing the same DbContext, both passing configure callbacks
+        var services = new ServiceCollection();
+
+        // Act & Assert
+        var act = () => services.AddRatatoskr(bus =>
+        {
+            bus.AddEventConsumeChannel("channel-a", c => c
+                .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("key-a"))
+                .UseInbox<TestDbContext>(inbox => inbox.WithMaxRetries(3)));
+            bus.AddEventConsumeChannel("channel-b", c => c
+                .Consumes<OrderCreatedEvent>(m => m.WithHandler<NoOpOrderCreatedHandler>("key-b"))
+                .UseInbox<TestDbContext>(inbox => inbox.WithMaxRetries(10)));
+        });
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Inbox options for 'TestDbContext' have already been configured*");
+    }
+}
+
+file class NoOpOrderCreatedHandler : IMessageHandler<OrderCreatedEvent>
+{
+    public Task HandleAsync(OrderCreatedEvent message, MessageProperties context, CancellationToken cancellationToken)
+        => Task.CompletedTask;
 }

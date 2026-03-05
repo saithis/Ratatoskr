@@ -23,7 +23,7 @@ public class ConsumeChannelBuilder(ChannelRegistration channel, IServiceCollecti
         AddMessage<T>(configure: null);
         var messageRegistration = channel.Messages.Last();
 
-        var consumptionBuilder = new MessageConsumptionBuilder<T>(services, messageRegistration);
+        var consumptionBuilder = new MessageConsumptionBuilder<T>(services);
         configure(consumptionBuilder);
 
         ValidateAndSetHandlers<T>(messageRegistration, consumptionBuilder);
@@ -40,7 +40,7 @@ public class ConsumeChannelBuilder(ChannelRegistration channel, IServiceCollecti
         AddMessage<T>(configureMessage);
         var messageRegistration = channel.Messages.Last();
 
-        var consumptionBuilder = new MessageConsumptionBuilder<T>(services, messageRegistration);
+        var consumptionBuilder = new MessageConsumptionBuilder<T>(services);
         configureHandlers(consumptionBuilder);
 
         ValidateAndSetHandlers<T>(messageRegistration, consumptionBuilder);
@@ -61,6 +61,9 @@ public class ConsumeChannelBuilder(ChannelRegistration channel, IServiceCollecti
 
     /// <summary>
     /// Registers a message type consumed from this channel with optional message configuration but no handlers.
+    /// Use this for message type registration only (e.g. AsyncAPI documentation, topology provisioning).
+    /// For channels that process messages, use the <c>Consumes&lt;T&gt;(Action&lt;MessageConsumptionBuilder&lt;T&gt;&gt;)</c> overload
+    /// to register at least one handler.
     /// </summary>
     public ConsumeChannelBuilder Consumes<T>(Action<MessageBuilder>? configure = null)
     {

@@ -41,9 +41,19 @@ public static class InboxPublicApiExtensions
 
         var services = builder.Services;
 
-        // Skip if already registered for this DbContext type (idempotent across multiple channels sharing a DbContext)
+        // Per-DbContext services are registered once (idempotent across multiple channels sharing a DbContext).
+        // If already registered, a configure callback is rejected to prevent silent option conflicts.
         if (services.Any(d => d.ServiceType == typeof(InboxOptionsHolder<TDbContext>)))
+        {
+            if (configure != null)
+                throw new InvalidOperationException(
+                    $"Inbox options for '{typeof(TDbContext).Name}' have already been configured by another channel. " +
+                    $"Per-DbContext inbox options can only be configured once. " +
+                    $"Use .UseInbox<{typeof(TDbContext).Name}>() without a configure callback on subsequent channels, " +
+                    $"or consolidate all options into the first UseInbox call.");
+
             return builder;
+        }
 
         // Default lock name includes DbContext type to avoid collisions across different DbContexts
         if (inboxBuilder.Options.LockName == InboxOptions.DefaultLockName)
