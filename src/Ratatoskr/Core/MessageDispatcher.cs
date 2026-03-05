@@ -4,23 +4,20 @@ using Microsoft.Extensions.Logging;
 namespace Ratatoskr.Core;
 
 /// <summary>
-/// Dispatches incoming messages to all registered handlers.
-/// Supports multiple handlers per message type, each invoked in its own DI scope.
-/// Handlers excluded by <see cref="IHandlerFilter"/> are skipped — they are
-/// delivered separately by external infrastructure (e.g. the inbox processor).
+/// Dispatches incoming messages to registered fire-and-forget handlers for the given channel.
+/// Uses <see cref="ChannelHandlerRegistry"/> for handler lookup instead of DI discovery.
 /// </summary>
 public class MessageDispatcher(
     ChannelRegistry channelRegistry,
+    ChannelHandlerRegistry channelHandlerRegistry,
     IMessageSerializer deserializer,
     HandlerInvoker handlerInvoker,
-    IServiceScopeFactory scopeFactory,
     TimeProvider timeProvider,
     IEnumerable<IMessageActivityObserver> observers,
-    ILogger<MessageDispatcher> logger,
-    IHandlerFilter? handlerFilter = null)
+    ILogger<MessageDispatcher> logger)
 {
     /// <summary>
-    /// Dispatches a message to all registered handlers, each in its own DI scope.
+    /// Dispatches a message to all registered fire-and-forget handlers for the channel, each in its own DI scope.
     /// </summary>
     public async Task<DispatchResult> DispatchAsync(byte[] body, MessageProperties properties, CancellationToken cancellationToken, string channelName, string transportName)
     {
@@ -33,7 +30,6 @@ public class MessageDispatcher(
         // 1. Resolve Message Type
         Type? messageType = null;
 
-        // Try ChannelRegistry first (Topology based)
         var channel = channelRegistry.GetConsumeChannel(channelName);
         var msgReg = channel?.Messages.FirstOrDefault(m => m.MessageTypeName == properties.Type);
         if (msgReg != null)
@@ -41,16 +37,13 @@ public class MessageDispatcher(
             messageType = msgReg.MessageType;
         }
 
-        // Try global lookup in ChannelRegistry if not found in channel
         if (messageType == null)
         {
-             // Find any consumer channel that handles this type
-             // If multiple, this is ambiguous, but we pick first for now
-             var match = channelRegistry.FindConsumeChannelsForType(properties.Type).FirstOrDefault();
-             if (match.Message != null)
-             {
-                 messageType = match.Message.MessageType;
-             }
+            var match = channelRegistry.FindConsumeChannelsForType(properties.Type).FirstOrDefault();
+            if (match.Message != null)
+            {
+                messageType = match.Message.MessageType;
+            }
         }
 
         if (messageType == null)
@@ -76,46 +69,33 @@ public class MessageDispatcher(
             return DispatchResult.PermanentError;
         }
 
-        // 3. Discover registered handler types via a short-lived DI scope.
-        //    Each handler will later be invoked in its own scope for full isolation.
-        List<Exception>? exceptions = null;
-        var interfaceType = typeof(IMessageHandler<>).MakeGenericType(messageType);
-        Type[] handlerTypes;
-        using (var discoveryScope = scopeFactory.CreateScope())
-        {
-            handlerTypes = discoveryScope.ServiceProvider
-                .GetServices(interfaceType)
-                .Where(h => h != null)
-                .Select(h => h!.GetType())
-                .ToArray();
-        }
+        // 3. Get fire-and-forget handlers from the channel handler registry
+        var handlers = channelHandlerRegistry.GetFireAndForgetHandlers(channelName, messageType);
 
-        if (handlerTypes.Length == 0)
+        if (handlers.Count == 0)
         {
-             logger.LogWarning("No handlers registered in DI for CLR type '{Type}' (Event: {EventType})", messageType.Name, properties.Type);
-             return DispatchResult.NoHandlers;
+            logger.LogDebug("No fire-and-forget handlers for '{Type}' on channel '{Channel}'", properties.Type, channelName);
+            return DispatchResult.NoHandlers;
         }
 
         // 4. Invoke each handler in its own DI scope for full isolation.
-        //    Skip handlers excluded by the handler filter (e.g. inbox-managed handlers).
+        List<Exception>? exceptions = null;
         var invoked = 0;
-        foreach (var handlerType in handlerTypes)
-        {
-            if (handlerFilter?.ShouldSkip(handlerType, messageType) == true)
-                continue;
 
+        foreach (var handler in handlers)
+        {
             try
             {
-                await handlerInvoker.InvokeAsync(handlerType, message, properties, cancellationToken);
+                await handlerInvoker.InvokeAsync(handler.HandlerType, message, properties, cancellationToken);
                 invoked++;
 
                 logger.LogDebug("Handler '{Handler}' processed message '{Id}' of type '{Type}'",
-                    handlerType.Name, properties.Id, properties.Type);
+                    handler.HandlerType.Name, properties.Id, properties.Type);
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Handler '{Handler}' failed for message '{Id}' of type '{Type}'",
-                    handlerType.Name, properties.Id, properties.Type);
+                    handler.HandlerType.Name, properties.Id, properties.Type);
                 invoked++;
                 exceptions ??= [];
                 exceptions.Add(ex);
@@ -125,8 +105,8 @@ public class MessageDispatcher(
         DispatchResult result;
         if (exceptions != null)
             result = DispatchResult.RecoverableError;
-        else if (invoked == 0 && handlerTypes.Length > 0)
-            result = DispatchResult.NoHandlers; // All handlers were filtered out
+        else if (invoked == 0)
+            result = DispatchResult.NoHandlers;
         else
             result = DispatchResult.Success;
 
@@ -151,10 +131,15 @@ public class MessageDispatcher(
     }
 }
 
+/// <summary>Outcome of message dispatch.</summary>
 public enum DispatchResult
 {
+    /// <summary>All handlers completed successfully.</summary>
     Success,
+    /// <summary>No handlers found for the message.</summary>
     NoHandlers,
+    /// <summary>One or more handlers failed but may succeed on retry.</summary>
     RecoverableError,
+    /// <summary>Message could not be processed (deserialization failure, etc.).</summary>
     PermanentError,
 }

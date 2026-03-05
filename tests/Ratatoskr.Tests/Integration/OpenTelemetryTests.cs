@@ -414,9 +414,9 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("otel-inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("otel-inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, NoOpTestEventHandler>(cfg => cfg.WithInbox("otel-noop"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithPollingInterval(TimeSpan.FromMilliseconds(500)));
+                bus.AddEventConsumeChannel("otel-inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<NoOpTestEventHandler>("otel-noop"))
+                    .UseInbox<TestDbContext>(inbox => inbox.WithPollingInterval(TimeSpan.FromMilliseconds(500))));
             });
             services.AddDbContext<TestDbContext>((sp, opts) =>
                 opts.UseNpgsql(PostgresConnectionString));
@@ -458,9 +458,9 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("otel-inbox-trace", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("otel-inbox-trace", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, NoOpTestEventHandler>(cfg => cfg.WithInbox("otel-trace-noop"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithPollingInterval(TimeSpan.FromMilliseconds(500)));
+                bus.AddEventConsumeChannel("otel-inbox-trace", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<NoOpTestEventHandler>("otel-trace-noop"))
+                    .UseInbox<TestDbContext>(inbox => inbox.WithPollingInterval(TimeSpan.FromMilliseconds(500))));
             });
             services.AddDbContext<TestDbContext>((sp, opts) =>
                 opts.UseNpgsql(PostgresConnectionString));
@@ -514,6 +514,7 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
     private void ConfigureRatatoskr<THandler>(IServiceCollection services, THandler handler, bool useOutbox, Action<RabbitMqConsumeOptions>? configureConsumer = null)
         where THandler : class, IMessageHandler<TestEvent>
     {
+        services.AddSingleton<THandler>(handler);
         services.AddRatatoskr(bus =>
         {
             bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
@@ -529,9 +530,7 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
                      .WithQueueType(QueueType.Classic);
                     configureConsumer?.Invoke(o);
                 })
-                .Consumes<TestEvent>());
-
-            bus.AddHandler<TestEvent, THandler>(handler);
+                .Consumes<TestEvent>(m => m.WithHandler<THandler>()));
 
             if (useOutbox)
             {

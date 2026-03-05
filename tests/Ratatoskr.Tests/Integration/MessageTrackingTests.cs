@@ -2,6 +2,7 @@ using System.Text;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Ratatoskr.Config;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.Local;
@@ -71,10 +72,10 @@ public class MessageTrackingTests(
 
         await StartTestAsync(services =>
         {
+            services.AddSingleton<TestEventHandler>(handler);
             services.AddRatatoskr(bus =>
             {
-                ConfigureConsumeBus(bus);
-                bus.AddHandler<TestEvent, TestEventHandler>(handler);
+                ConfigureConsumeBus(bus, m => m.WithHandler<TestEventHandler>());
             });
             services.AddRatatoskrTesting();
         });
@@ -105,10 +106,10 @@ public class MessageTrackingTests(
 
         await StartTestAsync(services =>
         {
+            services.AddSingleton<TestEventHandler>(handler);
             services.AddRatatoskr(bus =>
             {
-                ConfigureConsumeBus(bus);
-                bus.AddHandler<TestEvent, TestEventHandler>(handler);
+                ConfigureConsumeBus(bus, m => m.WithHandler<TestEventHandler>());
             });
             services.AddRatatoskrTesting();
         });
@@ -144,14 +145,14 @@ public class MessageTrackingTests(
 
         await StartTestAsync(services =>
         {
+            services.AddSingleton<TestEventHandler>(handler);
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
                 bus.AddCommandConsumeChannel(QueueName, c => c
                     .WithRabbitMq(o => o.WithQueueName(QueueName).WithAutoAck(false).WithTransientQueue()
                         .WithQueueType(QueueType.Classic))
-                    .Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, TestEventHandler>(handler);
+                    .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
                 bus.AddEfCoreOutbox<TestDbContext>();
             });
 
@@ -195,10 +196,10 @@ public class MessageTrackingTests(
 
         await StartTestAsync(services =>
         {
+            services.AddSingleton<TestEventHandler>(handler);
             services.AddRatatoskr(bus =>
             {
-                ConfigureConsumeBus(bus);
-                bus.AddHandler<TestEvent, TestEventHandler>(handler);
+                ConfigureConsumeBus(bus, m => m.WithHandler<TestEventHandler>());
             });
             services.AddRatatoskrTesting();
         });
@@ -242,6 +243,7 @@ public class MessageTrackingTests(
 
         await StartTestAsync(services =>
         {
+            services.AddSingleton<ThrowingTestEventHandler>(handler);
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
@@ -255,8 +257,7 @@ public class MessageTrackingTests(
                         .WithRetry(r => r.WithMaxRetries(1).WithDelay(TimeSpan.FromMilliseconds(50)))
                         .WithTransientQueue()
                         .WithQueueType(QueueType.Classic))
-                    .Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, ThrowingTestEventHandler>(handler);
+                    .Consumes<TestEvent>(m => m.WithHandler<ThrowingTestEventHandler>()));
             });
             services.AddRatatoskrTesting();
         });
@@ -326,10 +327,10 @@ public class MessageTrackingTests(
 
         await StartTestAsync(services =>
         {
+            services.AddSingleton<TestEventHandler>(handler);
             services.AddRatatoskr(bus =>
             {
-                ConfigureConsumeBus(bus);
-                bus.AddHandler<TestEvent, TestEventHandler>(handler);
+                ConfigureConsumeBus(bus, m => m.WithHandler<TestEventHandler>());
             });
             services.AddRatatoskrTesting();
         });
@@ -454,10 +455,10 @@ public class MessageTrackingTests(
 
         await StartTestAsync(services =>
         {
+            services.AddSingleton<TestEventHandler>(handler);
             services.AddRatatoskr(bus =>
             {
-                ConfigureConsumeBus(bus);
-                bus.AddHandler<TestEvent, TestEventHandler>(handler);
+                ConfigureConsumeBus(bus, m => m.WithHandler<TestEventHandler>());
             });
             services.AddRatatoskrTesting();
         });
@@ -507,9 +508,9 @@ public class MessageTrackingTests(
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel(channelName, c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel(channelName, c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, NoOpTestEventHandler>(cfg => cfg.WithInbox("no-op"));
-                bus.UseEfCoreInbox<TestDbContext>();
+                bus.AddEventConsumeChannel(channelName, c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<NoOpTestEventHandler>("no-op"))
+                    .UseInbox<TestDbContext>());
             });
             services.AddRatatoskrTesting();
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -544,9 +545,9 @@ public class MessageTrackingTests(
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel(channelName, c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel(channelName, c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, NoOpTestEventHandler>(cfg => cfg.WithInbox("no-op"));
-                bus.UseEfCoreInbox<TestDbContext>();
+                bus.AddEventConsumeChannel(channelName, c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<NoOpTestEventHandler>("no-op"))
+                    .UseInbox<TestDbContext>());
             });
             services.AddRatatoskrTesting();
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -575,7 +576,8 @@ public class MessageTrackingTests(
 
     // --- Test Helpers ---
 
-    private void ConfigureConsumeBus(RatatoskrBuilder bus)
+    private void ConfigureConsumeBus(RatatoskrBuilder bus,
+        Action<MessageConsumptionBuilder<TestEvent>>? configureHandler = null)
     {
         bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
         bus.AddCommandPublishChannel(QueueName, c => c
@@ -584,7 +586,7 @@ public class MessageTrackingTests(
         bus.AddCommandConsumeChannel(QueueName, c => c
             .WithRabbitMq(o => o.WithQueueName(QueueName).WithAutoAck(false).WithTransientQueue()
                 .WithQueueType(QueueType.Classic))
-            .Consumes<TestEvent>());
+            .Consumes<TestEvent>(configureHandler ?? (_ => {})));
     }
 
     private async Task InitializeDatabase()

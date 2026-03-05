@@ -15,4 +15,14 @@ public class HandlerBuilder(HandlerRegistration registration)
         registration.SetExtension(value);
         return this;
     }
+
+    /// <summary>
+    /// Explicitly opts this handler out of deferred (inbox) processing.
+    /// The handler will be invoked synchronously (fire-and-forget).
+    /// </summary>
+    public HandlerBuilder WithoutInbox()
+    {
+        registration.SetExtension(new DeferredProcessingOverride { OptOut = true });
+        return this;
+    }
 }

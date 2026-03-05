@@ -63,10 +63,7 @@ public class TopologyTests(
                         .WithQueueName(QueueName)
                         .WithQueueType(QueueType.Quorum)
                         .WithRetry(1, TimeSpan.FromMilliseconds(100))) // Fast retry
-                    .Consumes<TestEvent>());
-                
-                // Register a handler that always throws permanent error
-                bus.AddHandler<TestEvent, PermanentErrorHandler>();
+                    .Consumes<TestEvent>(m => m.WithHandler<PermanentErrorHandler>()));
             });
         });
 

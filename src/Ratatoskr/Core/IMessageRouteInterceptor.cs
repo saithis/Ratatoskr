@@ -13,7 +13,7 @@ public interface IMessageRouteInterceptor
     /// <returns>Result indicating whether any handlers were accepted for deferred processing.</returns>
     Task<RouteInterceptResult> BeforeDispatchAsync(
         byte[] body, MessageProperties properties, string transportName,
-        CancellationToken cancellationToken);
+        string channelName, CancellationToken cancellationToken);
 }
 
 /// <summary>

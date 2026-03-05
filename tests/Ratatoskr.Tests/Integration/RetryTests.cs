@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Ratatoskr.CloudEvents;
+using Ratatoskr.Config;
 using Ratatoskr.Core;
 using Ratatoskr.RabbitMq;
 using Ratatoskr.RabbitMq.Config;
@@ -63,7 +64,7 @@ public class RetryTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
 
     private void ConfigureRetryConsumer(IServiceCollection services, int maxRetries, bool addHandler = true)
     {
-        services.AddRatatoskr(bus => 
+        services.AddRatatoskr(bus =>
         {
             bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
             bus.AddCommandConsumeChannel(QueueName, c => c
@@ -73,12 +74,9 @@ public class RetryTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                     .WithRetry(r => r.WithMaxRetries(maxRetries).WithDelay(TimeSpan.FromMilliseconds(50)))
                     .WithTransientQueue()
                     .WithQueueType(QueueType.Classic))
-                .Consumes<TestEvent>());
-            
-            if (addHandler)
-            {
-                bus.AddHandler<TestEvent, ThrowingTestEventHandler>(new ThrowingTestEventHandler());
-            }
+                .Consumes<TestEvent>(addHandler
+                    ? m => m.WithHandler<ThrowingTestEventHandler>()
+                    : _ => {}));
         });
     }
 }

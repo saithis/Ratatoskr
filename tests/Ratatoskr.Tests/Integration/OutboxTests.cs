@@ -3,7 +3,6 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
@@ -75,14 +74,14 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
         var handler = new TestEventHandler();
         await StartTestAsync(services =>
         {
+            services.AddSingleton<TestEventHandler>(handler);
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
                 bus.AddCommandConsumeChannel(QueueName, c => c
                     .WithRabbitMq(o => o.WithQueueName(QueueName).WithAutoAck(false).WithTransientQueue()
                         .WithQueueType(QueueType.Classic))
-                    .Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, TestEventHandler>(handler);
+                    .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
                 bus.AddEfCoreOutbox<TestDbContext>();
             });
 
@@ -189,7 +188,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
-            services.AddSingleton(Options.Create(new OutboxOptions()));
+            services.AddSingleton(new OutboxOptionsHolder<TestDbContext>(new OutboxOptions()));
             services.AddDbContext<TestDbContext>((sp, options) =>
             {
                 options.UseNpgsql(PostgresConnectionString);
@@ -289,7 +288,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
-            services.AddSingleton(Options.Create(new OutboxOptions { MaxRetries = 3 }));
+            services.AddSingleton(new OutboxOptionsHolder<TestDbContext>(new OutboxOptions { MaxRetries = 3 }));
             services.AddDbContext<TestDbContext>((sp, options) =>
             {
                 options.UseNpgsql(PostgresConnectionString);
@@ -586,7 +585,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
-            services.AddSingleton(Options.Create(new OutboxOptions()));
+            services.AddSingleton(new OutboxOptionsHolder<TestDbContext>(new OutboxOptions()));
             services.AddDbContext<TestDbContext>((sp, options) =>
             {
                 options.UseNpgsql(PostgresConnectionString);
@@ -648,7 +647,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
-            services.AddSingleton(Options.Create(new OutboxOptions { SendTimeout = TimeSpan.FromMilliseconds(100) }));
+            services.AddSingleton(new OutboxOptionsHolder<TestDbContext>(new OutboxOptions { SendTimeout = TimeSpan.FromMilliseconds(100) }));
             services.AddDbContext<TestDbContext>((sp, options) =>
             {
                 options.UseNpgsql(PostgresConnectionString);
@@ -706,7 +705,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
-            services.AddSingleton(Options.Create(new OutboxOptions
+            services.AddSingleton(new OutboxOptionsHolder<TestDbContext>(new OutboxOptions
             {
                 StuckMessageThreshold = TimeSpan.FromMinutes(5)
             }));

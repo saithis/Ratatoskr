@@ -52,11 +52,13 @@ public class OutboxOptions
     /// </summary>
     public TimeSpan MaxRetryDelay { get; set; } = TimeSpan.FromMinutes(5);
     
+    internal const string DefaultLockName = "OutboxProcessor";
+
     /// <summary>
-    /// Name of the distributed lock. Change this if you have multiple outboxes.
-    /// Default: "OutboxProcessor".
+    /// Name of the distributed lock.
+    /// Default: "OutboxProcessor_{DbContextTypeName}" (auto-generated per DbContext to avoid collisions).
     /// </summary>
-    public string LockName { get; set; } = "OutboxProcessor";
+    public string LockName { get; set; } = DefaultLockName;
 
     /// <summary>
     /// Maximum time a send operation is allowed to run before being cancelled.

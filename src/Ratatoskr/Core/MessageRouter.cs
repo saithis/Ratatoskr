@@ -1,16 +1,16 @@
 namespace Ratatoskr.Core;
 
 /// <summary>
-/// Routes incoming messages through an optional <see cref="IMessageRouteInterceptor"/>
-/// (e.g. inbox acceptance) and then to the <see cref="MessageDispatcher"/> for handler invocation.
+/// Routes incoming messages through registered <see cref="IMessageRouteInterceptor"/> instances
+/// (e.g. inbox acceptance per DbContext) and then to the <see cref="MessageDispatcher"/> for handler invocation.
 /// <para>
 /// Transport consumers call <see cref="RouteAsync"/> instead of interacting with
-/// the interceptor and <see cref="MessageDispatcher"/> separately.
+/// interceptors and <see cref="MessageDispatcher"/> separately.
 /// </para>
 /// </summary>
 public class MessageRouter(
     MessageDispatcher dispatcher,
-    IMessageRouteInterceptor? interceptor = null)
+    IEnumerable<IMessageRouteInterceptor> interceptors)
 {
     public async Task<DispatchResult> RouteAsync(
         byte[] body,
@@ -20,11 +20,11 @@ public class MessageRouter(
         string channelName)
     {
         var handlersAccepted = false;
-        if (interceptor != null)
+        foreach (var interceptor in interceptors)
         {
             var interceptResult = await interceptor.BeforeDispatchAsync(
-                body, properties, transportName, cancellationToken);
-            handlersAccepted = interceptResult.HandlersAccepted;
+                body, properties, transportName, channelName, cancellationToken);
+            handlersAccepted |= interceptResult.HandlersAccepted;
         }
 
         var result = await dispatcher.DispatchAsync(

@@ -77,22 +77,23 @@ public class RatatoskrBuilderTests
     }
 
     [Test]
-    public void AddHandler_RegistersHandlerAsBothTypesInDI()
+    public void WithHandler_RegistersHandlerAsBothTypesInDI()
     {
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        
+
         // Act
-        builder.AddHandler<TestEvent, TestEventHandler>();
+        builder.AddEventConsumeChannel("test-channel", c => c
+            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
         var provider = services.BuildServiceProvider();
-        
+
         // Assert - Can resolve as concrete type
         using (var scope = provider.CreateScope())
         {
             var concreteHandler = scope.ServiceProvider.GetService<TestEventHandler>();
             concreteHandler.Should().NotBeNull();
-            
+
             // Assert - Can resolve as interface
             var interfaceHandler = scope.ServiceProvider.GetService<IMessageHandler<TestEvent>>();
             interfaceHandler.Should().NotBeNull();

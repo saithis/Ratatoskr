@@ -10,10 +10,11 @@ internal class OutboxTriggerInterceptor<TDbContext>(
     OutboxProcessor<TDbContext> outboxProcessor,
     IMessageSerializer messageSerializer,
     IMessagePropertiesEnricher enricher,
+    ChannelRegistry channelRegistry,
+    ChannelHandlerRegistry channelHandlerRegistry,
     IEnumerable<IMessageActivityObserver> observers,
     TimeProvider timeProvider,
     ILogger<OutboxTriggerInterceptor<TDbContext>> logger,
-    InboxHandlerRegistry? inboxHandlerRegistry = null,
     IProcessorTrigger? inboxProcessorTrigger = null)
     : SaveChangesInterceptor where TDbContext : DbContext, IOutboxDbContext
 {
@@ -32,8 +33,6 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         if (context is not IOutboxDbContext outboxDbContext)
             throw new InvalidOperationException("Expected IOutboxDbContext");
 
-        // Peek and process items - if serialization fails,
-        // successfully processed items are already removed, failed items remain
         while (outboxDbContext.OutboxMessages.Queue.TryPeek(out var item))
         {
             var enrichedProperties = enricher.Enrich(item.Message.GetType(), item.Properties);
@@ -46,43 +45,21 @@ internal class OutboxTriggerInterceptor<TDbContext>(
                 throw new InvalidOperationException($"No transports found for message '{item.Message.GetType()}'.");
             }
 
-            // Create one outbox entity per transport
             foreach (var transport in enrichedProperties.Transports)
             {
                 var outboxMessage = OutboxMessageEntity.Create(serializedMessage, enrichedProperties, timeProvider, transport);
                 context.Set<OutboxMessageEntity>().Add(outboxMessage);
             }
 
-            // For local transport messages: write inbox entries in the same transaction
-            // so that inbox-managed handlers are guaranteed to be persisted when the
-            // outbox entry is created. This replaces the DurableLocalMessageSender approach.
+            // For local transport: write inbox entries in the same transaction
+            // Only for channels with inbox on the SAME DbContext as this outbox.
             if (enrichedProperties.Transports.Contains(LocalTransportConstants.TransportName)
                 && context is IInboxDbContext
-                && inboxHandlerRegistry is { IsEmpty: false })
+                && enrichedProperties.Type != null)
             {
-                var inboxHandlers = inboxHandlerRegistry.GetByMessageType(item.Message.GetType());
-                if (inboxHandlers.Count > 0)
-                {
-                    if (string.IsNullOrWhiteSpace(enrichedProperties.Id))
-                        throw new InvalidOperationException($"Inbox requires a non-empty message id for '{item.Message.GetType().FullName}'.");
-                    
-                    context.Set<InboxMessageEntity>().Add(
-                        InboxMessageEntity.Create(enrichedProperties.Id, LocalTransportConstants.TransportName,
-                            serializedMessage, enrichedProperties, timeProvider));
-
-                    foreach (var handler in inboxHandlers)
-                    {
-                        context.Set<InboxHandlerStatusEntity>().Add(
-                            InboxHandlerStatusEntity.Create(enrichedProperties.Id, handler.Key, timeProvider));
-                    }
-
-                    logger.LogDebug(
-                        "Created inbox entries for local message '{MessageId}' with {HandlerCount} handler(s) in outbox transaction",
-                        enrichedProperties.Id, inboxHandlers.Count);
-                }
+                CreateSameTransactionInboxEntries(context, enrichedProperties, serializedMessage);
             }
 
-            // Only dequeue after successful serialization
             outboxDbContext.OutboxMessages.Queue.TryDequeue(out _);
 
             await observers.NotifyAsync(new MessageActivity
@@ -97,6 +74,50 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         }
 
         return result;
+    }
+
+    private void CreateSameTransactionInboxEntries(
+        DbContext context,
+        MessageProperties enrichedProperties,
+        byte[] serializedMessage)
+    {
+        // Find all consume channels for this message wire type
+        var consumeChannels = channelRegistry.FindConsumeChannelsForType(enrichedProperties.Type!);
+        var inboxEntriesCreated = false;
+
+        foreach (var (channel, _) in consumeChannels)
+        {
+            var inboxConfig = channel.GetExtension<ChannelInboxConfig>();
+            if (inboxConfig == null) continue;
+
+            // Only create same-tx entries if the channel's inbox DbContext matches this outbox's DbContext
+            if (inboxConfig.DbContextType != typeof(TDbContext)) continue;
+
+            var inboxHandlers = channelHandlerRegistry.GetInboxHandlers(channel.ChannelName);
+            if (inboxHandlers.Count == 0) continue;
+
+            if (string.IsNullOrWhiteSpace(enrichedProperties.Id))
+                throw new InvalidOperationException(
+                    $"Inbox requires a non-empty message id for '{enrichedProperties.Type}'.");
+
+            if (!inboxEntriesCreated)
+            {
+                context.Set<InboxMessageEntity>().Add(
+                    InboxMessageEntity.Create(enrichedProperties.Id, LocalTransportConstants.TransportName,
+                        serializedMessage, enrichedProperties, timeProvider));
+                inboxEntriesCreated = true;
+            }
+
+            foreach (var handler in inboxHandlers)
+            {
+                context.Set<InboxHandlerStatusEntity>().Add(
+                    InboxHandlerStatusEntity.Create(enrichedProperties.Id, handler.InboxKey!, timeProvider));
+            }
+
+            logger.LogDebug(
+                "Created inbox entries for local message '{MessageId}' on channel '{Channel}' with {HandlerCount} handler(s) in outbox transaction",
+                enrichedProperties.Id, channel.ChannelName, inboxHandlers.Count);
+        }
     }
 
     public override async ValueTask<int> SavedChangesAsync(
@@ -114,7 +135,6 @@ internal class OutboxTriggerInterceptor<TDbContext>(
             await outboxProcessor.TriggerAsync(cancellationToken);
         }
 
-        // Trigger inbox processor if inbox handler statuses were created in this transaction
         if (inboxProcessorTrigger != null)
         {
             var inboxStatuses = eventData.Context?.ChangeTracker.Entries<InboxHandlerStatusEntity>() ?? [];

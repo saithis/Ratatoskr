@@ -23,17 +23,12 @@ Everything happens inside `AddRatatoskr`.
 ### Configuration Example
 
 ```csharp
-services.AddRatatoskr(builder => 
+services.AddRatatoskr(builder =>
 {
     builder.WithServiceName("OrderService");
-    
+
     // Transport Configuration (Global)
     builder.UseRabbitMq(mq => mq.ConnectionString("amqp://..."));
-
-    // Handlers (Generic Registration)
-    // Registers THandler as IMessageHandler<TMessage> in DI
-    builder.AddHandler<CreateOrderHandler>();
-    builder.AddHandler<UserRegisteredHandler>();
 
     // ==========================================
     // 1. PRODUCER: Events we own
@@ -44,7 +39,7 @@ services.AddRatatoskr(builder =>
                .WithTopicExchange()
            )
            // Default Routing Key: Uses [RatatoskrMessage("type")] or typeof(T).Name
-           .Produces<OrderCreated>() 
+           .Produces<OrderCreated>()
            // Overridden Routing Key
            .Produces<OrderCancelled>(cfg => cfg.WithRoutingKey("order.cancelled"));
 
@@ -62,21 +57,26 @@ services.AddRatatoskr(builder =>
     // ==========================================
     // 3. CONSUMER: Commands we own
     // Intent: We own "orders.commands". We declare it and our queue.
+    // Handlers are registered inside Consumes<T>().
     // ==========================================
-    builder.AddCommandConsumeChannel("orders.commands")
+    builder.AddCommandConsumeChannel("orders.commands", c => c
            .WithRabbitMq(cfg => cfg
                 .WithDirectExchange()
                 // For Command Consumption, we usually bind a specific queue
                 .WithQueueName("orders.process")
            )
            // Implicitly binds using Routing Key derived from Type or Attribute
-           .Consumes<CreateOrder>(); 
+           // Handlers are registered per message type
+           .Consumes<CreateOrder>(m => m
+                .WithHandler<CreateOrderHandler>()));
 
     // ==========================================
     // 4. CONSUMER: Events from others
     // Intent: We listen to "users.events". We expect it to exist. We declare our queue.
+    // Handlers are registered inside Consumes<T>().
+    // Inbox is enabled per channel via UseInbox<TDbContext>().
     // ==========================================
-    builder.AddEventConsumeChannel("users.events")
+    builder.AddEventConsumeChannel("users.events", c => c
            .WithRabbitMq(cfg => cfg
                 .WithTopicExchange() // We expect this type
                 // The shared queue for this channel's subscriptions
@@ -84,7 +84,13 @@ services.AddRatatoskr(builder =>
                 // Optional: Global settings for this consumer (e.g. Prefetch)
             )
            // Binds queue "orders.user-handler" to exchange "users.events" with key "user.registered"
-           .Consumes<UserRegistered>(cfg => cfg.WithType("user.registered")); 
+           // Handlers: fire-and-forget (no key) or inbox-managed (with key)
+           .Consumes<UserRegistered>(m => m
+                .WithHandler<UserRegisteredHandler>()                   // fire-and-forget
+                .WithHandler<UserRegisteredInboxHandler>("user-reg"),   // inbox-managed
+                cfg => cfg.WithType("user.registered"))
+           // Enable inbox on this channel — each channel can use a different DbContext
+           .UseInbox<AppDbContext>());
 });
 ```
 
@@ -100,4 +106,4 @@ public record OrderCreated(string OrderId);
 ## Registry Architecture
 
 ### 1. ChannelRegistry
-The root container that holds all the channel information, which in turn hold all the message informations. This is populated from the `AddRatatoskr` configuration.
+The root container that holds all the channel information, which in turn hold all the message and handler registrations. This is populated from the `AddRatatoskr` configuration. Consume channels contain the handler registrations for each message type, including whether each handler is fire-and-forget or inbox-managed.

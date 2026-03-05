@@ -94,16 +94,6 @@ public class InboxBuilder<TDbContext> where TDbContext : DbContext, IInboxDbCont
     }
 
     /// <summary>
-    /// Enrolls all handlers (that have not explicitly called <c>WithoutInbox()</c>) in the inbox by default.
-    /// Handlers without a stable key use the handler's CLR full name as the stable key.
-    /// </summary>
-    public InboxBuilder<TDbContext> WithDefaultInboxEnabled()
-    {
-        Options.DefaultHandlerInboxEnabled = true;
-        return this;
-    }
-
-    /// <summary>
     /// Sets the maximum time a handler is allowed to run before being cancelled.
     /// Timeout cancellation is treated as a handler failure and increments the error count.
     /// </summary>

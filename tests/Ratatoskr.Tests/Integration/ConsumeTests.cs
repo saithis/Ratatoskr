@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using RabbitMQ.Client;
 using Ratatoskr.CloudEvents;
+using Ratatoskr.Config;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.EfCore.Internal;
@@ -24,13 +25,13 @@ public class ConsumeTests(
     {
         // Arrange
         var handler = new TestEventHandler();
-        
+
         await StartTestAsync(services =>
         {
-            services.AddRatatoskr(bus => 
+            services.AddSingleton<TestEventHandler>(handler);
+            services.AddRatatoskr(bus =>
             {
-                ConfigureBus(bus, QueueName);
-                bus.AddHandler<TestEvent, TestEventHandler>(handler);
+                ConfigureBus(bus, QueueName, c => c.WithHandler<TestEventHandler>());
             });
         });
 
@@ -49,14 +50,16 @@ public class ConsumeTests(
         // Arrange
         var handler1 = new TestEventHandler();
         var handler2 = new SecondTestEventHandler();
-        
+
         await StartTestAsync(services =>
         {
-            services.AddRatatoskr(bus => 
+            services.AddSingleton<TestEventHandler>(handler1);
+            services.AddSingleton<SecondTestEventHandler>(handler2);
+            services.AddRatatoskr(bus =>
             {
-                ConfigureBus(bus, QueueName);
-                bus.AddHandler<TestEvent, TestEventHandler>(handler1)
-                   .AddHandler<TestEvent, SecondTestEventHandler>(handler2);
+                ConfigureBus(bus, QueueName, c => c
+                    .WithHandler<TestEventHandler>()
+                    .WithHandler<SecondTestEventHandler>());
             });
         });
 
@@ -76,10 +79,10 @@ public class ConsumeTests(
         var handler = new TestEventHandler();
         await StartTestAsync(services =>
         {
-            services.AddRatatoskr(bus => 
+            services.AddSingleton<TestEventHandler>(handler);
+            services.AddRatatoskr(bus =>
             {
-                ConfigureBus(bus, QueueName);
-                bus.AddHandler<TestEvent, TestEventHandler>(handler);
+                ConfigureBus(bus, QueueName, c => c.WithHandler<TestEventHandler>());
                 bus.ConfigureCloudEvents(ce => ce.ContentMode = CloudEventsContentMode.Binary);
             });
         });
@@ -100,10 +103,10 @@ public class ConsumeTests(
         var handler = new TestEventHandler();
         await StartTestAsync(services =>
         {
+            services.AddSingleton<TestEventHandler>(handler);
             services.AddRatatoskr(bus =>
             {
-                ConfigureBus(bus, QueueName);
-                bus.AddHandler<TestEvent, TestEventHandler>(handler);
+                ConfigureBus(bus, QueueName, c => c.WithHandler<TestEventHandler>());
                 bus.ConfigureCloudEvents(ce => ce.ContentMode = CloudEventsContentMode.Structured);
             });
         });
@@ -126,10 +129,10 @@ public class ConsumeTests(
 
         await StartTestAsync(services =>
         {
+            services.AddSingleton<TestEventHandler>(handler);
             services.AddRatatoskr(bus =>
             {
-                ConfigureBusWithRetry(bus, QueueName, maxRetries: 1);
-                bus.AddHandler<TestEvent, TestEventHandler>(handler);
+                ConfigureBusWithRetry(bus, QueueName, maxRetries: 1, c => c.WithHandler<TestEventHandler>());
             });
         });
 
@@ -151,10 +154,10 @@ public class ConsumeTests(
 
         await StartTestAsync(services =>
         {
+            services.AddSingleton<ThrowingTestEventHandler>(handler);
             services.AddRatatoskr(bus =>
             {
-                ConfigureBusWithRetry(bus, QueueName, maxRetries: 3);
-                bus.AddHandler<TestEvent, ThrowingTestEventHandler>(handler);
+                ConfigureBusWithRetry(bus, QueueName, maxRetries: 3, c => c.WithHandler<ThrowingTestEventHandler>());
             });
         });
 
@@ -181,9 +184,9 @@ public class ConsumeTests(
         {
             services.AddRatatoskr(bus =>
             {
-                ConfigureBus(bus, QueueName);
-                bus.AddHandler<TestEvent, NoOpTestEventHandler>(cfg => cfg.WithInbox("consume-noop"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
+                ConfigureBus(bus, QueueName, c => c
+                    .WithHandler<NoOpTestEventHandler>("consume-noop"),
+                    inbox => inbox.WithoutBackgroundProcessing());
             });
             services.AddDbContext<TestDbContext>((sp, opts) =>
                 opts.UseNpgsql(PostgresConnectionString));
@@ -222,26 +225,42 @@ public class ConsumeTests(
         });
     }
 
-    private void ConfigureBus(RatatoskrBuilder bus, string queueName)
+    private void ConfigureBus(RatatoskrBuilder bus, string queueName,
+        Action<MessageConsumptionBuilder<TestEvent>>? configureHandler = null,
+        Action<InboxBuilder<TestDbContext>>? configureInbox = null)
     {
         bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-        bus.AddCommandConsumeChannel(queueName, c => c
-            .WithRabbitMq(o => o.WithQueueName(queueName).WithAutoAck(false).WithTransientQueue()
-                .WithQueueType(QueueType.Classic))
-            .Consumes<TestEvent>());
+        bus.AddCommandConsumeChannel(queueName, c =>
+        {
+            c.WithRabbitMq(o => o.WithQueueName(queueName).WithAutoAck(false).WithTransientQueue()
+                .WithQueueType(QueueType.Classic));
+            if (configureHandler != null)
+            {
+                var channel = c.Consumes<TestEvent>(configureHandler);
+                if (configureInbox != null)
+                    channel.UseInbox<TestDbContext>(configureInbox);
+            }
+            else
+            {
+                c.Consumes<TestEvent>();
+            }
+        });
     }
 
-    private void ConfigureBusWithRetry(RatatoskrBuilder bus, string queueName, int maxRetries)
+    private void ConfigureBusWithRetry(RatatoskrBuilder bus, string queueName, int maxRetries,
+        Action<MessageConsumptionBuilder<TestEvent>>? configureHandler = null)
     {
         bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-        bus.AddCommandConsumeChannel(queueName, c => c
-            .WithRabbitMq(o => o
+        bus.AddCommandConsumeChannel(queueName, c =>
+        {
+            c.WithRabbitMq(o => o
                 .WithQueueName(queueName)
                 .WithAutoAck(false)
                 .WithRetry(r => r.WithMaxRetries(maxRetries).WithDelay(TimeSpan.FromMilliseconds(50)))
                 .WithTransientQueue()
-                .WithQueueType(QueueType.Classic))
-            .Consumes<TestEvent>());
+                .WithQueueType(QueueType.Classic));
+            c.Consumes<TestEvent>(configureHandler ?? (_ => {}));
+        });
     }
 
     private async Task PublishBinaryCloudEventAsync(string routingKey, TestEvent eventData)

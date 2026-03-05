@@ -27,10 +27,11 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("handler-a"));
-                bus.AddHandler<TestEvent, InboxHandlerB>(cfg => cfg.WithInbox("handler-b"));
-                bus.UseEfCoreInbox<TestDbContext>();
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m
+                        .WithHandler<InboxHandlerA>("handler-a")
+                        .WithHandler<InboxHandlerB>("handler-b"))
+                    .UseInbox<TestDbContext>());
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -90,10 +91,11 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("succeeding"));
-                bus.AddHandler<TestEvent, AlwaysFailingHandler>(cfg => cfg.WithInbox("failing"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m
+                        .WithHandler<InboxHandlerA>("succeeding")
+                        .WithHandler<AlwaysFailingHandler>("failing"))
+                    .UseInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing()));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -167,13 +169,13 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, AlwaysFailingHandler>(cfg => cfg.WithInbox("failing"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox =>
-                {
-                    inbox.WithMaxRetries(10);
-                    inbox.WithoutBackgroundProcessing();
-                });
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<AlwaysFailingHandler>("failing"))
+                    .UseInbox<TestDbContext>(inbox =>
+                    {
+                        inbox.WithMaxRetries(10);
+                        inbox.WithoutBackgroundProcessing();
+                    }));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -249,13 +251,13 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, AlwaysFailingHandler>(cfg => cfg.WithInbox("failing"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox =>
-                {
-                    inbox.WithMaxRetries(3);
-                    inbox.WithoutBackgroundProcessing();
-                });
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<AlwaysFailingHandler>("failing"))
+                    .UseInbox<TestDbContext>(inbox =>
+                    {
+                        inbox.WithMaxRetries(3);
+                        inbox.WithoutBackgroundProcessing();
+                    }));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -313,9 +315,9 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, CountingHandler>(cfg => cfg.WithInbox("counting"));
-                bus.UseEfCoreInbox<TestDbContext>();
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<CountingHandler>("counting"))
+                    .UseInbox<TestDbContext>());
             });
 
             services.AddSingleton(callCounter);
@@ -383,13 +385,13 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("handler-a"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox =>
-                {
-                    inbox.WithStuckMessageThreshold(TimeSpan.FromMinutes(5));
-                    inbox.WithoutBackgroundProcessing();
-                });
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
+                    .UseInbox<TestDbContext>(inbox =>
+                    {
+                        inbox.WithStuckMessageThreshold(TimeSpan.FromMinutes(5));
+                        inbox.WithoutBackgroundProcessing();
+                    }));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -458,14 +460,16 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
 
         await StartTestAsync(services =>
         {
+            services.AddSingleton<TestEventHandler>(nonInboxHandler);
             services.AddRatatoskr(bus =>
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, TestEventHandler>(nonInboxHandler); // Non-inbox (fire-and-forget)
-                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("inbox-handler"));
-                bus.UseEfCoreInbox<TestDbContext>();
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m
+                        .WithHandler<TestEventHandler>()
+                        .WithHandler<InboxHandlerA>("inbox-handler"))
+                    .UseInbox<TestDbContext>());
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -518,10 +522,10 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("inbox-handler"));
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("inbox-handler"))
+                    .UseInbox<TestDbContext>());
                 bus.AddEfCoreOutbox<TestDbContext>();
-                bus.UseEfCoreInbox<TestDbContext>();
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -570,73 +574,23 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
     }
 
     [Test]
-    public async Task Inbox_DefaultInboxEnabled_AllHandlersEnrolled()
+    public async Task Inbox_ExplicitFireAndForget_HandlerSkippedByInbox()
     {
-        // Arrange: UseEfCoreInbox with WithDefaultInboxEnabled() — all handlers get inbox by default
-        await StartTestAsync(services =>
-        {
-            services.AddRatatoskr(bus =>
-            {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                // No explicit WithInbox() — rely on global default
-                bus.AddHandler<TestEvent, InboxHandlerA>();
-                bus.AddHandler<TestEvent, InboxHandlerB>();
-                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithDefaultInboxEnabled());
-            });
-
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
-        });
-
-        await InitializeDatabase();
-
-        await InScopeAsync(async ctx =>
-        {
-            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
-            await bus.PublishDirectAsync(
-                new TestEvent { Id = "business-default-inbox-1" },
-                new MessageProperties { Id = "default-inbox-1" });
-        });
-
-        // Both handlers should be in the inbox (enrolled via global default)
-        await WaitForConditionAsync(
-            async () => await InScopeAsync(async ctx =>
-            {
-                var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-                var statuses = await db.Set<InboxHandlerStatusEntity>().ToListAsync();
-                return statuses.Count == 2 && statuses.All(s => s.CompletedAt != null);
-            }),
-            TimeSpan.FromSeconds(15));
-
-        await InScopeAsync(async ctx =>
-        {
-            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var statuses = await db.Set<InboxHandlerStatusEntity>().ToListAsync();
-            statuses.Should().HaveCount(2);
-            // Keys should be the handler CLR full names
-            statuses.Should().AllSatisfy(s => s.HandlerKey.Should().Contain("InboxHandler"));
-        });
-    }
-
-    [Test]
-    public async Task Inbox_ExplicitWithoutInbox_HandlerSkippedByInbox()
-    {
-        // Arrange: one handler with inbox, one explicitly opted out
+        // Arrange: one handler with inbox, one fire-and-forget
         var nonInboxHandler = new TestEventHandler();
 
         await StartTestAsync(services =>
         {
+            services.AddSingleton<TestEventHandler>(nonInboxHandler);
             services.AddRatatoskr(bus =>
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, TestEventHandler>(nonInboxHandler);
-                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("handler-a"));
-                // WithDefaultInboxEnabled but TestEventHandler explicitly opts out via instance registration
-                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithDefaultInboxEnabled());
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m
+                        .WithHandler<TestEventHandler>()
+                        .WithHandler<InboxHandlerA>("handler-a"))
+                    .UseInbox<TestDbContext>());
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -677,47 +631,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
     }
 
     [Test]
-    public async Task Inbox_OrderIndependent_UseEfCoreInboxBeforeUseLocalTransport()
-    {
-        // Verifies that UseEfCoreInbox can be called BEFORE UseLocalTransport
-        await StartTestAsync(services =>
-        {
-            services.AddRatatoskr(bus =>
-            {
-                // Intentionally call UseEfCoreInbox FIRST
-                bus.UseEfCoreInbox<TestDbContext>();
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("handler-a"));
-            });
-
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
-        });
-
-        await InitializeDatabase();
-
-        await InScopeAsync(async ctx =>
-        {
-            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
-            await bus.PublishDirectAsync(
-                new TestEvent { Id = "business-order-1" },
-                new MessageProperties { Id = "order-1" });
-        });
-
-        await WaitForConditionAsync(
-            async () => await InScopeAsync(async ctx =>
-            {
-                var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-                var status = await db.Set<InboxHandlerStatusEntity>()
-                    .SingleOrDefaultAsync(s => s.HandlerKey == "handler-a");
-                return status?.CompletedAt != null;
-            }),
-            TimeSpan.FromSeconds(15));
-    }
-
-    [Test]
     public async Task Inbox_HandlerSucceedsOnRetry_MarkedAsCompleted()
     {
         // Arrange: handler that fails twice, then succeeds on attempt 3
@@ -732,13 +645,13 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, FailsThenSucceedsHandler>(cfg => cfg.WithInbox("fails-then-succeeds"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox =>
-                {
-                    inbox.WithMaxRetries(5);
-                    inbox.WithoutBackgroundProcessing();
-                });
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<FailsThenSucceedsHandler>("fails-then-succeeds"))
+                    .UseInbox<TestDbContext>(inbox =>
+                    {
+                        inbox.WithMaxRetries(5);
+                        inbox.WithoutBackgroundProcessing();
+                    }));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -795,14 +708,14 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, AlwaysFailingHandler>(cfg => cfg.WithInbox("failing"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox =>
-                {
-                    inbox.WithMaxRetries(20);
-                    inbox.WithMaxRetryDelay(TimeSpan.FromSeconds(30));
-                    inbox.WithoutBackgroundProcessing();
-                });
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<AlwaysFailingHandler>("failing"))
+                    .UseInbox<TestDbContext>(inbox =>
+                    {
+                        inbox.WithMaxRetries(20);
+                        inbox.WithMaxRetryDelay(TimeSpan.FromSeconds(30));
+                        inbox.WithoutBackgroundProcessing();
+                    }));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -852,10 +765,11 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 services.AddRatatoskr(bus =>
                 {
                     bus.UseLocalTransport();
-                    bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                    bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("same-key"));
-                    bus.AddHandler<TestEvent, InboxHandlerB>(cfg => cfg.WithInbox("same-key"));
-                    bus.UseEfCoreInbox<TestDbContext>();
+                    bus.AddEventConsumeChannel("inbox-events", c => c
+                        .Consumes<TestEvent>(m => m
+                            .WithHandler<InboxHandlerA>("same-key")
+                            .WithHandler<InboxHandlerB>("same-key"))
+                        .UseInbox<TestDbContext>());
                 });
 
                 services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -868,35 +782,11 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
     }
 
     [Test]
-    public async Task Inbox_ValidationFailure_HandlerWithoutConsumeChannel_ThrowsAtStartup()
-    {
-        // Arrange & Act & Assert: handler for a type not in any consume channel should throw
-        var act = async () =>
-        {
-            await StartTestAsync(services =>
-            {
-                services.AddRatatoskr(bus =>
-                {
-                    bus.UseLocalTransport();
-                    // No consume channel for TestEvent!
-                    bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("orphan"));
-                    bus.UseEfCoreInbox<TestDbContext>();
-                });
-
-                services.AddDbContext<TestDbContext>((sp, opts) =>
-                    opts.UseNpgsql(PostgresConnectionString));
-            });
-        };
-
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*not registered in any consume channel*");
-    }
-
-    [Test]
     public async Task Inbox_ErrorTruncation_LongErrorMessageTruncatedTo2000Chars()
     {
         // Arrange
         var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
+
         await StartTestAsync(services =>
         {
             services.AddSingleton<TimeProvider>(fakeTime);
@@ -904,9 +794,9 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, LongErrorHandler>(cfg => cfg.WithInbox("long-error"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<LongErrorHandler>("long-error"))
+                    .UseInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing()));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -949,9 +839,9 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("handler-a"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
+                    .UseInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing()));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -1013,14 +903,10 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                     .WithLocal()
                     .Produces<TestEvent>()
                     .Produces<OrderCreatedEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c =>
-                {
-                    c.Consumes<TestEvent>();
-                    c.Consumes<OrderCreatedEvent>();
-                });
-                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("test-handler"));
-                bus.AddHandler<OrderCreatedEvent, OrderCreatedInboxHandler>(cfg => cfg.WithInbox("order-handler"));
-                bus.UseEfCoreInbox<TestDbContext>();
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("test-handler"))
+                    .Consumes<OrderCreatedEvent>(m => m.WithHandler<OrderCreatedInboxHandler>("order-handler"))
+                    .UseInbox<TestDbContext>());
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -1079,9 +965,9 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("roundtrip"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("roundtrip"))
+                    .UseInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing()));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -1092,7 +978,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
 
         const string cloudEventsId = "ce-roundtrip-1";
         const string businessId = "business-roundtrip-1";
-        const string data = "special chars: <>&\"' \u00e9\u00e8\u00ea";
+        const string data = "special chars: <>&\"' éèê";
 
         await InScopeAsync(async ctx =>
         {
@@ -1133,9 +1019,9 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("handler-a"));
-                bus.UseEfCoreInbox<TestDbContext>();
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
+                    .UseInbox<TestDbContext>());
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -1203,9 +1089,9 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, CountingHandler>(cfg => cfg.WithInbox("counting"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<CountingHandler>("counting"))
+                    .UseInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing()));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -1260,9 +1146,9 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, CancellableHandler>(cfg => cfg.WithInbox("cancellable"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<CancellableHandler>("cancellable"))
+                    .UseInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing()));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -1322,13 +1208,13 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("handler-a"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox =>
-                {
-                    inbox.WithBatchSize(3);
-                    inbox.WithoutBackgroundProcessing();
-                });
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
+                    .UseInbox<TestDbContext>(inbox =>
+                    {
+                        inbox.WithBatchSize(3);
+                        inbox.WithoutBackgroundProcessing();
+                    }));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -1371,18 +1257,19 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
     [Test]
     public async Task Inbox_ZeroInboxHandlers_MessagesDispatchedNormally()
     {
-        // Arrange: UseEfCoreInbox configured but no handlers with WithInbox()
+        // Arrange: channel with UseInbox but no handlers registered with an inbox key
         var nonInboxHandler = new TestEventHandler();
 
         await StartTestAsync(services =>
         {
+            services.AddSingleton<TestEventHandler>(nonInboxHandler);
             services.AddRatatoskr(bus =>
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, TestEventHandler>(nonInboxHandler);
-                bus.UseEfCoreInbox<TestDbContext>(); // Inbox enabled, but no handlers opted in
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
+                    .UseInbox<TestDbContext>());
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -1422,10 +1309,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
     [Test]
     public async Task Inbox_CancellationDuringHandler_DoesNotIncrementErrorCount()
     {
-        // Verifies that when the cancellation token fires mid-handler (e.g. app shutdown),
-        // the handler's ErrorCount is NOT incremented and the status is NOT poisoned.
-        // Stuck detection will recover it on the next restart.
-
         var coordination = new CancellableHandlerCoordination();
         var cts = new CancellationTokenSource();
 
@@ -1436,9 +1319,9 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, CancellableHandler>(cfg => cfg.WithInbox("cancellable"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<CancellableHandler>("cancellable"))
+                    .UseInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing()));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -1457,21 +1340,17 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
 
         await WaitForInboxEntriesAsync(1);
 
-        // Process with a cancellable token — cancel while handler is running
         var processTask = InScopeAsync(async ctx =>
         {
             var processor = ctx.ServiceProvider.GetRequiredService<InboxMessageProcessor<TestDbContext>>();
             await processor.ProcessBatchAsync(false, cts.Token);
         });
 
-        // Wait for handler to start, then cancel
         await coordination.HandlerStarted.WaitAsync(TimeSpan.FromSeconds(5));
         await cts.CancelAsync();
 
-        // The handler will throw OperationCanceledException
         await processTask;
 
-        // Assert: ErrorCount should still be 0 and status should NOT be poisoned
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
@@ -1479,90 +1358,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             status.ErrorCount.Should().Be(0, "cancellation should not count as a handler failure");
             status.IsPoisoned.Should().BeFalse("cancellation should not poison the handler");
             status.CompletedAt.Should().BeNull("handler was interrupted");
-            // ProcessingStartedAt should still be set (stuck detection picks it up)
             status.ProcessingStartedAt.Should().NotBeNull("status should remain in processing state for stuck detection");
-        });
-    }
-
-    [Test]
-    public async Task Inbox_WithInboxNoKey_UsesHandlerClrFullNameAsKey()
-    {
-        // Verifies that WithInbox() (no explicit key) uses the handler's CLR full name.
-
-        await StartTestAsync(services =>
-        {
-            services.AddRatatoskr(bus =>
-            {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox());
-                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
-            });
-
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
-        });
-
-        await InitializeDatabase();
-
-        await InScopeAsync(async ctx =>
-        {
-            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
-            await bus.PublishDirectAsync(
-                new TestEvent { Id = "business-nokey-1" },
-                new MessageProperties { Id = "nokey-1" });
-        });
-
-        await WaitForInboxEntriesAsync(1);
-
-        await InScopeAsync(async ctx =>
-        {
-            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var status = await db.Set<InboxHandlerStatusEntity>().SingleAsync();
-            status.HandlerKey.Should().Be(typeof(InboxHandlerA).FullName);
-        });
-    }
-
-    [Test]
-    public async Task Inbox_DefaultInboxEnabled_WithExplicitKey_ExplicitKeyTakesPrecedence()
-    {
-        await StartTestAsync(services =>
-        {
-            services.AddRatatoskr(bus =>
-            {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("my-explicit-key"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox =>
-                {
-                    inbox.WithDefaultInboxEnabled();
-                    inbox.WithoutBackgroundProcessing();
-                });
-            });
-
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
-        });
-
-        await InitializeDatabase();
-
-        await InScopeAsync(async ctx =>
-        {
-            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
-            await bus.PublishDirectAsync(
-                new TestEvent { Id = "business-explicit-1" },
-                new MessageProperties { Id = "explicit-1" });
-        });
-
-        await WaitForInboxEntriesAsync(1);
-
-        await InScopeAsync(async ctx =>
-        {
-            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var status = await db.Set<InboxHandlerStatusEntity>().SingleAsync();
-            status.HandlerKey.Should().Be("my-explicit-key");
         });
     }
 
@@ -1578,13 +1374,13 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, AlwaysFailingHandler>(cfg => cfg.WithInbox("fail-once"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox =>
-                {
-                    inbox.WithMaxRetries(1);
-                    inbox.WithoutBackgroundProcessing();
-                });
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<AlwaysFailingHandler>("fail-once"))
+                    .UseInbox<TestDbContext>(inbox =>
+                    {
+                        inbox.WithMaxRetries(1);
+                        inbox.WithoutBackgroundProcessing();
+                    }));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -1617,8 +1413,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
     [Test]
     public async Task Inbox_PerHandlerSave_CompletedHandlersSurviveSubsequentFailures()
     {
-        // Verifies that when handler A succeeds and handler B fails,
-        // handler A's completed state is already persisted and won't be lost.
         var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
 
         await StartTestAsync(services =>
@@ -1628,10 +1422,11 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("a-succeeds"));
-                bus.AddHandler<TestEvent, AlwaysFailingHandler>(cfg => cfg.WithInbox("b-fails"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m
+                        .WithHandler<InboxHandlerA>("a-succeeds")
+                        .WithHandler<AlwaysFailingHandler>("b-fails"))
+                    .UseInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing()));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -1652,7 +1447,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
 
         await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
 
-        // Verify both states are persisted correctly
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
@@ -1679,9 +1473,9 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("handler-a"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
+                    .UseInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing()));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -1711,9 +1505,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
     [Test]
     public async Task Inbox_MessageIdExceeds200Chars_Throws()
     {
-        // When using the outbox with local transport, the OutboxTriggerInterceptor writes
-        // inbox entries in the same DB transaction. InboxMessageEntity.Create validates
-        // the ID length and throws synchronously during SaveChangesAsync.
         var tooLongId = new string('a', 201);
 
         await StartTestAsync(services =>
@@ -1722,10 +1513,10 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("handler-a"));
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
+                    .UseInbox<TestDbContext>());
                 bus.AddEfCoreOutbox<TestDbContext>();
-                bus.UseEfCoreInbox<TestDbContext>();
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -1753,8 +1544,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
     [Test]
     public async Task Inbox_ErrorCountPreservedAfterSuccessfulRetry()
     {
-        // Handler fails twice, then succeeds on third attempt.
-        // After success, ErrorCount should still be 2 (not reset).
         var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
         var counter = new InvocationCounter();
 
@@ -1766,9 +1555,9 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, FailsThenSucceedsHandler>(cfg => cfg.WithInbox("flaky"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<FailsThenSucceedsHandler>("flaky"))
+                    .UseInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing()));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -1787,13 +1576,10 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
 
         await WaitForInboxEntriesAsync(1);
 
-        // Attempt 1: fails
         await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
         fakeTime.Advance(TimeSpan.FromSeconds(5));
-        // Attempt 2: fails
         await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
         fakeTime.Advance(TimeSpan.FromSeconds(10));
-        // Attempt 3: succeeds
         await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
 
         await InScopeAsync(async ctx =>
@@ -1818,9 +1604,9 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("with-created"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("with-created"))
+                    .UseInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing()));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -1850,10 +1636,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
     [Test]
     public async Task Inbox_HandlerKeyNoLongerRegistered_PoisonedImmediately()
     {
-        // Simulates a deployment where a handler is removed/renamed: the handler status row
-        // references a key that no longer exists in InboxHandlerRegistry.
-        // The processor should poison it immediately — no point retrying 5 times.
-
         var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
 
         await StartTestAsync(services =>
@@ -1863,13 +1645,13 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("handler-a"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox =>
-                {
-                    inbox.WithMaxRetries(5);
-                    inbox.WithoutBackgroundProcessing();
-                });
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
+                    .UseInbox<TestDbContext>(inbox =>
+                    {
+                        inbox.WithMaxRetries(5);
+                        inbox.WithoutBackgroundProcessing();
+                    }));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -1878,7 +1660,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
 
         await InitializeDatabase();
 
-        // Publish to create inbox entries (handler status with key "handler-a")
         await InScopeAsync(async ctx =>
         {
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
@@ -1889,17 +1670,13 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
 
         await WaitForInboxEntriesAsync(1);
 
-        // Simulate a deployment that removed/renamed the handler:
-        // change the handler key in the DB to something that's no longer registered.
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            // Also drop the unique index that covers (MessageId, HandlerKey) to allow the update
             await db.Database.ExecuteSqlRawAsync(
                 """UPDATE "InboxHandlerStatusEntity" SET "HandlerKey" = 'handler-removed-in-v2' WHERE "HandlerKey" = 'handler-a'""");
         });
 
-        // Process — should poison immediately, NOT retry 5 times
         await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
 
         await InScopeAsync(async ctx =>
@@ -1916,8 +1693,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
     [Test]
     public async Task Inbox_HandlerScopeIsolation_HandlersDoNotShareDbContext()
     {
-        // Verifies that MessageDispatcher creates a separate DI scope per handler,
-        // so changes to scoped services (like DbContext) in one handler don't leak to another.
         var tracker = new ScopeIsolationTracker();
         await StartTestAsync(services =>
         {
@@ -1926,10 +1701,10 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("test-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("test-events", c => c.Consumes<TestEvent>());
-                // Two non-inbox handlers — each should get its own DI scope
-                bus.AddHandler<TestEvent, ChangeTrackerPollutingHandler>();
-                bus.AddHandler<TestEvent, ChangeTrackerCheckingHandler>();
+                bus.AddEventConsumeChannel("test-events", c => c
+                    .Consumes<TestEvent>(m => m
+                        .WithHandler<ChangeTrackerPollutingHandler>()
+                        .WithHandler<ChangeTrackerCheckingHandler>()));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -1955,9 +1730,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
     [Test]
     public async Task Inbox_ChangeTrackerClear_DoesNotAffectNonInboxHandler()
     {
-        // Verifies that ChangeTracker.Clear() in InboxPersistence (dedup path) does not
-        // corrupt scoped services used by non-inbox handlers, because each handler and
-        // the inbox interceptor each run in their own DI scope.
         var writeTracker = new DbWriteTracker();
         await StartTestAsync(services =>
         {
@@ -1966,10 +1738,11 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("test-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("test-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("inbox-handler"));
-                bus.AddHandler<TestEvent, DbWritingHandler>();
-                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
+                bus.AddEventConsumeChannel("test-events", c => c
+                    .Consumes<TestEvent>(m => m
+                        .WithHandler<InboxHandlerA>("inbox-handler")
+                        .WithHandler<DbWritingHandler>())
+                    .UseInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing()));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -1978,7 +1751,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
 
         await InitializeDatabase();
 
-        // First send — inbox entries persist normally
         await InScopeAsync(async ctx =>
         {
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
@@ -1989,18 +1761,16 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
 
         await writeTracker.WaitForWriteCountAsync(1, TimeSpan.FromSeconds(10));
 
-        // Second send — same message ID triggers ChangeTracker.Clear() in InboxPersistence (dedup)
         await InScopeAsync(async ctx =>
         {
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             await bus.PublishDirectAsync(
                 new TestEvent { Id = "ct-clear-1-dup" },
-                new MessageProperties { Id = "ct-clear-1" }); // same CloudEvents ID
+                new MessageProperties { Id = "ct-clear-1" });
         });
 
         await writeTracker.WaitForWriteCountAsync(2, TimeSpan.FromSeconds(10));
 
-        // Verify: non-inbox handler's DB writes succeeded for both deliveries
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
@@ -2012,8 +1782,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
     [Test]
     public async Task Inbox_InterceptorFailure_DoesNotRunNonInboxHandlers()
     {
-        // Verifies that when the route interceptor fails, the MessageDispatcher never runs,
-        // so non-inbox handlers are not invoked for that message.
         var nonInboxCounter = new InvocationCounter();
         var failingInterceptor = new AlwaysFailingInterceptor();
 
@@ -2024,13 +1792,13 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, CountingNonInboxHandler>(); // Non-inbox (fire-and-forget)
-                bus.AddHandler<TestEvent, InboxHandlerA>(cfg => cfg.WithInbox("inbox-a"));
-                bus.UseEfCoreInbox<TestDbContext>();
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m
+                        .WithHandler<CountingNonInboxHandler>()
+                        .WithHandler<InboxHandlerA>("inbox-a"))
+                    .UseInbox<TestDbContext>());
             });
 
-            // Replace the real IMessageRouteInterceptor with one that always throws.
             services.RemoveAll<IMessageRouteInterceptor>();
             services.AddSingleton<IMessageRouteInterceptor>(failingInterceptor);
 
@@ -2040,8 +1808,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
 
         await InitializeDatabase();
 
-        // Act — publish a message. PublishDirectAsync succeeds (writes to in-memory channel),
-        // but the consumer-side interceptor throws before dispatch.
         await InScopeAsync(async ctx =>
         {
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
@@ -2050,11 +1816,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 new MessageProperties { Id = "accept-fail-1" });
         });
 
-        // Wait for the interceptor to be called (deterministic, no arbitrary delay)
         await failingInterceptor.WaitForCallAsync(TimeSpan.FromSeconds(5));
 
-        // Assert — non-inbox handler should NOT have been called because the interceptor
-        // threw before MessageDispatcher ran.
         nonInboxCounter.Count.Should().Be(0,
             "non-inbox handlers must not execute when route interception fails");
     }
@@ -2062,22 +1825,19 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
     [Test]
     public async Task Inbox_HandlerTimeout_IncreasesErrorCount()
     {
-        // Verifies that a handler exceeding the configured timeout is treated as a failure.
-        // The timeout CTS cancels only the handler's token; the outer cancellationToken is NOT cancelled,
-        // so the OperationCanceledException falls into the general failure path (not the shutdown path).
         await StartTestAsync(services =>
         {
             services.AddRatatoskr(bus =>
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, SlowHandler>(cfg => cfg.WithInbox("slow-handler"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox =>
-                {
-                    inbox.WithHandlerTimeout(TimeSpan.FromMilliseconds(100));
-                    inbox.WithoutBackgroundProcessing();
-                });
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<SlowHandler>("slow-handler"))
+                    .UseInbox<TestDbContext>(inbox =>
+                    {
+                        inbox.WithHandlerTimeout(TimeSpan.FromMilliseconds(100));
+                        inbox.WithoutBackgroundProcessing();
+                    }));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -2096,10 +1856,8 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
 
         await WaitForInboxEntriesAsync(1);
 
-        // Act — process; the handler will be cancelled by the timeout
         await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
 
-        // Assert
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
@@ -2113,7 +1871,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
     [Test]
     public async Task Inbox_HandlerTimeout_EventuallyPoisoned()
     {
-        // Verifies that repeated timeouts eventually poison the handler status.
         var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
 
         await StartTestAsync(services =>
@@ -2123,14 +1880,14 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             {
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c.Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, SlowHandler>(cfg => cfg.WithInbox("slow-handler"));
-                bus.UseEfCoreInbox<TestDbContext>(inbox =>
-                {
-                    inbox.WithHandlerTimeout(TimeSpan.FromMilliseconds(100));
-                    inbox.WithMaxRetries(2);
-                    inbox.WithoutBackgroundProcessing();
-                });
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<SlowHandler>("slow-handler"))
+                    .UseInbox<TestDbContext>(inbox =>
+                    {
+                        inbox.WithHandlerTimeout(TimeSpan.FromMilliseconds(100));
+                        inbox.WithMaxRetries(2);
+                        inbox.WithoutBackgroundProcessing();
+                    }));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -2149,14 +1906,12 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
 
         await WaitForInboxEntriesAsync(1);
 
-        // Process MaxRetries times with time advances between each attempt
         for (int i = 0; i < 2; i++)
         {
             await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
             fakeTime.Advance(TimeSpan.FromMinutes(10));
         }
 
-        // Assert — handler should be poisoned after MaxRetries timeouts
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
@@ -2182,8 +1937,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
 
     /// <summary>
     /// Waits for the expected number of inbox handler status entries to appear in the database.
-    /// With the new architecture, inbox entries are written by the consumer-side <see cref="InboxRouteInterceptor{TDbContext}"/>,
-    /// which runs asynchronously after <c>PublishDirectAsync</c> writes to the in-memory channel.
     /// </summary>
     private async Task WaitForInboxEntriesAsync(int expectedCount, TimeSpan? timeout = null)
     {
@@ -2220,32 +1973,24 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
 
     #region Handler Types
 
-    /// <summary>Basic handler that always succeeds.</summary>
     private class InboxHandlerA : IMessageHandler<TestEvent>
     {
         public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
             => Task.CompletedTask;
     }
 
-    /// <summary>Second basic handler that always succeeds (different type needed for two-handler tests).</summary>
     private class InboxHandlerB : IMessageHandler<TestEvent>
     {
         public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
             => Task.CompletedTask;
     }
 
-    /// <summary>Handler that always throws, used for retry/backoff/poison tests.</summary>
     private class AlwaysFailingHandler : IMessageHandler<TestEvent>
     {
         public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
             => throw new InvalidOperationException("Handler failed intentionally");
     }
 
-    /// <summary>
-    /// Handler that increments a singleton <see cref="InvocationCounter"/> on each call.
-    /// Since the handler is scoped (registered via AddHandler with inbox key), a new instance
-    /// is created per InboxProcessor invocation, but the singleton counter persists.
-    /// </summary>
     private class CountingHandler(InvocationCounter counter) : IMessageHandler<TestEvent>
     {
         public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
@@ -2255,7 +2000,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
         }
     }
 
-    /// <summary>Thread-safe invocation counter for deduplication and retry tests.</summary>
     private class InvocationCounter
     {
         private int _count;
@@ -2263,9 +2007,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
         public int Count => _count;
     }
 
-    /// <summary>Handler that fails the first N invocations then succeeds.
-    /// Since inbox handlers are scoped (new instance per invocation), the failure count
-    /// must be tracked via the singleton <see cref="InvocationCounter"/>.</summary>
     private class FailsThenSucceedsHandler(InvocationCounter counter) : IMessageHandler<TestEvent>
     {
         private const int FailuresBeforeSuccess = 2;
@@ -2279,28 +2020,24 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
         }
     }
 
-    /// <summary>Handler for OrderCreatedEvent (second message type for multi-type tests).</summary>
     private class OrderCreatedInboxHandler : IMessageHandler<OrderCreatedEvent>
     {
         public Task HandleAsync(OrderCreatedEvent message, MessageProperties props, CancellationToken ct)
             => Task.CompletedTask;
     }
 
-    /// <summary>Handler that throws an exception with a message exceeding 2000 chars.</summary>
     private class LongErrorHandler : IMessageHandler<TestEvent>
     {
         public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
             => throw new InvalidOperationException(new string('X', 5000));
     }
 
-    /// <summary>Coordination object for the cancellable handler test (avoids DI ambiguity with two SemaphoreSlim params).</summary>
     private class CancellableHandlerCoordination
     {
         public SemaphoreSlim HandlerStarted { get; } = new(0, 1);
         public SemaphoreSlim HandlerGate { get; } = new(0, 1);
     }
 
-    /// <summary>Handler that blocks until a semaphore is released, then checks for cancellation.</summary>
     private class CancellableHandler(CancellableHandlerCoordination coordination) : IMessageHandler<TestEvent>
     {
         public async Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
@@ -2311,18 +2048,15 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
         }
     }
 
-    /// <summary>Tracks scope isolation: adds an entity to the change tracker but doesn't save.</summary>
     private class ChangeTrackerPollutingHandler(TestDbContext db) : IMessageHandler<TestEvent>
     {
         public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
         {
-            // Add entity to change tracker but DON'T save — if scopes leak, the next handler sees this
             db.TestEntities.Add(new TestEntity { Name = "leaked-from-polluting-handler" });
             return Task.CompletedTask;
         }
     }
 
-    /// <summary>Checks whether the DbContext has any tracked changes (it shouldn't if scopes are isolated).</summary>
     private class ChangeTrackerCheckingHandler(TestDbContext db, ScopeIsolationTracker tracker) : IMessageHandler<TestEvent>
     {
         public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
@@ -2333,7 +2067,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
         }
     }
 
-    /// <summary>Coordination object for scope isolation tests.</summary>
     private class ScopeIsolationTracker
     {
         private readonly TaskCompletionSource _completed = new();
@@ -2343,7 +2076,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
         public Task WaitForCompletionAsync(TimeSpan timeout) => _completed.Task.WaitAsync(timeout);
     }
 
-    /// <summary>Non-inbox handler that writes a TestEntity to the DB on every invocation.</summary>
     private class DbWritingHandler(TestDbContext db, DbWriteTracker tracker) : IMessageHandler<TestEvent>
     {
         public async Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
@@ -2354,7 +2086,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
         }
     }
 
-    /// <summary>Tracks DB writes from the DbWritingHandler.</summary>
     private class DbWriteTracker
     {
         private int _count;
@@ -2370,7 +2101,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
         }
     }
 
-    /// <summary>Handler that blocks indefinitely until its cancellation token fires. Used for timeout tests.</summary>
     private class SlowHandler : IMessageHandler<TestEvent>
     {
         public async Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
@@ -2379,7 +2109,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
         }
     }
 
-    /// <summary>Non-inbox handler that increments a singleton counter. Used to verify non-inbox handler execution.</summary>
     private class CountingNonInboxHandler(InvocationCounter counter) : IMessageHandler<TestEvent>
     {
         public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
@@ -2389,7 +2118,6 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
         }
     }
 
-    /// <summary>Interceptor that always throws, used to test route interception failure behavior.</summary>
     private class AlwaysFailingInterceptor : IMessageRouteInterceptor
     {
         private readonly TaskCompletionSource _called = new();
@@ -2397,14 +2125,13 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
         public Task WaitForCallAsync(TimeSpan timeout) => _called.Task.WaitAsync(timeout);
 
         public Task<RouteInterceptResult> BeforeDispatchAsync(byte[] body, MessageProperties properties,
-            string transportName, CancellationToken cancellationToken)
+            string transportName, string channelName, CancellationToken cancellationToken)
         {
             _called.TrySetResult();
             throw new InvalidOperationException("Simulated interceptor failure");
         }
     }
 
-    /// <summary>Observer that signals when a Dispatched-stage activity fires. Used to synchronize with dispatch completion.</summary>
     private class DispatchCompletionObserver : IMessageActivityObserver
     {
         private readonly TaskCompletionSource _dispatched = new();

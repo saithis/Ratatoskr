@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Ratatoskr.Core;
 
 namespace Ratatoskr.EfCore.Internal;
@@ -9,33 +8,37 @@ namespace Ratatoskr.EfCore.Internal;
 /// <summary>
 /// Core inbox message processing logic shared between production and testing.
 /// For each pending <see cref="InboxHandlerStatusEntity"/>, resolves the corresponding handler
-/// from DI and invokes it. Handles exponential backoff and stuck message detection.
+/// from the <see cref="ChannelHandlerRegistry"/> and invokes it. Handles exponential backoff and stuck message detection.
 /// </summary>
 internal class InboxMessageProcessor<TDbContext>(
     TDbContext dbContext,
     HandlerInvoker handlerInvoker,
-    InboxHandlerRegistry handlerRegistry,
+    ChannelHandlerRegistry channelHandlerRegistry,
     InboxTelemetry telemetry,
     TimeProvider timeProvider,
-    IOptions<InboxOptions> options,
+    InboxOptionsHolder<TDbContext> optionsHolder,
     IEnumerable<IMessageActivityObserver> observers,
     IMessageSerializer messageSerializer,
     ILogger<InboxMessageProcessor<TDbContext>> logger)
     where TDbContext : DbContext, IInboxDbContext
 {
-    private readonly InboxOptions _options = options.Value;
+    private readonly InboxOptions _options = optionsHolder.Options;
+
     /// <summary>
     /// Processes a single batch of pending handler statuses.
     /// Returns the number of handler statuses picked up in the batch (0 means no work found).
     /// </summary>
-    /// <param name="includeStuckMessageDetection">Whether to include stuck-message detection (needed in background processing).</param>
+    /// <remarks>
+    /// Each DbContext type is expected to have its own database, so queries naturally return
+    /// only data for that database. Handler lookup by key is global (across all DbContext types),
+    /// so correctness is maintained even if databases overlap.
+    /// </remarks>
     public async Task<int> ProcessBatchAsync(
         bool includeStuckMessageDetection,
         CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
 
-        // Query pending handler statuses
         var query = dbContext.Set<InboxHandlerStatusEntity>()
             .Where(s => s.CompletedAt == null
                      && !s.IsPoisoned
@@ -57,16 +60,11 @@ internal class InboxMessageProcessor<TDbContext>(
 
         logger.LogInformation("Found {Count} inbox handler status(es) to deliver", statuses.Length);
 
-        // Load all required messages in one query
         var messageIds = statuses.Select(s => s.MessageId).Distinct().ToArray();
         var messages = await dbContext.Set<InboxMessageEntity>()
             .Where(m => messageIds.Contains(m.Id))
             .ToDictionaryAsync(m => m.Id, cancellationToken);
 
-        // Claim statuses with optimistic concurrency. If another worker already
-        // claimed some of these rows, their Version column has changed and EF Core
-        // throws DbUpdateConcurrencyException. We reload the conflicting entries
-        // (which resets them to Unchanged) and retry with the remaining entries.
         foreach (var status in statuses)
             status.MarkAsProcessing(timeProvider);
 
@@ -112,7 +110,6 @@ internal class InboxMessageProcessor<TDbContext>(
                 continue;
             }
 
-            // Deserialize properties before handler lookup so observers can fire for all poison paths
             MessageProperties props;
             try
             {
@@ -128,7 +125,7 @@ internal class InboxMessageProcessor<TDbContext>(
                 continue;
             }
 
-            var registration = handlerRegistry.GetByKey(status.HandlerKey);
+            var registration = channelHandlerRegistry.GetInboxRegistrationByKey(status.HandlerKey);
             if (registration == null)
             {
                 logger.LogWarning(
@@ -158,14 +155,10 @@ internal class InboxMessageProcessor<TDbContext>(
             {
                 deliverActivity = telemetry.StartDeliverActivity(props, status.HandlerKey);
 
-                // Deserialize message body
                 var message = messageSerializer.Deserialize(inboxMessage.Content, registration.MessageType)
                               ?? throw new InvalidOperationException(
                                   $"Deserialized message of type '{registration.MessageType.Name}' was null.");
 
-                // Invoke handler in a fresh DI scope via compiled delegate.
-                // Timeout cancellation falls into the general catch (not the shutdown catch) because
-                // the outer cancellationToken is NOT cancelled — only the timeout CTS is.
                 await handlerInvoker.InvokeAsync(
                     registration.HandlerType, message, props,
                     cancellationToken, _options.HandlerTimeout);
@@ -178,8 +171,6 @@ internal class InboxMessageProcessor<TDbContext>(
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                // Shutdown or lock loss — do NOT count as a handler failure.
-                // Leave status as "processing"; stuck detection will recover it on restart.
                 logger.LogDebug(
                     "Inbox handler '{HandlerKey}' for message '{MessageId}' interrupted by cancellation, will be retried via stuck detection",
                     status.HandlerKey, status.MessageId);
@@ -207,10 +198,8 @@ internal class InboxMessageProcessor<TDbContext>(
                 deliverActivity?.Dispose();
             }
 
-            // Persist each handler's state immediately so progress isn't lost on crash
             await dbContext.SaveChangesAsync(CancellationToken.None);
 
-            // Fire InboxDispatched observer — always fires (props always available here)
             await observers.NotifyAsync(new MessageActivity
             {
                 Stage = MessageStage.InboxDispatched,
@@ -222,7 +211,6 @@ internal class InboxMessageProcessor<TDbContext>(
                 Timestamp = timeProvider.GetUtcNow(),
             }, logger);
 
-            // Fire InboxPoisoned observer when max retries are exceeded
             if (status.IsPoisoned)
             {
                 telemetry.RecordPoisoned();

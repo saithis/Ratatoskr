@@ -35,8 +35,11 @@ public static class ServiceCollectionExtensions
         // Register message properties enricher
         services.AddSingleton<IMessagePropertiesEnricher, MessagePropertiesEnricher>();
 
-        // Register ChannelRegistry
+        // Register ChannelRegistry and ChannelHandlerRegistry
         services.AddSingleton(builder.ChannelRegistry);
+        var handlerRegistry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
+        builder.ValidateHandlers(handlerRegistry);
+        services.AddSingleton(handlerRegistry);
 
         // Register serializer
         services.AddSingleton<IMessageSerializer, JsonMessageSerializer>();
