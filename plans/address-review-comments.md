@@ -6,35 +6,106 @@ Three AI reviewers (Antigravity, Claude, Cursor) provided feedback on the `multi
 
 ---
 
-## 1. Startup validation: same message type on different DbContexts
+## 1. Fix: make InboxHandlerRegistry channel-aware
 
-**Problem:** `InboxHandlerRegistry` is global — maps wire type name to handlers without per-channel/per-DbContext scoping. When the same message type (e.g. `test.event`) is consumed on two channels with different DbContexts, both `InboxAcceptor<Context1>` and `InboxAcceptor<Context2>` create handler statuses for ALL handlers of that wire type.
+**Problem:** `InboxHandlerRegistry` is global — maps wire type name to handlers without per-channel scoping. When the same message type (e.g. `test.event`) is consumed on two channels with different DbContexts, both `InboxAcceptor<Context1>` and `InboxAcceptor<Context2>` create handler statuses for ALL handlers of that wire type, causing each handler to be processed in every DbContext instead of only its own.
 
-**Fix:** Add startup validation in `InboxConfigurationFinalizer.PopulateRoutingTable()` that throws if the same wire type name appears on channels mapped to different DbContexts. This prevents the bug at startup rather than silently producing wrong behavior.
+**Fix:** Scope handler registrations by channel name. During inbox finalization, register each handler under the specific channels that consume its message type (instead of globally). `InboxAcceptor` then queries handlers by `(channelName, wireTypeName)`, so each acceptor only creates statuses for handlers relevant to its channel.
+
+Global handlers (registered via `bus.AddHandler<>()`) are registered under **all** channels that consume their message type — this is backward-compatible and correct: each channel independently processes its messages with all applicable handlers.
 
 **Files:**
-- `src/Ratatoskr.EfCore/Internal/InboxConfigurationFinalizer.cs` — Add validation in `PopulateRoutingTable()`
-- `docs/known-limitations.md` — Update the limitation to note it's now caught at startup
-- `tests/Ratatoskr.Tests/Integration/InboxTests.cs` — Add test: `Inbox_SameMessageTypeDifferentDbContexts_ThrowsAtStartup`
+- `src/Ratatoskr.EfCore/Internal/InboxHandlerRegistry.cs` — Add channel-scoped storage and lookup
+- `src/Ratatoskr.EfCore/Internal/InboxConfigurationFinalizer.cs` — Change `PopulateHandlerRegistry` to register per-channel
+- `src/Ratatoskr.EfCore/Internal/InboxAcceptor.cs` — Use channel-scoped lookup
+- `docs/known-limitations.md` — Remove the limitation (it's now supported)
+- `tests/Ratatoskr.Tests/Integration/InboxTests.cs` — Add test: `Inbox_SameMessageTypeDifferentDbContexts_HandlersProcessedInCorrectDbContext`
 
 **Implementation:**
-```csharp
-// In PopulateRoutingTable(), after the foreach loop over channels:
-// Track wireTypeName -> dbContextType mapping, throw on conflict
-var wireTypeToDbContext = new Dictionary<string, (Type DbContextType, string ChannelName)>();
 
-// Inside the message loop, when UseInbox is true:
-if (wireTypeToDbContext.TryGetValue(wireTypeName, out var existing)
-    && existing.DbContextType != dbContextType)
+### InboxHandlerRegistry — add channel-scoped index
+
+```csharp
+// New field alongside existing dictionaries:
+private readonly Dictionary<(string ChannelName, string WireTypeName), List<InboxHandlerRegistration>>
+    _byChannelAndWireTypeName = new();
+
+// New registration method:
+public void RegisterForChannel(
+    string key, Type messageType, Type handlerType, string wireTypeName, string channelName)
 {
-    throw new InvalidOperationException(
-        $"Message type '{wireTypeName}' is inbox-managed on channel '{channel.ChannelName}' " +
-        $"(DbContext: {dbContextType.Name}) and channel '{existing.ChannelName}' " +
-        $"(DbContext: {existing.DbContextType.Name}). Inbox-managed message types must use " +
-        $"the same DbContext across all channels. Use distinct message types per DbContext.");
+    // Reuse existing Register() for global indexes (_byKey, _byHandlerType, etc.)
+    // but skip duplicates since the same handler gets registered for multiple channels.
+    if (!_byKey.ContainsKey(key))
+        Register(key, messageType, handlerType, wireTypeName);
+
+    var compositeKey = (channelName, wireTypeName);
+    if (!_byChannelAndWireTypeName.TryGetValue(compositeKey, out var list))
+    {
+        list = new List<InboxHandlerRegistration>();
+        _byChannelAndWireTypeName[compositeKey] = list;
+    }
+    list.Add(_byKey[key]);
 }
-wireTypeToDbContext[wireTypeName] = (dbContextType, channel.ChannelName);
+
+// New lookup:
+public IReadOnlyList<InboxHandlerRegistration> GetByChannelAndWireTypeName(
+    string channelName, string wireTypeName)
+{
+    return _byChannelAndWireTypeName.TryGetValue((channelName, wireTypeName), out var list)
+        ? list
+        : Array.Empty<InboxHandlerRegistration>();
+}
 ```
+
+### InboxConfigurationFinalizer.PopulateHandlerRegistry — register per channel
+
+Change signature to also receive the channel-to-wireTypeName mappings built during `PopulateRoutingTable`:
+
+```csharp
+private void PopulateHandlerRegistry(HashSet<Type> inboxMessageTypes)
+{
+    // Build channelName -> Set<wireTypeName> from the routing table
+    // (already populated by PopulateRoutingTable)
+    foreach (var pending in pendingHandlers)
+    {
+        if (!inboxMessageTypes.Contains(pending.MessageType))
+            continue;
+
+        var key = pending.Key
+            ?? throw new InvalidOperationException(...);
+        var wireTypeName = InboxPublicApiExtensions.ResolveWireTypeName(
+            channelRegistry, pending.MessageType);
+
+        // Register handler under each channel that consumes this message type with inbox
+        foreach (var channelName in routingTable.GetChannelNames())
+        {
+            if (routingTable.IsInboxManaged(channelName, wireTypeName))
+            {
+                handlerRegistry.RegisterForChannel(
+                    key, pending.MessageType, pending.HandlerType,
+                    wireTypeName, channelName);
+            }
+        }
+    }
+}
+```
+
+### InboxAcceptor — use channel-scoped lookup
+
+```csharp
+// Before (line 34):
+var inboxHandlers = inboxHandlerRegistry.GetByWireTypeName(properties.Type);
+
+// After:
+var inboxHandlers = inboxHandlerRegistry.GetByChannelAndWireTypeName(channelName, properties.Type);
+```
+
+### Behavior
+
+- **Single DbContext:** No change — all handlers for a wire type are registered under all channels that consume it, which all map to the same DbContext.
+- **Multiple DbContexts, different message types:** No change — each wire type appears on one channel, so handler lookup is scoped correctly.
+- **Multiple DbContexts, same message type:** Now works correctly — each channel's acceptor only creates statuses for handlers registered on that channel. Since global handlers are registered under all channels, they run once per channel (each in its own DbContext). This is correct because each channel independently receives and processes messages.
 
 ---
 
@@ -129,7 +200,7 @@ Inbox cleanup already has `InboxCleanup_SharedDatabase_DifferentRetention_OnlyDe
 ## 7. Update documentation
 
 **Files:**
-- `docs/known-limitations.md` — Update first limitation to note it's validated at startup. Add new entries for:
+- `docs/known-limitations.md` — Remove the first limitation (same message type on different DbContexts now works). Add new entries for:
   - Cross-DbContext outbox->inbox loses atomicity (consumer-side acceptance is eventual, not crash-safe)
   - SkipDispatch design: when UseInbox() is enabled for a message type, all handlers go through inbox (no mixed inbox + fire-and-forget on the same message type)
 - `docs/inbox.md` — Update if relevant sections exist
@@ -155,7 +226,7 @@ Inbox cleanup already has `InboxCleanup_SharedDatabase_DifferentRetention_OnlyDe
 ## Verification
 
 1. Run full test suite: `cd tests/Ratatoskr.Tests && dotnet run`
-2. Verify new startup validation test throws with correct message
+2. Verify same-message-type-different-DbContexts test: handlers are processed in their correct DbContext only
 3. Verify zero-handler orphan test passes (message not deleted)
 4. Verify cross-DbContext outbox->inbox test works end-to-end
 5. Verify all existing tests still pass (no regressions)
