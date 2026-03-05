@@ -7,24 +7,25 @@ namespace Ratatoskr.EfCore.Internal;
 /// </summary>
 internal class InboxDbContextRegistry
 {
-    private readonly Dictionary<Type, InboxOptions> _options = new();
+    private readonly TypedOptionsRegistry<InboxOptions> _options = new("inbox options");
     private readonly Dictionary<Type, IProcessorTrigger> _triggers = new();
 
-    // --- Options ---
+    // --- Options (delegated to TypedOptionsRegistry) ---
 
     /// <summary>Registers options for a specific DbContext type.</summary>
     public void RegisterOptions(Type dbContextType, InboxOptions options) =>
-        _options[dbContextType] = options;
+        _options.Register(dbContextType, options);
 
     /// <summary>
-    /// Returns the options for a DbContext type, or a new default instance if not explicitly configured.
+    /// Returns the options for a DbContext type.
+    /// Throws if the type was not registered via <c>UseEfCoreInbox&lt;T&gt;()</c>.
     /// </summary>
     public InboxOptions GetOptions(Type dbContextType) =>
-        _options.GetValueOrDefault(dbContextType) ?? new InboxOptions();
+        _options.Get(dbContextType);
 
     /// <summary>Returns true if options have been explicitly registered for the given type.</summary>
     public bool ContainsOptions(Type dbContextType) =>
-        _options.ContainsKey(dbContextType);
+        _options.Contains(dbContextType);
 
     // --- Triggers ---
 

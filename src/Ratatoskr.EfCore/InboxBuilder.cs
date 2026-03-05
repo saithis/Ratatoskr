@@ -140,6 +140,17 @@ public class InboxBuilder<TDbContext> where TDbContext : DbContext, IInboxDbCont
     }
 
     /// <summary>
+    /// Sets the maximum number of messages to delete per cleanup batch.
+    /// Default: 1000.
+    /// </summary>
+    public InboxBuilder<TDbContext> WithCleanupBatchSize(int batchSize)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(batchSize, 0, nameof(batchSize));
+        Options.CleanupBatchSize = batchSize;
+        return this;
+    }
+
+    /// <summary>
     /// Disables automatic cleanup of completed and poisoned inbox messages.
     /// </summary>
     public InboxBuilder<TDbContext> WithoutCleanup()

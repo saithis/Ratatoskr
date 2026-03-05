@@ -48,12 +48,20 @@ internal class OutboxMessageEntity
     [MaxLength(50)]
     public string TransportName { get; private set; } = string.Empty;
 
+    /// <summary>
+    /// The full type name of the DbContext that created this outbox message.
+    /// Used to scope cleanup when multiple DbContexts share the same physical database.
+    /// Empty string for legacy rows (pre-migration).
+    /// </summary>
+    [MaxLength(500)]
+    public string SourceContext { get; private set; } = string.Empty;
+
     public MessageProperties GetProperties() => 
         JsonSerializer.Deserialize<MessageProperties>(SerializedProperties)
         ?? throw new OutboxMessageSerializationException("Could not deserialize the message properties.", SerializedProperties);
 
     private OutboxMessageEntity(){}
-    public static OutboxMessageEntity Create(byte[] message, MessageProperties props, TimeProvider timeProvider, string transportName)
+    public static OutboxMessageEntity Create(byte[] message, MessageProperties props, TimeProvider timeProvider, string transportName, string sourceContext)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(transportName);
         if (transportName.Length > 50)
@@ -65,6 +73,7 @@ internal class OutboxMessageEntity
             Content = message,
             CreatedAt = timeProvider.GetUtcNow(),
             TransportName = transportName,
+            SourceContext = sourceContext,
         };
     }
 

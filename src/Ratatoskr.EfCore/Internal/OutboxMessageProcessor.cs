@@ -14,7 +14,7 @@ internal class OutboxMessageProcessor<TDbContext>(
     IEnumerable<IMessageSender> senders,
     OutboxTelemetry telemetry,
     TimeProvider timeProvider,
-    OutboxOptionsRegistry optionsRegistry,
+    TypedOptionsRegistry<OutboxOptions> optionsRegistry,
     IEnumerable<IMessageActivityObserver> observers,
     ILogger<OutboxMessageProcessor<TDbContext>> logger)
     where TDbContext : DbContext, IOutboxDbContext

@@ -90,6 +90,17 @@ public class OutboxBuilder<TDbContext> where TDbContext : DbContext, IOutboxDbCo
     }
 
     /// <summary>
+    /// Sets the maximum number of messages to delete per cleanup batch.
+    /// Default: 1000.
+    /// </summary>
+    public OutboxBuilder<TDbContext> WithCleanupBatchSize(int batchSize)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(batchSize, 0, nameof(batchSize));
+        Options.CleanupBatchSize = batchSize;
+        return this;
+    }
+
+    /// <summary>
     /// Disables automatic cleanup of processed and poisoned outbox messages.
     /// </summary>
     public OutboxBuilder<TDbContext> WithoutCleanup()

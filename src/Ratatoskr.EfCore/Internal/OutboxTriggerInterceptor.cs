@@ -51,7 +51,7 @@ internal class OutboxTriggerInterceptor<TDbContext>(
             // Create one outbox entity per transport
             foreach (var transport in enrichedProperties.Transports)
             {
-                var outboxMessage = OutboxMessageEntity.Create(serializedMessage, enrichedProperties, timeProvider, transport);
+                var outboxMessage = OutboxMessageEntity.Create(serializedMessage, enrichedProperties, timeProvider, transport, typeof(TDbContext).FullName!);
                 context.Set<OutboxMessageEntity>().Add(outboxMessage);
             }
 

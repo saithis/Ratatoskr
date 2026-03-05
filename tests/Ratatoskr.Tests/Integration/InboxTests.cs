@@ -2610,6 +2610,180 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             .WithMessage("*HandlerWithoutKey*does not have a stable key*");
     }
 
+    [Test]
+    public async Task Inbox_UseInboxOnPublishChannel_ThrowsAtStartup()
+    {
+        var act = () => StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventPublishChannel("pub-channel", c => c
+                    .WithLocal()
+                    .Produces<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .UseInbox<TestDbContext>()
+                    .Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddHandler<TestEvent, InboxHandlerA>();
+                bus.UseEfCoreInbox<TestDbContext>();
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*UseInbox()*publish channel*only supported on consume channels*");
+    }
+
+    [Test]
+    public async Task Inbox_DuplicateUseEfCoreInbox_ThrowsAtStartup()
+    {
+        var act = () => StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .UseInbox<TestDbContext>()
+                    .Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddHandler<TestEvent, InboxHandlerA>();
+                bus.UseEfCoreInbox<TestDbContext>();
+                bus.UseEfCoreInbox<TestDbContext>(); // Duplicate!
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*UseEfCoreInbox*already been called*");
+    }
+
+    [Test]
+    public async Task InboxCleanup_SharedDatabase_DifferentRetention_OnlyDeletesOwnChannelMessages()
+    {
+        var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TimeProvider>(fakeTime);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventPublishChannel("pub-channel", c => c
+                    .WithLocal()
+                    .Produces<TestEvent>()
+                    .Produces<OrderCreatedEvent>());
+
+                bus.AddEventConsumeChannel("channel-a", c => c
+                    .UseInbox<TestDbContext>()
+                    .Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("channel-b", c => c
+                    .UseInbox<SecondInboxDbContext>()
+                    .Consumes<OrderCreatedEvent>(m => m.UseInbox()));
+
+                bus.AddHandler<TestEvent, InboxHandlerA>();
+                bus.AddHandler<OrderCreatedEvent, OrderCreatedInboxHandler>();
+
+                bus.UseEfCoreInbox<TestDbContext>(inbox =>
+                {
+                    inbox.WithoutBackgroundProcessing();
+                    inbox.WithCompletedRetention(TimeSpan.FromDays(7));
+                });
+                bus.UseEfCoreInbox<SecondInboxDbContext>(inbox =>
+                {
+                    inbox.WithoutBackgroundProcessing();
+                    inbox.WithCompletedRetention(TimeSpan.FromDays(30));
+                });
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<SecondInboxDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        // Initialize both databases (shared physical DB)
+        await InScopeAsync(async ctx =>
+        {
+            var db1 = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            await db1.Database.EnsureCreatedAsync();
+            var db2 = ctx.ServiceProvider.GetRequiredService<SecondInboxDbContext>();
+            await db2.Database.EnsureCreatedAsync();
+        });
+
+        // Publish and process messages on both channels
+        await InScopeAsync(async ctx =>
+        {
+            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+            await bus.PublishDirectAsync(
+                new TestEvent { Id = "cross-cleanup-a" },
+                new MessageProperties { Id = "cross-msg-a" });
+            await bus.PublishDirectAsync(
+                new OrderCreatedEvent { OrderId = Guid.NewGuid(), Amount = 10m },
+                new MessageProperties { Id = "cross-msg-b" });
+        });
+
+        // Wait for both inbox entries
+        await WaitForConditionAsync(
+            async () => await InScopeAsync(async ctx =>
+            {
+                var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                return await db.Set<InboxHandlerStatusEntity>().CountAsync() >= 2;
+            }),
+            TimeSpan.FromSeconds(10));
+
+        // Process both inboxes to completion
+        await InScopeAsync(async ctx =>
+        {
+            await ProcessInboxAsync(ctx.ServiceProvider);
+            await ProcessInboxAsync<SecondInboxDbContext>(ctx.ServiceProvider);
+        });
+
+        // Verify both messages are completed
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var statuses = await db.Set<InboxHandlerStatusEntity>().ToListAsync();
+            statuses.Should().HaveCount(2);
+            statuses.Should().AllSatisfy(s => s.CompletedAt.Should().NotBeNull());
+        });
+
+        // Advance time 8 days — past TestDbContext retention (7d), within SecondInboxDbContext (30d)
+        fakeTime.Advance(TimeSpan.FromDays(8));
+
+        // Run cleanup for TestDbContext only
+        await RunInboxCleanupAsync();
+
+        // Assert: channel-a message deleted, channel-b message kept
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var messages = await db.Set<InboxMessageEntity>().ToListAsync();
+            messages.Should().HaveCount(1);
+            messages[0].ChannelName.Should().Be("channel-b");
+        });
+
+        // Advance time to 31 days total — past SecondInboxDbContext retention (30d)
+        fakeTime.Advance(TimeSpan.FromDays(23));
+
+        // Run cleanup for SecondInboxDbContext
+        await InScopeAsync(async ctx =>
+        {
+            var cleanup = ctx.ServiceProvider.GetRequiredService<InboxCleanupProcessor<SecondInboxDbContext>>();
+            await cleanup.RunOnceAsync(CancellationToken.None);
+        });
+
+        // Assert: channel-b message now also deleted
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var messages = await db.Set<InboxMessageEntity>().CountAsync();
+            messages.Should().Be(0);
+        });
+    }
+
     #endregion
 
     #region Helpers

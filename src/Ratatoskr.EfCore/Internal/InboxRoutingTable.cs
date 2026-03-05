@@ -53,4 +53,11 @@ internal class InboxRoutingTable
     /// <summary>Returns all inbox-managed wire type names for a channel.</summary>
     public IReadOnlySet<string> GetWireTypeNames(string channelName) =>
         _inboxMessages.TryGetValue(channelName, out var types) ? types : new HashSet<string>();
+
+    /// <summary>Returns all channel names that are mapped to the specified DbContext type.</summary>
+    public IReadOnlyList<string> GetChannelNamesForDbContext(Type dbContextType) =>
+        _channelDbContextMap
+            .Where(kvp => kvp.Value == dbContextType)
+            .Select(kvp => kvp.Key)
+            .ToList();
 }

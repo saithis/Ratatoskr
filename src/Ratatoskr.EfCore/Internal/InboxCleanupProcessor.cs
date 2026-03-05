@@ -10,24 +10,28 @@ namespace Ratatoskr.EfCore.Internal;
 /// Completed messages (all handlers succeeded) are deleted after <see cref="InboxOptions.CompletedRetention"/>.
 /// Poisoned messages (at least one handler poisoned, all terminal) are deleted after <see cref="InboxOptions.PoisonedRetention"/>.
 /// Cascade delete on the foreign key handles handler status rows automatically.
+/// Cleanup is scoped to channels belonging to this DbContext to prevent cross-contamination
+/// when multiple DbContexts share the same physical database.
 /// </summary>
 internal class InboxCleanupProcessor<TDbContext>(
     IServiceScopeFactory serviceScopeFactory,
     IDistributedLockProvider distributedLockProvider,
     TimeProvider timeProvider,
     InboxDbContextRegistry dbContextRegistry,
+    InboxRoutingTable routingTable,
     InboxTelemetry telemetry,
     ILogger<InboxCleanupProcessor<TDbContext>> logger)
     : PollingBackgroundService(distributedLockProvider, timeProvider, logger)
     where TDbContext : DbContext, IInboxDbContext
 {
     private readonly InboxOptions _options = dbContextRegistry.GetOptions(typeof(TDbContext));
+    private readonly IReadOnlyList<string> _channelNames = routingTable.GetChannelNamesForDbContext(typeof(TDbContext));
 
     protected override string ProcessorName => $"InboxCleanupProcessor<{typeof(TDbContext).Name}>";
     protected override TimeSpan PollingInterval => _options.CleanupInterval;
     protected override TimeSpan RestartDelay => _options.RestartDelay;
     protected override TimeSpan LockAcquireTimeout => _options.LockAcquireTimeout;
-    protected override string LockName => $"InboxCleanup-{typeof(TDbContext).Name}";
+    protected override string LockName => $"InboxCleanup-{typeof(TDbContext).FullName}";
 
     /// <summary>
     /// Runs one cleanup pass without requiring the background service infrastructure.
@@ -46,21 +50,32 @@ internal class InboxCleanupProcessor<TDbContext>(
         if (_options.CompletedRetention is { } completedRetention)
         {
             var cutoff = now - completedRetention;
-            var deleted = await dbContext.Set<InboxMessageEntity>()
-                .Where(m => m.ReceivedAt < cutoff
-                    // No pending handlers (not completed and not poisoned)
-                    && !dbContext.Set<InboxHandlerStatusEntity>()
-                        .Any(s => s.MessageId == m.Id && s.CompletedAt == null && !s.IsPoisoned)
-                    // No poisoned handlers
-                    && !dbContext.Set<InboxHandlerStatusEntity>()
-                        .Any(s => s.MessageId == m.Id && s.IsPoisoned))
-                .ExecuteDeleteAsync(cancellationToken);
+            var totalDeleted = 0;
 
-            if (deleted > 0)
+            while (true)
+            {
+                var deleted = await dbContext.Set<InboxMessageEntity>()
+                    .Where(m => _channelNames.Contains(m.ChannelName))
+                    .Where(m => m.ReceivedAt < cutoff
+                        // No pending handlers (not completed and not poisoned)
+                        && !dbContext.Set<InboxHandlerStatusEntity>()
+                            .Any(s => s.MessageId == m.Id && s.CompletedAt == null && !s.IsPoisoned)
+                        // No poisoned handlers
+                        && !dbContext.Set<InboxHandlerStatusEntity>()
+                            .Any(s => s.MessageId == m.Id && s.IsPoisoned))
+                    .Take(_options.CleanupBatchSize)
+                    .ExecuteDeleteAsync(cancellationToken);
+
+                totalDeleted += deleted;
+                if (deleted < _options.CleanupBatchSize)
+                    break;
+            }
+
+            if (totalDeleted > 0)
             {
                 logger.LogInformation("Inbox cleanup: deleted {Count} completed messages older than {Retention}",
-                    deleted, completedRetention);
-                telemetry.RecordCleanup(deleted, "completed");
+                    totalDeleted, completedRetention);
+                telemetry.RecordCleanup(totalDeleted, "completed");
             }
         }
 
@@ -68,21 +83,32 @@ internal class InboxCleanupProcessor<TDbContext>(
         if (_options.PoisonedRetention is { } poisonedRetention)
         {
             var cutoff = now - poisonedRetention;
-            var deleted = await dbContext.Set<InboxMessageEntity>()
-                .Where(m => m.ReceivedAt < cutoff
-                    // No pending handlers
-                    && !dbContext.Set<InboxHandlerStatusEntity>()
-                        .Any(s => s.MessageId == m.Id && s.CompletedAt == null && !s.IsPoisoned)
-                    // At least one poisoned handler
-                    && dbContext.Set<InboxHandlerStatusEntity>()
-                        .Any(s => s.MessageId == m.Id && s.IsPoisoned))
-                .ExecuteDeleteAsync(cancellationToken);
+            var totalDeleted = 0;
 
-            if (deleted > 0)
+            while (true)
+            {
+                var deleted = await dbContext.Set<InboxMessageEntity>()
+                    .Where(m => _channelNames.Contains(m.ChannelName))
+                    .Where(m => m.ReceivedAt < cutoff
+                        // No pending handlers
+                        && !dbContext.Set<InboxHandlerStatusEntity>()
+                            .Any(s => s.MessageId == m.Id && s.CompletedAt == null && !s.IsPoisoned)
+                        // At least one poisoned handler
+                        && dbContext.Set<InboxHandlerStatusEntity>()
+                            .Any(s => s.MessageId == m.Id && s.IsPoisoned))
+                    .Take(_options.CleanupBatchSize)
+                    .ExecuteDeleteAsync(cancellationToken);
+
+                totalDeleted += deleted;
+                if (deleted < _options.CleanupBatchSize)
+                    break;
+            }
+
+            if (totalDeleted > 0)
             {
                 logger.LogInformation("Inbox cleanup: deleted {Count} poisoned messages older than {Retention}",
-                    deleted, poisonedRetention);
-                telemetry.RecordCleanup(deleted, "poisoned");
+                    totalDeleted, poisonedRetention);
+                telemetry.RecordCleanup(totalDeleted, "poisoned");
             }
         }
     }

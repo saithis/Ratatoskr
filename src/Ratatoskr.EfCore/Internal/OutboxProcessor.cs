@@ -9,7 +9,7 @@ internal class OutboxProcessor<TDbContext>(
     IServiceScopeFactory serviceScopeFactory,
     IDistributedLockProvider distributedLockProvider,
     TimeProvider timeProvider,
-    OutboxOptionsRegistry optionsRegistry,
+    TypedOptionsRegistry<OutboxOptions> optionsRegistry,
     ILogger<OutboxProcessor<TDbContext>> logger)
     : PollingBackgroundService(distributedLockProvider, timeProvider, logger)
     where TDbContext : DbContext, IOutboxDbContext

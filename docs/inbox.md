@@ -124,11 +124,11 @@ services.AddRatatoskr(bus =>
 });
 ```
 
-Each DbContext type gets its own `InboxProcessor` background service with an independent distributed lock (auto-named `InboxProcessor-{DbContextTypeName}`).
+Each DbContext type gets its own `InboxProcessor` background service with an independent distributed lock (auto-named `InboxProcessor-{DbContextFullName}`).
 
-Every consume channel that has inbox-managed messages **must** have an explicit `UseInbox<TDbContext>()` call. If `UseInbox<TDbContext>()` is used on a channel without calling `UseEfCoreInbox<TDbContext>()`, the infrastructure is auto-registered with default options.
+Every consume channel that has inbox-managed messages **must** have an explicit `UseInbox<TDbContext>()` call, and every referenced DbContext type **must** be registered via `UseEfCoreInbox<TDbContext>()`. If either is missing, startup fails with an `InvalidOperationException`.
 
-> **Validation**: At startup, the system validates that every channel with inbox-managed messages has an explicit `UseInbox<TDbContext>()` on the channel. Channels without this mapping will cause a startup error.
+> **Validation**: At startup, the system validates that every channel with inbox-managed messages has an explicit `UseInbox<TDbContext>()` on the channel and that `UseEfCoreInbox<TDbContext>()` was called for that DbContext type. Missing configuration will cause an `InvalidOperationException`.
 
 ### 3. Enable inbox per message type
 
@@ -202,7 +202,7 @@ bus.UseEfCoreInbox<AppDbContext>(inbox =>
 | `WithHandlerTimeout(TimeSpan)` | *none* | Maximum time a handler is allowed to run. Timeout cancellation counts as a failure (increments ErrorCount). |
 | `WithRestartDelay(TimeSpan)` | `5 seconds` | Delay before restarting the processor after an unexpected crash. |
 | `WithLockAcquireTimeout(TimeSpan)` | `60 seconds` | Timeout for acquiring the distributed lock. |
-| `WithLockName(string)` | `"InboxProcessor-{DbContextName}"` | Distributed lock name. Auto-generated per DbContext type. Override if you need a custom name. |
+| `WithLockName(string)` | `"InboxProcessor-{DbContextFullName}"` | Distributed lock name. Auto-generated per DbContext type using the full namespace-qualified name. Override if you need a custom name. |
 
 ## Per-Message Inbox Semantics
 
@@ -293,6 +293,7 @@ Inbox messages are automatically cleaned up by the `InboxCleanupProcessor` backg
 | `WithCompletedRetention(TimeSpan?)` | `7 days` | How long to keep fully completed messages (all handlers succeeded). Set to `null` to disable. |
 | `WithPoisonedRetention(TimeSpan?)` | `30 days` | How long to keep poisoned messages (at least one handler poisoned, all terminal). Set to `null` to disable. |
 | `WithCleanupInterval(TimeSpan)` | `1 hour` | How often the cleanup processor runs. |
+| `WithCleanupBatchSize(int)` | `1000` | Maximum number of messages deleted per batch during cleanup. Large tables are cleaned in batches to avoid long-running transactions. |
 | `WithoutCleanup()` | — | Disables all automatic cleanup. |
 
 ```csharp
@@ -310,6 +311,8 @@ bus.UseEfCoreInbox<AppDbContext>(inbox =>
 - **Poisoned messages**: Deleted when ALL handler statuses are terminal (completed or poisoned), at least one is poisoned, and the message's `ReceivedAt` is older than `PoisonedRetention`.
 - **Partially completed messages**: Messages with any still-pending handler status are never cleaned up, regardless of age.
 
-The cleanup processor acquires a distributed lock (`InboxCleanup-{DbContextName}`) to prevent concurrent cleanup from multiple instances. The `ratatoskr.inbox.cleanup.count` metric counter tracks deletions by category (`completed` or `poisoned`).
+The cleanup processor acquires a distributed lock (`InboxCleanup-{DbContextFullName}`) to prevent concurrent cleanup from multiple instances. The `ratatoskr.inbox.cleanup.count` metric counter tracks deletions by category (`completed` or `poisoned`).
 
-The outbox has matching cleanup options (`WithCompletedRetention`, `WithPoisonedRetention`, `WithCleanupInterval`, `WithoutCleanup`) on the `OutboxBuilder`.
+**Multi-DbContext cleanup isolation**: When multiple DbContexts share the same physical database, each `InboxCleanupProcessor` only deletes messages belonging to channels mapped to its own DbContext. This prevents cross-contamination where one DbContext's cleanup could delete another DbContext's messages.
+
+The outbox has matching cleanup options (`WithCompletedRetention`, `WithPoisonedRetention`, `WithCleanupInterval`, `WithCleanupBatchSize`, `WithoutCleanup`) on the `OutboxBuilder`.

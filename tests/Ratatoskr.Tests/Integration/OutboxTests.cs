@@ -189,7 +189,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
-            var registry = new OutboxOptionsRegistry();
+            var registry = new TypedOptionsRegistry<OutboxOptions>("outbox options");
             registry.Register(typeof(TestDbContext), new OutboxOptions());
             services.AddSingleton(registry);
             services.AddDbContext<TestDbContext>((sp, options) =>
@@ -291,7 +291,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
-            var registry = new OutboxOptionsRegistry();
+            var registry = new TypedOptionsRegistry<OutboxOptions>("outbox options");
             registry.Register(typeof(TestDbContext), new OutboxOptions { MaxRetries = 3 });
             services.AddSingleton(registry);
             services.AddDbContext<TestDbContext>((sp, options) =>
@@ -590,7 +590,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
-            var registry = new OutboxOptionsRegistry();
+            var registry = new TypedOptionsRegistry<OutboxOptions>("outbox options");
             registry.Register(typeof(TestDbContext), new OutboxOptions());
             services.AddSingleton(registry);
             services.AddDbContext<TestDbContext>((sp, options) =>
@@ -654,7 +654,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
-            var registry = new OutboxOptionsRegistry();
+            var registry = new TypedOptionsRegistry<OutboxOptions>("outbox options");
             registry.Register(typeof(TestDbContext), new OutboxOptions { SendTimeout = TimeSpan.FromMilliseconds(100) });
             services.AddSingleton(registry);
             services.AddDbContext<TestDbContext>((sp, options) =>
@@ -714,7 +714,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
-            var registry = new OutboxOptionsRegistry();
+            var registry = new TypedOptionsRegistry<OutboxOptions>("outbox options");
             registry.Register(typeof(TestDbContext), new OutboxOptions
             {
                 StuckMessageThreshold = TimeSpan.FromMinutes(5)
@@ -1049,6 +1049,118 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
             var count = await db.Set<OutboxMessageEntity>().CountAsync();
             count.Should().Be(1, "cleanup is disabled — no messages should be deleted");
         });
+    }
+
+    [Test]
+    public async Task OutboxCleanup_PoisonedMessagesOlderThanRetention_AreDeleted()
+    {
+        var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var alwaysFailingSender = new FailingMessageSender(RabbitMqConstants.TransportName);
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TimeProvider>(fakeTime);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddEventPublishChannel(ExchangeName, c => c
+                    .WithRabbitMq(r => r.WithTopicExchange())
+                    .Produces<TestEvent>());
+            });
+
+            // Manual outbox registration for control over processing
+            services.AddSingleton<OutboxTelemetry>();
+            services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
+            services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
+            services.AddSingleton<OutboxProcessor<TestDbContext>>();
+            services.AddSingleton<OutboxCleanupProcessor<TestDbContext>>();
+            var registry = new TypedOptionsRegistry<OutboxOptions>("outbox options");
+            registry.Register(typeof(TestDbContext), new OutboxOptions
+            {
+                MaxRetries = 3,
+                PoisonedRetention = TimeSpan.FromDays(30)
+            });
+            services.AddSingleton(registry);
+
+            services.RemoveAll<IMessageSender>();
+            services.AddSingleton<IMessageSender>(alwaysFailingSender);
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+            {
+                opts.UseNpgsql(PostgresConnectionString);
+                opts.RegisterOutbox<TestDbContext>(sp);
+            });
+        });
+
+        await InitializeDatabase();
+
+        // Stage message
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            db.OutboxMessages.Add(new TestEvent { Data = "poisoned-cleanup" });
+            await db.SaveChangesAsync();
+        });
+
+        // Process until poisoned (3 retries)
+        for (int i = 0; i < 3; i++)
+        {
+            await InScopeAsync(async ctx =>
+                await ProcessOutboxAsync<TestDbContext>(ctx.ServiceProvider));
+            fakeTime.Advance(TimeSpan.FromSeconds(10));
+        }
+
+        // Verify message is poisoned
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var entity = await db.Set<OutboxMessageEntity>().SingleAsync();
+            entity.IsPoisoned.Should().BeTrue();
+        });
+
+        // Advance past PoisonedRetention
+        fakeTime.Advance(TimeSpan.FromDays(31));
+
+        // Run cleanup
+        await InScopeAsync(async ctx =>
+        {
+            var cleanup = ctx.ServiceProvider.GetRequiredService<OutboxCleanupProcessor<TestDbContext>>();
+            await cleanup.RunOnceAsync(CancellationToken.None);
+        });
+
+        // Assert: poisoned message should be deleted
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var count = await db.Set<OutboxMessageEntity>().CountAsync();
+            count.Should().Be(0);
+        });
+    }
+
+    [Test]
+    public async Task Outbox_DuplicateAddEfCoreOutbox_ThrowsAtStartup()
+    {
+        var act = () => StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddEventPublishChannel(ExchangeName, c => c
+                    .WithRabbitMq(r => r.WithTopicExchange())
+                    .Produces<TestEvent>());
+                bus.AddEfCoreOutbox<TestDbContext>();
+                bus.AddEfCoreOutbox<TestDbContext>(); // Duplicate!
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+            {
+                opts.UseNpgsql(PostgresConnectionString);
+                opts.RegisterOutbox<TestDbContext>(sp);
+            });
+        });
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*AddEfCoreOutbox*already been called*");
     }
 
     private class NoOpMessageSender(string transportName) : IMessageSender

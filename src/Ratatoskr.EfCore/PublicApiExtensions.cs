@@ -15,7 +15,7 @@ public static class PublicApiExtensions
 {
     private class OutboxBuildTimeState
     {
-        public OutboxOptionsRegistry OptionsRegistry { get; } = new();
+        public TypedOptionsRegistry<OutboxOptions> OptionsRegistry { get; } = new("outbox options");
     }
 
     private static OutboxBuildTimeState GetOrCreateState(RatatoskrBuilder builder) =>
@@ -50,7 +50,7 @@ public static class PublicApiExtensions
 
             // Auto-assign per-DbContext lock name if still default
             if (outboxBuilder.Options.LockName == "OutboxProcessor")
-                outboxBuilder.Options.LockName = $"OutboxProcessor-{typeof(TDbContext).Name}";
+                outboxBuilder.Options.LockName = $"OutboxProcessor-{typeof(TDbContext).FullName}";
 
             state.OptionsRegistry.Register(typeof(TDbContext), outboxBuilder.Options);
             RegisterOutboxServices<TDbContext>(builder, state, outboxBuilder.Options);
@@ -71,7 +71,7 @@ public static class PublicApiExtensions
                     $"AddEfCoreOutbox<{typeof(TDbContext).Name}>() has already been called. " +
                     $"Each DbContext type can only be registered once for the outbox.");
 
-            var options = new OutboxOptions { LockName = $"OutboxProcessor-{typeof(TDbContext).Name}" };
+            var options = new OutboxOptions { LockName = $"OutboxProcessor-{typeof(TDbContext).FullName}" };
             configuration.GetSection(OutboxOptions.SectionName).Bind(options);
 
             state.OptionsRegistry.Register(typeof(TDbContext), options);
@@ -160,6 +160,7 @@ public static class PublicApiExtensions
             entity.Property(e => e.Content).IsRequired();
             entity.Property(e => e.SerializedProperties).IsRequired();
             entity.Property(e => e.TransportName).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.SourceContext).HasMaxLength(500).HasDefaultValue("").IsRequired();
         });
     }
 }

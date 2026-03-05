@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Hosting;
 using Ratatoskr;
 using Ratatoskr.Config;
 using Ratatoskr.Core;
@@ -66,7 +65,7 @@ public static class InboxPublicApiExtensions
 
             // Set lock name per DbContext type if still the default
             if (inboxBuilder.Options.LockName == "InboxProcessor")
-                inboxBuilder.Options.LockName = $"InboxProcessor-{typeof(TDbContext).Name}";
+                inboxBuilder.Options.LockName = $"InboxProcessor-{typeof(TDbContext).FullName}";
 
             state.DbContextRegistry.RegisterOptions(typeof(TDbContext), inboxBuilder.Options);
             state.RegisterBackgroundService[typeof(TDbContext)] = inboxBuilder.RegisterBackgroundService;
@@ -139,45 +138,6 @@ public static class InboxPublicApiExtensions
     }
 
     /// <summary>
-    /// Registers per-DbContext services using open generic types for auto-registration
-    /// (when <c>UseInbox&lt;T&gt;()</c> on a channel references a DbContext not explicitly
-    /// configured via <c>UseEfCoreInbox&lt;T&gt;()</c>).
-    /// </summary>
-    private static void AutoRegisterPerDbContextServices(
-        IServiceCollection services, InboxBuildTimeState state, Type dbContextType)
-    {
-        if (!state.RegisteredDbContextTypes.Add(dbContextType))
-            return;
-
-        var processorType = typeof(InboxMessageProcessor<>).MakeGenericType(dbContextType);
-        var bgProcessorType = typeof(InboxProcessor<>).MakeGenericType(dbContextType);
-        var acceptorType = typeof(InboxAcceptor<>).MakeGenericType(dbContextType);
-
-        services.AddTransient(processorType);
-
-        // Use factory to register in trigger registry on first resolution
-        services.AddSingleton(bgProcessorType, sp =>
-        {
-            var processor = ActivatorUtilities.CreateInstance(sp, bgProcessorType);
-            sp.GetRequiredService<InboxDbContextRegistry>().RegisterTrigger(dbContextType, (IProcessorTrigger)processor);
-            return processor;
-        });
-
-        services.AddSingleton(acceptorType);
-        services.AddSingleton(typeof(IInboxAcceptor), sp => sp.GetRequiredService(acceptorType));
-
-        var cleanupProcessorType = typeof(InboxCleanupProcessor<>).MakeGenericType(dbContextType);
-        services.AddSingleton(cleanupProcessorType);
-
-        // Auto-registered DbContexts always have background processing enabled
-        state.RegisterBackgroundService[dbContextType] = true;
-
-        // Default options with auto-generated lock name
-        if (!state.DbContextRegistry.ContainsOptions(dbContextType))
-            state.DbContextRegistry.RegisterOptions(dbContextType, new InboxOptions { LockName = $"InboxProcessor-{dbContextType.Name}" });
-    }
-
-    /// <summary>
     /// Ensures shared singletons, the composite interceptor, the deferred action,
     /// and the validator are registered exactly once.
     /// </summary>
@@ -199,90 +159,16 @@ public static class InboxPublicApiExtensions
         // Deferred action: runs after all configuration calls complete
         builder.AddDeferredServiceAction(services =>
         {
-            // 0. Validate UseInbox() is not used on publish channels
-            foreach (var channel in builder.ChannelRegistry.GetPublishChannels())
-            {
-                foreach (var message in channel.Messages)
-                {
-                    var msgOpts = message.GetExtension<InboxMessageOptions>();
-                    if (msgOpts is { UseInbox: true })
-                    {
-                        throw new InvalidOperationException(
-                            $"UseInbox() was called on message type '{message.MessageTypeName}' on publish channel " +
-                            $"'{channel.ChannelName}'. UseInbox() is only supported on consume channels.");
-                    }
-                }
-            }
+            var finalizer = new InboxConfigurationFinalizer(
+                builder.ChannelRegistry,
+                builder.PendingHandlers,
+                state.HandlerRegistry,
+                state.RoutingTable,
+                state.DbContextRegistry,
+                state.RegisteredDbContextTypes,
+                state.RegisterBackgroundService);
 
-            // 1. Populate InboxRoutingTable from consume channel config
-            var inboxMessageTypes = new HashSet<Type>();
-
-            foreach (var channel in builder.ChannelRegistry.GetConsumeChannels())
-            {
-                var channelInboxOpts = channel.GetExtension<InboxChannelOptions>();
-                var hasInboxMessages = false;
-
-                foreach (var message in channel.Messages)
-                {
-                    var msgOpts = message.GetExtension<InboxMessageOptions>();
-                    if (msgOpts is { UseInbox: true })
-                    {
-                        state.RoutingTable.RegisterMessage(channel.ChannelName, message.MessageTypeName);
-                        inboxMessageTypes.Add(message.MessageType);
-                        hasInboxMessages = true;
-                    }
-                }
-
-                if (!hasInboxMessages)
-                    continue;
-
-                // Resolve the DbContext type for this channel — requires explicit UseInbox<TDbContext>()
-                var dbContextType = channelInboxOpts?.DbContextType;
-                if (dbContextType == null)
-                {
-                    throw new InvalidOperationException(
-                        $"Channel '{channel.ChannelName}' has inbox-managed messages (UseInbox()) " +
-                        $"but no DbContext is configured. Call UseInbox<TDbContext>() on the channel.");
-                }
-
-                state.RoutingTable.RegisterChannel(channel.ChannelName, dbContextType);
-
-                // Auto-register infrastructure if this DbContext wasn't explicitly configured
-                AutoRegisterPerDbContextServices(services, state, dbContextType);
-            }
-
-            // 2. Register hosted services for each DbContext type
-            foreach (var dbContextType in state.RegisteredDbContextTypes)
-            {
-                if (state.RegisterBackgroundService.GetValueOrDefault(dbContextType, true))
-                {
-                    var bgProcessorType = typeof(InboxProcessor<>).MakeGenericType(dbContextType);
-                    services.AddSingleton(typeof(IHostedService), sp => sp.GetRequiredService(bgProcessorType));
-                }
-
-                // Register cleanup processor as hosted service if any retention is configured
-                var opts = state.DbContextRegistry.GetOptions(dbContextType);
-                if (opts.CompletedRetention != null || opts.PoisonedRetention != null)
-                {
-                    var cleanupType = typeof(InboxCleanupProcessor<>).MakeGenericType(dbContextType);
-                    services.AddSingleton(typeof(IHostedService), sp => sp.GetRequiredService(cleanupType));
-                }
-            }
-
-            // 3. Populate InboxHandlerRegistry with all handlers for inbox-managed messages
-            foreach (var pending in builder.PendingHandlers)
-            {
-                if (!inboxMessageTypes.Contains(pending.MessageType))
-                    continue;
-
-                var key = pending.Key
-                    ?? throw new InvalidOperationException(
-                        $"Inbox handler '{pending.HandlerType.Name}' does not have a stable key. " +
-                        $"Add [HandlerKey(\"...\")] to the handler class or pass a key to " +
-                        $"AddHandler<{pending.MessageType.Name}, {pending.HandlerType.Name}>(\"...\").");
-                var wireTypeName = ResolveWireTypeName(builder.ChannelRegistry, pending.MessageType);
-                state.HandlerRegistry.Register(key, pending.MessageType, pending.HandlerType, wireTypeName);
-            }
+            finalizer.Finalize(services);
         });
 
         // Startup validation
