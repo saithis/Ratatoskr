@@ -31,7 +31,7 @@ internal class InboxAcceptor<TDbContext>(
         if (properties.Type == null || !routingTable.IsInboxManaged(channelName, properties.Type))
             return InboxAcceptOutcome.NoHandlers;
 
-        var inboxHandlers = inboxHandlerRegistry.GetByWireTypeName(properties.Type);
+        var inboxHandlers = inboxHandlerRegistry.GetByChannelAndWireTypeName(channelName, properties.Type);
         if (inboxHandlers.Count == 0)
             return InboxAcceptOutcome.NoHandlers;
 

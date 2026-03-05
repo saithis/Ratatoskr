@@ -57,6 +57,9 @@ internal class InboxCleanupProcessor<TDbContext>(
                 var deleted = await dbContext.Set<InboxMessageEntity>()
                     .Where(m => _channelNames.Contains(m.ChannelName))
                     .Where(m => m.ReceivedAt < cutoff
+                        // At least one handler status must exist (orphaned messages without handlers are not "completed")
+                        && dbContext.Set<InboxHandlerStatusEntity>()
+                            .Any(s => s.MessageId == m.Id)
                         // No pending handlers (not completed and not poisoned)
                         && !dbContext.Set<InboxHandlerStatusEntity>()
                             .Any(s => s.MessageId == m.Id && s.CompletedAt == null && !s.IsPoisoned)

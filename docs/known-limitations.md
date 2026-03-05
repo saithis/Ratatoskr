@@ -1,10 +1,12 @@
 # Known Limitations
 
-## Same message type on multiple channels with different DbContexts
+## Cross-DbContext outbox→inbox loses atomicity
 
-When the same message type (e.g. `TestEvent`) has `UseInbox()` and is consumed on two channels with different `UseInbox<TDbContext>()` mappings, all handlers for that message type are registered globally — not per-channel. Both `InboxAcceptor<Context1>` and `InboxAcceptor<Context2>` will create handler statuses for ALL handlers of the message type, even if some handlers are "intended" for a specific context.
+When the outbox and inbox use different DbContext types (e.g. outbox on `OrdersDbContext`, inbox on `PaymentsDbContext`), the `OutboxTriggerInterceptor` cannot write inbox entries in the same transaction as the outbox entry. Instead, the consumer-side `InboxAcceptor` writes inbox entries in a separate transaction after the local transport delivers the message. This is still safe (the outbox guarantees delivery), but involves two separate transactions instead of one — inbox acceptance is eventual, not crash-safe in the same way as the single-DbContext path.
 
-Workaround: use distinct message types per channel when different DbContexts are involved.
+## SkipDispatch design: inbox is all-or-nothing per message type
+
+When `UseInbox()` is enabled for a message type, **all** handlers for that message type go through the inbox. There is no way to have a mix of inbox-managed and fire-and-forget handlers for the same message type on the same channel. If you need both durable and fire-and-forget processing for the same event, use separate message types.
 
 ## Outbox `SourceContext` column and legacy rows
 

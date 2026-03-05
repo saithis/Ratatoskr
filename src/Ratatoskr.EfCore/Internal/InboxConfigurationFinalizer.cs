@@ -109,9 +109,23 @@ internal class InboxConfigurationFinalizer(
     {
         foreach (var dbContextType in registeredDbContextTypes)
         {
+            var bgProcessorType = typeof(InboxProcessor<>).MakeGenericType(dbContextType);
+
+            // Always register trigger eagerly at startup so OutboxTriggerInterceptor
+            // can trigger the inbox processor even when outbox and inbox use different DbContexts.
+            // This avoids the previous pattern where the trigger was registered as a side-effect
+            // of singleton factory resolution, which could return null if GetTrigger was called
+            // before the processor was resolved.
+            var capturedDbContextType = dbContextType;
+            services.AddSingleton(typeof(IHostedService), sp =>
+            {
+                var processor = (IProcessorTrigger)sp.GetRequiredService(bgProcessorType);
+                dbContextRegistry.RegisterTrigger(capturedDbContextType, processor);
+                return new InboxTriggerInitializerService();
+            });
+
             if (registerBackgroundService.GetValueOrDefault(dbContextType, true))
             {
-                var bgProcessorType = typeof(InboxProcessor<>).MakeGenericType(dbContextType);
                 services.AddSingleton(typeof(IHostedService), sp => sp.GetRequiredService(bgProcessorType));
             }
 
@@ -141,7 +155,17 @@ internal class InboxConfigurationFinalizer(
                     $"Add [HandlerKey(\"...\")] to the handler class or pass a key to " +
                     $"AddHandler<{pending.MessageType.Name}, {pending.HandlerType.Name}>(\"...\").");
             var wireTypeName = InboxPublicApiExtensions.ResolveWireTypeName(channelRegistry, pending.MessageType);
-            handlerRegistry.Register(key, pending.MessageType, pending.HandlerType, wireTypeName);
+
+            // Register handler under each channel that consumes this message type with inbox
+            foreach (var channelName in routingTable.GetChannelNames())
+            {
+                if (wireTypeName != null && routingTable.IsInboxManaged(channelName, wireTypeName))
+                {
+                    handlerRegistry.RegisterForChannel(
+                        key, pending.MessageType, pending.HandlerType,
+                        wireTypeName, channelName);
+                }
+            }
         }
     }
 }

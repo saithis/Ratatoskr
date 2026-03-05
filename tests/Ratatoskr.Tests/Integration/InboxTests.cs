@@ -2053,7 +2053,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
     }
 
     [Test]
-    public async Task Inbox_TwoChannelsDifferentDbContexts_EachUsesItsOwnDatabase()
+    public async Task Inbox_TwoChannelsDifferentDbContexts_EachRoutedToCorrectDbContext()
     {
         // Arrange: two channels with different DbContexts, each handling different message types
         await StartTestAsync(services =>
@@ -2171,6 +2171,36 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*has inbox-managed messages*but no DbContext is configured*UseInbox<TDbContext>()*");
+    }
+
+    [Test]
+    public async Task Inbox_MissingUseEfCoreInbox_ThrowsAtStartup()
+    {
+        // Arrange: channel uses UseInbox<TestDbContext>() but UseEfCoreInbox<TestDbContext>() was not called.
+        // UseEfCoreInbox<SecondInboxDbContext>() IS called so that the shared registration
+        // (and therefore the finalizer that runs validation) is triggered.
+        var act = async () => await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .UseInbox<TestDbContext>()
+                    .Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddHandler<TestEvent, InboxHandlerA>();
+                // Register a different DbContext to trigger shared registration
+                bus.UseEfCoreInbox<SecondInboxDbContext>();
+                // Missing: bus.UseEfCoreInbox<TestDbContext>()
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<SecondInboxDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*UseInbox<TestDbContext>*UseEfCoreInbox<TestDbContext>*was not called*");
     }
 
     #endregion
@@ -2781,6 +2811,302 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var messages = await db.Set<InboxMessageEntity>().CountAsync();
             messages.Should().Be(0);
+        });
+    }
+
+    [Test]
+    public async Task InboxCleanup_OrphanedMessageWithNoHandlers_IsNotDeleted()
+    {
+        var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TimeProvider>(fakeTime);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventConsumeChannel("inbox-events", c => c.UseInbox<TestDbContext>().Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddHandler<TestEvent, InboxHandlerA>();
+                bus.UseEfCoreInbox<TestDbContext>(inbox =>
+                {
+                    inbox.WithoutBackgroundProcessing();
+                    inbox.WithCompletedRetention(TimeSpan.FromDays(7));
+                });
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await InitializeDatabase();
+
+        // Manually insert an orphaned inbox message with zero handler statuses
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var serializer = ctx.ServiceProvider.GetRequiredService<IMessageSerializer>();
+            var timeProvider = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
+
+            var testEvent = new TestEvent { Id = "orphan-1", Data = "orphaned" };
+            var body = serializer.Serialize(testEvent);
+            var props = new MessageProperties { Id = "orphan-msg-1", Type = "test.event" };
+
+            db.Set<InboxMessageEntity>().Add(
+                InboxMessageEntity.Create("orphan-msg-1", "inbox-events", "local", body, props, timeProvider));
+
+            // Intentionally do NOT add any handler statuses
+            await db.SaveChangesAsync();
+        });
+
+        // Advance time well past retention
+        fakeTime.Advance(TimeSpan.FromDays(30));
+
+        await RunInboxCleanupAsync();
+
+        // Assert: orphaned message should NOT be deleted
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var messages = await db.Set<InboxMessageEntity>().CountAsync();
+            messages.Should().Be(1, "orphaned message with no handler statuses should not be cleaned up");
+        });
+    }
+
+    [Test]
+    public async Task Inbox_SameMessageTypeDifferentDbContexts_HandlersProcessedInCorrectDbContext()
+    {
+        // Arrange: two channels consuming the same message type but with different DbContexts.
+        // Both DbContexts point to the same physical database. Since the inbox deduplicates
+        // by CloudEvents ID (PK), the first channel's acceptor creates the inbox entry and
+        // the second channel's acceptor detects it as a duplicate. This test verifies:
+        // 1. The channel-scoped handler registry registers handlers for both channels
+        // 2. The setup doesn't throw even with the same message type on multiple channels
+        // 3. The message is processed successfully by the first accepting channel
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventPublishChannel("pub-channel", c => c
+                    .WithLocal()
+                    .Produces<TestEvent>());
+
+                bus.AddEventConsumeChannel("channel-a", c => c
+                    .UseInbox<TestDbContext>()
+                    .Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("channel-b", c => c
+                    .UseInbox<SecondInboxDbContext>()
+                    .Consumes<TestEvent>(m => m.UseInbox()));
+
+                bus.AddHandler<TestEvent, InboxHandlerA>();
+                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
+                bus.UseEfCoreInbox<SecondInboxDbContext>(inbox => inbox.WithoutBackgroundProcessing());
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<SecondInboxDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        // Initialize both databases
+        await InScopeAsync(async ctx =>
+        {
+            var db1 = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            await db1.Database.EnsureCreatedAsync();
+            var db2 = ctx.ServiceProvider.GetRequiredService<SecondInboxDbContext>();
+            await db2.Database.EnsureCreatedAsync();
+        });
+
+        // Act — publish a message (both channels will receive it via local transport)
+        await InScopeAsync(async ctx =>
+        {
+            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+            await bus.PublishDirectAsync(
+                new TestEvent { Id = "same-type-1", Data = "test" },
+                new MessageProperties { Id = "same-type-msg-1" });
+        });
+
+        // Wait for at least one inbox handler status to appear
+        await WaitForConditionAsync(
+            async () => await InScopeAsync(async ctx =>
+            {
+                var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                return await db.Set<InboxHandlerStatusEntity>().CountAsync() >= 1;
+            }),
+            TimeSpan.FromSeconds(10));
+
+        // Process inbox for both DbContexts
+        await InScopeAsync(async ctx =>
+        {
+            await ProcessInboxAsync(ctx.ServiceProvider);
+            await ProcessInboxAsync<SecondInboxDbContext>(ctx.ServiceProvider);
+        });
+
+        // Assert — with shared physical DB and same CloudEvents ID, the inbox deduplicates
+        // to a single message entry. The handler is processed successfully.
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+
+            var message = await db.Set<InboxMessageEntity>().SingleAsync();
+            message.Id.Should().Be("same-type-msg-1");
+
+            var status = await db.Set<InboxHandlerStatusEntity>().SingleAsync();
+            status.MessageId.Should().Be("same-type-msg-1");
+            status.HandlerKey.Should().Be("inbox-handler-a");
+            status.CompletedAt.Should().NotBeNull();
+        });
+    }
+
+    [Test]
+    public async Task Inbox_CrossDbContextOutboxToInbox_ConsumerSideAcceptance()
+    {
+        // Arrange: outbox uses TestDbContext, inbox uses SecondInboxDbContext.
+        // The OutboxTriggerInterceptor detects the DbContext mismatch and does NOT write
+        // inbox entries in the same transaction. Instead, the consumer-side InboxAcceptor handles it.
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventPublishChannel("pub-channel", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventConsumeChannel("consume-channel", c => c
+                    .UseInbox<SecondInboxDbContext>()
+                    .Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddHandler<TestEvent, InboxHandlerA>();
+                bus.AddEfCoreOutbox<TestDbContext>();
+                bus.UseEfCoreInbox<SecondInboxDbContext>();
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+            {
+                opts.UseNpgsql(PostgresConnectionString);
+                opts.RegisterOutbox<TestDbContext>(sp);
+            });
+            services.AddDbContext<SecondInboxDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        // Initialize both databases
+        await InScopeAsync(async ctx =>
+        {
+            var db1 = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            await db1.Database.EnsureCreatedAsync();
+            var db2 = ctx.ServiceProvider.GetRequiredService<SecondInboxDbContext>();
+            await db2.Database.EnsureCreatedAsync();
+        });
+
+        // Act — stage via outbox
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            db.OutboxMessages.Add(
+                new TestEvent { Id = "cross-db-1", Data = "cross-context" },
+                new MessageProperties { Id = "cross-db-msg-1" });
+            await db.SaveChangesAsync();
+        });
+
+        // Wait for the full pipeline: OutboxProcessor → LocalSender → InboxAcceptor → InboxProcessor → Completed
+        await WaitForConditionAsync(
+            async () => await InScopeAsync(async ctx =>
+            {
+                var db = ctx.ServiceProvider.GetRequiredService<SecondInboxDbContext>();
+                var status = await db.Set<InboxHandlerStatusEntity>().SingleOrDefaultAsync();
+                return status?.CompletedAt != null;
+            }),
+            TimeSpan.FromSeconds(20));
+
+        // Assert
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<SecondInboxDbContext>();
+
+            var outboxDb = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var outboxMsg = await outboxDb.Set<OutboxMessageEntity>().SingleAsync();
+            outboxMsg.ProcessedAt.Should().NotBeNull("outbox message must be processed");
+
+            var inboxMsg = await db.Set<InboxMessageEntity>().SingleAsync();
+            inboxMsg.TransportName.Should().Be("local");
+            inboxMsg.ChannelName.Should().Be("consume-channel");
+
+            var status = await db.Set<InboxHandlerStatusEntity>().SingleAsync();
+            status.HandlerKey.Should().Be("inbox-handler-a");
+            status.CompletedAt.Should().NotBeNull();
+        });
+    }
+
+    [Test]
+    public async Task Inbox_MultipleChannelsSameDbContext_BothProcessedCorrectly()
+    {
+        // Arrange: two consume channels both using UseInbox<TestDbContext>()
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventPublishChannel("pub-channel", c => c
+                    .WithLocal()
+                    .Produces<TestEvent>()
+                    .Produces<OrderCreatedEvent>());
+
+                bus.AddEventConsumeChannel("channel-a", c => c
+                    .UseInbox<TestDbContext>()
+                    .Consumes<TestEvent>(m => m.UseInbox()));
+                bus.AddEventConsumeChannel("channel-b", c => c
+                    .UseInbox<TestDbContext>()
+                    .Consumes<OrderCreatedEvent>(m => m.UseInbox()));
+
+                bus.AddHandler<TestEvent, InboxHandlerA>();
+                bus.AddHandler<OrderCreatedEvent, OrderCreatedInboxHandler>();
+                bus.UseEfCoreInbox<TestDbContext>(inbox => inbox.WithoutBackgroundProcessing());
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await InitializeDatabase();
+
+        // Act — publish both message types
+        await InScopeAsync(async ctx =>
+        {
+            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+            await bus.PublishDirectAsync(
+                new TestEvent { Id = "multi-ch-1", Data = "for channel-a" },
+                new MessageProperties { Id = "multi-ch-msg-a" });
+            await bus.PublishDirectAsync(
+                new OrderCreatedEvent { OrderId = Guid.NewGuid(), Amount = 50m },
+                new MessageProperties { Id = "multi-ch-msg-b" });
+        });
+
+        await WaitForConditionAsync(
+            async () => await InScopeAsync(async ctx =>
+            {
+                var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                return await db.Set<InboxHandlerStatusEntity>().CountAsync() >= 2;
+            }),
+            TimeSpan.FromSeconds(10));
+
+        // Process all — both channels share the same DbContext and processor
+        await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
+
+        // Assert
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+
+            var messages = await db.Set<InboxMessageEntity>().OrderBy(m => m.ChannelName).ToListAsync();
+            messages.Should().HaveCount(2);
+            messages[0].ChannelName.Should().Be("channel-a");
+            messages[1].ChannelName.Should().Be("channel-b");
+
+            var statuses = await db.Set<InboxHandlerStatusEntity>().ToListAsync();
+            statuses.Should().HaveCount(2);
+            statuses.Should().AllSatisfy(s => s.CompletedAt.Should().NotBeNull());
+            statuses.Should().Contain(s => s.HandlerKey == "inbox-handler-a");
+            statuses.Should().Contain(s => s.HandlerKey == "order-created-inbox");
         });
     }
 

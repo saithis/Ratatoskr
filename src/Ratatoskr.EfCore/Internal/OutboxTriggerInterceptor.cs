@@ -76,7 +76,7 @@ internal class OutboxTriggerInterceptor<TDbContext>(
                     if (inboxDbContextType != typeof(TDbContext))
                         continue;
 
-                    var inboxHandlers = inboxHandlerRegistry.GetByWireTypeName(enrichedProperties.Type);
+                    var inboxHandlers = inboxHandlerRegistry.GetByChannelAndWireTypeName(channel.ChannelName, enrichedProperties.Type);
                     if (inboxHandlers.Count == 0)
                         continue;
 

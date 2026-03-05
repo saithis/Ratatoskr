@@ -121,13 +121,8 @@ public static class InboxPublicApiExtensions
 
         builder.Services.AddTransient<InboxMessageProcessor<TDbContext>>();
 
-        // Use factory to register the processor in the trigger registry on first resolution
-        builder.Services.AddSingleton(sp =>
-        {
-            var processor = ActivatorUtilities.CreateInstance<InboxProcessor<TDbContext>>(sp);
-            sp.GetRequiredService<InboxDbContextRegistry>().RegisterTrigger(typeof(TDbContext), processor);
-            return processor;
-        });
+        // Register processor as plain singleton (no side-effect trigger registration)
+        builder.Services.AddSingleton<InboxProcessor<TDbContext>>();
 
         builder.Services.AddSingleton<InboxAcceptor<TDbContext>>();
         builder.Services.AddSingleton<IInboxAcceptor>(sp => sp.GetRequiredService<InboxAcceptor<TDbContext>>());

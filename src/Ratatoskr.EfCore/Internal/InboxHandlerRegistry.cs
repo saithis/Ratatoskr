@@ -12,6 +12,8 @@ internal class InboxHandlerRegistry
     private readonly Dictionary<Type, List<InboxHandlerRegistration>> _byMessageType = new();
     private readonly Dictionary<string, List<InboxHandlerRegistration>> _byWireTypeName = new();
     private readonly Dictionary<Type, InboxHandlerRegistration> _byHandlerType = new();
+    private readonly Dictionary<(string ChannelName, string WireTypeName), List<InboxHandlerRegistration>>
+        _byChannelAndWireTypeName = new();
 
     public void Register(string key, Type messageType, Type handlerType, string? wireTypeName)
     {
@@ -47,6 +49,36 @@ internal class InboxHandlerRegistry
             byWireList.Add(registration);
         }
     }
+
+    /// <summary>
+    /// Registers a handler under a specific channel. Uses <see cref="Register"/> for global indexes
+    /// (idempotent per key) and additionally indexes by (channelName, wireTypeName).
+    /// </summary>
+    public void RegisterForChannel(
+        string key, Type messageType, Type handlerType, string? wireTypeName, string channelName)
+    {
+        // Register in global indexes if not already present (same handler can be registered for multiple channels)
+        if (!_byKey.ContainsKey(key))
+            Register(key, messageType, handlerType, wireTypeName);
+
+        if (wireTypeName != null)
+        {
+            var compositeKey = (channelName, wireTypeName);
+            if (!_byChannelAndWireTypeName.TryGetValue(compositeKey, out var list))
+            {
+                list = new List<InboxHandlerRegistration>();
+                _byChannelAndWireTypeName[compositeKey] = list;
+            }
+            list.Add(_byKey[key]);
+        }
+    }
+
+    /// <summary>Returns all inbox-managed handlers for a given channel and wire type name.</summary>
+    public IReadOnlyList<InboxHandlerRegistration> GetByChannelAndWireTypeName(
+        string channelName, string wireTypeName) =>
+        _byChannelAndWireTypeName.TryGetValue((channelName, wireTypeName), out var list)
+            ? list
+            : Array.Empty<InboxHandlerRegistration>();
 
     /// <summary>
     /// Looks up a registration by its stable handler key.

@@ -52,3 +52,23 @@ public class SecondInboxDbContext : DbContext, IInboxDbContext
         modelBuilder.AddInboxEntities();
     }
 }
+
+/// <summary>
+/// Second outbox DbContext for multi-DbContext outbox cleanup integration tests.
+/// Uses the same database but a separate DbContext type to verify
+/// that the outbox cleanup scoping by SourceContext works correctly.
+/// </summary>
+public class SecondOutboxDbContext : DbContext, IOutboxDbContext
+{
+    public SecondOutboxDbContext(DbContextOptions<SecondOutboxDbContext> options) : base(options)
+    {
+    }
+
+    public OutboxStagingCollection OutboxMessages { get; } = new();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+        modelBuilder.AddOutboxEntities();
+    }
+}

@@ -1138,6 +1138,122 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
     }
 
     [Test]
+    public async Task OutboxCleanup_SharedDatabase_DifferentRetention_OnlyDeletesOwnSourceContextMessages()
+    {
+        var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var noOpSender = new NoOpMessageSender("rabbitmq");
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TimeProvider>(fakeTime);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddEventPublishChannel(ExchangeName, c => c
+                    .WithRabbitMq(r => r.WithTopicExchange())
+                    .Produces<TestEvent>());
+                bus.AddEfCoreOutbox<TestDbContext>(outbox =>
+                {
+                    outbox.WithCompletedRetention(TimeSpan.FromDays(7));
+                });
+                bus.AddEfCoreOutbox<SecondOutboxDbContext>(outbox =>
+                {
+                    outbox.WithCompletedRetention(TimeSpan.FromDays(30));
+                });
+            });
+
+            services.RemoveAll<IMessageSender>();
+            services.AddSingleton<IMessageSender>(noOpSender);
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+            {
+                opts.UseNpgsql(PostgresConnectionString);
+                opts.RegisterOutbox<TestDbContext>(sp);
+            });
+            services.AddDbContext<SecondOutboxDbContext>((sp, opts) =>
+            {
+                opts.UseNpgsql(PostgresConnectionString);
+                opts.RegisterOutbox<SecondOutboxDbContext>(sp);
+            });
+        });
+
+        await InitializeDatabase();
+
+        // Also initialize SecondOutboxDbContext tables
+        await InScopeAsync(async ctx =>
+        {
+            var db2 = ctx.ServiceProvider.GetRequiredService<SecondOutboxDbContext>();
+            await db2.Database.EnsureCreatedAsync();
+        });
+
+        // Stage messages via both DbContexts
+        await InScopeAsync(async ctx =>
+        {
+            var db1 = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            db1.OutboxMessages.Add(
+                new TestEvent { Id = "outbox-ctx1-1", Data = "from TestDbContext" },
+                new MessageProperties { Id = "outbox-ctx1-msg" });
+            await db1.SaveChangesAsync();
+        });
+
+        await InScopeAsync(async ctx =>
+        {
+            var db2 = ctx.ServiceProvider.GetRequiredService<SecondOutboxDbContext>();
+            db2.OutboxMessages.Add(
+                new TestEvent { Id = "outbox-ctx2-1", Data = "from SecondOutboxDbContext" },
+                new MessageProperties { Id = "outbox-ctx2-msg" });
+            await db2.SaveChangesAsync();
+        });
+
+        // Wait for both messages to be processed
+        await WaitForConditionAsync(
+            async () => await InScopeAsync(async ctx =>
+            {
+                var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                var entities = await db.Set<OutboxMessageEntity>().ToListAsync();
+                return entities.Count >= 2 && entities.All(e => e.ProcessedAt != null);
+            }),
+            TimeSpan.FromSeconds(10));
+
+        // Advance 8 days — past TestDbContext retention (7d), within SecondOutboxDbContext (30d)
+        fakeTime.Advance(TimeSpan.FromDays(8));
+
+        // Run cleanup for TestDbContext only
+        await InScopeAsync(async ctx =>
+        {
+            var cleanup = ctx.ServiceProvider.GetRequiredService<OutboxCleanupProcessor<TestDbContext>>();
+            await cleanup.RunOnceAsync(CancellationToken.None);
+        });
+
+        // Assert: only TestDbContext's message deleted, SecondOutboxDbContext's message kept
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var messages = await db.Set<OutboxMessageEntity>().ToListAsync();
+            messages.Should().HaveCount(1);
+            messages[0].SourceContext.Should().Be(typeof(SecondOutboxDbContext).FullName);
+        });
+
+        // Advance to 31 days total — past SecondOutboxDbContext retention (30d)
+        fakeTime.Advance(TimeSpan.FromDays(23));
+
+        // Run cleanup for SecondOutboxDbContext
+        await InScopeAsync(async ctx =>
+        {
+            var cleanup = ctx.ServiceProvider.GetRequiredService<OutboxCleanupProcessor<SecondOutboxDbContext>>();
+            await cleanup.RunOnceAsync(CancellationToken.None);
+        });
+
+        // Assert: both messages now deleted
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var count = await db.Set<OutboxMessageEntity>().CountAsync();
+            count.Should().Be(0);
+        });
+    }
+
+    [Test]
     public async Task Outbox_DuplicateAddEfCoreOutbox_ThrowsAtStartup()
     {
         var act = () => StartTestAsync(services =>
