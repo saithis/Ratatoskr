@@ -78,7 +78,7 @@ public class RatatoskrBuilderTests
     }
 
     [Test]
-    public void WithHandler_RegistersHandlerAsBothTypesInDI()
+    public void WithHandler_RegistersHandlerInDI()
     {
         // Arrange
         var services = new ServiceCollection();
@@ -94,11 +94,6 @@ public class RatatoskrBuilderTests
         {
             var concreteHandler = scope.ServiceProvider.GetService<TestEventHandler>();
             concreteHandler.Should().NotBeNull();
-
-            // Assert - Can resolve as interface
-            var interfaceHandler = scope.ServiceProvider.GetService<IMessageHandler<TestEvent>>();
-            interfaceHandler.Should().NotBeNull();
-            interfaceHandler.Should().BeSameAs(concreteHandler);
         }
     }
 }

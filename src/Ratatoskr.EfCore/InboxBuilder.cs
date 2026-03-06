@@ -5,7 +5,7 @@ namespace Ratatoskr.EfCore;
 /// <summary>
 /// Builder for configuring the inbox pattern.
 /// </summary>
-public class InboxBuilder<TDbContext> where TDbContext : DbContext, IInboxDbContext
+public class InboxBuilder<TDbContext> where TDbContext : DbContext
 {
     internal InboxOptions Options { get; } = new();
     internal bool RegisterBackgroundService { get; private set; } = true;

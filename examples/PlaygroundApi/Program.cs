@@ -34,7 +34,7 @@ builder.Services.AddRatatoskr(bus =>
             c.ConnectionString = new Uri(rabbitMqConnectionString);
         });
     
-    bus.AddEfCoreOutbox<NotesDbContext>();
+    bus.AddEfCoreDurability<NotesDbContext>(d => d.UseOutbox());
     
     bus
         .AddEventPublishChannel("events.topic", c => c

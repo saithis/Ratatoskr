@@ -1,20 +1,15 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Ratatoskr.EfCore;
 
 /// <summary>
 /// Builder for configuring the outbox pattern.
 /// </summary>
-public class OutboxBuilder<TDbContext> where TDbContext : DbContext, IOutboxDbContext
+public class OutboxBuilder<TDbContext> where TDbContext : DbContext
 {
-    internal IServiceCollection Services { get; }
     internal OutboxOptions Options { get; } = new();
-    
-    internal OutboxBuilder(IServiceCollection services)
-    {
-        Services = services;
-    }
+
+    internal OutboxBuilder() { }
     
     /// <summary>
     /// Sets the polling interval for checking the database.

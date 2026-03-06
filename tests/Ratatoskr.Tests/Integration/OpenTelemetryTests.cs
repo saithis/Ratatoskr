@@ -416,7 +416,8 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
                 bus.AddEventPublishChannel("otel-inbox-events", c => c.WithLocal().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("otel-inbox-events", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<NoOpTestEventHandler>("otel-noop"))
-                    .UseInbox<TestDbContext>(inbox => inbox.WithPollingInterval(TimeSpan.FromMilliseconds(500))));
+                    .UseInbox<TestDbContext>());
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox => inbox.WithPollingInterval(TimeSpan.FromMilliseconds(500))));
             });
             services.AddDbContext<TestDbContext>((sp, opts) =>
                 opts.UseNpgsql(PostgresConnectionString));
@@ -460,7 +461,8 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
                 bus.AddEventPublishChannel("otel-inbox-trace", c => c.WithLocal().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("otel-inbox-trace", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<NoOpTestEventHandler>("otel-trace-noop"))
-                    .UseInbox<TestDbContext>(inbox => inbox.WithPollingInterval(TimeSpan.FromMilliseconds(500))));
+                    .UseInbox<TestDbContext>());
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox => inbox.WithPollingInterval(TimeSpan.FromMilliseconds(500))));
             });
             services.AddDbContext<TestDbContext>((sp, opts) =>
                 opts.UseNpgsql(PostgresConnectionString));
@@ -534,7 +536,7 @@ public class OpenTelemetryTests(RabbitMqContainerFixture rabbitMq, PostgresConta
 
             if (useOutbox)
             {
-                bus.AddEfCoreOutbox<TestDbContext>(o => o.Options.PollingInterval = TimeSpan.FromSeconds(1));
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox(o => o.Options.PollingInterval = TimeSpan.FromSeconds(1)));
             }
         });
 

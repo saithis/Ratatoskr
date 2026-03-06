@@ -60,7 +60,9 @@ public class ChannelRegistryTests
         var builder = new RatatoskrBuilder(services);
 
         builder.AddCommandConsumeChannel("orders.commands", cfg => cfg
-            .Consumes<TestEvent>(m => m.WithRoutingKey("cmd.test"))
+            .Consumes<TestEvent>(
+                m => m.WithHandler<TestEventHandler>(),
+                msg => msg.WithRoutingKey("cmd.test"))
         );
 
         // Act

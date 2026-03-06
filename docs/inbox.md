@@ -41,46 +41,58 @@ When using `UseInbox<TDbContext>()` on a consume channel together with `UseLocal
 
 ## Setup
 
-### 1. Implement `IInboxDbContext`
+### 1. Implement DbContext interfaces
+
+DbContext classes must implement both `IInboxDbContext` and `IOutboxDbContext`:
 
 ```csharp
 public class AppDbContext : DbContext, IOutboxDbContext, IInboxDbContext
 {
+    public OutboxStagingCollection OutboxMessages { get; } = new();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
         // Pass Database to enable provider-specific partial indexes (PostgreSQL, SQL Server)
-        modelBuilder.AddOutboxEntities(Database); // if using outbox
+        modelBuilder.AddOutboxEntities(Database);
         modelBuilder.AddInboxEntities(Database);
     }
 }
 ```
 
-### 2. Register with `AddRatatoskr`
+### 2. Configure durability with `AddEfCoreDurability`
 
-Handlers and inbox support are configured per consume channel. Each channel that needs inbox durability calls `UseInbox<TDbContext>()`. Different channels can use different `DbContext` types.
+Per-DbContext inbox and outbox options are configured centrally via `AddEfCoreDurability<TDbContext>()`. Channels then opt in to the inbox with `UseInbox<TDbContext>()` (no options).
 
 ```csharp
 services.AddRatatoskr(bus =>
 {
     bus.UseLocalTransport(); // or UseRabbitMq(...)
 
+    // Configure durability for this DbContext — inbox + outbox options in one place
+    bus.AddEfCoreDurability<AppDbContext>(d =>
+    {
+        d.UseInbox(inbox =>
+        {
+            inbox.WithMaxRetries(5);
+            inbox.WithMaxRetryDelay(TimeSpan.FromMinutes(5));
+            inbox.WithPollingInterval(TimeSpan.FromSeconds(30));
+        });
+        d.UseOutbox();
+    });
+
     bus.AddEventConsumeChannel("orders.events", c => c
         .Consumes<OrderPlaced>(m => m
             .WithHandler<FulfillmentHandler>("fulfillment")   // inbox-managed
             .WithHandler<NotificationHandler>("notification") // inbox-managed
             .WithHandler<AuditLogHandler>())                  // fire-and-forget
-        .UseInbox<AppDbContext>(inbox =>
-        {
-            inbox.WithMaxRetries(5);
-            inbox.WithMaxRetryDelay(TimeSpan.FromMinutes(5));
-            inbox.WithPollingInterval(TimeSpan.FromSeconds(30));
-        }));
+        .UseInbox<AppDbContext>());  // enables inbox on this channel
 });
 
 services.AddDbContext<AppDbContext>((sp, opts) =>
 {
     opts.UseNpgsql("...");
+    opts.RegisterOutbox<AppDbContext>(sp); // wire up outbox interceptor
 });
 ```
 
@@ -107,10 +119,10 @@ The **handler key** (`"fulfillment"`) is persisted in the database. It must be s
 
 ## Configuration Options
 
-All options are configurable via fluent methods on the `UseInbox<TDbContext>()` builder:
+All options are configurable via fluent methods on the `AddEfCoreDurability` inbox builder:
 
 ```csharp
-.UseInbox<AppDbContext>(inbox =>
+bus.AddEfCoreDurability<AppDbContext>(d => d.UseInbox(inbox =>
 {
     inbox.WithMaxRetries(5);
     inbox.WithMaxRetryDelay(TimeSpan.FromMinutes(5));
@@ -121,7 +133,7 @@ All options are configurable via fluent methods on the `UseInbox<TDbContext>()` 
     inbox.WithRestartDelay(TimeSpan.FromSeconds(5));
     inbox.WithLockAcquireTimeout(TimeSpan.FromSeconds(60));
     inbox.WithLockName("custom-lock-name");
-});
+}));
 ```
 
 | Fluent Method | Default | Description |
@@ -199,10 +211,13 @@ Use `WithoutBackgroundProcessing()` to disable the `InboxProcessor` background s
 services.AddRatatoskr(bus =>
 {
     bus.UseLocalTransport();
+    bus.AddEfCoreDurability<AppDbContext>(d =>
+        d.UseInbox(inbox => inbox.WithoutBackgroundProcessing()));
+
     bus.AddEventConsumeChannel("events", c => c
         .Consumes<OrderPlaced>(m => m
             .WithHandler<FulfillmentHandler>("fulfillment"))
-        .UseInbox<AppDbContext>(inbox => inbox.WithoutBackgroundProcessing()));
+        .UseInbox<AppDbContext>());
 });
 
 // In the test body, trigger processing manually:
@@ -212,13 +227,19 @@ await processor.ProcessBatchAsync(includeStuckMessageDetection: false, Cancellat
 
 ## Multi-DbContext Support
 
-Each consume channel can use a different `DbContext` for its inbox. This enables bounded context isolation — for example, an Orders service and a Shipping service sharing the same application but using separate databases:
+Each consume channel can use a different `DbContext` for its inbox. This enables bounded context isolation — for example, an Orders service and a Shipping service sharing the same application but using separate databases.
+
+Per-DbContext durability is configured centrally via `AddEfCoreDurability`, and channels opt in with `UseInbox`:
 
 ```csharp
 services.AddRatatoskr(bus =>
 {
     bus.UseLocalTransport();
     bus.AddEventPublishChannel("shared-events", c => c.WithLocal().Produces<OrderPlaced>());
+
+    // Per-DbContext durability configuration
+    bus.AddEfCoreDurability<OrdersDbContext>(d => d.UseInbox());
+    bus.AddEfCoreDurability<ShippingDbContext>(d => d.UseInbox());
 
     // Orders inbox — persists to OrdersDbContext
     bus.AddEventConsumeChannel("orders.inbox", c => c
@@ -245,7 +266,7 @@ Each `DbContext` type gets its own:
 - `InboxAcceptor<TDbContext>` for persistence
 - Distributed lock (auto-named `InboxProcessor_{DbContextTypeName}`)
 
-Per-DbContext services are registered once (idempotent), so multiple channels sharing the same `DbContext` reuse the same processor and options. If the first channel configures options via `UseInbox<TDbContext>(inbox => ...)`, subsequent channels sharing the same `DbContext` must call `UseInbox<TDbContext>()` **without** a configure callback — passing conflicting options throws `InvalidOperationException` at startup.
+Per-DbContext services are registered once (idempotent), so multiple channels sharing the same `DbContext` reuse the same processor and options.
 
 > **Important:** Each `DbContext` type is expected to have its own database. The `InboxMessageProcessor` queries all pending handler statuses from its database — if two `DbContext` types share a database, they will see each other's data.
 

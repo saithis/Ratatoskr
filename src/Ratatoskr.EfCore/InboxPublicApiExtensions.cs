@@ -1,10 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Hosting;
 using Ratatoskr.Config;
-using Ratatoskr.Core;
 using Ratatoskr.EfCore.Internal;
 
 namespace Ratatoskr.EfCore;
@@ -15,62 +12,26 @@ namespace Ratatoskr.EfCore;
 public static class InboxPublicApiExtensions
 {
     /// <summary>
-    /// Enables the inbox pattern on this consume channel with default options.
+    /// Enables the inbox pattern on this consume channel.
     /// All handlers registered with a stable key on this channel will be inbox-managed.
+    /// Requires <c>AddEfCoreDurability&lt;TDbContext&gt;(d =&gt; d.UseInbox())</c> to be called on the bus builder.
     /// </summary>
     public static ConsumeChannelBuilder UseInbox<TDbContext>(this ConsumeChannelBuilder builder)
         where TDbContext : DbContext, IInboxDbContext
     {
-        return builder.UseInbox<TDbContext>(configure: null);
-    }
-
-    /// <summary>
-    /// Enables the inbox pattern on this consume channel with custom options.
-    /// All handlers registered with a stable key on this channel will be inbox-managed.
-    /// Per-DbContext services are registered once (idempotent across multiple channels sharing a DbContext).
-    /// </summary>
-    public static ConsumeChannelBuilder UseInbox<TDbContext>(this ConsumeChannelBuilder builder,
-        Action<InboxBuilder<TDbContext>>? configure)
-        where TDbContext : DbContext, IInboxDbContext
-    {
-        // Mark this channel as inbox-enabled
         builder.Channel.SetExtension(new ChannelInboxConfig(typeof(TDbContext)));
 
-        var inboxBuilder = new InboxBuilder<TDbContext>();
-        configure?.Invoke(inboxBuilder);
-
+        // Deferred validation: ensure AddEfCoreDurability<TDbContext>(d => d.UseInbox()) was called
         var services = builder.Services;
-
-        // Per-DbContext services are registered once (idempotent across multiple channels sharing a DbContext).
-        // If already registered, a configure callback is rejected to prevent silent option conflicts.
-        if (services.Any(d => d.ServiceType == typeof(InboxOptionsHolder<TDbContext>)))
+        var channelName = builder.Channel.ChannelName;
+        builder.RatatoskrBuilder.AddValidator(_ =>
         {
-            if (configure != null)
+            if (!services.Any(d => d.ServiceType == typeof(InboxOptionsHolder<TDbContext>)))
                 throw new InvalidOperationException(
-                    $"Inbox options for '{typeof(TDbContext).Name}' have already been configured by another channel. " +
-                    $"Per-DbContext inbox options can only be configured once. " +
-                    $"Use .UseInbox<{typeof(TDbContext).Name}>() without a configure callback on subsequent channels, " +
-                    $"or consolidate all options into the first UseInbox call.");
-
-            return builder;
-        }
-
-        // Default lock name includes DbContext type to avoid collisions across different DbContexts
-        if (inboxBuilder.Options.LockName == InboxOptions.DefaultLockName)
-            inboxBuilder.Options.LockName = $"InboxProcessor_{typeof(TDbContext).Name}";
-
-        services.AddSingleton(new InboxOptionsHolder<TDbContext>(inboxBuilder.Options));
-        services.TryAddSingleton<InboxTelemetry>();
-        services.AddTransient<InboxMessageProcessor<TDbContext>>();
-        services.AddSingleton<InboxProcessor<TDbContext>>();
-        services.AddSingleton<IProcessorTrigger>(sp => sp.GetRequiredService<InboxProcessor<TDbContext>>());
-        if (inboxBuilder.RegisterBackgroundService)
-            services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<InboxProcessor<TDbContext>>());
-        services.AddSingleton<InboxAcceptor<TDbContext>>();
-        services.AddSingleton<IMessageRouteInterceptor, InboxRouteInterceptor<TDbContext>>();
-
-        // Register inbox configuration validator (runs once, after ChannelHandlerRegistry is built)
-        builder.RatatoskrBuilder.AddHandlerValidator(InboxConfigurationValidator.Validate);
+                    $"Channel '{channelName}' uses UseInbox<{typeof(TDbContext).Name}>() " +
+                    $"but AddEfCoreDurability<{typeof(TDbContext).Name}>(d => d.UseInbox()) was not configured. " +
+                    $"Call AddEfCoreDurability before configuring consume channels.");
+        });
 
         return builder;
     }

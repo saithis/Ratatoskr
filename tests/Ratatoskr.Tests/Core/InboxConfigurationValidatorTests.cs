@@ -94,10 +94,10 @@ public class InboxConfigurationValidatorTests
     }
 
     [Test]
-    public void UseInbox_TwoChannelsSameDbContext_SecondWithoutOptions_DoesNotThrow()
+    public void UseInbox_TwoChannelsSameDbContext_SharedDurability_DoesNotThrow()
     {
         // Arrange - two channels sharing the same DbContext;
-        // first configures options, second calls UseInbox without configure callback
+        // options are configured once via AddEfCoreDurability
         var services = new ServiceCollection();
 
         // Act & Assert
@@ -105,34 +105,48 @@ public class InboxConfigurationValidatorTests
         {
             bus.AddEventConsumeChannel("channel-a", c => c
                 .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("key-a"))
-                .UseInbox<TestDbContext>(inbox => inbox.WithPollingInterval(TimeSpan.FromSeconds(5))));
+                .UseInbox<TestDbContext>());
             bus.AddEventConsumeChannel("channel-b", c => c
                 .Consumes<OrderCreatedEvent>(m => m.WithHandler<NoOpOrderCreatedHandler>("key-b"))
                 .UseInbox<TestDbContext>());
+            bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox => inbox.WithPollingInterval(TimeSpan.FromSeconds(5))));
         });
 
         act.Should().NotThrow();
     }
-
     [Test]
-    public void UseInbox_TwoChannelsSameDbContext_WithConflictingOptions_ThrowsInvalidOperationException()
+    public void UseInbox_WithoutAddEfCoreDurability_ThrowsAtStartup()
     {
-        // Arrange - two channels sharing the same DbContext, both passing configure callbacks
+        // Arrange - UseInbox<TDbContext>() on channel without AddEfCoreDurability
         var services = new ServiceCollection();
 
         // Act & Assert
         var act = () => services.AddRatatoskr(bus =>
         {
-            bus.AddEventConsumeChannel("channel-a", c => c
-                .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("key-a"))
-                .UseInbox<TestDbContext>(inbox => inbox.WithMaxRetries(3)));
-            bus.AddEventConsumeChannel("channel-b", c => c
-                .Consumes<OrderCreatedEvent>(m => m.WithHandler<NoOpOrderCreatedHandler>("key-b"))
-                .UseInbox<TestDbContext>(inbox => inbox.WithMaxRetries(10)));
+            bus.AddEventConsumeChannel("test-channel", c => c
+                .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("key"))
+                .UseInbox<TestDbContext>());
+            // Missing: bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox());
         });
 
         act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*Inbox options for 'TestDbContext' have already been configured*");
+            .WithMessage("*AddEfCoreDurability*UseInbox*");
+    }
+
+    [Test]
+    public void AddEfCoreDurability_WithoutUseInboxOrUseOutbox_ThrowsImmediately()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act & Assert
+        var act = () => services.AddRatatoskr(bus =>
+        {
+            bus.AddEfCoreDurability<TestDbContext>(d => { });
+        });
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*requires at least UseInbox() or UseOutbox()*");
     }
 }
 

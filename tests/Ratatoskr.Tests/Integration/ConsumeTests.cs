@@ -236,8 +236,10 @@ public class ConsumeTests(
                 .WithQueueType(QueueType.Classic));
             var channel = c.Consumes<TestEvent>(configureHandler);
             if (configureInbox != null)
-                channel.UseInbox<TestDbContext>(configureInbox);
+                channel.UseInbox<TestDbContext>();
         });
+        if (configureInbox != null)
+            bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(configureInbox));
     }
 
     private void ConfigureBusWithRetry(RatatoskrBuilder bus, string queueName, int maxRetries,

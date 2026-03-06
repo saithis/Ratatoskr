@@ -149,14 +149,14 @@ public class ValidationTests
         registry.GetInboxHandlers("test-channel").Should().BeEmpty();
     }
     [Test]
-    public void WithHandler_FireAndForget_WithConfig_RegistersAsFireAndForget()
+    public void WithHandler_FireAndForget_RegistersAsFireAndForget()
     {
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
         builder.AddEventConsumeChannel("test-channel", c => c
             .Consumes<TestEvent>(m => m
-                .WithHandler<TestEventHandler>(h => { /* no-op config */ })));
+                .WithHandler<TestEventHandler>()));
 
         // Act
         var registry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);

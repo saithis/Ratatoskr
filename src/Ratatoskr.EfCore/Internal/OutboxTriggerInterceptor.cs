@@ -93,7 +93,10 @@ internal class OutboxTriggerInterceptor<TDbContext>(
             // Only create same-tx entries if the channel's inbox DbContext matches this outbox's DbContext
             if (inboxConfig.DbContextType != typeof(TDbContext)) continue;
 
-            var inboxHandlers = channelHandlerRegistry.GetInboxHandlers(channel.ChannelName);
+            var msgReg = channel.Messages.FirstOrDefault(m => m.MessageTypeName == enrichedProperties.Type);
+            if (msgReg == null) continue;
+
+            var inboxHandlers = channelHandlerRegistry.GetInboxHandlers(channel.ChannelName, msgReg.MessageType);
             if (inboxHandlers.Count == 0) continue;
 
             if (string.IsNullOrWhiteSpace(enrichedProperties.Id))

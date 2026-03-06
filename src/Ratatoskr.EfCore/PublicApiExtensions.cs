@@ -1,54 +1,83 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Ratatoskr.Core;
 using Ratatoskr.EfCore.Internal;
 
 namespace Ratatoskr.EfCore;
 
 /// <summary>
-/// Contains the extension methods to enable/configure the outbox.
+/// Contains the extension methods to enable/configure EF Core durability (inbox and outbox).
 /// </summary>
 public static class PublicApiExtensions
 {
     extension(RatatoskrBuilder builder)
     {
         /// <summary>
-        /// Registers the outbox pattern with default options.
-        /// Can be called multiple times with different DbContext types.
+        /// Registers EF Core durability (inbox and/or outbox) for the given DbContext.
+        /// Call <c>UseInbox()</c> and/or <c>UseOutbox()</c> on the builder to enable each pattern.
+        /// Per-DbContext services are registered once (idempotent).
         /// </summary>
-        public RatatoskrBuilder AddEfCoreOutbox<TDbContext>()
-            where TDbContext : DbContext, IOutboxDbContext
+        public RatatoskrBuilder AddEfCoreDurability<TDbContext>(Action<DurabilityBuilder<TDbContext>> configure)
+            where TDbContext : DbContext, IInboxDbContext, IOutboxDbContext
         {
-            return builder.AddEfCoreOutbox<TDbContext>(configure: null);
-        }
-
-        /// <summary>
-        /// Registers the outbox pattern with custom options via builder.
-        /// Can be called multiple times with different DbContext types.
-        /// </summary>
-        public RatatoskrBuilder AddEfCoreOutbox<TDbContext>(Action<OutboxBuilder<TDbContext>>? configure)
-            where TDbContext : DbContext, IOutboxDbContext
-        {
-            // Skip if already registered for this DbContext type
-            if (builder.Services.Any(d => d.ServiceType == typeof(OutboxOptionsHolder<TDbContext>)))
+            // Idempotency: skip if already registered for this DbContext type
+            if (builder.Services.Any(d => d.ServiceType == typeof(DurabilityMarker<TDbContext>)))
                 return builder;
 
-            var outboxBuilder = new OutboxBuilder<TDbContext>(builder.Services);
-            configure?.Invoke(outboxBuilder);
+            builder.Services.AddSingleton<DurabilityMarker<TDbContext>>();
 
-            // Default lock name includes DbContext type to avoid collisions across different DbContexts
+            var durabilityBuilder = new DurabilityBuilder<TDbContext>();
+            configure(durabilityBuilder);
+
+            if (durabilityBuilder.InboxBuilder == null && durabilityBuilder.OutboxBuilder == null)
+                throw new InvalidOperationException(
+                    $"AddEfCoreDurability<{typeof(TDbContext).Name}>() requires at least UseInbox() or UseOutbox() to be called.");
+
+            if (durabilityBuilder.InboxBuilder != null)
+                RegisterInboxServices<TDbContext>(builder, durabilityBuilder.InboxBuilder);
+
+            if (durabilityBuilder.OutboxBuilder != null)
+                RegisterOutboxServices<TDbContext>(builder, durabilityBuilder.OutboxBuilder);
+
+            return builder;
+        }
+
+        private static void RegisterInboxServices<TDbContext>(
+            RatatoskrBuilder ratatoskrBuilder, InboxBuilder<TDbContext> inboxBuilder)
+            where TDbContext : DbContext, IInboxDbContext, IOutboxDbContext
+        {
+            if (inboxBuilder.Options.LockName == InboxOptions.DefaultLockName)
+                inboxBuilder.Options.LockName = $"InboxProcessor_{typeof(TDbContext).Name}";
+
+            ratatoskrBuilder.Services.AddSingleton(new InboxOptionsHolder<TDbContext>(inboxBuilder.Options));
+            ratatoskrBuilder.Services.TryAddSingleton<InboxTelemetry>();
+            ratatoskrBuilder.Services.AddTransient<InboxMessageProcessor<TDbContext>>();
+            ratatoskrBuilder.Services.AddSingleton<InboxProcessor<TDbContext>>();
+            ratatoskrBuilder.Services.AddSingleton<IProcessorTrigger>(sp => sp.GetRequiredService<InboxProcessor<TDbContext>>());
+            if (inboxBuilder.RegisterBackgroundService)
+                ratatoskrBuilder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<InboxProcessor<TDbContext>>());
+            ratatoskrBuilder.Services.AddSingleton<InboxAcceptor<TDbContext>>();
+            ratatoskrBuilder.Services.AddSingleton<IMessageRouteInterceptor, InboxRouteInterceptor<TDbContext>>();
+
+            ratatoskrBuilder.AddHandlerValidator(InboxConfigurationValidator.Validate);
+        }
+
+        private static void RegisterOutboxServices<TDbContext>(
+            RatatoskrBuilder ratatoskrBuilder, OutboxBuilder<TDbContext> outboxBuilder)
+            where TDbContext : DbContext, IInboxDbContext, IOutboxDbContext
+        {
             if (outboxBuilder.Options.LockName == OutboxOptions.DefaultLockName)
                 outboxBuilder.Options.LockName = $"OutboxProcessor_{typeof(TDbContext).Name}";
 
-            builder.Services.AddSingleton(new OutboxOptionsHolder<TDbContext>(outboxBuilder.Options));
-            builder.Services.AddSingleton<OutboxTelemetry>();
-            builder.Services.AddSingleton<OutboxTriggerInterceptor<TDbContext>>();
-            builder.Services.AddTransient<OutboxMessageProcessor<TDbContext>>();
-            builder.Services.AddSingleton<OutboxProcessor<TDbContext>>();
-            builder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<OutboxProcessor<TDbContext>>());
-
-            return builder;
+            ratatoskrBuilder.Services.AddSingleton(new OutboxOptionsHolder<TDbContext>(outboxBuilder.Options));
+            ratatoskrBuilder.Services.TryAddSingleton<OutboxTelemetry>();
+            ratatoskrBuilder.Services.AddSingleton<OutboxTriggerInterceptor<TDbContext>>();
+            ratatoskrBuilder.Services.AddTransient<OutboxMessageProcessor<TDbContext>>();
+            ratatoskrBuilder.Services.AddSingleton<OutboxProcessor<TDbContext>>();
+            ratatoskrBuilder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<OutboxProcessor<TDbContext>>());
         }
     }
 

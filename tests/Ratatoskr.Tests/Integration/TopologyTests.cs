@@ -27,7 +27,7 @@ public class TopologyTests(
                     .WithRabbitMq(o => o
                         .WithQueueName(QueueName)
                         .WithQueueType(QueueType.Quorum))
-                    .Consumes<TestEvent>());
+                    .Consumes<TestEvent>(m => m.WithHandler<PermanentErrorHandler>()));
             });
         });
 
@@ -105,7 +105,7 @@ public class TopologyTests(
                     .WithRabbitMq(o => o
                         .WithDirectExchange()
                         .WithQueueName(QueueName))
-                    .Consumes<TestEvent>());
+                    .Consumes<TestEvent>(m => m.WithHandler<PermanentErrorHandler>()));
 
                 bus.AddCommandPublishChannel(exchangeName, c => c
                     .WithRabbitMq(o => o

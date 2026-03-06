@@ -10,6 +10,8 @@ public class RatatoskrTestFactory(RabbitMqContainerFixture rabbitMq, PostgresCon
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        builder.UseSetting("hostBuilder:reloadConfigOnChange", "false");
+
         builder.ConfigureTestServices(services =>
         {
             // Register infrastructure components

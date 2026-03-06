@@ -66,11 +66,14 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
 
                 bus.AddEventConsumeChannel("channel-a", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<HandlerForDbContext1>("ctx1-handler"))
-                    .UseInbox<TestDbContext>(i => i.WithoutBackgroundProcessing()));
+                    .UseInbox<TestDbContext>());
 
                 bus.AddEventConsumeChannel("channel-b", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<HandlerForDbContext2>("ctx2-handler"))
-                    .UseInbox<SecondTestDbContext>(i => i.WithoutBackgroundProcessing()));
+                    .UseInbox<SecondTestDbContext>());
+
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(i => i.WithoutBackgroundProcessing()));
+                bus.AddEfCoreDurability<SecondTestDbContext>(d => d.UseInbox(i => i.WithoutBackgroundProcessing()));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -133,11 +136,14 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
 
                 bus.AddEventConsumeChannel("channel-a", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<HandlerForDbContext1>("ctx1-handler"))
-                    .UseInbox<TestDbContext>(i => i.WithoutBackgroundProcessing()));
+                    .UseInbox<TestDbContext>());
 
                 bus.AddEventConsumeChannel("channel-b", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<HandlerForDbContext2>("ctx2-handler"))
-                    .UseInbox<SecondTestDbContext>(i => i.WithoutBackgroundProcessing()));
+                    .UseInbox<SecondTestDbContext>());
+
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(i => i.WithoutBackgroundProcessing()));
+                bus.AddEfCoreDurability<SecondTestDbContext>(d => d.UseInbox(i => i.WithoutBackgroundProcessing()));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -196,13 +202,16 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
                     .Consumes<TestEvent>(m => m
                         .WithHandler<HandlerForDbContext1>("ctx1-handler-a")
                         .WithHandler<HandlerForDbContext1B>("ctx1-handler-b"))
-                    .UseInbox<TestDbContext>(i => i.WithoutBackgroundProcessing()));
+                    .UseInbox<TestDbContext>());
 
                 bus.AddEventConsumeChannel("channel-b", c => c
                     .Consumes<TestEvent>(m => m
                         .WithHandler<HandlerForDbContext2>("ctx2-handler-a")
                         .WithHandler<HandlerForDbContext2B>("ctx2-handler-b"))
-                    .UseInbox<SecondTestDbContext>(i => i.WithoutBackgroundProcessing()));
+                    .UseInbox<SecondTestDbContext>());
+
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(i => i.WithoutBackgroundProcessing()));
+                bus.AddEfCoreDurability<SecondTestDbContext>(d => d.UseInbox(i => i.WithoutBackgroundProcessing()));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -355,13 +364,14 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
 
                 bus.AddEventConsumeChannel("channel-a", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<HandlerForDbContext1>("ctx1-handler"))
-                    .UseInbox<TestDbContext>(i => i.WithoutBackgroundProcessing()));
+                    .UseInbox<TestDbContext>());
 
                 bus.AddEventConsumeChannel("channel-b", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<HandlerForDbContext2>("ctx2-handler"))
-                    .UseInbox<SecondTestDbContext>(i => i.WithoutBackgroundProcessing()));
+                    .UseInbox<SecondTestDbContext>());
 
-                bus.AddEfCoreOutbox<TestDbContext>();
+                bus.AddEfCoreDurability<TestDbContext>(d => { d.UseInbox(i => i.WithoutBackgroundProcessing()); d.UseOutbox(); });
+                bus.AddEfCoreDurability<SecondTestDbContext>(d => d.UseInbox(i => i.WithoutBackgroundProcessing()));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>

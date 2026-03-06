@@ -4,7 +4,7 @@ using Ratatoskr.EfCore;
 
 namespace PlaygroundApi.Database;
 
-public class NotesDbContext(DbContextOptions<NotesDbContext> options) : DbContext(options), IOutboxDbContext
+public class NotesDbContext(DbContextOptions<NotesDbContext> options) : DbContext(options), IOutboxDbContext, IInboxDbContext
 {
     public DbSet<Note> Notes { get; set; }
     public OutboxStagingCollection OutboxMessages { get; } = new();
@@ -14,5 +14,6 @@ public class NotesDbContext(DbContextOptions<NotesDbContext> options) : DbContex
         base.OnModelCreating(modelBuilder);
 
         modelBuilder.AddOutboxEntities();
+        modelBuilder.AddInboxEntities();
     }
 }

@@ -153,7 +153,7 @@ public class MessageTrackingTests(
                     .WithRabbitMq(o => o.WithQueueName(QueueName).WithAutoAck(false).WithTransientQueue()
                         .WithQueueType(QueueType.Classic))
                     .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
-                bus.AddEfCoreOutbox<TestDbContext>();
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox());
             });
 
             services.AddDbContext<TestDbContext>((sp, options) =>
@@ -511,6 +511,7 @@ public class MessageTrackingTests(
                 bus.AddEventConsumeChannel(channelName, c => c
                     .Consumes<TestEvent>(m => m.WithHandler<NoOpTestEventHandler>("no-op"))
                     .UseInbox<TestDbContext>());
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox());
             });
             services.AddRatatoskrTesting();
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -548,6 +549,7 @@ public class MessageTrackingTests(
                 bus.AddEventConsumeChannel(channelName, c => c
                     .Consumes<TestEvent>(m => m.WithHandler<NoOpTestEventHandler>("no-op"))
                     .UseInbox<TestDbContext>());
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox());
             });
             services.AddRatatoskrTesting();
             services.AddDbContext<TestDbContext>((sp, opts) =>

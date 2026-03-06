@@ -34,7 +34,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
                 bus.AddEventPublishChannel(ExchangeName, c => c
                     .WithRabbitMq(r => r.WithTopicExchange())
                     .Produces<TestEvent>());
-                bus.AddEfCoreOutbox<TestDbContext>();
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox());
             });
 
             services.AddDbContext<TestDbContext>((sp, options) =>
@@ -82,7 +82,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
                     .WithRabbitMq(o => o.WithQueueName(QueueName).WithAutoAck(false).WithTransientQueue()
                         .WithQueueType(QueueType.Classic))
                     .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
-                bus.AddEfCoreOutbox<TestDbContext>();
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox());
             });
 
             services.AddDbContext<TestDbContext>((sp, options) =>
@@ -125,7 +125,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
                 bus.AddEventPublishChannel(ExchangeName, c => c
                     .WithRabbitMq(r => r.WithTopicExchange())
                     .Produces<TestEvent>(m => m.WithRoutingKey(DefaultRoutingKey)));
-                bus.AddEfCoreOutbox<TestDbContext>();
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox());
             });
 
             services.AddDbContext<TestDbContext>((sp, options) =>
@@ -352,7 +352,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
                 bus.AddEventPublishChannel(ExchangeName, c => c
                     .WithRabbitMq(r => r.WithTopicExchange())
                     .Produces<TestEvent>(m => m.WithRoutingKey(DefaultRoutingKey)));
-                bus.AddEfCoreOutbox<TestDbContext>(outbox => outbox.WithBatchSize(2)); // Small batch
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox(outbox => outbox.WithBatchSize(2))); // Small batch
             });
 
             services.AddDbContext<TestDbContext>((sp, options) =>
@@ -403,7 +403,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
                 bus.AddEventPublishChannel(ExchangeName, c => c
                     .WithRabbitMq(r => r.WithTopicExchange())
                     .Produces<TestEvent>());
-                bus.AddEfCoreOutbox<TestDbContext>();
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox());
             });
 
             services.AddDbContext<TestDbContext>((sp, options) =>
@@ -459,7 +459,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
                 bus.AddEventPublishChannel(ExchangeName, c => c
                     .WithRabbitMq(r => r.WithTopicExchange())
                     .Produces<TestEvent>());
-                bus.AddEfCoreOutbox<TestDbContext>();
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox());
             });
 
             services.AddDbContext<TestDbContext>((sp, options) =>
@@ -514,7 +514,7 @@ public class OutboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFix
                 bus.AddEventPublishChannel(ExchangeName, c => c
                     .WithRabbitMq(r => r.WithTopicExchange())
                     .Produces<TestEvent>(m => m.WithRoutingKey(DefaultRoutingKey)));
-                bus.AddEfCoreOutbox<TestDbContext>();
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox());
             });
 
             services.AddDbContext<TestDbContext>((sp, options) =>

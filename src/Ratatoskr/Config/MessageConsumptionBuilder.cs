@@ -58,25 +58,10 @@ public class MessageConsumptionBuilder<TMessage> where TMessage : notnull
         return this;
     }
 
-    /// <summary>
-    /// Registers a fire-and-forget handler with additional configuration.
-    /// </summary>
-    public MessageConsumptionBuilder<TMessage> WithHandler<THandler>(Action<HandlerBuilder> configure)
-        where THandler : class, IMessageHandler<TMessage>
-    {
-        var registration = new HandlerRegistration();
-        var handlerBuilder = new HandlerBuilder(registration);
-        configure(handlerBuilder);
-
-        AddHandler<THandler>(isInbox: false, inboxKey: null);
-        return this;
-    }
-
     private void AddHandler<THandler>(bool isInbox, string? inboxKey)
         where THandler : class, IMessageHandler<TMessage>
     {
         _services.TryAddScoped<THandler>();
-        _services.AddScoped<IMessageHandler<TMessage>>(sp => sp.GetRequiredService<THandler>());
 
         HandlerRegistrations.Add(new ChannelHandlerRegistration(
             typeof(TMessage),
