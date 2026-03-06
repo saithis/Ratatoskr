@@ -84,9 +84,9 @@ services.AddRatatoskr(builder =>
                 // Optional: Global settings for this consumer (e.g. Prefetch)
             )
            // Binds queue "orders.user-handler" to exchange "users.events" with key "user.registered"
-           // Handlers: fire-and-forget (no key) or inbox-managed (with key)
+           // Handlers: inbox-managed (with key) or explicit fire-and-forget (with WithoutInbox())
            .Consumes<UserRegistered>(m => m
-                .WithHandler<UserRegisteredHandler>()                   // fire-and-forget
+                .WithHandler<UserRegisteredHandler>("user-audit", h => h.WithoutInbox())  // fire-and-forget
                 .WithHandler<UserRegisteredInboxHandler>("user-reg"),   // inbox-managed
                 cfg => cfg.WithType("user.registered"))
            // Enable inbox on this channel — each channel can use a different DbContext

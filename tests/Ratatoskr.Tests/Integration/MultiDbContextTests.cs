@@ -422,6 +422,85 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         });
     }
 
+    [Test]
+    public async Task Inbox_TwoDbContexts_ConcurrentProcessing_NoInterference()
+    {
+        // Arrange: Both DbContexts process their inboxes concurrently — should not interfere.
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseLocalTransport();
+                bus.AddEventPublishChannel("shared-events", c => c.WithLocal().Produces<TestEvent>());
+
+                bus.AddEventConsumeChannel("channel-a", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<HandlerForDbContext1>("ctx1-handler"))
+                    .UseInbox<TestDbContext>());
+
+                bus.AddEventConsumeChannel("channel-b", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<HandlerForDbContext2>("ctx2-handler"))
+                    .UseInbox<SecondTestDbContext>());
+
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(i => i.WithoutBackgroundProcessing()));
+                bus.AddEfCoreDurability<SecondTestDbContext>(d => d.UseInbox(i => i.WithoutBackgroundProcessing()));
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<SecondTestDbContext>((sp, opts) =>
+                opts.UseNpgsql(SecondPostgresConnectionString));
+        });
+
+        await InitializeBothDatabasesAsync();
+
+        // Publish multiple messages
+        for (var i = 0; i < 5; i++)
+        {
+            var index = i;
+            await InScopeAsync(async ctx =>
+            {
+                var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+                await bus.PublishDirectAsync(
+                    new TestEvent { Id = $"concurrent-{index}", Data = $"data-{index}" },
+                    new MessageProperties { Id = $"concurrent-msg-{index}" });
+            });
+        }
+
+        await WaitForInboxEntriesAsync<TestDbContext>(5, TimeSpan.FromSeconds(15));
+        await WaitForInboxEntriesAsync<SecondTestDbContext>(5, TimeSpan.FromSeconds(15));
+
+        // Act: Process both inboxes concurrently
+        var task1 = Task.Run(async () =>
+        {
+            await InScopeAsync(async ctx =>
+                await ProcessInboxAsync<TestDbContext>(ctx.ServiceProvider));
+        });
+        var task2 = Task.Run(async () =>
+        {
+            await InScopeAsync(async ctx =>
+                await ProcessInboxAsync<SecondTestDbContext>(ctx.ServiceProvider));
+        });
+
+        await Task.WhenAll(task1, task2);
+
+        // Assert: Both databases have all 5 handler statuses completed
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var statuses = await db.Set<InboxHandlerStatusEntity>().ToListAsync();
+            statuses.Should().HaveCount(5);
+            statuses.Should().AllSatisfy(s => s.CompletedAt.Should().NotBeNull());
+        });
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<SecondTestDbContext>();
+            var statuses = await db.Set<InboxHandlerStatusEntity>().ToListAsync();
+            statuses.Should().HaveCount(5);
+            statuses.Should().AllSatisfy(s => s.CompletedAt.Should().NotBeNull());
+        });
+    }
+
     #endregion
 
     #region Helpers

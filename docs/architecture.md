@@ -275,12 +275,12 @@ Handlers are registered inside the channel's `Consumes<T>()` builder. Inbox hand
 ```csharp
 bus.AddEventConsumeChannel("events", c => c
     .Consumes<OrderCreated>(m => m
-        .WithHandler<OrderCreatedHandler>()                // fire-and-forget
-        .WithHandler<FulfillmentHandler>("fulfillment"))   // inbox-managed
+        .WithHandler<OrderCreatedHandler>("audit", h => h.WithoutInbox())  // explicit fire-and-forget
+        .WithHandler<FulfillmentHandler>("fulfillment"))                   // inbox-managed
     .UseInbox<AppDbContext>());
 ```
 
-Without a key, the handler is fire-and-forget — invoked inline by the dispatcher without durability guarantees. With a key, the handler is inbox-managed — persisted to the database and delivered by `InboxProcessor`.
+With a key, the handler is inbox-managed — persisted to the database and delivered by `InboxProcessor`. On inbox channels, all handlers must either provide a stable key or explicitly opt out with `WithoutInbox()`.
 
 ### Inbox Processing
 

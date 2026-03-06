@@ -148,6 +148,85 @@ public class InboxConfigurationValidatorTests
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*requires at least UseInbox() or UseOutbox()*");
     }
+
+    [Test]
+    public void Validate_ChannelWithUseInbox_ButOnlyFireAndForgetHandlers_Throws()
+    {
+        // Arrange — channel has UseInbox configured but handler has no key (implicit fire-and-forget)
+        var services = new ServiceCollection();
+        var builder = new RatatoskrBuilder(services);
+        builder.AddEventConsumeChannel("test-channel", c => c
+            .UseInbox<TestDbContext>()
+            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+
+        var channelRegistry = builder.ChannelRegistry;
+        var handlerRegistry = ChannelHandlerRegistry.Build(channelRegistry);
+
+        // Act & Assert — must provide a key or explicitly opt out with WithoutInbox()
+        var act = () => InboxConfigurationValidator.Validate(channelRegistry, handlerRegistry);
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*registered without a stable key*");
+    }
+
+    [Test]
+    public void Validate_ChannelWithUseInbox_ExplicitFireAndForget_DoesNotThrow()
+    {
+        // Arrange — handler explicitly opted out via WithoutInbox()
+        var services = new ServiceCollection();
+        var builder = new RatatoskrBuilder(services);
+        builder.AddEventConsumeChannel("test-channel", c => c
+            .UseInbox<TestDbContext>()
+            .Consumes<TestEvent>(m => m
+                .WithHandler<TestEventHandler>("key", h => h.WithoutInbox())));
+
+        var channelRegistry = builder.ChannelRegistry;
+        var handlerRegistry = ChannelHandlerRegistry.Build(channelRegistry);
+
+        // Act & Assert — explicit opt-out is allowed
+        var act = () => InboxConfigurationValidator.Validate(channelRegistry, handlerRegistry);
+        act.Should().NotThrow();
+    }
+
+    [Test]
+    public void Validate_ChannelWithUseInbox_MixedInboxAndExplicitOptOut_DoesNotThrow()
+    {
+        // Arrange — one inbox handler + one explicitly opted-out handler
+        var services = new ServiceCollection();
+        var builder = new RatatoskrBuilder(services);
+        builder.AddEventConsumeChannel("test-channel", c => c
+            .UseInbox<TestDbContext>()
+            .Consumes<TestEvent>(m => m
+                .WithHandler<TestEventHandler>("inbox-key")
+                .WithHandler<SecondTestEventHandler>("audit-key", h => h.WithoutInbox())));
+
+        var channelRegistry = builder.ChannelRegistry;
+        var handlerRegistry = ChannelHandlerRegistry.Build(channelRegistry);
+
+        // Act & Assert
+        var act = () => InboxConfigurationValidator.Validate(channelRegistry, handlerRegistry);
+        act.Should().NotThrow();
+    }
+
+    [Test]
+    public void Validate_MultipleChannelsDifferentDbContexts_DoesNotThrow()
+    {
+        // Arrange — two channels with different DbContext types, both valid
+        var services = new ServiceCollection();
+        var builder = new RatatoskrBuilder(services);
+        builder.AddEventConsumeChannel("channel-a", c => c
+            .UseInbox<TestDbContext>()
+            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("key-a")));
+        builder.AddEventConsumeChannel("channel-b", c => c
+            .UseInbox<SecondTestDbContext>()
+            .Consumes<OrderCreatedEvent>(m => m.WithHandler<NoOpOrderCreatedHandler>("key-b")));
+
+        var channelRegistry = builder.ChannelRegistry;
+        var handlerRegistry = ChannelHandlerRegistry.Build(channelRegistry);
+
+        // Act & Assert
+        var act = () => InboxConfigurationValidator.Validate(channelRegistry, handlerRegistry);
+        act.Should().NotThrow();
+    }
 }
 
 file class NoOpOrderCreatedHandler : IMessageHandler<OrderCreatedEvent>

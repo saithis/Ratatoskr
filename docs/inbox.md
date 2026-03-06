@@ -85,7 +85,7 @@ services.AddRatatoskr(bus =>
         .Consumes<OrderPlaced>(m => m
             .WithHandler<FulfillmentHandler>("fulfillment")   // inbox-managed
             .WithHandler<NotificationHandler>("notification") // inbox-managed
-            .WithHandler<AuditLogHandler>())                  // fire-and-forget
+            .WithHandler<AuditLogHandler>("audit", h => h.WithoutInbox()))  // explicit fire-and-forget
         .UseInbox<AppDbContext>());  // enables inbox on this channel
 });
 
@@ -98,24 +98,25 @@ services.AddDbContext<AppDbContext>((sp, opts) =>
 
 ### 3. Register handlers with stable keys
 
-Handlers are registered inside the `Consumes<T>()` builder. Inbox-managed handlers provide a stable key as the first argument; fire-and-forget handlers omit the key:
+Handlers are registered inside the `Consumes<T>()` builder. Inbox-managed handlers provide a stable key; fire-and-forget handlers must explicitly opt out with `WithoutInbox()`:
 
 ```csharp
 .Consumes<OrderPlaced>(m => m
-    .WithHandler<FulfillmentHandler>("fulfillment")  // inbox-managed
-    .WithHandler<AuditLogHandler>())                 // fire-and-forget
+    .WithHandler<FulfillmentHandler>("fulfillment")                    // inbox-managed
+    .WithHandler<AuditLogHandler>("audit", h => h.WithoutInbox()))     // explicit fire-and-forget
 ```
 
 The **handler key** (`"fulfillment"`) is persisted in the database. It must be stable across deployments — renaming the key will cause existing in-flight messages to be poisoned with an "unknown handler key" error.
 
-> **Validation**: Handler keys must be **globally unique** across all channels and DbContexts, because the inbox processor looks up handlers by key when processing batches. Registering two handlers with the same key throws `InvalidOperationException` at startup.
+> **Validation**: On channels with `UseInbox<TDbContext>()`, every handler must either provide a stable key (inbox-managed) or explicitly opt out with `WithoutInbox()`. Registering a handler without a key on an inbox channel throws `InvalidOperationException` at startup. Handler keys must be **globally unique** across all channels and DbContexts.
 
 #### Handler registration API
 
 | Method | Effect |
 |---|---|
 | `.WithHandler<THandler>("key")` | Register handler as inbox-managed with the given stable key. |
-| `.WithHandler<THandler>()` | Register handler as fire-and-forget (no inbox durability). |
+| `.WithHandler<THandler>("key", h => h.WithoutInbox())` | Register handler as fire-and-forget on an inbox channel (explicit opt-out). |
+| `.WithHandler<THandler>()` | Register handler as fire-and-forget (only on channels **without** `UseInbox`). |
 
 ## Configuration Options
 
@@ -148,14 +149,47 @@ bus.AddEfCoreDurability<AppDbContext>(d => d.UseInbox(inbox =>
 | `WithLockAcquireTimeout(TimeSpan)` | `60 seconds` | Timeout for acquiring the distributed lock. |
 | `WithLockName(string)` | `"InboxProcessor_{DbContextTypeName}"` | Distributed lock name. Auto-generated per DbContext type to avoid collisions. Override only if you need a custom name. |
 
+## Outbox Configuration Options
+
+The outbox builder supports the same set of tuning options as the inbox:
+
+```csharp
+bus.AddEfCoreDurability<AppDbContext>(d => d.UseOutbox(outbox =>
+{
+    outbox.WithMaxRetries(5);
+    outbox.WithMaxRetryDelay(TimeSpan.FromMinutes(5));
+    outbox.WithPollingInterval(TimeSpan.FromSeconds(60));
+    outbox.WithBatchSize(100);
+    outbox.WithStuckMessageThreshold(TimeSpan.FromMinutes(5));
+    outbox.WithSendTimeout(TimeSpan.FromSeconds(30));
+    outbox.WithRestartDelay(TimeSpan.FromSeconds(5));
+    outbox.WithLockAcquireTimeout(TimeSpan.FromSeconds(60));
+    outbox.WithLockName("custom-outbox-lock");
+}));
+```
+
+| Fluent Method | Default | Description |
+|---|---|---|
+| `WithMaxRetries(int)` | `5` | Number of send attempts before marking a message as poisoned. A value of 0 means poisoned on the first failure. |
+| `WithMaxRetryDelay(TimeSpan)` | `5 minutes` | Maximum backoff delay between retries. |
+| `WithPollingInterval(TimeSpan)` | `60 seconds` | How often the background processor polls the DB when idle. |
+| `WithBatchSize(int)` | `100` | Messages processed per batch. |
+| `WithStuckMessageThreshold(TimeSpan)` | `5 minutes` | How long a message can remain in "processing" state before it is considered stuck. |
+| `WithSendTimeout(TimeSpan)` | *none* | Maximum time a send operation is allowed to run. Timeout cancellation counts as a failure (increments ErrorCount). |
+| `WithRestartDelay(TimeSpan)` | `5 seconds` | Delay before restarting the processor after an unexpected crash. |
+| `WithLockAcquireTimeout(TimeSpan)` | `60 seconds` | Timeout for acquiring the distributed lock. |
+| `WithLockName(string)` | `"OutboxProcessor_{DbContextTypeName}"` | Distributed lock name. Auto-generated per DbContext type. |
+
+Use `WithoutBackgroundProcessing()` to disable the outbox background service in integration tests, analogous to the inbox pattern.
+
 ## Mixing Inbox and Non-Inbox Handlers
 
-You can register both inbox-managed and fire-and-forget handlers for the same message type within the same `Consumes<T>()` builder:
+You can register both inbox-managed and fire-and-forget handlers for the same message type within the same `Consumes<T>()` builder. Fire-and-forget handlers on inbox channels must explicitly opt out:
 
 ```csharp
 .Consumes<OrderPlaced>(m => m
-    .WithHandler<FulfillmentHandler>("fulfillment")  // inbox
-    .WithHandler<AuditLogHandler>())                 // fire-and-forget
+    .WithHandler<FulfillmentHandler>("fulfillment")                    // inbox
+    .WithHandler<AuditLogHandler>("audit", h => h.WithoutInbox()))     // explicit fire-and-forget
 ```
 
 - **Non-inbox handlers** are called synchronously during message dispatch, each in its own DI scope.

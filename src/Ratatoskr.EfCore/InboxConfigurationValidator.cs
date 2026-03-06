@@ -25,6 +25,22 @@ internal static class InboxConfigurationValidator
                     $"but does not have UseInbox<TDbContext>() configured. " +
                     $"Either add UseInbox<TDbContext>() to the channel or use WithHandler<THandler>() without a key for fire-and-forget.");
             }
+
+            // UseInbox channel with fire-and-forget handlers that weren't explicitly opted out
+            if (inboxConfig != null)
+            {
+                foreach (var handler in GetAllHandlersForChannel(channel))
+                {
+                    if (!handler.IsInbox && !handler.IsExplicitFireAndForget)
+                    {
+                        throw new InvalidOperationException(
+                            $"Channel '{channel.ChannelName}' has UseInbox<TDbContext>() configured, " +
+                            $"but handler '{handler.HandlerType.Name}' was registered without a stable key. " +
+                            $"Provide a key via WithHandler<THandler>(\"key\") for inbox processing, " +
+                            $"or explicitly opt out with WithHandler<THandler>(\"key\", h => h.WithoutInbox()).");
+                    }
+                }
+            }
         }
 
         if (handlerRegistry.HasNoInboxHandlers)
@@ -36,6 +52,19 @@ internal static class InboxConfigurationValidator
                 throw new InvalidOperationException(
                     $"Inbox handler for '{handler.HandlerType.Name}' has an empty stable key. " +
                     $"Provide a non-empty key via Consumes<TMsg>(m => m.WithHandler<THandler>(\"key\")).");
+        }
+    }
+
+    private static IEnumerable<ChannelHandlerRegistration> GetAllHandlersForChannel(
+        ChannelRegistration channel)
+    {
+        foreach (var message in channel.Messages)
+        {
+            var handlerRegs = message.GetExtension<MessageHandlerRegistrations>();
+            if (handlerRegs == null) continue;
+
+            foreach (var handler in handlerRegs.Handlers)
+                yield return handler;
         }
     }
 }

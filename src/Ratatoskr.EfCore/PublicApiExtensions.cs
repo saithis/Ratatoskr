@@ -77,7 +77,8 @@ public static class PublicApiExtensions
             ratatoskrBuilder.Services.AddSingleton<OutboxTriggerInterceptor<TDbContext>>();
             ratatoskrBuilder.Services.AddTransient<OutboxMessageProcessor<TDbContext>>();
             ratatoskrBuilder.Services.AddSingleton<OutboxProcessor<TDbContext>>();
-            ratatoskrBuilder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<OutboxProcessor<TDbContext>>());
+            if (outboxBuilder.RegisterBackgroundService)
+                ratatoskrBuilder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<OutboxProcessor<TDbContext>>());
         }
     }
 

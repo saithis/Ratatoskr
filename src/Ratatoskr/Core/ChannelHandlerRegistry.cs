@@ -118,7 +118,7 @@ public class ChannelHandlerRegistry
     /// <summary>
     /// Returns all inbox handler registrations across all channels.
     /// </summary>
-    public IReadOnlyCollection<ChannelHandlerRegistration> GetAllInboxHandlers() => _inboxByKey.Values;
+    public IReadOnlyCollection<ChannelHandlerRegistration> GetAllInboxHandlers() => [.. _inboxByKey.Values];
 
     /// <summary>True if no inbox handlers have been registered.</summary>
     public bool HasNoInboxHandlers => _inboxByKey.Count == 0;

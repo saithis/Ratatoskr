@@ -388,9 +388,80 @@ public class MessageDispatcherTests
         return CreateDispatcher(_ => { }, configureChannels ?? (_ => { }));
     }
 
+    [Test]
+    public async Task DispatchAsync_CrossChannelFallback_ResolvesTypeFromOtherChannel()
+    {
+        // Arrange — message type is registered on "other-channel" but dispatch is called with "unknown-channel"
+        var handler = new TestEventHandler();
+        var dispatcher = CreateDispatcher(
+            services =>
+            {
+                services.AddScoped<TestEventHandler>(_ => handler);
+                services.AddScoped<IMessageHandler<TestEvent>>(_ => handler);
+            },
+            registry =>
+            {
+                registry.Register(CreateTestChannel(typeof(TestEventHandler)));
+            });
+
+        var testEvent = new TestEvent { Id = "123", Data = "test data" };
+        var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testEvent));
+        var context = new MessageProperties
+        {
+            Id = "event-123",
+            Type = "test.event",
+            Source = "/test",
+        };
+
+        // Act — dispatch to a channel that doesn't exist; type should be resolved via cross-channel fallback
+        // but fire-and-forget handlers are looked up by the provided channelName, so no handlers will be found
+        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "unknown-channel", "local");
+
+        // Assert — type was resolved (no PermanentError), but no handlers on "unknown-channel"
+        result.Should().Be(DispatchResult.NoHandlers);
+    }
+
+    [Test]
+    public async Task DispatchAsync_CorrectChannel_UsesDirectLookup()
+    {
+        // Arrange — dispatch to the correct channel should find handlers directly
+        var handler = new TestEventHandler();
+        var dispatcher = CreateDispatcher(
+            services =>
+            {
+                services.AddScoped<TestEventHandler>(_ => handler);
+                services.AddScoped<IMessageHandler<TestEvent>>(_ => handler);
+            },
+            registry =>
+            {
+                registry.Register(CreateTestChannel(typeof(TestEventHandler)));
+            });
+
+        var testEvent = new TestEvent { Id = "123", Data = "test data" };
+        var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testEvent));
+        var context = new MessageProperties
+        {
+            Id = "event-123",
+            Type = "test.event",
+            Source = "/test",
+        };
+
+        // Act
+        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "local");
+
+        // Assert
+        result.Should().Be(DispatchResult.Success);
+        handler.HandledMessages.Should().HaveCount(1);
+    }
+
     private static ChannelRegistration CreateTestChannel(params Type[] handlerTypes)
     {
-        var channel = new ChannelRegistration("test", ChannelType.EventConsume);
+        return CreateTestChannel("test", handlerTypes);
+    }
+
+    private static ChannelRegistration CreateTestChannel(string channelName, params Type[] handlerTypes)
+    {
+        var channel = new ChannelRegistration(channelName, ChannelType.EventConsume);
         var msgReg = new MessageRegistration(typeof(TestEvent), "test.event");
         if (handlerTypes.Length > 0)
         {

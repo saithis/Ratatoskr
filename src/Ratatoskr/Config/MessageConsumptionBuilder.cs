@@ -44,7 +44,7 @@ public class MessageConsumptionBuilder<TMessage> where TMessage : notnull
         configure(handlerBuilder);
 
         var optOut = registration.GetExtension<DeferredProcessingOverride>()?.OptOut == true;
-        AddHandler<THandler>(isInbox: !optOut, inboxKey: optOut ? null : stableKey);
+        AddHandler<THandler>(isInbox: !optOut, inboxKey: optOut ? null : stableKey, isExplicitFireAndForget: optOut);
         return this;
     }
 
@@ -58,7 +58,7 @@ public class MessageConsumptionBuilder<TMessage> where TMessage : notnull
         return this;
     }
 
-    private void AddHandler<THandler>(bool isInbox, string? inboxKey)
+    private void AddHandler<THandler>(bool isInbox, string? inboxKey, bool isExplicitFireAndForget = false)
         where THandler : class, IMessageHandler<TMessage>
     {
         _services.TryAddScoped<THandler>();
@@ -67,7 +67,8 @@ public class MessageConsumptionBuilder<TMessage> where TMessage : notnull
             typeof(TMessage),
             typeof(THandler),
             isInbox,
-            inboxKey));
+            inboxKey,
+            isExplicitFireAndForget));
     }
 }
 

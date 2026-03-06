@@ -215,6 +215,49 @@ public class ChannelHandlerRegistryTests
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*Duplicate inbox handler key*shared-key*");
     }
+
+    [Test]
+    public void GetAllInboxHandlers_ReturnsSnapshot_NotLiveCollection()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var builder = new RatatoskrBuilder(services);
+        builder.AddEventConsumeChannel("test-channel", c => c
+            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("handler-key")));
+
+        var registry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
+
+        // Act — get two separate references
+        var first = registry.GetAllInboxHandlers();
+        var second = registry.GetAllInboxHandlers();
+
+        // Assert — should be equal in content but not the same reference (defensive copy)
+        first.Should().NotBeSameAs(second);
+        first.Should().BeEquivalentTo(second);
+    }
+
+    [Test]
+    public void GetInboxHandlers_ByChannelAndMessageType_ReturnsCorrectSubset()
+    {
+        // Arrange — two message types on the same channel, each with inbox handlers
+        var services = new ServiceCollection();
+        var builder = new RatatoskrBuilder(services);
+        builder.AddEventConsumeChannel("test-channel", c => c
+            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("key-test"))
+            .Consumes<OrderCreatedEvent>(m => m.WithHandler<NoOpOrderHandler>("key-order")));
+
+        // Act
+        var registry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
+
+        // Assert — per-type lookup returns only the matching handler
+        var testHandlers = registry.GetInboxHandlers("test-channel", typeof(TestEvent));
+        testHandlers.Should().HaveCount(1);
+        testHandlers[0].HandlerType.Should().Be(typeof(TestEventHandler));
+
+        var orderHandlers = registry.GetInboxHandlers("test-channel", typeof(OrderCreatedEvent));
+        orderHandlers.Should().HaveCount(1);
+        orderHandlers[0].HandlerType.Should().Be(typeof(NoOpOrderHandler));
+    }
 }
 
 /// <summary>

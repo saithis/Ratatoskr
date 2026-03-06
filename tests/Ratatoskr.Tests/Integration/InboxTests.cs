@@ -473,7 +473,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m
-                        .WithHandler<TestEventHandler>()
+                        .WithHandler<TestEventHandler>("faf-handler", h => h.WithoutInbox())
                         .WithHandler<InboxHandlerA>("inbox-handler"))
                     .UseInbox<TestDbContext>());
                 bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox());
@@ -595,7 +595,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m
-                        .WithHandler<TestEventHandler>()
+                        .WithHandler<TestEventHandler>("faf-handler", h => h.WithoutInbox())
                         .WithHandler<InboxHandlerA>("handler-a"))
                     .UseInbox<TestDbContext>());
                 bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox());
@@ -1287,7 +1287,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
+                    .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("faf-handler", h => h.WithoutInbox()))
                     .UseInbox<TestDbContext>());
                 bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox());
             });
@@ -1768,7 +1768,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 bus.AddEventConsumeChannel("test-events", c => c
                     .Consumes<TestEvent>(m => m
                         .WithHandler<InboxHandlerA>("inbox-handler")
-                        .WithHandler<DbWritingHandler>())
+                        .WithHandler<DbWritingHandler>("db-writer", h => h.WithoutInbox()))
                     .UseInbox<TestDbContext>());
                 bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox => inbox.WithoutBackgroundProcessing()));
             });
@@ -1822,7 +1822,7 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
                 bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m
-                        .WithHandler<CountingNonInboxHandler>()
+                        .WithHandler<CountingNonInboxHandler>("counting-faf", h => h.WithoutInbox())
                         .WithHandler<InboxHandlerA>("inbox-a"))
                     .UseInbox<TestDbContext>());
                 bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox());
