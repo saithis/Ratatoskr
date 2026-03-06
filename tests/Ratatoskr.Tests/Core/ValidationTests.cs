@@ -198,14 +198,12 @@ public class ValidationTests
         builder.AddEventConsumeChannel("channel-b", c => c
             .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
 
-        var provider = services.BuildServiceProvider();
-
-        // Act - resolve in a scope
-        using var scope = provider.CreateScope();
-        var handler = scope.ServiceProvider.GetService<TestEventHandler>();
-
         // Assert - handler is resolvable (TryAddScoped ensures single registration)
-        handler.Should().NotBeNull();
+        services.Should().ContainSingle(d => d.ServiceType == typeof(TestEventHandler));
+        
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        scope.ServiceProvider.GetServices<TestEventHandler>().Should().ContainSingle();
     }
 }
 

@@ -25,7 +25,8 @@ public static class PublicApiExtensions
         {
             // Idempotency: skip if already registered for this DbContext type
             if (builder.Services.Any(d => d.ServiceType == typeof(DurabilityMarker<TDbContext>)))
-                return builder;
+                throw new InvalidOperationException(
+                    $"AddEfCoreDurability<{typeof(TDbContext).Name}>() was called more than once. Merge UseInbox()/UseOutbox() into a single registration.");
 
             builder.Services.AddSingleton<DurabilityMarker<TDbContext>>();
 

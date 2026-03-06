@@ -20,3 +20,4 @@ dotnet run --project tests/Ratatoskr.Tests -- --treenode-filter "/*/*/OutboxTest
 
 # List all tests
 dotnet run --project tests/Ratatoskr.Tests -- --list-tests
+```

@@ -30,6 +30,11 @@ services.AddRatatoskr(builder =>
     // Transport Configuration (Global)
     builder.UseRabbitMq(mq => mq.ConnectionString("amqp://..."));
 
+    // EF Core Durability (Inbox/Outbox)
+    builder.AddEfCoreDurability<AppDbContext>(d => d
+        .UseInbox()
+        .UseOutbox());
+
     // ==========================================
     // 1. PRODUCER: Events we own
     // Intent: We govern "orders.events". We declare it.

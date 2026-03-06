@@ -103,7 +103,7 @@ public class MessageDispatcherTests
         var context = new MessageProperties
         {
             Id = "event-123",
-            Type = "unknown.event",
+            Type = "test.event",
             Source = "/test",
         };
 

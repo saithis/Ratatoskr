@@ -2079,30 +2079,34 @@ public class InboxTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixt
         }
     }
 
-    private class ChangeTrackerPollutingHandler(TestDbContext db) : IMessageHandler<TestEvent>
+    private class ChangeTrackerPollutingHandler(TestDbContext db, ScopeIsolationTracker tracker) : IMessageHandler<TestEvent>
     {
         public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
         {
             db.TestEntities.Add(new TestEntity { Name = "leaked-from-polluting-handler" });
+            tracker.SignalPolluted();
             return Task.CompletedTask;
         }
     }
 
     private class ChangeTrackerCheckingHandler(TestDbContext db, ScopeIsolationTracker tracker) : IMessageHandler<TestEvent>
     {
-        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
+        public async Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
         {
+            await tracker.WaitForPollutedAsync(TimeSpan.FromSeconds(5));
             tracker.CheckingHandlerSawChanges = db.ChangeTracker.HasChanges();
             tracker.SignalCompletion();
-            return Task.CompletedTask;
         }
     }
 
     private class ScopeIsolationTracker
     {
         private readonly TaskCompletionSource _completed = new();
+        private readonly TaskCompletionSource _polluted = new();
         public bool CheckingHandlerSawChanges { get; set; }
 
+        public void SignalPolluted() => _polluted.TrySetResult();
+        public Task WaitForPollutedAsync(TimeSpan timeout) => _polluted.Task.WaitAsync(timeout);
         public void SignalCompletion() => _completed.TrySetResult();
         public Task WaitForCompletionAsync(TimeSpan timeout) => _completed.Task.WaitAsync(timeout);
     }
