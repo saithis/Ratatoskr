@@ -37,6 +37,7 @@ public class LocalTransportTests : IAsyncDisposable
 
         await StartAsync(services =>
         {
+            services.AddSingleton<TestEventHandler>(handler);
             services.AddRatatoskr(bus =>
             {
                 bus.UseLocalTransport();
@@ -44,8 +45,7 @@ public class LocalTransportTests : IAsyncDisposable
                     .WithLocal()
                     .Produces<TestEvent>());
                 bus.AddEventConsumeChannel("local.events", c => c
-                    .Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, TestEventHandler>(handler);
+                    .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
             });
             services.AddRatatoskrTesting();
         });
@@ -68,6 +68,7 @@ public class LocalTransportTests : IAsyncDisposable
 
         await StartAsync(services =>
         {
+            services.AddSingleton<TestEventHandler>(handler);
             services.AddRatatoskr(bus =>
             {
                 bus.UseLocalTransport();
@@ -75,8 +76,7 @@ public class LocalTransportTests : IAsyncDisposable
                     .WithLocal()
                     .Produces<TestEvent>());
                 bus.AddEventConsumeChannel("local.events", c => c
-                    .Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, TestEventHandler>(handler);
+                    .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
             });
             services.AddRatatoskrTesting();
         });
@@ -118,6 +118,7 @@ public class LocalTransportTests : IAsyncDisposable
 
         await StartAsync(services =>
         {
+            services.AddSingleton<BlockingHandler>(handler);
             services.AddRatatoskr(bus =>
             {
                 bus.UseLocalTransport();
@@ -125,8 +126,7 @@ public class LocalTransportTests : IAsyncDisposable
                     .WithLocal()
                     .Produces<TestEvent>());
                 bus.AddEventConsumeChannel("local.events", c => c
-                    .Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, BlockingHandler>(handler);
+                    .Consumes<TestEvent>(m => m.WithHandler<BlockingHandler>()));
             });
             services.AddRatatoskrTesting();
         });
@@ -152,6 +152,8 @@ public class LocalTransportTests : IAsyncDisposable
 
         await StartAsync(services =>
         {
+            services.AddSingleton<TestEventHandler>(handler1);
+            services.AddSingleton<SecondTestEventHandler>(handler2);
             services.AddRatatoskr(bus =>
             {
                 bus.UseLocalTransport();
@@ -159,9 +161,9 @@ public class LocalTransportTests : IAsyncDisposable
                     .WithLocal()
                     .Produces<TestEvent>());
                 bus.AddEventConsumeChannel("local.events", c => c
-                    .Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, TestEventHandler>(handler1);
-                bus.AddHandler<TestEvent, SecondTestEventHandler>(handler2);
+                    .Consumes<TestEvent>(m => m
+                        .WithHandler<TestEventHandler>()
+                        .WithHandler<SecondTestEventHandler>()));
             });
             services.AddRatatoskrTesting();
         });
@@ -185,6 +187,7 @@ public class LocalTransportTests : IAsyncDisposable
 
         await StartAsync(services =>
         {
+            services.AddSingleton<ThrowingTestEventHandler>(throwingHandler);
             services.AddRatatoskr(bus =>
             {
                 bus.UseLocalTransport();
@@ -192,8 +195,7 @@ public class LocalTransportTests : IAsyncDisposable
                     .WithLocal()
                     .Produces<TestEvent>());
                 bus.AddEventConsumeChannel("local.events", c => c
-                    .Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, ThrowingTestEventHandler>(throwingHandler);
+                    .Consumes<TestEvent>(m => m.WithHandler<ThrowingTestEventHandler>()));
             });
             services.AddRatatoskrTesting();
         });
@@ -230,6 +232,7 @@ public class LocalTransportTests : IAsyncDisposable
 
         await StartAsync(services =>
         {
+            services.AddSingleton<TestEventHandler>(handler);
             services.AddRatatoskr(bus =>
             {
                 bus.UseLocalTransport();
@@ -240,8 +243,7 @@ public class LocalTransportTests : IAsyncDisposable
                     c.AddTransport("failing-transport");
                 });
                 bus.AddEventConsumeChannel("local.events", c => c
-                    .Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, TestEventHandler>(handler);
+                    .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
             });
             services.AddSingleton<IMessageSender>(failingSender);
             services.AddRatatoskrTesting();
@@ -274,6 +276,7 @@ public class LocalTransportTests : IAsyncDisposable
         builder.ConfigureServices(services =>
         {
             services.AddSingleton<TimeProvider>(TimeProvider.System);
+            services.AddSingleton<DrainTestHandler>(drainHandler);
             services.AddRatatoskr(bus =>
             {
                 bus.UseLocalTransport();
@@ -281,8 +284,7 @@ public class LocalTransportTests : IAsyncDisposable
                     .WithLocal()
                     .Produces<TestEvent>());
                 bus.AddEventConsumeChannel("local.events", c => c
-                    .Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, DrainTestHandler>(drainHandler);
+                    .Consumes<TestEvent>(m => m.WithHandler<DrainTestHandler>()));
             });
         });
 
@@ -332,6 +334,7 @@ public class LocalTransportTests : IAsyncDisposable
 
         await StartAsync(services =>
         {
+            services.AddSingleton<TestEventHandler>(handler);
             services.AddRatatoskr(bus =>
             {
                 bus.UseLocalTransport();
@@ -339,8 +342,7 @@ public class LocalTransportTests : IAsyncDisposable
                     .WithLocal()
                     .Produces<TestEvent>());
                 bus.AddEventConsumeChannel("local.events", c => c
-                    .Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, TestEventHandler>(handler);
+                    .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
             });
             services.AddRatatoskrTesting();
         });

@@ -1,0 +1,55 @@
+using Microsoft.EntityFrameworkCore;
+
+namespace Ratatoskr.EfCore;
+
+/// <summary>
+/// Builder for configuring EF Core durability (inbox and/or outbox) for a specific DbContext type.
+/// </summary>
+public class DurabilityBuilder<TDbContext> where TDbContext : DbContext, IInboxDbContext, IOutboxDbContext
+{
+    internal InboxBuilder<TDbContext>? InboxBuilder { get; private set; }
+    internal OutboxBuilder<TDbContext>? OutboxBuilder { get; private set; }
+
+    internal DurabilityBuilder() { }
+
+    /// <summary>
+    /// Enables the inbox pattern for this DbContext with default options.
+    /// </summary>
+    public DurabilityBuilder<TDbContext> UseInbox()
+    {
+        return UseInbox(configure: null);
+    }
+
+    /// <summary>
+    /// Enables the inbox pattern for this DbContext with custom options.
+    /// </summary>
+    public DurabilityBuilder<TDbContext> UseInbox(Action<InboxBuilder<TDbContext>>? configure)
+    {
+        InboxBuilder = new InboxBuilder<TDbContext>();
+        configure?.Invoke(InboxBuilder);
+        return this;
+    }
+
+    /// <summary>
+    /// Enables the outbox pattern for this DbContext with default options.
+    /// </summary>
+    public DurabilityBuilder<TDbContext> UseOutbox()
+    {
+        return UseOutbox(configure: null);
+    }
+
+    /// <summary>
+    /// Enables the outbox pattern for this DbContext with custom options.
+    /// </summary>
+    public DurabilityBuilder<TDbContext> UseOutbox(Action<OutboxBuilder<TDbContext>>? configure)
+    {
+        OutboxBuilder = new OutboxBuilder<TDbContext>();
+        configure?.Invoke(OutboxBuilder);
+        return this;
+    }
+}
+
+/// <summary>
+/// Sentinel type for idempotency detection of <c>AddEfCoreDurability&lt;TDbContext&gt;</c>.
+/// </summary>
+internal sealed class DurabilityMarker<TDbContext>;

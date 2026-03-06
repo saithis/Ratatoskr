@@ -34,34 +34,29 @@ builder.Services.AddRatatoskr(bus =>
             c.ConnectionString = new Uri(rabbitMqConnectionString);
         });
     
-    bus.AddEfCoreOutbox<NotesDbContext>();
-    
-    bus.AddHandler<NoteAddedEvent, NoteAddedEventHandler>();
-    bus.AddHandler<NoteDto, NoteDtoHandler>();
-    bus.AddHandler<FailEvent, FailEventHandler>();
-    bus.AddHandler<AddNoteCommand, AddNoteCommandHandler>();
+    bus.AddEfCoreDurability<NotesDbContext>(d => d.UseOutbox());
     
     bus
         .AddEventPublishChannel("events.topic", c => c
             .WithRabbitMq(r => r
                 .WithTopicExchange())
             .Produces<NoteAddedEvent>()
-            .Produces<NoteDto>(m => m.WithType("notes"))
+            .Produces<NoteDto>()
             .Produces<FailEvent>());
-    
+
     bus.AddEventConsumeChannel("events.topic", c =>
         c.WithRabbitMq(r => r
                 .WithQueueName("events.subscriptions"))
-            .Consumes<NoteDto>(m => m.WithType("notes"))
-            .Consumes<NoteAddedEvent>()
-            .Consumes<FailEvent>());
+            .Consumes<NoteDto>(m => m.WithHandler<NoteDtoHandler>())
+            .Consumes<NoteAddedEvent>(m => m.WithHandler<NoteAddedEventHandler>())
+            .Consumes<FailEvent>(m => m.WithHandler<FailEventHandler>()));
 
     bus.AddCommandConsumeChannel("commands.topic", c =>
         c.WithRabbitMq(r => r
                 .WithTopicExchange()
                 .WithQueueName("commands.subscriptions"))
-            .Consumes<AddNoteCommand>());
-    
+            .Consumes<AddNoteCommand>(m => m.WithHandler<AddNoteCommandHandler>()));
+
     bus.AddCommandPublishChannel("commands.topic", c =>
         c.WithRabbitMq(r => r
                 .WithDirectExchange())

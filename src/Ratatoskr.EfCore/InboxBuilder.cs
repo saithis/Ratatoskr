@@ -5,7 +5,7 @@ namespace Ratatoskr.EfCore;
 /// <summary>
 /// Builder for configuring the inbox pattern.
 /// </summary>
-public class InboxBuilder<TDbContext> where TDbContext : DbContext, IInboxDbContext
+public class InboxBuilder<TDbContext> where TDbContext : DbContext
 {
     internal InboxOptions Options { get; } = new();
     internal bool RegisterBackgroundService { get; private set; } = true;
@@ -90,16 +90,6 @@ public class InboxBuilder<TDbContext> where TDbContext : DbContext, IInboxDbCont
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(lockName);
         Options.LockName = lockName;
-        return this;
-    }
-
-    /// <summary>
-    /// Enrolls all handlers (that have not explicitly called <c>WithoutInbox()</c>) in the inbox by default.
-    /// Handlers without a stable key use the handler's CLR full name as the stable key.
-    /// </summary>
-    public InboxBuilder<TDbContext> WithDefaultInboxEnabled()
-    {
-        Options.DefaultHandlerInboxEnabled = true;
         return this;
     }
 

@@ -8,10 +8,12 @@ namespace Ratatoskr.EfCore.Internal;
 /// <summary>
 /// Single entry point for inbox persistence. Called by <see cref="InboxRouteInterceptor{TDbContext}"/>
 /// to persist inbox-managed handler statuses to the database before message dispatch.
+/// Only processes channels whose inbox DbContext matches <typeparamref name="TDbContext"/>.
 /// </summary>
 internal class InboxAcceptor<TDbContext>(
     IServiceScopeFactory scopeFactory,
-    InboxHandlerRegistry inboxHandlerRegistry,
+    ChannelRegistry channelRegistry,
+    ChannelHandlerRegistry channelHandlerRegistry,
     InboxProcessor<TDbContext> inboxProcessor,
     TimeProvider timeProvider,
     IEnumerable<IMessageActivityObserver> observers,
@@ -22,12 +24,27 @@ internal class InboxAcceptor<TDbContext>(
         byte[] body,
         MessageProperties properties,
         string transportName,
+        string channelName,
         CancellationToken cancellationToken)
     {
-        var inboxHandlers = properties.Type != null
-            ? inboxHandlerRegistry.GetByWireTypeName(properties.Type)
-            : [];
+        // Check if this channel's inbox DbContext matches our TDbContext
+        var channel = channelRegistry.GetConsumeChannel(channelName);
+        if (channel == null)
+            return InboxAcceptOutcome.NoHandlers;
 
+        var inboxConfig = channel.GetExtension<ChannelInboxConfig>();
+        if (inboxConfig == null || inboxConfig.DbContextType != typeof(TDbContext))
+            return InboxAcceptOutcome.NoHandlers;
+
+        // Resolve message CLR type from wire type name
+        if (properties.Type == null)
+            return InboxAcceptOutcome.NoHandlers;
+
+        var msgReg = channel.Messages.FirstOrDefault(m => m.MessageTypeName == properties.Type);
+        if (msgReg == null)
+            return InboxAcceptOutcome.NoHandlers;
+
+        var inboxHandlers = channelHandlerRegistry.GetInboxHandlers(channelName, msgReg.MessageType);
         if (inboxHandlers.Count == 0)
             return InboxAcceptOutcome.NoHandlers;
 
@@ -36,13 +53,12 @@ internal class InboxAcceptor<TDbContext>(
             logger.LogError("Cannot persist to inbox: message has no Id. Type: '{Type}'", properties.Type);
             throw new InvalidOperationException("Messages must have a non-empty Id for inbox deduplication.");
         }
-        
+
         var inboxMessage = InboxMessageEntity.Create(properties.Id, transportName, body, properties, timeProvider);
 
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<TDbContext>();
-        // Best-effort optimization: skip inserting the message if it already exists.
-        // On concurrent delivery the unique constraint is the real dedup mechanism.
+
         var messageExists = await dbContext.Set<InboxMessageEntity>()
             .AnyAsync(m => m.Id == properties.Id, cancellationToken);
 
@@ -56,19 +72,17 @@ internal class InboxAcceptor<TDbContext>(
             logger.LogDebug("Inbox message '{MessageId}' already exists (duplicate delivery), updating handler statuses only", properties.Id);
         }
 
-        // Insert InboxHandlerStatuses for handlers not yet present (dedup per handler key).
-        // On concurrent delivery, the unique constraint on (MessageId, HandlerKey) prevents duplicates.
         var existingKeys = await dbContext.Set<InboxHandlerStatusEntity>()
             .Where(s => s.MessageId == properties.Id)
             .Select(s => s.HandlerKey)
             .ToHashSetAsync(cancellationToken);
 
-        foreach (var handler in inboxHandlers.Where(h => !existingKeys.Contains(h.Key)))
+        foreach (var handler in inboxHandlers.Where(h => !existingKeys.Contains(h.InboxKey!)))
         {
             dbContext.Set<InboxHandlerStatusEntity>().Add(
-                InboxHandlerStatusEntity.Create(properties.Id, handler.Key, timeProvider));
+                InboxHandlerStatusEntity.Create(properties.Id, handler.InboxKey!, timeProvider));
             logger.LogDebug("Created inbox handler status for key '{HandlerKey}' on message '{MessageId}'",
-                handler.Key, properties.Id);
+                handler.InboxKey, properties.Id);
         }
 
         try
@@ -77,10 +91,6 @@ internal class InboxAcceptor<TDbContext>(
         }
         catch (DbUpdateException ex) when (DbExceptionHelper.IsUniqueConstraintViolation(ex))
         {
-            // Another instance raced us — the deduplication constraint fired.
-            // This is expected and safe: the other instance will process the handlers.
-            // Clear the change tracker to avoid corrupting the DbContext state for any
-            // subsequent operations in the same scope.
             dbContext.ChangeTracker.Clear();
             logger.LogDebug(
                 "Inbox entries for message '{MessageId}' were already inserted by a concurrent instance (unique constraint). Ignoring.",
@@ -91,7 +101,6 @@ internal class InboxAcceptor<TDbContext>(
         logger.LogDebug("Persisted inbox entries for message '{MessageId}', {HandlerCount} handler(s)",
             properties.Id, inboxHandlers.Count);
 
-        // Notify observers that the message has been accepted into the inbox
         await observers.NotifyAsync(new MessageActivity
         {
             Stage = MessageStage.InboxQueued,
@@ -112,7 +121,7 @@ internal class InboxAcceptor<TDbContext>(
 /// </summary>
 internal enum InboxAcceptOutcome
 {
-    /// <summary>No inbox-managed handlers exist for this message type.</summary>
+    /// <summary>No inbox-managed handlers exist for this message type on this channel.</summary>
     NoHandlers,
 
     /// <summary>Inbox entries were successfully persisted for the first time.</summary>

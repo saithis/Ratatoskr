@@ -52,11 +52,13 @@ public class InboxOptions
     /// </summary>
     public TimeSpan MaxRetryDelay { get; set; } = TimeSpan.FromMinutes(5);
 
+    internal const string DefaultLockName = "InboxProcessor";
+
     /// <summary>
-    /// Name of the distributed lock. Change this if you have multiple inboxes or conflict with the outbox lock.
-    /// Default: "InboxProcessor".
+    /// Name of the distributed lock.
+    /// Default: "InboxProcessor_{DbContextTypeName}" (auto-generated per DbContext to avoid collisions).
     /// </summary>
-    public string LockName { get; set; } = "InboxProcessor";
+    public string LockName { get; set; } = DefaultLockName;
 
     /// <summary>
     /// Maximum time a handler is allowed to run before being cancelled.
@@ -67,11 +69,4 @@ public class InboxOptions
     /// </summary>
     public TimeSpan? HandlerTimeout { get; set; }
 
-    /// <summary>
-    /// When true, all handlers registered via <c>AddHandler</c> without an explicit
-    /// <c>WithoutInbox()</c> are automatically enrolled in the inbox.
-    /// The handler's CLR full name is used as the stable key unless overridden by <c>WithInbox("key")</c>.
-    /// Default: false (handlers must opt in explicitly).
-    /// </summary>
-    public bool DefaultHandlerInboxEnabled { get; set; } = false;
 }

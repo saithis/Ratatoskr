@@ -11,7 +11,6 @@ graph LR
         IMessageSender["IMessageSender"]
         IMessageHandler["IMessageHandler&lt;T&gt;"]
         IRouteInterceptor["IMessageRouteInterceptor"]
-        IHandlerFilter["IHandlerFilter"]
         MessageRouter["MessageRouter"]
         MessageDispatcher["MessageDispatcher"]
         HandlerInvoker["HandlerInvoker"]
@@ -25,7 +24,6 @@ graph LR
         InboxProcessor["InboxProcessor"]
         InboxAcceptor["InboxAcceptor"]
         InboxInterceptor["InboxRouteInterceptor"]
-        InboxFilter["InboxHandlerFilter"]
         OutboxInterceptor["OutboxTriggerInterceptor"]
     end
 
@@ -44,15 +42,13 @@ graph LR
     IRouteInterceptor -.->|"implements"| InboxInterceptor
     InboxInterceptor -->|"byte[], MessageProperties"| InboxAcceptor
     MessageRouter -->|"byte[], MessageProperties"| MessageDispatcher
-    MessageDispatcher -->|"checks"| IHandlerFilter
-    IHandlerFilter -.->|"implements"| InboxFilter
     MessageDispatcher -->|"object, MessageProperties"| HandlerInvoker
     InboxProcessor -->|"object, MessageProperties"| HandlerInvoker
     OutboxProcessor -->|"byte[], MessageProperties"| IMessageSender
     HandlerInvoker -->|"TMessage, MessageProperties"| IMessageHandler
 ```
 
-The core library provides the abstractions (`IRatatoskr`, `IMessageSender`, `IMessageHandler<T>`, `MessageDispatcher`) and a built-in local (in-process) transport. The EfCore package adds outbox/inbox durability. The RabbitMq package provides a RabbitMQ transport.
+The core library provides the abstractions (`IRatatoskr`, `IMessageSender`, `IMessageHandler<T>`, `MessageDispatcher`) and a built-in local (in-process) transport. The EfCore package adds outbox/inbox durability. The RabbitMq package provides a RabbitMQ transport. Handlers are registered per message type inside the channel's `Consumes<T>()` builder, and inbox support is enabled per consume channel via `UseInbox<TDbContext>()`.
 
 ---
 
@@ -106,7 +102,7 @@ flowchart TD
 
     subgraph Dispatch ["Message Dispatch"]
         Router["MessageRouter<br/>Call IMessageRouteInterceptor,<br/>then dispatch"]
-        Dispatcher["MessageDispatcher<br/>Resolve type, deserialize,<br/>skip filtered handlers"]
+        Dispatcher["MessageDispatcher<br/>Resolve type, deserialize,<br/>invoke fire-and-forget handlers"]
 
         LocalConsumer -->|"byte[], MessageProperties"| Router
         RmqConsumer -->|"byte[], MessageProperties"| Router
@@ -257,15 +253,14 @@ The local transport uses an in-memory `System.Threading.Channels.Channel<T>`. `L
 flowchart TD
     D[MessageDispatcher.DispatchAsync] --> Resolve[Resolve message CLR type<br/>from ChannelRegistry]
     Resolve --> Deserialize[Deserialize body to message object]
-    Deserialize --> FindHandlers[Find all registered<br/>IMessageHandler&lt;T&gt; implementations]
-    FindHandlers --> SkipFiltered[Skip filtered handlers<br/>via IHandlerFilter]
-    SkipFiltered --> InvokeAll[Invoke remaining handlers<br/>via HandlerInvoker]
+    Deserialize --> FindHandlers[Find all fire-and-forget<br/>IMessageHandler&lt;T&gt; registrations]
+    FindHandlers --> InvokeAll[Invoke handlers<br/>via HandlerInvoker]
     InvokeAll --> ReturnResult[Return DispatchResult]
 ```
 
-The `MessageDispatcher` resolves the message type from the `ChannelRegistry`, deserializes it, then delegates to `HandlerInvoker` for each handler not filtered by `IHandlerFilter`. The EfCore package registers an `InboxHandlerFilter` that skips inbox-managed handlers — these have already been persisted to the database by the `InboxAcceptor` (called via `IMessageRouteInterceptor` by the `MessageRouter` before dispatch) and will be delivered later by the `InboxProcessor`, which also uses `HandlerInvoker`.
+The `MessageDispatcher` resolves the message type from the `ChannelRegistry`, deserializes it, then delegates to `HandlerInvoker` for each fire-and-forget handler registered on the channel. Inbox-managed handlers are not part of the dispatcher's pipeline — they have already been persisted to the database by the `InboxAcceptor` (called via `IMessageRouteInterceptor` by the `MessageRouter` before dispatch) and will be delivered later by the `InboxProcessor`, which also uses `HandlerInvoker`.
 
-If all handlers are filtered out, the dispatcher returns `NoHandlers`. The `MessageRouter` combines this with the interceptor result to determine the outcome (treating it as success when the interceptor accepted handlers).
+If there are no fire-and-forget handlers, the dispatcher returns `NoHandlers`. The `MessageRouter` combines this with the interceptor result to determine the outcome (treating it as success when the interceptor accepted inbox handlers).
 
 ---
 
@@ -275,14 +270,17 @@ The inbox provides per-handler durability, deduplication, and isolated retry. Ea
 
 ### Registration
 
-Handlers opt into the inbox by providing a stable key:
+Handlers are registered inside the channel's `Consumes<T>()` builder. Inbox handlers provide a stable key; fire-and-forget handlers do not:
 
 ```csharp
-builder.AddHandler<OrderCreated, OrderCreatedHandler>(h =>
-    h.WithInbox("order-created-handler"));
+bus.AddEventConsumeChannel("events", c => c
+    .Consumes<OrderCreated>(m => m
+        .WithHandler<OrderCreatedHandler>("audit", h => h.WithoutInbox())  // explicit fire-and-forget
+        .WithHandler<FulfillmentHandler>("fulfillment"))                   // inbox-managed
+    .UseInbox<AppDbContext>());
 ```
 
-Without a key, the handler is fire-and-forget — invoked inline by the dispatcher without durability guarantees.
+With a key, the handler is inbox-managed — persisted to the database and delivered by `InboxProcessor`. On inbox channels, all handlers must either provide a stable key or explicitly opt out with `WithoutInbox()`.
 
 ### Inbox Processing
 
@@ -423,9 +421,10 @@ The unique constraint on `(MessageId, HandlerKey)` provides deduplication — co
 
 Ratatoskr is designed for multi-instance deployment:
 
-- **Distributed locks** (via Medallion.Threading) — Both `OutboxProcessor` and `InboxProcessor` acquire a named lock before processing. Only one instance processes at a time.
+- **Distributed locks** (via Medallion.Threading) — Both `OutboxProcessor` and `InboxProcessor` acquire a named lock before processing. Only one instance processes at a time. Lock names are auto-generated per DbContext type (e.g. `InboxProcessor_OrdersDbContext`) to avoid collisions.
 - **Optimistic concurrency** — `InboxHandlerStatusEntity.Version` prevents two workers from processing the same handler status simultaneously.
 - **Idempotent persistence** — The inbox acceptor uses unique constraints for deduplication. Concurrent inserts safely resolve via constraint violations.
+- **Multi-DbContext isolation** — Each `DbContext` type gets its own processor, lock, and options. Different channels can use different `DbContext` types for bounded context isolation. Per-DbContext services are registered once (idempotent across channels sharing a `DbContext`).
 
 ---
 

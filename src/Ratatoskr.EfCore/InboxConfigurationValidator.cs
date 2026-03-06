@@ -1,5 +1,5 @@
+using Ratatoskr.Config;
 using Ratatoskr.Core;
-using Ratatoskr.EfCore.Internal;
 
 namespace Ratatoskr.EfCore;
 
@@ -9,28 +9,62 @@ namespace Ratatoskr.EfCore;
 /// </summary>
 internal static class InboxConfigurationValidator
 {
-    public static void Validate(ChannelRegistry channelRegistry, InboxHandlerRegistry inboxRegistry)
+    public static void Validate(ChannelRegistry channelRegistry, ChannelHandlerRegistry handlerRegistry)
     {
-        if (inboxRegistry.IsEmpty)
+        foreach (var channel in channelRegistry.GetConsumeChannels())
+        {
+            var inboxConfig = channel.GetExtension<ChannelInboxConfig>();
+            var inboxHandlers = handlerRegistry.GetInboxHandlers(channel.ChannelName);
+
+            // Inbox handlers on a channel without UseInbox<>()
+            if (inboxConfig == null && inboxHandlers.Count > 0)
+            {
+                var firstHandler = inboxHandlers[0];
+                throw new InvalidOperationException(
+                    $"Channel '{channel.ChannelName}' has inbox handler '{firstHandler.InboxKey}' " +
+                    $"but does not have UseInbox<TDbContext>() configured. " +
+                    $"Either add UseInbox<TDbContext>() to the channel or use WithHandler<THandler>() without a key for fire-and-forget.");
+            }
+
+            // UseInbox channel with fire-and-forget handlers that weren't explicitly opted out
+            if (inboxConfig != null)
+            {
+                foreach (var handler in GetAllHandlersForChannel(channel))
+                {
+                    if (!handler.IsInbox && !handler.IsExplicitFireAndForget)
+                    {
+                        throw new InvalidOperationException(
+                            $"Channel '{channel.ChannelName}' has UseInbox<TDbContext>() configured, " +
+                            $"but handler '{handler.HandlerType.Name}' was registered without a stable key. " +
+                            $"Provide a key via WithHandler<THandler>(\"key\") for inbox processing, " +
+                            $"or explicitly opt out with WithHandler<THandler>(\"key\", h => h.WithoutInbox()).");
+                    }
+                }
+            }
+        }
+
+        if (handlerRegistry.HasNoInboxHandlers)
             return;
 
-        foreach (var handler in inboxRegistry.GetAll())
+        foreach (var handler in handlerRegistry.GetAllInboxHandlers())
         {
-            if (string.IsNullOrWhiteSpace(handler.Key))
+            if (string.IsNullOrWhiteSpace(handler.InboxKey))
                 throw new InvalidOperationException(
                     $"Inbox handler for '{handler.HandlerType.Name}' has an empty stable key. " +
-                    $"Provide a non-empty key via AddHandler<TMsg, THandler>(h => h.WithInbox(\"key\")).");
+                    $"Provide a non-empty key via Consumes<TMsg>(m => m.WithHandler<THandler>(\"key\")).");
+        }
+    }
 
-            // Verify the message type is registered in at least one consume channel.
-            // Without this, MessageDispatcher cannot route incoming messages to the handler.
-            var hasConsumeChannel = channelRegistry.GetConsumeChannels()
-                .Any(ch => ch.Messages.Any(m => m.MessageType == handler.MessageType));
+    private static IEnumerable<ChannelHandlerRegistration> GetAllHandlersForChannel(
+        ChannelRegistration channel)
+    {
+        foreach (var message in channel.Messages)
+        {
+            var handlerRegs = message.GetExtension<MessageHandlerRegistrations>();
+            if (handlerRegs == null) continue;
 
-            if (!hasConsumeChannel)
-                throw new InvalidOperationException(
-                    $"Inbox handler '{handler.Key}' handles '{handler.MessageType.Name}', " +
-                    $"but that type is not registered in any consume channel. " +
-                    $"Add it with .Consumes<{handler.MessageType.Name}>() on a consume channel.");
+            foreach (var handler in handlerRegs.Handlers)
+                yield return handler;
         }
     }
 }

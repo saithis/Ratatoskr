@@ -171,14 +171,14 @@ public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
 
         await StartTestAsync(services =>
         {
+            services.AddSingleton<ContextCapturingHandler>(handler);
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
                 bus.AddCommandConsumeChannel(queueName, c => c
                     .WithRabbitMq(o => o.WithQueueName(queueName).WithAutoAck(false).WithTransientQueue()
                         .WithQueueType(QueueType.Classic))
-                    .Consumes<TestEvent>());
-                bus.AddHandler<TestEvent, ContextCapturingHandler>(handler);
+                    .Consumes<TestEvent>(m => m.WithHandler<ContextCapturingHandler>()));
             });
         });
 

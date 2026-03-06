@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Ratatoskr.Core;
 
 namespace Ratatoskr.EfCore.Internal;
@@ -15,32 +14,29 @@ internal class OutboxMessageProcessor<TDbContext>(
     IEnumerable<IMessageSender> senders,
     OutboxTelemetry telemetry,
     TimeProvider timeProvider,
-    IOptions<OutboxOptions> options,
+    OutboxOptionsHolder<TDbContext> optionsHolder,
     IEnumerable<IMessageActivityObserver> observers,
     ILogger<OutboxMessageProcessor<TDbContext>> logger)
     where TDbContext : DbContext, IOutboxDbContext
 {
-    private readonly OutboxOptions _options = options.Value;
+    private readonly OutboxOptions _options = optionsHolder.Options;
     private Dictionary<string, IMessageSender> _senderMap = senders.ToDictionary(x => x.TransportName);
 
     /// <summary>
     /// Processes a single batch of outbox messages.
     /// Returns the number of messages successfully processed.
     /// </summary>
-    /// <param name="includeStuckMessageDetection">Whether to check for stuck messages (only needed in production background processing)</param>
     public async Task<int> ProcessBatchAsync(
         bool includeStuckMessageDetection,
         CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
 
-        // Build the query for pending messages
         var query = dbContext.Set<OutboxMessageEntity>()
             .Where(x => x.ProcessedAt == null
                      && !x.IsPoisoned
                      && (x.NextAttemptAt == null || x.NextAttemptAt <= now));
 
-        // Add stuck message detection if needed (only for production background processing)
         if (includeStuckMessageDetection)
         {
             var stuckThreshold = now - _options.StuckMessageThreshold;
@@ -59,7 +55,6 @@ internal class OutboxMessageProcessor<TDbContext>(
         if (messages.Length == 0)
             return 0;
 
-        // Mark all as processing before sending
         foreach (var message in messages)
         {
             message.MarkAsProcessing(timeProvider);
@@ -69,7 +64,6 @@ internal class OutboxMessageProcessor<TDbContext>(
         var processedCount = 0;
         var batchStartTimestamp = Stopwatch.GetTimestamp();
 
-        // Process each message with error handling
         foreach (var message in messages)
         {
             MessageProperties? sentProps = null;
@@ -82,11 +76,9 @@ internal class OutboxMessageProcessor<TDbContext>(
 
                 logger.LogInformation("Processing message '{Id}' for transport '{Transport}'", message.Id, message.TransportName);
 
-                // Find the matching sender for this outbox entry's transport
                 var targetSender = _senderMap.GetValueOrDefault(message.TransportName)
                                    ?? throw new InvalidOperationException($"No sender found for transport '{message.TransportName}'");
 
-                // When SendTimeout is configured, wrap in a linked CTS that fires after the timeout.
                 if (_options.SendTimeout.HasValue)
                 {
                     using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -117,7 +109,6 @@ internal class OutboxMessageProcessor<TDbContext>(
                 }
             }
 
-            // Persist each message's state immediately so progress isn't lost on crash
             await dbContext.SaveChangesAsync(CancellationToken.None);
 
             if (sentProps != null)

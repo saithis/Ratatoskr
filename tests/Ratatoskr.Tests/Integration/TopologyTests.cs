@@ -27,7 +27,7 @@ public class TopologyTests(
                     .WithRabbitMq(o => o
                         .WithQueueName(QueueName)
                         .WithQueueType(QueueType.Quorum))
-                    .Consumes<TestEvent>());
+                    .Consumes<TestEvent>(m => m.WithHandler<PermanentErrorHandler>()));
             });
         });
 
@@ -63,10 +63,7 @@ public class TopologyTests(
                         .WithQueueName(QueueName)
                         .WithQueueType(QueueType.Quorum)
                         .WithRetry(1, TimeSpan.FromMilliseconds(100))) // Fast retry
-                    .Consumes<TestEvent>());
-                
-                // Register a handler that always throws permanent error
-                bus.AddHandler<TestEvent, PermanentErrorHandler>();
+                    .Consumes<TestEvent>(m => m.WithHandler<PermanentErrorHandler>()));
             });
         });
 
@@ -108,7 +105,7 @@ public class TopologyTests(
                     .WithRabbitMq(o => o
                         .WithDirectExchange()
                         .WithQueueName(QueueName))
-                    .Consumes<TestEvent>());
+                    .Consumes<TestEvent>(m => m.WithHandler<PermanentErrorHandler>()));
 
                 bus.AddCommandPublishChannel(exchangeName, c => c
                     .WithRabbitMq(o => o
