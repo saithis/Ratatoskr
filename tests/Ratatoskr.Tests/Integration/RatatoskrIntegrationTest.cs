@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using RabbitMQ.Client;
 using Ratatoskr.Tests.Fixtures;
@@ -218,6 +219,15 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
             await channel.ExchangeDeclarePassiveAsync(exchange);
             await channel.QueueBindAsync(queueName, exchange, routingKey);
         }
+    }
+
+    protected async Task InitializeDatabase()
+    {
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            await db.Database.EnsureCreatedAsync();
+        });
     }
 
     protected Task WaitForConditionAsync(Func<bool> condition, TimeSpan timeout, string? message = null)
