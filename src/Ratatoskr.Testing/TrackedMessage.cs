@@ -62,7 +62,7 @@ public class TrackedMessage
     public bool? IsSuccess => Activity.IsSuccess;
 
     /// <summary>
-    /// The transport that delivered this message (e.g. "rabbitmq", "local").
+    /// The transport that delivered this message (e.g. "rabbitmq", "efcore").
     /// Set at InboxQueued and InboxDispatched stages.
     /// </summary>
     public string? TransportName => Activity.TransportName;

@@ -107,7 +107,7 @@ public class MessageActivity
     public required DateTimeOffset Timestamp { get; init; }
 
     /// <summary>
-    /// The transport name this activity relates to (e.g. "rabbitmq", "local").
+    /// The transport name this activity relates to (e.g. "rabbitmq", "efcore").
     /// Set at Published, Sent, Received, and OutboxSent stages where a specific transport is involved.
     /// </summary>
     public string? TransportName { get; init; }

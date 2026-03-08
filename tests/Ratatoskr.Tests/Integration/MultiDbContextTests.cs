@@ -5,7 +5,6 @@ using Microsoft.Extensions.Time.Testing;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.EfCore.Internal;
-using Ratatoskr.Local;
 using Ratatoskr.Tests.Fixtures;
 using TUnit.Core;
 
@@ -61,8 +60,7 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         {
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("shared-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("shared-events", c => c.WithEfCore().Produces<TestEvent>());
 
                 bus.AddEventConsumeChannel("channel-a", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<HandlerForDbContext1>("ctx1-handler"))
@@ -131,8 +129,7 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         {
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("shared-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("shared-events", c => c.WithEfCore().Produces<TestEvent>());
 
                 bus.AddEventConsumeChannel("channel-a", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<HandlerForDbContext1>("ctx1-handler"))
@@ -195,8 +192,7 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         {
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("shared-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("shared-events", c => c.WithEfCore().Produces<TestEvent>());
 
                 bus.AddEventConsumeChannel("channel-a", c => c
                     .Consumes<TestEvent>(m => m
@@ -272,12 +268,13 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         {
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("outbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("outbox-events", c => c.WithEfCore().Produces<TestEvent>());
             });
 
             // Manually register outbox components for both DbContexts (without hosted services)
             services.AddSingleton<OutboxTelemetry>();
+            services.AddSingleton<IMessageSender, EfCoreMessageSender>();
+            services.AddSingleton<ITransportMessageMetadataEnricher, EfCoreTransportMetadataEnricher>();
 
             services.AddSingleton(new OutboxOptionsHolder<TestDbContext>(new OutboxOptions()));
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
@@ -359,8 +356,7 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         {
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("shared-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("shared-events", c => c.WithEfCore().Produces<TestEvent>());
 
                 bus.AddEventConsumeChannel("channel-a", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<HandlerForDbContext1>("ctx1-handler"))
@@ -430,8 +426,7 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         {
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("shared-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("shared-events", c => c.WithEfCore().Produces<TestEvent>());
 
                 bus.AddEventConsumeChannel("channel-a", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<HandlerForDbContext1>("ctx1-handler"))

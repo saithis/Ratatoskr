@@ -5,7 +5,6 @@ using Microsoft.Extensions.Time.Testing;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.EfCore.Internal;
-using Ratatoskr.Local;
 using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Inbox;
@@ -21,8 +20,7 @@ public class InboxBasicProcessingTests(RabbitMqContainerFixture rabbitMq, Postgr
         {
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m
                         .WithHandler<InboxHandlerA>("handler-a")
@@ -77,120 +75,6 @@ public class InboxBasicProcessingTests(RabbitMqContainerFixture rabbitMq, Postgr
     }
 
     [Test]
-    public async Task Inbox_MixedHandlers_InboxAndNonInboxHandlersBothRun()
-    {
-        // Arrange
-        var nonInboxHandler = new TestEventHandler();
-
-        await StartTestAsync(services =>
-        {
-            services.AddSingleton<TestEventHandler>(nonInboxHandler);
-            services.AddRatatoskr(bus =>
-            {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c
-                    .Consumes<TestEvent>(m => m
-                        .WithHandler<TestEventHandler>("faf-handler", h => h.WithoutInbox())
-                        .WithHandler<InboxHandlerA>("inbox-handler"))
-                    .UseInbox<TestDbContext>());
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox());
-            });
-
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
-        });
-
-        await InitializeDatabase();
-
-        // Act
-        await InScopeAsync(async ctx =>
-        {
-            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
-            await bus.PublishDirectAsync(
-                new TestEvent { Id = "business-mixed-1", Data = "mixed handlers" },
-                new MessageProperties { Id = "mixed-1" });
-        });
-
-        // Wait for the inbox handler status to be completed
-        await WaitForConditionAsync(
-            async () => await InScopeAsync(async ctx =>
-            {
-                var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-                var status = await db.Set<InboxHandlerStatusEntity>()
-                    .SingleOrDefaultAsync(s => s.HandlerKey == "inbox-handler");
-                return status?.CompletedAt != null;
-            }),
-            TimeSpan.FromSeconds(15));
-
-        // Non-inbox handler should have been called synchronously via LocalTransportConsumer
-        nonInboxHandler.HandledMessages.Should().ContainSingle(m => m.Id == "business-mixed-1");
-
-        // Inbox handler should have been completed via InboxProcessor
-        await InScopeAsync(async ctx =>
-        {
-            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var status = await db.Set<InboxHandlerStatusEntity>().SingleAsync();
-            status.HandlerKey.Should().Be("inbox-handler");
-            status.CompletedAt.Should().NotBeNull();
-            status.ErrorCount.Should().Be(0);
-        });
-    }
-
-    [Test]
-    public async Task Inbox_ZeroInboxHandlers_MessagesDispatchedNormally()
-    {
-        // Arrange: channel with UseInbox but no handlers registered with an inbox key
-        var nonInboxHandler = new TestEventHandler();
-
-        await StartTestAsync(services =>
-        {
-            services.AddSingleton<TestEventHandler>(nonInboxHandler);
-            services.AddRatatoskr(bus =>
-            {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("faf-handler", h => h.WithoutInbox()))
-                    .UseInbox<TestDbContext>());
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox());
-            });
-
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
-        });
-
-        await InitializeDatabase();
-
-        // Act
-        await InScopeAsync(async ctx =>
-        {
-            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
-            await bus.PublishDirectAsync(
-                new TestEvent { Id = "business-zero-inbox-1", Data = "no inbox handlers" },
-                new MessageProperties { Id = "zero-inbox-1" });
-        });
-
-        // Assert: non-inbox handler was called synchronously
-        await WaitForConditionAsync(
-            () => Task.FromResult(nonInboxHandler.HandledMessages.Any()),
-            TimeSpan.FromSeconds(5));
-
-        nonInboxHandler.HandledMessages.Should().ContainSingle(m => m.Id == "business-zero-inbox-1");
-
-        // No inbox rows should have been created
-        await InScopeAsync(async ctx =>
-        {
-            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var inboxMessages = await db.Set<InboxMessageEntity>().ToListAsync();
-            inboxMessages.Should().BeEmpty("no inbox handlers means no inbox rows");
-
-            var handlerStatuses = await db.Set<InboxHandlerStatusEntity>().ToListAsync();
-            handlerStatuses.Should().BeEmpty();
-        });
-    }
-
-    [Test]
     public async Task Inbox_MultipleMessageTypes_IsolatedCorrectly()
     {
         // Arrange: inbox handlers for two different message types
@@ -198,9 +82,8 @@ public class InboxBasicProcessingTests(RabbitMqContainerFixture rabbitMq, Postgr
         {
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
                 bus.AddEventPublishChannel("inbox-events", c => c
-                    .WithLocal()
+                    .WithEfCore()
                     .Produces<TestEvent>()
                     .Produces<OrderCreatedEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
@@ -264,8 +147,7 @@ public class InboxBasicProcessingTests(RabbitMqContainerFixture rabbitMq, Postgr
             services.AddSingleton<TimeProvider>(fakeTime);
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("roundtrip"))
                     .UseInbox<TestDbContext>());
@@ -321,8 +203,7 @@ public class InboxBasicProcessingTests(RabbitMqContainerFixture rabbitMq, Postgr
             services.AddSingleton<TimeProvider>(fakeTime);
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("with-created"))
                     .UseInbox<TestDbContext>());

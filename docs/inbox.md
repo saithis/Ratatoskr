@@ -33,11 +33,11 @@ A unique constraint on `(MessageId, HandlerKey)` is the **deduplication key**: t
 7. If the application shuts down (cancellation) while a handler is running, the attempt is **not** counted as a failure. The handler status remains in "processing" state and is recovered by stuck message detection on the next startup.
 8. For deterministically unrecoverable errors (e.g. `InboxMessage` row deleted, handler key unregistered), the status is poisoned **immediately** without going through the retry cycle.
 
-### Crash safety (local transport)
+### EF Core Transport Durability
 
-When using `UseInbox<TDbContext>()` on a consume channel together with `UseLocalTransport`, the regular `LocalMessageSender` is replaced by `DurableLocalMessageSender`. Its `SendAsync` writes inbox entries to the database **before** writing to the in-memory channel. Combined with the outbox's deduplication, this guarantees no message loss at any crash point in the pipeline.
+The EF Core transport (`WithEfCore()`) writes messages directly to the inbox tables via `EfCoreMessageSender` → `InboxAcceptor`. There is no in-memory channel — all messages are persisted to the database before handler invocation.
 
-> **Important:** This replacement means that local publish calls (`PublishDirectAsync`) now depend on database availability and will have database-level latency. If the database is slow or unavailable, local publishes will be affected. Plan database capacity accordingly.
+When using the outbox with the same DbContext as the inbox, the `OutboxTriggerInterceptor` writes inbox entries in the **same database transaction** as business data. No outbox entry is created for same-DbContext channels — the inbox processor picks up the entries directly. For cross-DbContext scenarios, an outbox entry is created and delivered via the `OutboxProcessor`.
 
 ## Setup
 
@@ -67,8 +67,6 @@ Per-DbContext inbox and outbox options are configured centrally via `AddEfCoreDu
 ```csharp
 services.AddRatatoskr(bus =>
 {
-    bus.UseLocalTransport(); // or UseRabbitMq(...)
-
     // Configure durability for this DbContext — inbox + outbox options in one place
     bus.AddEfCoreDurability<AppDbContext>(d =>
     {
@@ -81,11 +79,11 @@ services.AddRatatoskr(bus =>
         d.UseOutbox();
     });
 
+    bus.AddEventPublishChannel("orders.events", c => c.WithEfCore().Produces<OrderPlaced>());
     bus.AddEventConsumeChannel("orders.events", c => c
         .Consumes<OrderPlaced>(m => m
             .WithHandler<FulfillmentHandler>("fulfillment")   // inbox-managed
-            .WithHandler<NotificationHandler>("notification") // inbox-managed
-            .WithHandler<AuditLogHandler>("audit", h => h.WithoutInbox()))  // explicit fire-and-forget
+            .WithHandler<NotificationHandler>("notification")) // inbox-managed
         .UseInbox<AppDbContext>());  // enables inbox on this channel
 });
 
@@ -234,7 +232,7 @@ var dispatched = await session.WaitForInboxDispatched<MyMessage>();
 var poisoned = await session.WaitForInboxPoisoned<MyMessage>();
 ```
 
-`TrackedMessage.TransportName` reflects the transport that delivered the message to the inbox (e.g. `"rabbitmq"`, `"local"`).
+`TrackedMessage.TransportName` reflects the transport that delivered the message to the inbox (e.g. `"rabbitmq"`, `"efcore"`).
 `TrackedMessage.IsSuccess` indicates whether the handler succeeded (`true`) or failed (`false`) at the `InboxDispatched` stage.
 
 ## Testing
@@ -244,10 +242,10 @@ Use `WithoutBackgroundProcessing()` to disable the `InboxProcessor` background s
 ```csharp
 services.AddRatatoskr(bus =>
 {
-    bus.UseLocalTransport();
     bus.AddEfCoreDurability<AppDbContext>(d =>
         d.UseInbox(inbox => inbox.WithoutBackgroundProcessing()));
 
+    bus.AddEventPublishChannel("events", c => c.WithEfCore().Produces<OrderPlaced>());
     bus.AddEventConsumeChannel("events", c => c
         .Consumes<OrderPlaced>(m => m
             .WithHandler<FulfillmentHandler>("fulfillment"))
@@ -268,8 +266,7 @@ Per-DbContext durability is configured centrally via `AddEfCoreDurability`, and 
 ```csharp
 services.AddRatatoskr(bus =>
 {
-    bus.UseLocalTransport();
-    bus.AddEventPublishChannel("shared-events", c => c.WithLocal().Produces<OrderPlaced>());
+    bus.AddEventPublishChannel("shared-events", c => c.WithEfCore().Produces<OrderPlaced>());
 
     // Per-DbContext durability configuration
     bus.AddEfCoreDurability<OrdersDbContext>(d => d.UseInbox());

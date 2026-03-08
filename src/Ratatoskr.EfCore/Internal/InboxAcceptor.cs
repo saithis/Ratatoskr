@@ -18,8 +18,11 @@ internal class InboxAcceptor<TDbContext>(
     TimeProvider timeProvider,
     IEnumerable<IMessageActivityObserver> observers,
     ILogger<InboxAcceptor<TDbContext>> logger)
+    : IEfCoreInboxAcceptor
     where TDbContext : DbContext, IInboxDbContext
 {
+    public Type DbContextType => typeof(TDbContext);
+
     public async Task<InboxAcceptOutcome> AcceptAsync(
         byte[] body,
         MessageProperties properties,

@@ -39,7 +39,7 @@ public class MessageDispatcherTests
         };
 
         // Act
-        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "local");
+        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
 
         // Assert
         result.Should().Be(DispatchResult.Success);
@@ -78,7 +78,7 @@ public class MessageDispatcherTests
         };
 
         // Act
-        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "local");
+        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
 
         // Assert
         result.Should().Be(DispatchResult.Success);
@@ -108,7 +108,7 @@ public class MessageDispatcherTests
         };
 
         // Act
-        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "local");
+        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
 
         // Assert
         result.Should().Be(DispatchResult.NoHandlers);
@@ -139,7 +139,7 @@ public class MessageDispatcherTests
         };
 
         // Act
-        var result = await dispatcher.DispatchAsync(invalidBody, context, CancellationToken.None, "test", "local");
+        var result = await dispatcher.DispatchAsync(invalidBody, context, CancellationToken.None, "test", "test");
 
         // Assert
         result.Should().Be(DispatchResult.PermanentError);
@@ -172,7 +172,7 @@ public class MessageDispatcherTests
         };
 
         // Act
-        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "local");
+        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
 
         // Assert
         result.Should().Be(DispatchResult.RecoverableError);
@@ -208,7 +208,7 @@ public class MessageDispatcherTests
         };
 
         // Act
-        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "local");
+        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
 
         // Assert
         result.Should().Be(DispatchResult.RecoverableError);
@@ -242,8 +242,8 @@ public class MessageDispatcherTests
         };
 
         // Act - Dispatch twice
-        await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "local");
-        await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "local");
+        await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
+        await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
 
         // Assert - Each dispatch creates a new scope, so scoped service is new each time
         collector.ServiceIds.Should().HaveCount(2);
@@ -279,7 +279,7 @@ public class MessageDispatcherTests
         };
 
         // Act
-        await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "local");
+        await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
 
         // Assert
         handler.CapturedContext.Should().NotBeNull();
@@ -319,7 +319,7 @@ public class MessageDispatcherTests
         cts.Cancel();
 
         // Act
-        var result = await dispatcher.DispatchAsync(body, context, cts.Token, "test", "local");
+        var result = await dispatcher.DispatchAsync(body, context, cts.Token, "test", "test");
 
         // Assert - OperationCanceledException from handler is treated as RecoverableError
         result.Should().Be(DispatchResult.RecoverableError);
@@ -349,7 +349,7 @@ public class MessageDispatcherTests
         };
 
         // Act
-        var result = await dispatcher.DispatchAsync(null!, context, CancellationToken.None, "test", "local");
+        var result = await dispatcher.DispatchAsync(null!, context, CancellationToken.None, "test", "test");
 
         // Assert - null body causes deserialization failure -> PermanentError
         result.Should().Be(DispatchResult.PermanentError);
@@ -415,7 +415,7 @@ public class MessageDispatcherTests
 
         // Act — dispatch to a channel that doesn't exist; type should be resolved via cross-channel fallback
         // but fire-and-forget handlers are looked up by the provided channelName, so no handlers will be found
-        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "unknown-channel", "local");
+        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "unknown-channel", "test");
 
         // Assert — type was resolved (no PermanentError), but no handlers on "unknown-channel"
         result.Should().Be(DispatchResult.NoHandlers);
@@ -447,7 +447,7 @@ public class MessageDispatcherTests
         };
 
         // Act
-        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "local");
+        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
 
         // Assert
         result.Should().Be(DispatchResult.Success);

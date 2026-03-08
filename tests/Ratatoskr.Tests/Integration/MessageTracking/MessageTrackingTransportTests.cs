@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
-using Ratatoskr.Local;
+using Ratatoskr.EfCore;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Testing;
 using Ratatoskr.Tests.Fixtures;
@@ -210,8 +210,7 @@ public class MessageTrackingTransportTests(
             var channelName = $"track-inbox-events-{TestId}";
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel(channelName, c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel(channelName, c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel(channelName, c => c
                     .Consumes<TestEvent>(m => m.WithHandler<NoOpTestEventHandler>("no-op"))
                     .UseInbox<TestDbContext>());
@@ -236,7 +235,7 @@ public class MessageTrackingTransportTests(
         // Assert — InboxQueued stage emitted by InboxAcceptor
         var queued = await session.WaitForInboxQueued<TestEvent>(TimeSpan.FromSeconds(10));
         queued.Properties.Id.Should().NotBeNullOrEmpty();
-        queued.TransportName.Should().Be("local");
+        queued.TransportName.Should().Be("efcore");
     }
 
     [Test]
@@ -248,8 +247,7 @@ public class MessageTrackingTransportTests(
             var channelName = $"track-inbox-disp-{TestId}";
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel(channelName, c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel(channelName, c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel(channelName, c => c
                     .Consumes<TestEvent>(m => m.WithHandler<NoOpTestEventHandler>("no-op"))
                     .UseInbox<TestDbContext>());
