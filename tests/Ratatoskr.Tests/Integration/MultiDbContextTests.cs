@@ -277,12 +277,14 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
             services.AddSingleton<IMessageSender, EfCoreMessageSender>();
             services.AddSingleton<ITransportMessageMetadataEnricher, EfCoreTransportMetadataEnricher>();
 
-            services.AddSingleton(new OutboxOptionsHolder<TestDbContext>(new OutboxOptions()));
+            services.AddSingleton(new OutboxOptionsHolder<TestDbContext>(new OutboxOptions
+                { LockName = $"OutboxProcessor_{nameof(TestDbContext)}" }));
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
 
-            services.AddSingleton(new OutboxOptionsHolder<SecondTestDbContext>(new OutboxOptions()));
+            services.AddSingleton(new OutboxOptionsHolder<SecondTestDbContext>(new OutboxOptions
+                { LockName = $"OutboxProcessor_{nameof(SecondTestDbContext)}" }));
             services.AddSingleton<OutboxTriggerInterceptor<SecondTestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<SecondTestDbContext>>();
             services.AddSingleton<OutboxProcessor<SecondTestDbContext>>();

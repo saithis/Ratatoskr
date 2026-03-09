@@ -215,9 +215,10 @@ public class InboxBatchAndEndToEndTests(RabbitMqContainerFixture rabbitMq, Postg
     }
 
     [Test]
-    public async Task Inbox_OutboxToEfCoreTransport_EndToEndCrashSafe()
+    public async Task Inbox_OutboxSameDbContext_SkipsOutboxAndCreatesInboxEntriesDirectly()
     {
-        // Arrange: full pipeline — Outbox → EfCoreMessageSender → InboxDB → InboxProcessor → handler
+        // Arrange: same-DbContext optimization — OutboxTriggerInterceptor writes inbox entries directly
+        // in the outbox transaction, bypassing OutboxProcessor and EfCoreMessageSender entirely.
         await StartTestAsync(services =>
         {
             services.AddRatatoskr(bus =>
@@ -246,7 +247,7 @@ public class InboxBatchAndEndToEndTests(RabbitMqContainerFixture rabbitMq, Postg
             await db.SaveChangesAsync();
         });
 
-        // Wait for the full pipeline: OutboxProcessor → EfCoreMessageSender → InboxProcessor → CompletedAt
+        // Wait for InboxProcessor to pick up the directly-created entries and complete the handler
         await WaitForConditionAsync(
             async () => await InScopeAsync(async ctx =>
             {

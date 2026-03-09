@@ -64,6 +64,18 @@ internal class OutboxTriggerInterceptor<TDbContext>(
                         "for cross-DbContext delivery. The inbox acceptor will deduplicate on delivery.",
                         enrichedProperties.Id);
                 }
+
+                if (sameDbCreated)
+                {
+                    await observers.NotifyAsync(new MessageActivity
+                    {
+                        Stage = MessageStage.InboxQueued,
+                        Properties = enrichedProperties,
+                        SerializedBody = serializedMessage,
+                        TransportName = EfCoreTransportConstants.TransportName,
+                        Timestamp = timeProvider.GetUtcNow(),
+                    }, logger);
+                }
             }
 
             foreach (var transport in enrichedProperties.Transports)

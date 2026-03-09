@@ -185,6 +185,8 @@ All handlers on an inbox channel are inbox-managed and delivered by `InboxProces
 
 If you need fire-and-forget handlers alongside inbox-managed handlers for the same message type, register them on a separate consume channel without `UseInbox()`.
 
+> **EF Core transport restriction:** When using the EF Core transport (`WithEfCore()`), `EfCoreMessageSender` requires **all** matching consume channels to have `UseInbox<TDbContext>()` configured. A channel without `UseInbox` will cause an `InvalidOperationException` at send time. This means the "separate fire-and-forget channel" pattern described above **does not work** with the EF Core transport. To mix durable and fire-and-forget delivery with EF Core, use a separate message type for fire-and-forget handlers so that the consume channel does not match the inbox-managed channels, or use a non-EF Core transport (e.g. RabbitMQ) for the fire-and-forget channel.
+
 ## Deduplication
 
 Deduplication is per **(message ID, handler key)**. If the same CloudEvents `id` is received twice (e.g. RabbitMQ redelivery or outbox retry), the second delivery is a no-op for the inbox: the unique constraint on `(MessageId, HandlerKey)` prevents duplicate handler status rows from being inserted.

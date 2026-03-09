@@ -66,8 +66,8 @@ public static class PublicApiExtensions
 
             // EF Core transport services (registered once, idempotent)
             ratatoskrBuilder.Services.TryAddSingleton<EfCoreTelemetry>();
-            ratatoskrBuilder.Services.TryAddSingleton<IMessageSender, EfCoreMessageSender>();
-            ratatoskrBuilder.Services.TryAddSingleton<ITransportMessageMetadataEnricher, EfCoreTransportMetadataEnricher>();
+            ratatoskrBuilder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IMessageSender, EfCoreMessageSender>());
+            ratatoskrBuilder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<ITransportMessageMetadataEnricher, EfCoreTransportMetadataEnricher>());
 
             ratatoskrBuilder.AddHandlerValidator(InboxConfigurationValidator.Validate);
             ratatoskrBuilder.AddValidator(EfCoreConfigurationValidator.Validate);
@@ -85,8 +85,8 @@ public static class PublicApiExtensions
 
             // EF Core transport services (registered once, idempotent — needed for outbox-only setups too)
             ratatoskrBuilder.Services.TryAddSingleton<EfCoreTelemetry>();
-            ratatoskrBuilder.Services.TryAddSingleton<IMessageSender, EfCoreMessageSender>();
-            ratatoskrBuilder.Services.TryAddSingleton<ITransportMessageMetadataEnricher, EfCoreTransportMetadataEnricher>();
+            ratatoskrBuilder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IMessageSender, EfCoreMessageSender>());
+            ratatoskrBuilder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<ITransportMessageMetadataEnricher, EfCoreTransportMetadataEnricher>());
             ratatoskrBuilder.Services.AddSingleton<OutboxTriggerInterceptor<TDbContext>>();
             ratatoskrBuilder.Services.AddTransient<OutboxMessageProcessor<TDbContext>>();
             ratatoskrBuilder.Services.AddSingleton<OutboxProcessor<TDbContext>>();
