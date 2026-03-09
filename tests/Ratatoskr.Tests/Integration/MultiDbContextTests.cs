@@ -273,6 +273,7 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
 
             // Manually register outbox components for both DbContexts (without hosted services)
             services.AddSingleton<OutboxTelemetry>();
+            services.AddSingleton<EfCoreTelemetry>();
             services.AddSingleton<IMessageSender, EfCoreMessageSender>();
             services.AddSingleton<ITransportMessageMetadataEnricher, EfCoreTransportMetadataEnricher>();
 
@@ -351,7 +352,7 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
     [Test]
     public async Task Inbox_TwoDbContexts_FullEndToEnd_OutboxToInbox()
     {
-        // Arrange: Full pipeline with two DbContexts — outbox → local transport → inbox
+        // Arrange: Full pipeline with two DbContexts — outbox → EF Core transport → inbox
         await StartTestAsync(services =>
         {
             services.AddRatatoskr(bus =>

@@ -55,6 +55,15 @@ internal class OutboxTriggerInterceptor<TDbContext>(
                 var (sameDbCreated, hasCrossDbChannels) = CreateSameTransactionInboxEntries(
                     context, enrichedProperties, serializedMessage);
                 skipEfCoreOutbox = sameDbCreated && !hasCrossDbChannels;
+
+                if (sameDbCreated && hasCrossDbChannels)
+                {
+                    logger.LogWarning(
+                        "Message '{MessageId}' targets both same-DbContext and cross-DbContext inbox channels. " +
+                        "Same-DbContext entries were created in this transaction; an outbox entry will also be created " +
+                        "for cross-DbContext delivery. The inbox acceptor will deduplicate on delivery.",
+                        enrichedProperties.Id);
+                }
             }
 
             foreach (var transport in enrichedProperties.Transports)

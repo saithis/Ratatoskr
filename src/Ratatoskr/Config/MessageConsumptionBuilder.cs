@@ -31,25 +31,8 @@ public class MessageConsumptionBuilder<TMessage> where TMessage : notnull
     }
 
     /// <summary>
-    /// Registers an inbox handler with a stable key and additional configuration.
-    /// Use <c>h.WithoutInbox()</c> to opt out of inbox management.
-    /// </summary>
-    public MessageConsumptionBuilder<TMessage> WithHandler<THandler>(string stableKey, Action<HandlerBuilder> configure)
-        where THandler : class, IMessageHandler<TMessage>
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(stableKey);
-
-        var registration = new HandlerRegistration();
-        var handlerBuilder = new HandlerBuilder(registration);
-        configure(handlerBuilder);
-
-        var optOut = registration.GetExtension<DeferredProcessingOverride>()?.OptOut == true;
-        AddHandler<THandler>(isInbox: !optOut, inboxKey: optOut ? null : stableKey, isExplicitFireAndForget: optOut);
-        return this;
-    }
-
-    /// <summary>
     /// Registers a fire-and-forget handler (no inbox, no key required).
+    /// Only valid on channels without <c>UseInbox&lt;TDbContext&gt;()</c>.
     /// </summary>
     public MessageConsumptionBuilder<TMessage> WithHandler<THandler>()
         where THandler : class, IMessageHandler<TMessage>
@@ -58,7 +41,7 @@ public class MessageConsumptionBuilder<TMessage> where TMessage : notnull
         return this;
     }
 
-    private void AddHandler<THandler>(bool isInbox, string? inboxKey, bool isExplicitFireAndForget = false)
+    private void AddHandler<THandler>(bool isInbox, string? inboxKey)
         where THandler : class, IMessageHandler<TMessage>
     {
         _services.TryAddScoped<THandler>();
@@ -67,16 +50,6 @@ public class MessageConsumptionBuilder<TMessage> where TMessage : notnull
             typeof(TMessage),
             typeof(THandler),
             isInbox,
-            inboxKey,
-            isExplicitFireAndForget));
+            inboxKey));
     }
-}
-
-/// <summary>
-/// Marker extension set on <see cref="HandlerRegistration"/> by <c>WithoutInbox()</c>
-/// to explicitly opt this handler out of deferred (inbox) processing.
-/// </summary>
-internal class DeferredProcessingOverride
-{
-    internal bool OptOut { get; init; }
 }

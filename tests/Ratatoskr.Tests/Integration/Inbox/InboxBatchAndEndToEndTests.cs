@@ -246,7 +246,7 @@ public class InboxBatchAndEndToEndTests(RabbitMqContainerFixture rabbitMq, Postg
             await db.SaveChangesAsync();
         });
 
-        // Wait for the full pipeline: OutboxProcessor → DurableLocalSender → InboxProcessor → CompletedAt
+        // Wait for the full pipeline: OutboxProcessor → EfCoreMessageSender → InboxProcessor → CompletedAt
         await WaitForConditionAsync(
             async () => await InScopeAsync(async ctx =>
             {

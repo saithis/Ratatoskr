@@ -145,7 +145,7 @@ public class OpenTelemetryTracingTests(RabbitMqContainerFixture rabbitMq, Postgr
         using var listener = CreateActivityListener(activities);
         ActivitySource.AddActivityListener(listener);
 
-        // 2. Setup local transport + inbox
+        // 2. Setup EF Core transport + inbox
         await StartTestAsync(services =>
         {
             services.AddRatatoskr(bus =>

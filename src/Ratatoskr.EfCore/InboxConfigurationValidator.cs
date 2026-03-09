@@ -23,21 +23,21 @@ internal static class InboxConfigurationValidator
                 throw new InvalidOperationException(
                     $"Channel '{channel.ChannelName}' has inbox handler '{firstHandler.InboxKey}' " +
                     $"but does not have UseInbox<TDbContext>() configured. " +
-                    $"Either add UseInbox<TDbContext>() to the channel or use WithHandler<THandler>() without a key for fire-and-forget.");
+                    $"Either add UseInbox<TDbContext>() to the channel or move fire-and-forget handlers to a separate channel without UseInbox.");
             }
 
-            // UseInbox channel with fire-and-forget handlers that weren't explicitly opted out
+            // UseInbox channel must not have fire-and-forget handlers
             if (inboxConfig != null)
             {
                 foreach (var handler in GetAllHandlersForChannel(channel))
                 {
-                    if (!handler.IsInbox && !handler.IsExplicitFireAndForget)
+                    if (!handler.IsInbox)
                     {
                         throw new InvalidOperationException(
                             $"Channel '{channel.ChannelName}' has UseInbox<TDbContext>() configured, " +
                             $"but handler '{handler.HandlerType.Name}' was registered without a stable key. " +
                             $"Provide a key via WithHandler<THandler>(\"key\") for inbox processing, " +
-                            $"or explicitly opt out with WithHandler<THandler>(\"key\", h => h.WithoutInbox()).");
+                            $"or move fire-and-forget handlers to a separate channel without UseInbox.");
                     }
                 }
             }

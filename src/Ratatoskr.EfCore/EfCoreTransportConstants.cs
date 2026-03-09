@@ -2,5 +2,5 @@ namespace Ratatoskr.EfCore;
 
 public static class EfCoreTransportConstants
 {
-    internal const string TransportName = "efcore";
+    public const string TransportName = "efcore";
 }

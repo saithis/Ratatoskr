@@ -274,7 +274,7 @@ public class OpenTelemetryMetricsTests(RabbitMqContainerFixture rabbitMq, Postgr
         var metricMeasurements = new ConcurrentBag<(string InstrumentName, double Value, KeyValuePair<string, object?>[] Tags)>();
         using var meterListener = CreateMeterListener(metricMeasurements);
 
-        // 2. Setup local transport + inbox (no RabbitMQ needed for this test)
+        // 2. Setup EF Core transport + inbox (no RabbitMQ needed for this test)
         await StartTestAsync(services =>
         {
             services.AddRatatoskr(bus =>

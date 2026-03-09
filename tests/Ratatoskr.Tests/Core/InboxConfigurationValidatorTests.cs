@@ -162,49 +162,10 @@ public class InboxConfigurationValidatorTests
         var channelRegistry = builder.ChannelRegistry;
         var handlerRegistry = ChannelHandlerRegistry.Build(channelRegistry);
 
-        // Act & Assert — must provide a key or explicitly opt out with WithoutInbox()
+        // Act & Assert — all handlers on inbox channels must have a stable key
         var act = () => InboxConfigurationValidator.Validate(channelRegistry, handlerRegistry);
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*registered without a stable key*");
-    }
-
-    [Test]
-    public void Validate_ChannelWithUseInbox_ExplicitFireAndForget_DoesNotThrow()
-    {
-        // Arrange — handler explicitly opted out via WithoutInbox()
-        var services = new ServiceCollection();
-        var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .UseInbox<TestDbContext>()
-            .Consumes<TestEvent>(m => m
-                .WithHandler<TestEventHandler>("key", h => h.WithoutInbox())));
-
-        var channelRegistry = builder.ChannelRegistry;
-        var handlerRegistry = ChannelHandlerRegistry.Build(channelRegistry);
-
-        // Act & Assert — explicit opt-out is allowed
-        var act = () => InboxConfigurationValidator.Validate(channelRegistry, handlerRegistry);
-        act.Should().NotThrow();
-    }
-
-    [Test]
-    public void Validate_ChannelWithUseInbox_MixedInboxAndExplicitOptOut_DoesNotThrow()
-    {
-        // Arrange — one inbox handler + one explicitly opted-out handler
-        var services = new ServiceCollection();
-        var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .UseInbox<TestDbContext>()
-            .Consumes<TestEvent>(m => m
-                .WithHandler<TestEventHandler>("inbox-key")
-                .WithHandler<SecondTestEventHandler>("audit-key", h => h.WithoutInbox())));
-
-        var channelRegistry = builder.ChannelRegistry;
-        var handlerRegistry = ChannelHandlerRegistry.Build(channelRegistry);
-
-        // Act & Assert
-        var act = () => InboxConfigurationValidator.Validate(channelRegistry, handlerRegistry);
-        act.Should().NotThrow();
     }
 
     [Test]

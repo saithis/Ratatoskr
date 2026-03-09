@@ -65,10 +65,12 @@ public static class PublicApiExtensions
             ratatoskrBuilder.Services.AddSingleton<IMessageRouteInterceptor, InboxRouteInterceptor<TDbContext>>();
 
             // EF Core transport services (registered once, idempotent)
+            ratatoskrBuilder.Services.TryAddSingleton<EfCoreTelemetry>();
             ratatoskrBuilder.Services.TryAddSingleton<IMessageSender, EfCoreMessageSender>();
             ratatoskrBuilder.Services.TryAddSingleton<ITransportMessageMetadataEnricher, EfCoreTransportMetadataEnricher>();
 
             ratatoskrBuilder.AddHandlerValidator(InboxConfigurationValidator.Validate);
+            ratatoskrBuilder.AddValidator(EfCoreConfigurationValidator.Validate);
         }
 
         private static void RegisterOutboxServices<TDbContext>(
@@ -82,6 +84,7 @@ public static class PublicApiExtensions
             ratatoskrBuilder.Services.TryAddSingleton<OutboxTelemetry>();
 
             // EF Core transport services (registered once, idempotent — needed for outbox-only setups too)
+            ratatoskrBuilder.Services.TryAddSingleton<EfCoreTelemetry>();
             ratatoskrBuilder.Services.TryAddSingleton<IMessageSender, EfCoreMessageSender>();
             ratatoskrBuilder.Services.TryAddSingleton<ITransportMessageMetadataEnricher, EfCoreTransportMetadataEnricher>();
             ratatoskrBuilder.Services.AddSingleton<OutboxTriggerInterceptor<TDbContext>>();

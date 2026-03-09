@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Ratatoskr.Core;
 
@@ -10,10 +11,12 @@ namespace Ratatoskr.EfCore.Internal;
 internal class EfCoreMessageSender(
     ChannelRegistry channelRegistry,
     IEnumerable<IEfCoreInboxAcceptor> acceptors,
+    EfCoreTelemetry telemetry,
+    TimeProvider timeProvider,
+    IEnumerable<IMessageActivityObserver> observers,
     ILogger<EfCoreMessageSender> logger) : IMessageSender
 {
-    private readonly Dictionary<Type, IEfCoreInboxAcceptor> _acceptorMap =
-        acceptors.ToDictionary(a => a.DbContextType);
+    private readonly Dictionary<Type, IEfCoreInboxAcceptor> _acceptorMap = BuildAcceptorMap(acceptors);
 
     public string TransportName => EfCoreTransportConstants.TransportName;
 
@@ -22,27 +25,69 @@ internal class EfCoreMessageSender(
         if (props.Type == null)
             throw new InvalidOperationException("Cannot send via EF Core transport: message has no Type.");
 
-        var consumeChannels = channelRegistry.FindConsumeChannelsForType(props.Type);
+        using var activity = telemetry.StartSendActivity(props, content.Length);
+        var startTimestamp = Stopwatch.GetTimestamp();
+        Exception? sendException = null;
 
-        foreach (var (channel, _) in consumeChannels)
+        try
         {
-            var inboxConfig = channel.GetExtension<ChannelInboxConfig>();
-            if (inboxConfig == null)
-            {
-                logger.LogWarning(
-                    "Channel '{Channel}' has no inbox configured — skipping EF Core transport delivery for message '{MessageId}'",
-                    channel.ChannelName, props.Id);
-                continue;
-            }
+            var consumeChannels = channelRegistry.FindConsumeChannelsForType(props.Type);
 
-            if (!_acceptorMap.TryGetValue(inboxConfig.DbContextType, out var acceptor))
+            foreach (var (channel, _) in consumeChannels)
+            {
+                var inboxConfig = channel.GetExtension<ChannelInboxConfig>();
+                if (inboxConfig == null)
+                {
+                    throw new InvalidOperationException(
+                        $"Channel '{channel.ChannelName}' has no inbox configured. " +
+                        $"The EF Core transport requires UseInbox<TDbContext>() on all consume channels. " +
+                        $"Either add UseInbox<TDbContext>() or use a different transport.");
+                }
+
+                if (!_acceptorMap.TryGetValue(inboxConfig.DbContextType, out var acceptor))
+                {
+                    throw new InvalidOperationException(
+                        $"No inbox acceptor registered for DbContext '{inboxConfig.DbContextType.Name}'. " +
+                        $"Ensure AddEfCoreDurability<{inboxConfig.DbContextType.Name}>() with UseInbox() is configured.");
+                }
+
+                await acceptor.AcceptAsync(content, props, TransportName, channel.ChannelName, cancellationToken);
+            }
+        }
+        catch (Exception ex)
+        {
+            sendException = ex;
+            EfCoreTelemetry.SetActivityError(activity, ex);
+            throw;
+        }
+        finally
+        {
+            telemetry.RecordSent(startTimestamp, sendException);
+
+            await observers.NotifyAsync(new MessageActivity
+            {
+                Stage = MessageStage.Sent,
+                Properties = props,
+                SerializedBody = content,
+                TransportName = TransportName,
+                Exception = sendException,
+                Timestamp = timeProvider.GetUtcNow(),
+            }, logger);
+        }
+    }
+
+    private static Dictionary<Type, IEfCoreInboxAcceptor> BuildAcceptorMap(IEnumerable<IEfCoreInboxAcceptor> acceptors)
+    {
+        var map = new Dictionary<Type, IEfCoreInboxAcceptor>();
+        foreach (var acceptor in acceptors)
+        {
+            if (!map.TryAdd(acceptor.DbContextType, acceptor))
             {
                 throw new InvalidOperationException(
-                    $"No inbox acceptor registered for DbContext '{inboxConfig.DbContextType.Name}'. " +
-                    $"Ensure AddEfCoreDurability<{inboxConfig.DbContextType.Name}>() with UseInbox() is configured.");
+                    $"Duplicate IEfCoreInboxAcceptor registered for DbContext '{acceptor.DbContextType.Name}'. " +
+                    $"Ensure AddEfCoreDurability<{acceptor.DbContextType.Name}>() is only called once.");
             }
-
-            await acceptor.AcceptAsync(content, props, TransportName, channel.ChannelName, cancellationToken);
         }
+        return map;
     }
 }

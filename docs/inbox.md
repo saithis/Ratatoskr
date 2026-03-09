@@ -96,24 +96,23 @@ services.AddDbContext<AppDbContext>((sp, opts) =>
 
 ### 3. Register handlers with stable keys
 
-Handlers are registered inside the `Consumes<T>()` builder. Inbox-managed handlers provide a stable key; fire-and-forget handlers must explicitly opt out with `WithoutInbox()`:
+Handlers are registered inside the `Consumes<T>()` builder with a stable key:
 
 ```csharp
 .Consumes<OrderPlaced>(m => m
-    .WithHandler<FulfillmentHandler>("fulfillment")                    // inbox-managed
-    .WithHandler<AuditLogHandler>("audit", h => h.WithoutInbox()))     // explicit fire-and-forget
+    .WithHandler<FulfillmentHandler>("fulfillment")
+    .WithHandler<NotificationHandler>("notification"))
 ```
 
 The **handler key** (`"fulfillment"`) is persisted in the database. It must be stable across deployments — renaming the key will cause existing in-flight messages to be poisoned with an "unknown handler key" error.
 
-> **Validation**: On channels with `UseInbox<TDbContext>()`, every handler must either provide a stable key (inbox-managed) or explicitly opt out with `WithoutInbox()`. Registering a handler without a key on an inbox channel throws `InvalidOperationException` at startup. Handler keys must be **globally unique** across all channels and DbContexts.
+> **Validation**: On channels with `UseInbox<TDbContext>()`, every handler must have a stable key. Registering a handler without a key on an inbox channel throws `InvalidOperationException` at startup. Handler keys must be **globally unique** across all channels and DbContexts.
 
 #### Handler registration API
 
 | Method | Effect |
 |---|---|
 | `.WithHandler<THandler>("key")` | Register handler as inbox-managed with the given stable key. |
-| `.WithHandler<THandler>("key", h => h.WithoutInbox())` | Register handler as fire-and-forget on an inbox channel (explicit opt-out). |
 | `.WithHandler<THandler>()` | Register handler as fire-and-forget (only on channels **without** `UseInbox`). |
 
 ## Configuration Options
@@ -180,21 +179,11 @@ bus.AddEfCoreDurability<AppDbContext>(d => d.UseOutbox(outbox =>
 
 Use `WithoutBackgroundProcessing()` to disable the outbox background service in integration tests, analogous to the inbox pattern.
 
-## Mixing Inbox and Non-Inbox Handlers
+## Handler Isolation
 
-You can register both inbox-managed and fire-and-forget handlers for the same message type within the same `Consumes<T>()` builder. Fire-and-forget handlers on inbox channels must explicitly opt out:
+All handlers on an inbox channel are inbox-managed and delivered by `InboxProcessor`. Each handler runs in its own DI scope, so a failure or `ChangeTracker.Clear()` in one scope cannot affect another.
 
-```csharp
-.Consumes<OrderPlaced>(m => m
-    .WithHandler<FulfillmentHandler>("fulfillment")                    // inbox
-    .WithHandler<AuditLogHandler>("audit", h => h.WithoutInbox()))     // explicit fire-and-forget
-```
-
-- **Non-inbox handlers** are called synchronously during message dispatch, each in its own DI scope.
-- **Inbox-managed handlers** are queued to the database and delivered by `InboxProcessor`.
-- Each handler and the inbox acceptor run in **separate DI scopes**, so a failure or `ChangeTracker.Clear()` in one scope cannot affect another.
-
-> **Recommendation**: avoid mixing on the same consume channel where possible. If a non-inbox handler fails, the transport may redeliver the message; inbox handlers will deduplicate correctly, but non-inbox handlers will run again.
+If you need fire-and-forget handlers alongside inbox-managed handlers for the same message type, register them on a separate consume channel without `UseInbox()`.
 
 ## Deduplication
 
@@ -300,16 +289,6 @@ Each `DbContext` type gets its own:
 Per-DbContext services are registered once (idempotent), so multiple channels sharing the same `DbContext` reuse the same processor and options.
 
 > **Important:** Each `DbContext` type is expected to have its own database. The `InboxMessageProcessor` queries all pending handler statuses from its database — if two `DbContext` types share a database, they will see each other's data.
-
-### Opting out of inbox for specific handlers
-
-On a channel with `UseInbox<TDbContext>()`, handlers with a stable key are automatically inbox-managed. To opt a specific handler out of inbox processing (making it fire-and-forget even on an inbox channel), use `WithoutInbox()`:
-
-```csharp
-.Consumes<OrderPlaced>(m => m
-    .WithHandler<FulfillmentHandler>("fulfillment")          // inbox-managed
-    .WithHandler<AuditLogHandler>("audit", h => h.WithoutInbox())) // fire-and-forget despite having a key
-```
 
 ## Data Retention
 

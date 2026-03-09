@@ -204,7 +204,7 @@ public class MessageTrackingTransportTests(
     [Test]
     public async Task Tracking_InboxQueued_CapturesInboxQueuedStage()
     {
-        // Arrange: local transport + inbox, tracking session captures InboxQueued
+        // Arrange: EF Core transport + inbox, tracking session captures InboxQueued
         await StartTestAsync(services =>
         {
             var channelName = $"track-inbox-events-{TestId}";

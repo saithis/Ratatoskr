@@ -91,25 +91,6 @@ public class ValidationTests
     }
 
     [Test]
-    public void WithoutInbox_OptOut_RegistersAsFireAndForget()
-    {
-        // Arrange
-        var services = new ServiceCollection();
-        var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m
-                .WithHandler<TestEventHandler>("key-a", h => h.WithoutInbox())));
-
-        // Act
-        var registry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
-
-        // Assert
-        registry.GetFireAndForgetHandlers("test-channel", typeof(TestEvent)).Should().HaveCount(1);
-        registry.GetInboxHandlers("test-channel").Should().BeEmpty();
-        registry.HasNoInboxHandlers.Should().BeTrue();
-    }
-
-    [Test]
     public void WithHandler_WithStableKey_RegistersAsInbox()
     {
         // Arrange
