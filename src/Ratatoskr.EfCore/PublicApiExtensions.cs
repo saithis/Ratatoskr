@@ -143,6 +143,7 @@ public static class PublicApiExtensions
             entity.Property(e => e.Content).IsRequired();
             entity.Property(e => e.SerializedProperties).IsRequired();
             entity.Property(e => e.TransportName).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.Version).IsConcurrencyToken();
         });
     }
 }

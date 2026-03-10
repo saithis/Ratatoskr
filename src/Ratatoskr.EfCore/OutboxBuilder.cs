@@ -105,6 +105,17 @@ public class OutboxBuilder<TDbContext> where TDbContext : DbContext
     }
 
     /// <summary>
+    /// Sets the maximum allowed size of the serialized message body in bytes.
+    /// Messages exceeding this limit will cause SaveChangesAsync to throw.
+    /// </summary>
+    public OutboxBuilder<TDbContext> WithMaxMessageSize(int maxBytes)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(maxBytes, 0, nameof(maxBytes));
+        Options.MaxMessageSize = maxBytes;
+        return this;
+    }
+
+    /// <summary>
     /// Prevents the <see cref="Internal.OutboxProcessor{TDbContext}"/> from being registered as a hosted service.
     /// Use this in integration tests where you want deterministic control over when outbox processing runs
     /// (e.g. by calling <c>OutboxMessageProcessor.ProcessBatchAsync</c> directly).

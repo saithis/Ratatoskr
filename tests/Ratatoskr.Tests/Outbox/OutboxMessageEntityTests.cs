@@ -271,4 +271,49 @@ public class OutboxMessageEntityTests
         // Assert
         act.Should().Throw<OutboxMessageSerializationException>();
     }
+
+    [Test]
+    public void Version_IncrementedOnEveryStateMutation()
+    {
+        // Arrange
+        var fakeTime = new FakeTimeProvider();
+        var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties(), fakeTime, "rabbitmq");
+        entity.Version.Should().Be(0u);
+
+        // Act & Assert - MarkAsProcessing increments
+        entity.MarkAsProcessing(fakeTime);
+        entity.Version.Should().Be(1u);
+
+        // Act & Assert - MarkAsProcessed increments
+        entity.MarkAsProcessed(fakeTime);
+        entity.Version.Should().Be(2u);
+    }
+
+    [Test]
+    public void Version_IncrementedOnPublishFailed()
+    {
+        // Arrange
+        var fakeTime = new FakeTimeProvider();
+        var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties(), fakeTime, "rabbitmq");
+
+        // Act
+        entity.PublishFailed("Error", fakeTime, maxRetries: 5, TimeSpan.FromMinutes(5));
+
+        // Assert
+        entity.Version.Should().Be(1u);
+    }
+
+    [Test]
+    public void Version_IncrementedOnMarkAsPoisoned()
+    {
+        // Arrange
+        var fakeTime = new FakeTimeProvider();
+        var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties(), fakeTime, "rabbitmq");
+
+        // Act
+        entity.MarkAsPoisoned("reason", fakeTime);
+
+        // Assert
+        entity.Version.Should().Be(1u);
+    }
 }

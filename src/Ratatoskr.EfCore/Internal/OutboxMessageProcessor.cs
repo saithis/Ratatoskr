@@ -59,18 +59,44 @@ internal class OutboxMessageProcessor<TDbContext>(
         {
             message.MarkAsProcessing(timeProvider);
         }
-        await dbContext.SaveChangesAsync(cancellationToken);
+
+        while (true)
+        {
+            try
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+                break;
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                var conflictIds = new HashSet<Guid>();
+                foreach (var entry in ex.Entries)
+                {
+                    conflictIds.Add(((OutboxMessageEntity)entry.Entity).Id);
+                    await entry.ReloadAsync(cancellationToken);
+                }
+
+                logger.LogDebug(
+                    "Skipped {ConflictCount} outbox message(s) already claimed by another worker",
+                    conflictIds.Count);
+
+                messages = messages.Where(m => !conflictIds.Contains(m.Id)).ToArray();
+                if (messages.Length == 0)
+                    return 0;
+            }
+        }
 
         var processedCount = 0;
         var batchStartTimestamp = Stopwatch.GetTimestamp();
 
         foreach (var message in messages)
         {
-            MessageProperties? sentProps = null;
+            MessageProperties? props = null;
+            Exception? sendException = null;
 
             try
             {
-                var props = message.GetProperties();
+                props = message.GetProperties();
 
                 using var activity = telemetry.StartCreateActivity(props);
 
@@ -92,10 +118,10 @@ internal class OutboxMessageProcessor<TDbContext>(
                 message.MarkAsProcessed(timeProvider);
                 processedCount++;
                 telemetry.RecordProcessed(success: true);
-                sentProps = props;
             }
             catch (Exception e)
             {
+                sendException = e;
                 logger.LogWarning(e, "Failed to send message '{Id}', attempt {Attempt}",
                     message.Id, message.ErrorCount + 1);
                 message.PublishFailed(e.Message, timeProvider,
@@ -104,6 +130,7 @@ internal class OutboxMessageProcessor<TDbContext>(
 
                 if (message.IsPoisoned)
                 {
+                    telemetry.RecordPoisoned();
                     logger.LogError("Outbox message '{Id}' for transport '{Transport}' has been poisoned after {Attempts} failed attempts. Last error: {Error}",
                         message.Id, message.TransportName, message.ErrorCount, e.Message);
                 }
@@ -111,14 +138,27 @@ internal class OutboxMessageProcessor<TDbContext>(
 
             await dbContext.SaveChangesAsync(CancellationToken.None);
 
-            if (sentProps != null)
+            if (sendException == null && props != null)
             {
                 await observers.NotifyAsync(new MessageActivity
                 {
                     Stage = MessageStage.OutboxSent,
-                    Properties = sentProps,
+                    Properties = props,
                     SerializedBody = message.Content,
                     TransportName = message.TransportName,
+                    Timestamp = timeProvider.GetUtcNow(),
+                }, logger);
+            }
+
+            if (message.IsPoisoned && props != null)
+            {
+                await observers.NotifyAsync(new MessageActivity
+                {
+                    Stage = MessageStage.OutboxPoisoned,
+                    Properties = props,
+                    SerializedBody = message.Content,
+                    TransportName = message.TransportName,
+                    Exception = sendException,
                     Timestamp = timeProvider.GetUtcNow(),
                 }, logger);
             }

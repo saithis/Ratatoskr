@@ -48,6 +48,12 @@ internal class OutboxMessageEntity
     [MaxLength(50)]
     public string TransportName { get; private set; } = string.Empty;
 
+    /// <summary>
+    /// Optimistic concurrency token. Incremented on every state mutation to prevent
+    /// two concurrent processors from processing the same message.
+    /// </summary>
+    public uint Version { get; private set; }
+
     public MessageProperties GetProperties() => 
         JsonSerializer.Deserialize<MessageProperties>(SerializedProperties)
         ?? throw new OutboxMessageSerializationException("Could not deserialize the message properties.", SerializedProperties);
@@ -71,12 +77,14 @@ internal class OutboxMessageEntity
     public void MarkAsProcessing(TimeProvider timeProvider)
     {
         ProcessingStartedAt = timeProvider.GetUtcNow();
+        Version++;
     }
-    
+
     public void MarkAsProcessed(TimeProvider timeProvider)
     {
         ProcessedAt = timeProvider.GetUtcNow();
         ProcessingStartedAt = null; // Clear processing flag
+        Version++;
     }
 
     public void PublishFailed(string error, TimeProvider timeProvider, int maxRetries, TimeSpan maxRetryDelay)
@@ -85,7 +93,8 @@ internal class OutboxMessageEntity
         Error = error.Length > 2000 ? error[..2000] : error;
         FailedAt = timeProvider.GetUtcNow();
         ProcessingStartedAt = null; // Clear processing flag on failure
-        
+        Version++;
+
         if (ErrorCount >= maxRetries)
         {
             IsPoisoned = true;
@@ -107,5 +116,6 @@ internal class OutboxMessageEntity
         Error = reason.Length > 2000 ? reason[..2000] : reason;
         FailedAt = timeProvider.GetUtcNow();
         NextAttemptAt = null;
+        Version++;
     }
 }

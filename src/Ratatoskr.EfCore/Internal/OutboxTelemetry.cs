@@ -42,6 +42,11 @@ internal class OutboxTelemetry
         RatatoskrDiagnostics.OutboxProcessCount.Add(1, new TagList { { "status", success ? "success" : "failure" } });
     }
 
+    public void RecordPoisoned()
+    {
+        RatatoskrDiagnostics.OutboxPoisonCount.Add(1);
+    }
+
     public void RecordBatchDuration(long startTimestamp)
     {
         RatatoskrDiagnostics.OutboxProcessDuration.Record(Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds);

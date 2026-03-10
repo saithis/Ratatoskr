@@ -82,6 +82,11 @@ public class MessageTrackingSession : IAsyncDisposable
     public MessageCollection InboxPoisoned => GetCollection(MessageStage.InboxPoisoned);
 
     /// <summary>
+    /// Messages captured at the OutboxPoisoned stage (outbox message exceeded max retries).
+    /// </summary>
+    public MessageCollection OutboxPoisoned => GetCollection(MessageStage.OutboxPoisoned);
+
+    /// <summary>
     /// Waits for a message of the specified type to reach the Published stage.
     /// </summary>
     public Task<TrackedMessage> WaitForPublished<T>(
@@ -136,6 +141,14 @@ public class MessageTrackingSession : IAsyncDisposable
         TimeSpan? timeout = null,
         Func<TrackedMessage, bool>? predicate = null) where T : notnull
         => WaitForStage<T>(MessageStage.InboxPoisoned, timeout, predicate);
+
+    /// <summary>
+    /// Waits for a message of the specified type to reach the OutboxPoisoned stage.
+    /// </summary>
+    public Task<TrackedMessage> WaitForOutboxPoisoned<T>(
+        TimeSpan? timeout = null,
+        Func<TrackedMessage, bool>? predicate = null) where T : notnull
+        => WaitForStage<T>(MessageStage.OutboxPoisoned, timeout, predicate);
 
     private async Task<TrackedMessage> WaitForStage<T>(
         MessageStage stage,

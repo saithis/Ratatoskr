@@ -52,6 +52,11 @@ public enum MessageStage
     /// A handler status has been marked as poisoned after exceeding the maximum retry count.
     /// </summary>
     InboxPoisoned,
+
+    /// <summary>
+    /// An outbox message has been marked as poisoned after exceeding the maximum retry count.
+    /// </summary>
+    OutboxPoisoned,
 }
 
 /// <summary>
