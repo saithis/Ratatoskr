@@ -4,7 +4,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.EfCore.Internal;
-using Ratatoskr.Local;
 using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Inbox;
@@ -22,12 +21,11 @@ public class InboxDeduplicationTests(RabbitMqContainerFixture rabbitMq, Postgres
         {
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<CountingHandler>("counting"))
                     .UseInbox<TestDbContext>());
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox());
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox => inbox.WithoutBackgroundProcessing()));
             });
 
             services.AddSingleton(callCounter);
@@ -54,16 +52,8 @@ public class InboxDeduplicationTests(RabbitMqContainerFixture rabbitMq, Postgres
             await bus.PublishDirectAsync(new TestEvent { Data = "duplicate delivery" }, sharedProps);
         });
 
-        // Wait for the handler status to be completed
-        await WaitForConditionAsync(
-            async () => await InScopeAsync(async ctx =>
-            {
-                var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-                var status = await db.Set<InboxHandlerStatusEntity>()
-                    .SingleOrDefaultAsync(s => s.MessageId == messageId && s.HandlerKey == "counting");
-                return status?.CompletedAt != null;
-            }),
-            TimeSpan.FromSeconds(15));
+        // Process inbox deterministically
+        await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
 
         // Assert: exactly one inbox message row and one handler status row
         await InScopeAsync(async ctx =>
@@ -89,12 +79,11 @@ public class InboxDeduplicationTests(RabbitMqContainerFixture rabbitMq, Postgres
         {
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
                     .UseInbox<TestDbContext>());
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox());
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox => inbox.WithoutBackgroundProcessing()));
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -123,16 +112,8 @@ public class InboxDeduplicationTests(RabbitMqContainerFixture rabbitMq, Postgres
             })
         );
 
-        // Wait for handler to complete
-        await WaitForConditionAsync(
-            async () => await InScopeAsync(async ctx =>
-            {
-                var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-                var status = await db.Set<InboxHandlerStatusEntity>()
-                    .SingleOrDefaultAsync(s => s.MessageId == sharedMessageId);
-                return status?.CompletedAt != null;
-            }),
-            TimeSpan.FromSeconds(15));
+        // Process inbox deterministically
+        await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
 
         // Assert: exactly one inbox message and one handler status
         await InScopeAsync(async ctx =>
@@ -160,8 +141,7 @@ public class InboxDeduplicationTests(RabbitMqContainerFixture rabbitMq, Postgres
             services.AddSingleton(counter);
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<CountingHandler>("counting"))
                     .UseInbox<TestDbContext>());

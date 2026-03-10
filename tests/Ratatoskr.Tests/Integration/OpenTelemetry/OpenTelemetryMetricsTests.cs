@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
-using Ratatoskr.Local;
+using Ratatoskr.EfCore.Internal;
 using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.OpenTelemetry;
@@ -275,17 +275,16 @@ public class OpenTelemetryMetricsTests(RabbitMqContainerFixture rabbitMq, Postgr
         var metricMeasurements = new ConcurrentBag<(string InstrumentName, double Value, KeyValuePair<string, object?>[] Tags)>();
         using var meterListener = CreateMeterListener(metricMeasurements);
 
-        // 2. Setup local transport + inbox (no RabbitMQ needed for this test)
+        // 2. Setup EF Core transport + inbox (no RabbitMQ needed for this test)
         await StartTestAsync(services =>
         {
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("otel-inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("otel-inbox-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("otel-inbox-events", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<NoOpTestEventHandler>("otel-noop"))
                     .UseInbox<TestDbContext>());
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox => inbox.WithPollingInterval(TimeSpan.FromMilliseconds(500))));
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox => inbox.WithoutBackgroundProcessing()));
             });
             services.AddDbContext<TestDbContext>((sp, opts) =>
                 opts.UseNpgsql(PostgresConnectionString));
@@ -300,10 +299,13 @@ public class OpenTelemetryMetricsTests(RabbitMqContainerFixture rabbitMq, Postgr
             await bus.PublishDirectAsync(new TestEvent { Id = "otel-inbox-1", Data = "inbox metrics" });
         });
 
-        // 4. Wait for inbox processor to run and record metrics
-        await WaitForConditionAsync(
-            () => metricMeasurements.Any(m => m.InstrumentName == "ratatoskr.inbox.process.duration"),
-            TimeSpan.FromSeconds(15));
+        // 4. Process inbox deterministically instead of relying on background polling
+        await InScopeAsync(async ctx =>
+        {
+            using var scope = ctx.ServiceProvider.CreateScope();
+            var processor = scope.ServiceProvider.GetRequiredService<InboxMessageProcessor<TestDbContext>>();
+            await processor.ProcessBatchAsync(false, CancellationToken.None);
+        });
 
         // 5. Assert — inbox-specific metrics are recorded (not the outbox ones)
         metricMeasurements.Should().Contain(m => m.InstrumentName == "ratatoskr.inbox.process.duration");

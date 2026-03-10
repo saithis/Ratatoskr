@@ -1,12 +1,10 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Time.Testing;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.EfCore.Internal;
-using Ratatoskr.Local;
 using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Inbox;
@@ -24,8 +22,7 @@ public class InboxBatchAndEndToEndTests(RabbitMqContainerFixture rabbitMq, Postg
             services.AddSingleton<TimeProvider>(fakeTime);
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
                     .UseInbox<TestDbContext>());
@@ -88,8 +85,7 @@ public class InboxBatchAndEndToEndTests(RabbitMqContainerFixture rabbitMq, Postg
             services.AddSingleton<TimeProvider>(fakeTime);
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
                     .UseInbox<TestDbContext>());
@@ -149,8 +145,7 @@ public class InboxBatchAndEndToEndTests(RabbitMqContainerFixture rabbitMq, Postg
             services.AddSingleton<TimeProvider>(fakeTime);
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
                     .UseInbox<TestDbContext>());
@@ -182,7 +177,7 @@ public class InboxBatchAndEndToEndTests(RabbitMqContainerFixture rabbitMq, Postg
             var props = new MessageProperties { Id = messageId, Type = "test.event" };
 
             db.Set<InboxMessageEntity>().Add(
-                InboxMessageEntity.Create(messageId, "local", body, props, timeProvider));
+                InboxMessageEntity.Create(messageId, EfCoreTransportConstants.TransportName, body, props, timeProvider));
 
             var status = InboxHandlerStatusEntity.Create(messageId, "handler-a", timeProvider);
             status.MarkAsProcessing(timeProvider); // Simulate in-progress at startTime
@@ -220,15 +215,15 @@ public class InboxBatchAndEndToEndTests(RabbitMqContainerFixture rabbitMq, Postg
     }
 
     [Test]
-    public async Task Inbox_OutboxToLocalTransport_EndToEndCrashSafe()
+    public async Task Inbox_OutboxSameDbContext_SkipsOutboxAndCreatesInboxEntriesDirectly()
     {
-        // Arrange: full pipeline — Outbox → DurableLocalSender → InboxDB → InboxProcessor → handler
+        // Arrange: same-DbContext optimization — OutboxTriggerInterceptor writes inbox entries directly
+        // in the outbox transaction, bypassing OutboxProcessor and EfCoreMessageSender entirely.
         await StartTestAsync(services =>
         {
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("inbox-handler"))
                     .UseInbox<TestDbContext>());
@@ -252,7 +247,7 @@ public class InboxBatchAndEndToEndTests(RabbitMqContainerFixture rabbitMq, Postg
             await db.SaveChangesAsync();
         });
 
-        // Wait for the full pipeline: OutboxProcessor → DurableLocalSender → InboxProcessor → CompletedAt
+        // Wait for InboxProcessor to pick up the directly-created entries and complete the handler
         await WaitForConditionAsync(
             async () => await InScopeAsync(async ctx =>
             {
@@ -267,83 +262,17 @@ public class InboxBatchAndEndToEndTests(RabbitMqContainerFixture rabbitMq, Postg
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
 
-            var outboxMsg = await db.Set<OutboxMessageEntity>().SingleAsync();
-            outboxMsg.ProcessedAt.Should().NotBeNull("outbox message must be marked processed");
+            // Same-DbContext optimization: no outbox entry created for efcore transport
+            var outboxMessages = await db.Set<OutboxMessageEntity>().ToListAsync();
+            outboxMessages.Should().BeEmpty("same-DbContext optimization skips outbox for efcore transport");
 
             var inboxMsg = await db.Set<InboxMessageEntity>().SingleAsync();
-            inboxMsg.TransportName.Should().Be("local");
+            inboxMsg.TransportName.Should().Be("efcore");
 
             var status = await db.Set<InboxHandlerStatusEntity>().SingleAsync();
             status.HandlerKey.Should().Be("inbox-handler");
             status.CompletedAt.Should().NotBeNull();
             status.ErrorCount.Should().Be(0);
         });
-    }
-
-    [Test]
-    public async Task Inbox_InterceptorFailure_DoesNotRunNonInboxHandlers()
-    {
-        var nonInboxCounter = new InvocationCounter();
-        var failingInterceptor = new AlwaysFailingInterceptor();
-
-        await StartTestAsync(services =>
-        {
-            services.AddSingleton(nonInboxCounter);
-            services.AddRatatoskr(bus =>
-            {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c
-                    .Consumes<TestEvent>(m => m
-                        .WithHandler<CountingNonInboxHandler>("counting-faf", h => h.WithoutInbox())
-                        .WithHandler<InboxHandlerA>("inbox-a"))
-                    .UseInbox<TestDbContext>());
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox());
-            });
-
-            services.RemoveAll<IMessageRouteInterceptor>();
-            services.AddSingleton<IMessageRouteInterceptor>(failingInterceptor);
-
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
-        });
-
-        await InitializeDatabase();
-
-        await InScopeAsync(async ctx =>
-        {
-            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
-            await bus.PublishDirectAsync(
-                new TestEvent { Id = "business-accept-fail-1" },
-                new MessageProperties { Id = "accept-fail-1" });
-        });
-
-        await failingInterceptor.WaitForCallAsync(TimeSpan.FromSeconds(5));
-
-        nonInboxCounter.Count.Should().Be(0,
-            "non-inbox handlers must not execute when route interception fails");
-    }
-
-    private class CountingNonInboxHandler(InvocationCounter counter) : IMessageHandler<TestEvent>
-    {
-        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
-        {
-            counter.Increment();
-            return Task.CompletedTask;
-        }
-    }
-
-    private class AlwaysFailingInterceptor : IMessageRouteInterceptor
-    {
-        private readonly TaskCompletionSource _called = new();
-
-        public Task WaitForCallAsync(TimeSpan timeout) => _called.Task.WaitAsync(timeout);
-
-        public Task<RouteInterceptResult> BeforeDispatchAsync(byte[] body, MessageProperties properties,
-            string transportName, string channelName, CancellationToken cancellationToken)
-        {
-            _called.TrySetResult();
-            throw new InvalidOperationException("Simulated interceptor failure");
-        }
     }
 }

@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Ratatoskr.Core;
-using Ratatoskr.Local;
 
 namespace Ratatoskr.EfCore.Internal;
 
@@ -45,19 +44,49 @@ internal class OutboxTriggerInterceptor<TDbContext>(
                 throw new InvalidOperationException($"No transports found for message '{item.Message.GetType()}'.");
             }
 
-            foreach (var transport in enrichedProperties.Transports)
-            {
-                var outboxMessage = OutboxMessageEntity.Create(serializedMessage, enrichedProperties, timeProvider, transport);
-                context.Set<OutboxMessageEntity>().Add(outboxMessage);
-            }
-
-            // For local transport: write inbox entries in the same transaction
-            // Only for channels with inbox on the SAME DbContext as this outbox.
-            if (enrichedProperties.Transports.Contains(LocalTransportConstants.TransportName)
+            // For EF Core transport with same-DbContext inbox: write inbox entries directly
+            // in this transaction and skip the outbox entry (no need to round-trip through OutboxProcessor).
+            // An outbox entry is still needed if there are cross-DbContext channels.
+            var skipEfCoreOutbox = false;
+            if (enrichedProperties.Transports.Contains(EfCoreTransportConstants.TransportName)
                 && context is IInboxDbContext
                 && enrichedProperties.Type != null)
             {
-                CreateSameTransactionInboxEntries(context, enrichedProperties, serializedMessage);
+                var (sameDbCreated, hasCrossDbChannels) = CreateSameTransactionInboxEntries(
+                    context, enrichedProperties, serializedMessage);
+                skipEfCoreOutbox = sameDbCreated && !hasCrossDbChannels;
+
+                if (sameDbCreated && hasCrossDbChannels)
+                {
+                    logger.LogWarning(
+                        "Message '{MessageId}' targets both same-DbContext and cross-DbContext inbox channels. " +
+                        "Same-DbContext entries were created in this transaction; an outbox entry will also be created " +
+                        "for cross-DbContext delivery. The inbox acceptor will deduplicate on delivery.",
+                        enrichedProperties.Id);
+                }
+
+                if (sameDbCreated)
+                {
+                    await observers.NotifyAsync(new MessageActivity
+                    {
+                        Stage = MessageStage.InboxQueued,
+                        Properties = enrichedProperties,
+                        SerializedBody = serializedMessage,
+                        TransportName = EfCoreTransportConstants.TransportName,
+                        Timestamp = timeProvider.GetUtcNow(),
+                    }, logger);
+                }
+            }
+
+            foreach (var transport in enrichedProperties.Transports)
+            {
+                // Skip outbox entry for EF Core transport when ALL inbox channels are
+                // same-DbContext (entries already created in this transaction).
+                if (transport == EfCoreTransportConstants.TransportName && skipEfCoreOutbox)
+                    continue;
+
+                var outboxMessage = OutboxMessageEntity.Create(serializedMessage, enrichedProperties, timeProvider, transport);
+                context.Set<OutboxMessageEntity>().Add(outboxMessage);
             }
 
             outboxDbContext.OutboxMessages.Queue.TryDequeue(out _);
@@ -76,7 +105,14 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         return result;
     }
 
-    private void CreateSameTransactionInboxEntries(
+    /// <summary>
+    /// Creates inbox entries in the same transaction as the outbox for channels whose inbox
+    /// DbContext matches this outbox's DbContext.
+    /// Returns (sameDbCreated, hasCrossDbChannels):
+    ///   - sameDbCreated: true if any same-DbContext inbox entries were created
+    ///   - hasCrossDbChannels: true if any consume channels target a different DbContext
+    /// </summary>
+    private (bool SameDbCreated, bool HasCrossDbChannels) CreateSameTransactionInboxEntries(
         DbContext context,
         MessageProperties enrichedProperties,
         byte[] serializedMessage)
@@ -84,14 +120,19 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         // Find all consume channels for this message wire type
         var consumeChannels = channelRegistry.FindConsumeChannelsForType(enrichedProperties.Type!);
         var inboxEntriesCreated = false;
+        var hasCrossDbChannels = false;
 
         foreach (var (channel, _) in consumeChannels)
         {
             var inboxConfig = channel.GetExtension<ChannelInboxConfig>();
             if (inboxConfig == null) continue;
 
-            // Only create same-tx entries if the channel's inbox DbContext matches this outbox's DbContext
-            if (inboxConfig.DbContextType != typeof(TDbContext)) continue;
+            // Track cross-DbContext channels — they still need an outbox entry
+            if (inboxConfig.DbContextType != typeof(TDbContext))
+            {
+                hasCrossDbChannels = true;
+                continue;
+            }
 
             var msgReg = channel.Messages.FirstOrDefault(m => m.MessageTypeName == enrichedProperties.Type);
             if (msgReg == null) continue;
@@ -106,7 +147,7 @@ internal class OutboxTriggerInterceptor<TDbContext>(
             if (!inboxEntriesCreated)
             {
                 context.Set<InboxMessageEntity>().Add(
-                    InboxMessageEntity.Create(enrichedProperties.Id, LocalTransportConstants.TransportName,
+                    InboxMessageEntity.Create(enrichedProperties.Id, EfCoreTransportConstants.TransportName,
                         serializedMessage, enrichedProperties, timeProvider));
                 inboxEntriesCreated = true;
             }
@@ -118,9 +159,11 @@ internal class OutboxTriggerInterceptor<TDbContext>(
             }
 
             logger.LogDebug(
-                "Created inbox entries for local message '{MessageId}' on channel '{Channel}' with {HandlerCount} handler(s) in outbox transaction",
+                "Created inbox entries for message '{MessageId}' on channel '{Channel}' with {HandlerCount} handler(s) in outbox transaction",
                 enrichedProperties.Id, channel.ChannelName, inboxHandlers.Count);
         }
+
+        return (inboxEntriesCreated, hasCrossDbChannels);
     }
 
     public override async ValueTask<int> SavedChangesAsync(

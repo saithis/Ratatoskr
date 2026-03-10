@@ -5,7 +5,6 @@ using Microsoft.Extensions.Time.Testing;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.EfCore.Internal;
-using Ratatoskr.Local;
 using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Inbox;
@@ -24,8 +23,7 @@ public class InboxCancellationAndTimeoutTests(RabbitMqContainerFixture rabbitMq,
             services.AddSingleton(coordination);
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<CancellableHandler>("cancellable"))
                     .UseInbox<TestDbContext>());
@@ -88,8 +86,7 @@ public class InboxCancellationAndTimeoutTests(RabbitMqContainerFixture rabbitMq,
             services.AddSingleton(coordination);
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<CancellableHandler>("cancellable"))
                     .UseInbox<TestDbContext>());
@@ -141,8 +138,7 @@ public class InboxCancellationAndTimeoutTests(RabbitMqContainerFixture rabbitMq,
         {
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<SlowHandler>("slow-handler"))
                     .UseInbox<TestDbContext>());
@@ -191,8 +187,7 @@ public class InboxCancellationAndTimeoutTests(RabbitMqContainerFixture rabbitMq,
             services.AddSingleton<TimeProvider>(fakeTime);
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<SlowHandler>("slow-handler"))
                     .UseInbox<TestDbContext>());

@@ -5,7 +5,6 @@ using Microsoft.Extensions.Time.Testing;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.EfCore.Internal;
-using Ratatoskr.Local;
 using Ratatoskr.Tests.Fixtures;
 using TUnit.Core;
 
@@ -61,8 +60,7 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         {
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("shared-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("shared-events", c => c.WithEfCore().Produces<TestEvent>());
 
                 bus.AddEventConsumeChannel("channel-a", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<HandlerForDbContext1>("ctx1-handler"))
@@ -131,8 +129,7 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         {
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("shared-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("shared-events", c => c.WithEfCore().Produces<TestEvent>());
 
                 bus.AddEventConsumeChannel("channel-a", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<HandlerForDbContext1>("ctx1-handler"))
@@ -195,8 +192,7 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         {
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("shared-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("shared-events", c => c.WithEfCore().Produces<TestEvent>());
 
                 bus.AddEventConsumeChannel("channel-a", c => c
                     .Consumes<TestEvent>(m => m
@@ -272,19 +268,23 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         {
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("outbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("outbox-events", c => c.WithEfCore().Produces<TestEvent>());
             });
 
             // Manually register outbox components for both DbContexts (without hosted services)
             services.AddSingleton<OutboxTelemetry>();
+            services.AddSingleton<EfCoreTelemetry>();
+            services.AddSingleton<IMessageSender, EfCoreMessageSender>();
+            services.AddSingleton<ITransportMessageMetadataEnricher, EfCoreTransportMetadataEnricher>();
 
-            services.AddSingleton(new OutboxOptionsHolder<TestDbContext>(new OutboxOptions()));
+            services.AddSingleton(new OutboxOptionsHolder<TestDbContext>(new OutboxOptions
+                { LockName = $"OutboxProcessor_{nameof(TestDbContext)}" }));
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
 
-            services.AddSingleton(new OutboxOptionsHolder<SecondTestDbContext>(new OutboxOptions()));
+            services.AddSingleton(new OutboxOptionsHolder<SecondTestDbContext>(new OutboxOptions
+                { LockName = $"OutboxProcessor_{nameof(SecondTestDbContext)}" }));
             services.AddSingleton<OutboxTriggerInterceptor<SecondTestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<SecondTestDbContext>>();
             services.AddSingleton<OutboxProcessor<SecondTestDbContext>>();
@@ -354,13 +354,12 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
     [Test]
     public async Task Inbox_TwoDbContexts_FullEndToEnd_OutboxToInbox()
     {
-        // Arrange: Full pipeline with two DbContexts — outbox → local transport → inbox
+        // Arrange: Full pipeline with two DbContexts — outbox → EF Core transport → inbox
         await StartTestAsync(services =>
         {
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("shared-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("shared-events", c => c.WithEfCore().Produces<TestEvent>());
 
                 bus.AddEventConsumeChannel("channel-a", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<HandlerForDbContext1>("ctx1-handler"))
@@ -430,8 +429,7 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         {
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("shared-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("shared-events", c => c.WithEfCore().Produces<TestEvent>());
 
                 bus.AddEventConsumeChannel("channel-a", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<HandlerForDbContext1>("ctx1-handler"))

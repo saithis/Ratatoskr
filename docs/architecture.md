@@ -15,11 +15,10 @@ graph LR
         MessageDispatcher["MessageDispatcher"]
         HandlerInvoker["HandlerInvoker"]
         ChannelRegistry["ChannelRegistry"]
-        LocalSender["LocalMessageSender"]
-        LocalConsumer["LocalTransportConsumer"]
     end
 
     subgraph EfCore ["Ratatoskr.EfCore"]
+        EfCoreSender["EfCoreMessageSender"]
         OutboxProcessor["OutboxProcessor"]
         InboxProcessor["InboxProcessor"]
         InboxAcceptor["InboxAcceptor"]
@@ -34,9 +33,9 @@ graph LR
     end
 
     IRatatoskr -->|"byte[], MessageProperties"| IMessageSender
-    IMessageSender -.->|"implements"| LocalSender
+    IMessageSender -.->|"implements"| EfCoreSender
     IMessageSender -.->|"implements"| RmqSender
-    LocalConsumer -->|"byte[], MessageProperties"| MessageRouter
+    EfCoreSender -->|"byte[], MessageProperties"| InboxAcceptor
     RmqConsumer -->|"byte[], MessageProperties"| MessageRouter
     MessageRouter -->|"byte[], MessageProperties"| IRouteInterceptor
     IRouteInterceptor -.->|"implements"| InboxInterceptor
@@ -48,7 +47,7 @@ graph LR
     HandlerInvoker -->|"TMessage, MessageProperties"| IMessageHandler
 ```
 
-The core library provides the abstractions (`IRatatoskr`, `IMessageSender`, `IMessageHandler<T>`, `MessageDispatcher`) and a built-in local (in-process) transport. The EfCore package adds outbox/inbox durability. The RabbitMq package provides a RabbitMQ transport. Handlers are registered per message type inside the channel's `Consumes<T>()` builder, and inbox support is enabled per consume channel via `UseInbox<TDbContext>()`.
+The core library provides the abstractions (`IRatatoskr`, `IMessageSender`, `IMessageHandler<T>`, `MessageDispatcher`) and the message routing pipeline. The EfCore package adds the EF Core transport (durable in-process messaging via inbox tables) and outbox/inbox durability. The RabbitMq package provides a RabbitMQ transport. Handlers are registered per message type inside the channel's `Consumes<T>()` builder, and inbox support is enabled per consume channel via `UseInbox<TDbContext>()`.
 
 ---
 
@@ -68,43 +67,39 @@ flowchart TD
     end
 
     subgraph OutboxPipeline ["Outbox Pipeline"]
-        Interceptor["OutboxTriggerInterceptor<br/>Enrich, serialize, persist in same DB transaction<br/>(+ inbox entries for local transport)"]
+        Interceptor["OutboxTriggerInterceptor<br/>Enrich, serialize, persist in same DB transaction<br/>(+ inbox entries for same-DbContext)"]
         OutboxDB[("Database<br/>OutboxMessageEntity")]
         OutboxProc["OutboxProcessor<br/>Background service, distributed lock"]
 
         Outbox --> Interceptor
-        Interceptor -->|"OutboxMessageEntity"| OutboxDB
+        Interceptor -->|"OutboxMessageEntity<br/>(cross-DbContext only)"| OutboxDB
+        Interceptor -->|"InboxMessageEntity<br/>(same-DbContext)"| InboxDB
         OutboxDB -->|"OutboxMessageEntity"| OutboxProc
     end
 
     subgraph Transport ["Transport Layer"]
         SenderInterface["IMessageSender<br/>Routes by TransportName"]
-        Local["LocalMessageSender<br/>In-memory channel"]
+        EfCoreSend["EfCoreMessageSender<br/>Direct inbox write"]
         RmqSend["RabbitMqMessageSender<br/>AMQP publish"]
 
         Direct -->|"byte[], MessageProperties"| SenderInterface
         OutboxProc -->|"byte[], MessageProperties"| SenderInterface
-        SenderInterface -.->|"byte[], MessageProperties"| Local
+        SenderInterface -.->|"byte[], MessageProperties"| EfCoreSend
         SenderInterface -.->|"byte[], MessageProperties"| RmqSend
     end
 
-    subgraph Consume ["Consumption"]
-        InMemCh[/"In-Memory Channel"/]
+    subgraph Consume ["Consumption (external transports)"]
         RmqQueue[/"RabbitMQ Queue"/]
-        LocalConsumer["LocalTransportConsumer<br/>BackgroundService"]
         RmqConsumer["RabbitMqConsumer<br/>BackgroundService"]
 
-        Local -->|"LocalMessage"| InMemCh
         RmqSend -->|"BasicProperties, byte[]"| RmqQueue
-        InMemCh -->|"LocalMessage"| LocalConsumer
         RmqQueue -->|"BasicDeliverEventArgs"| RmqConsumer
     end
 
-    subgraph Dispatch ["Message Dispatch"]
+    subgraph Dispatch ["Message Dispatch (external transports)"]
         Router["MessageRouter<br/>Call IMessageRouteInterceptor,<br/>then dispatch"]
         Dispatcher["MessageDispatcher<br/>Resolve type, deserialize,<br/>invoke fire-and-forget handlers"]
 
-        LocalConsumer -->|"byte[], MessageProperties"| Router
         RmqConsumer -->|"byte[], MessageProperties"| Router
         Router -->|"byte[], MessageProperties"| Dispatcher
     end
@@ -114,7 +109,7 @@ flowchart TD
         InboxDB[("Database<br/>InboxMessageEntity<br/>InboxHandlerStatusEntity")]
         InboxProc["InboxProcessor<br/>Background service, distributed lock"]
 
-        Interceptor -->|"InboxMessageEntity"| InboxDB
+        EfCoreSend -->|"byte[], MessageProperties"| InboxAccept
         Router -->|"byte[], MessageProperties"| InboxAccept
         InboxAccept -->|"InboxMessageEntity"| InboxDB
         InboxDB -->|"InboxHandlerStatusEntity"| InboxProc
@@ -152,7 +147,7 @@ sequenceDiagram
     end
 ```
 
-The application calls `IRatatoskr.PublishDirectAsync<T>()`. Ratatoskr enriches the message properties (CloudEvents ID, timestamp, trace context), serializes the message, then sends it to all `IMessageSender` implementations matching the configured transports.
+The application calls `IRatatoskr.PublishDirectAsync<T>()`. Ratatoskr enriches the message properties (CloudEvents ID, timestamp, trace context), serializes the message, then sends it to all `IMessageSender` implementations matching the configured transports. For the EF Core transport, `EfCoreMessageSender` writes directly to the inbox tables via `InboxAcceptor`.
 
 ### Transactional Publishing (EF Core Outbox)
 
@@ -163,23 +158,28 @@ sequenceDiagram
     participant Int as OutboxTriggerInterceptor
     participant DB as Database
     participant OP as OutboxProcessor
-    participant Sender as IMessageSender
+    participant Sender as EfCoreMessageSender
+    participant IA as InboxAcceptor
 
     App->>Db: OutboxMessages.Add(message)
     App->>Db: SaveChangesAsync()
     activate Int
-    Int->>Int: Enrich, serialize & create OutboxMessageEntity
-    Int->>DB: Save business data + outbox entries (same transaction)
-    Int->>OP: TriggerAsync()
-    deactivate Int
-    OP->>DB: Query pending outbox messages
-    loop For each pending message
+    Int->>Int: Enrich, serialize
+    alt Same-DbContext inbox
+        Int->>DB: Save business data + inbox entries (same transaction)
+    else Cross-DbContext inbox
+        Int->>DB: Save business data + outbox entry (same transaction)
+        OP->>DB: Query pending outbox messages
         OP->>Sender: SendAsync(content, props)
-        OP->>DB: Mark as processed
+        Sender->>IA: AcceptAsync → write to target inbox DB
     end
+    deactivate Int
 ```
 
-Messages are added to the `DbContext` and persisted in the same database transaction as business data. The `OutboxTriggerInterceptor` hooks into EF Core's `SaveChangesAsync` to create `OutboxMessageEntity` records and signal the `OutboxProcessor`. The processor runs as a background service, acquires a distributed lock, and dispatches pending messages to the appropriate transport.
+Messages are added to the `DbContext` and persisted in the same database transaction as business data. The `OutboxTriggerInterceptor` hooks into EF Core's `SaveChangesAsync` to handle the message:
+
+- **Same-DbContext:** Inbox entries (message + handler statuses) are created directly in the same transaction. No outbox entry is needed — the inbox processor picks them up immediately.
+- **Cross-DbContext:** An `OutboxMessageEntity` is created. The `OutboxProcessor` background service dispatches it via `EfCoreMessageSender`, which writes to the target DbContext's inbox tables.
 
 On failure, the outbox retries with exponential backoff. After exceeding the maximum retry count, the message is marked as poisoned.
 
@@ -187,7 +187,9 @@ On failure, the outbox retries with exponential backoff. After exceeding the max
 
 ## Consuming & Dispatch
 
-All transports follow the same consumption path: messages are routed through the `MessageRouter`, which calls an optional `IMessageRouteInterceptor` (e.g. the inbox acceptor provided by the EfCore package) before dispatching to the `MessageDispatcher`. The core package has no inbox awareness — inbox behavior is injected by the EfCore package through these generic extension points.
+### EF Core Transport
+
+The EF Core transport writes messages directly to inbox tables — there is no in-memory channel or consumer loop. Messages flow through `EfCoreMessageSender` → `InboxAcceptor` → database → `InboxProcessor` → handler.
 
 ### RabbitMQ Transport
 
@@ -224,29 +226,6 @@ On startup, `RabbitMqTopologyManager` provisions exchanges, queues, and bindings
 
 The `MessageRouter` calls the `IMessageRouteInterceptor` (if registered) to handle inbox acceptance, then delegates to `MessageDispatcher` for non-inbox handler invocation. The consumer has no inbox awareness — it just calls `RouteAsync` and acts on the result. On errors, `RabbitMqRetryHandler` either requeues with a delay or routes to a Dead Letter Queue.
 
-### Local Transport
-
-```mermaid
-sequenceDiagram
-    participant S as LocalMessageSender
-    participant Ch as In-Memory Channel
-    participant C as LocalTransportConsumer
-    participant R as MessageRouter
-    participant D as MessageDispatcher
-    participant H as IMessageHandler
-
-    S->>Ch: WriteAsync(message)
-    Ch->>C: ReadAsync (BackgroundService)
-    C->>R: RouteAsync(body, props)
-    Note over R: Accept inbox handlers (if configured),<br/>then dispatch
-    R->>D: DispatchAsync(body, props)
-    D->>H: HandleAsync (non-inbox handlers only)
-```
-
-The local transport uses an in-memory `System.Threading.Channels.Channel<T>`. `LocalMessageSender` writes to the channel, and `LocalTransportConsumer` (a `BackgroundService`) reads from it and routes messages through the `MessageRouter` — the same pipeline used by the RabbitMQ consumer. The router handles inbox acceptance (if configured) before delegating to `MessageDispatcher` for non-inbox handler invocation.
-
-> **Note:** `PublishDirectAsync` with the local transport uses an in-memory channel — messages can be lost if the process crashes before the consumer processes them. For full durability, use the transactional outbox: when both inbox and outbox are configured, the `OutboxTriggerInterceptor` writes inbox entries in the **same database transaction** as the outbox entry, guaranteeing crash safety.
-
 ### Message Dispatch
 
 ```mermaid
@@ -258,7 +237,7 @@ flowchart TD
     InvokeAll --> ReturnResult[Return DispatchResult]
 ```
 
-The `MessageDispatcher` resolves the message type from the `ChannelRegistry`, deserializes it, then delegates to `HandlerInvoker` for each fire-and-forget handler registered on the channel. Inbox-managed handlers are not part of the dispatcher's pipeline — they have already been persisted to the database by the `InboxAcceptor` (called via `IMessageRouteInterceptor` by the `MessageRouter` before dispatch) and will be delivered later by the `InboxProcessor`, which also uses `HandlerInvoker`.
+The `MessageDispatcher` resolves the message type from the `ChannelRegistry`, deserializes it, then delegates to `HandlerInvoker` for each fire-and-forget handler registered on the channel. Inbox-managed handlers are not part of the dispatcher's pipeline — they have already been persisted to the database by the `InboxAcceptor` and will be delivered later by the `InboxProcessor`, which also uses `HandlerInvoker`.
 
 If there are no fire-and-forget handlers, the dispatcher returns `NoHandlers`. The `MessageRouter` combines this with the interceptor result to determine the outcome (treating it as success when the interceptor accepted inbox handlers).
 
@@ -270,17 +249,17 @@ The inbox provides per-handler durability, deduplication, and isolated retry. Ea
 
 ### Registration
 
-Handlers are registered inside the channel's `Consumes<T>()` builder. Inbox handlers provide a stable key; fire-and-forget handlers do not:
+Handlers are registered inside the channel's `Consumes<T>()` builder. Inbox handlers provide a stable key:
 
 ```csharp
+bus.AddEventPublishChannel("events", c => c.WithEfCore().Produces<OrderCreated>());
 bus.AddEventConsumeChannel("events", c => c
     .Consumes<OrderCreated>(m => m
-        .WithHandler<OrderCreatedHandler>("audit", h => h.WithoutInbox())  // explicit fire-and-forget
-        .WithHandler<FulfillmentHandler>("fulfillment"))                   // inbox-managed
+        .WithHandler<FulfillmentHandler>("fulfillment"))
     .UseInbox<AppDbContext>());
 ```
 
-With a key, the handler is inbox-managed — persisted to the database and delivered by `InboxProcessor`. On inbox channels, all handlers must either provide a stable key or explicitly opt out with `WithoutInbox()`.
+With a key, the handler is inbox-managed — persisted to the database and delivered by `InboxProcessor`.
 
 ### Inbox Processing
 
@@ -312,9 +291,9 @@ sequenceDiagram
 
 The `InboxProcessor` runs as a background service with a distributed lock. It queries pending `InboxHandlerStatusEntity` records, claims them via optimistic concurrency (Version increment), and invokes each handler via the shared `HandlerInvoker` (same component used by `MessageDispatcher`). Progress is saved per handler — a failure in one handler does not affect others.
 
-### Inbox Durability with Local Transport
+### Same-DbContext Optimization
 
-When using the **outbox** with the local transport and inbox, the `OutboxTriggerInterceptor` writes inbox entries (message + handler statuses) in the **same database transaction** as the outbox entry. This provides full crash safety:
+When the outbox and inbox share the same `DbContext`, the `OutboxTriggerInterceptor` writes inbox entries (message + handler statuses) in the **same database transaction** as business data. No outbox entry is created — the inbox processor picks up the entries directly. This provides full crash safety with zero indirection:
 
 ```mermaid
 sequenceDiagram
@@ -322,25 +301,16 @@ sequenceDiagram
     participant Db as DbContext
     participant Int as OutboxTriggerInterceptor
     participant DB as Database
-    participant OP as OutboxProcessor
-    participant S as LocalMessageSender
-    participant Ch as In-Memory Channel
-    participant C as LocalTransportConsumer
-    participant R as MessageRouter
     participant IP as InboxProcessor
     participant H as IMessageHandler
 
     App->>Db: OutboxMessages.Add(message)
     App->>Db: SaveChangesAsync()
-    Int->>DB: Save outbox + inbox entries (same transaction)
-    OP->>S: SendAsync(bytes, props)
-    S->>Ch: WriteAsync(message)
-    Ch->>C: ReadAsync
-    C->>R: RouteAsync (InboxAcceptor is idempotent, entries already exist)
+    Int->>DB: Save business data + inbox entries (same transaction)
     IP->>H: HandleAsync(message, props)
 ```
 
-When using `PublishDirectAsync` with the local transport, inbox entries are written by the consumer-side `InboxRouteInterceptor` **after** the message is read from the in-memory channel. This means messages can be lost if the process crashes between the channel write and the consumer processing. For full durability, use the outbox.
+For cross-DbContext scenarios, an outbox entry is created and the `OutboxProcessor` delivers the message to the target inbox via `EfCoreMessageSender`.
 
 ### Retry & Backoff
 

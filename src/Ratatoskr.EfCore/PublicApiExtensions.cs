@@ -61,9 +61,16 @@ public static class PublicApiExtensions
             if (inboxBuilder.RegisterBackgroundService)
                 ratatoskrBuilder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<InboxProcessor<TDbContext>>());
             ratatoskrBuilder.Services.AddSingleton<InboxAcceptor<TDbContext>>();
+            ratatoskrBuilder.Services.AddSingleton<IEfCoreInboxAcceptor>(sp => sp.GetRequiredService<InboxAcceptor<TDbContext>>());
             ratatoskrBuilder.Services.AddSingleton<IMessageRouteInterceptor, InboxRouteInterceptor<TDbContext>>();
 
+            // EF Core transport services (registered once, idempotent)
+            ratatoskrBuilder.Services.TryAddSingleton<EfCoreTelemetry>();
+            ratatoskrBuilder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IMessageSender, EfCoreMessageSender>());
+            ratatoskrBuilder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<ITransportMessageMetadataEnricher, EfCoreTransportMetadataEnricher>());
+
             ratatoskrBuilder.AddHandlerValidator(InboxConfigurationValidator.Validate);
+            ratatoskrBuilder.AddValidator(EfCoreConfigurationValidator.Validate);
         }
 
         private static void RegisterOutboxServices<TDbContext>(
@@ -75,11 +82,18 @@ public static class PublicApiExtensions
 
             ratatoskrBuilder.Services.AddSingleton(new OutboxOptionsHolder<TDbContext>(outboxBuilder.Options));
             ratatoskrBuilder.Services.TryAddSingleton<OutboxTelemetry>();
+
+            // EF Core transport services (registered once, idempotent — needed for outbox-only setups too)
+            ratatoskrBuilder.Services.TryAddSingleton<EfCoreTelemetry>();
+            ratatoskrBuilder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IMessageSender, EfCoreMessageSender>());
+            ratatoskrBuilder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<ITransportMessageMetadataEnricher, EfCoreTransportMetadataEnricher>());
             ratatoskrBuilder.Services.AddSingleton<OutboxTriggerInterceptor<TDbContext>>();
             ratatoskrBuilder.Services.AddTransient<OutboxMessageProcessor<TDbContext>>();
             ratatoskrBuilder.Services.AddSingleton<OutboxProcessor<TDbContext>>();
             if (outboxBuilder.RegisterBackgroundService)
                 ratatoskrBuilder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<OutboxProcessor<TDbContext>>());
+
+            ratatoskrBuilder.AddValidator(EfCoreConfigurationValidator.Validate);
         }
     }
 

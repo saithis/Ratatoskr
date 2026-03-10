@@ -5,7 +5,6 @@ using Microsoft.Extensions.Time.Testing;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.EfCore.Internal;
-using Ratatoskr.Local;
 using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Inbox;
@@ -23,8 +22,7 @@ public class InboxErrorHandlingTests(RabbitMqContainerFixture rabbitMq, Postgres
             services.AddSingleton<TimeProvider>(fakeTime);
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m
                         .WithHandler<InboxHandlerA>("succeeding")
@@ -102,8 +100,7 @@ public class InboxErrorHandlingTests(RabbitMqContainerFixture rabbitMq, Postgres
             services.AddSingleton<TimeProvider>(fakeTime);
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<AlwaysFailingHandler>("failing"))
                     .UseInbox<TestDbContext>());
@@ -185,8 +182,7 @@ public class InboxErrorHandlingTests(RabbitMqContainerFixture rabbitMq, Postgres
             services.AddSingleton<TimeProvider>(fakeTime);
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<AlwaysFailingHandler>("failing"))
                     .UseInbox<TestDbContext>());
@@ -253,8 +249,7 @@ public class InboxErrorHandlingTests(RabbitMqContainerFixture rabbitMq, Postgres
             services.AddSingleton(counter);
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<FailsThenSucceedsHandler>("fails-then-succeeds"))
                     .UseInbox<TestDbContext>());
@@ -317,8 +312,7 @@ public class InboxErrorHandlingTests(RabbitMqContainerFixture rabbitMq, Postgres
             services.AddSingleton<TimeProvider>(fakeTime);
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<AlwaysFailingHandler>("failing"))
                     .UseInbox<TestDbContext>());
@@ -376,8 +370,7 @@ public class InboxErrorHandlingTests(RabbitMqContainerFixture rabbitMq, Postgres
             services.AddSingleton<TimeProvider>(fakeTime);
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<AlwaysFailingHandler>("fail-once"))
                     .UseInbox<TestDbContext>());
@@ -426,8 +419,7 @@ public class InboxErrorHandlingTests(RabbitMqContainerFixture rabbitMq, Postgres
             services.AddSingleton<TimeProvider>(fakeTime);
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<LongErrorHandler>("long-error"))
                     .UseInbox<TestDbContext>());
@@ -474,8 +466,7 @@ public class InboxErrorHandlingTests(RabbitMqContainerFixture rabbitMq, Postgres
             services.AddSingleton(counter);
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<FailsThenSucceedsHandler>("flaky"))
                     .UseInbox<TestDbContext>());

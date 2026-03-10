@@ -5,7 +5,6 @@ using Microsoft.Extensions.Time.Testing;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.EfCore.Internal;
-using Ratatoskr.Local;
 using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Inbox;
@@ -22,12 +21,13 @@ public class InboxScopeAndIsolationTests(RabbitMqContainerFixture rabbitMq, Post
             services.AddSingleton(tracker);
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("test-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("test-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("test-events", c => c
                     .Consumes<TestEvent>(m => m
-                        .WithHandler<ChangeTrackerPollutingHandler>()
-                        .WithHandler<ChangeTrackerCheckingHandler>()));
+                        .WithHandler<ChangeTrackerPollutingHandler>("polluting-handler")
+                        .WithHandler<ChangeTrackerCheckingHandler>("checking-handler"))
+                    .UseInbox<TestDbContext>());
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox());
             });
 
             services.AddDbContext<TestDbContext>((sp, opts) =>
@@ -51,59 +51,6 @@ public class InboxScopeAndIsolationTests(RabbitMqContainerFixture rabbitMq, Post
     }
 
     [Test]
-    public async Task Inbox_ChangeTrackerClear_DoesNotAffectNonInboxHandler()
-    {
-        var writeTracker = new DbWriteTracker();
-        await StartTestAsync(services =>
-        {
-            services.AddSingleton(writeTracker);
-            services.AddRatatoskr(bus =>
-            {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("test-events", c => c.WithLocal().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("test-events", c => c
-                    .Consumes<TestEvent>(m => m
-                        .WithHandler<InboxHandlerA>("inbox-handler")
-                        .WithHandler<DbWritingHandler>("db-writer", h => h.WithoutInbox()))
-                    .UseInbox<TestDbContext>());
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox => inbox.WithoutBackgroundProcessing()));
-            });
-
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
-        });
-
-        await InitializeDatabase();
-
-        await InScopeAsync(async ctx =>
-        {
-            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
-            await bus.PublishDirectAsync(
-                new TestEvent { Id = "ct-clear-1" },
-                new MessageProperties { Id = "ct-clear-1" });
-        });
-
-        await writeTracker.WaitForWriteCountAsync(1, TimeSpan.FromSeconds(10));
-
-        await InScopeAsync(async ctx =>
-        {
-            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
-            await bus.PublishDirectAsync(
-                new TestEvent { Id = "ct-clear-1-dup" },
-                new MessageProperties { Id = "ct-clear-1" });
-        });
-
-        await writeTracker.WaitForWriteCountAsync(2, TimeSpan.FromSeconds(10));
-
-        await InScopeAsync(async ctx =>
-        {
-            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var entities = await db.TestEntities.Where(e => e.Name.StartsWith("ct-clear-")).ToListAsync();
-            entities.Should().HaveCount(2, "non-inbox handler should have written an entity for each delivery");
-        });
-    }
-
-    [Test]
     public async Task Inbox_PerHandlerSave_CompletedHandlersSurviveSubsequentFailures()
     {
         var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
@@ -113,8 +60,7 @@ public class InboxScopeAndIsolationTests(RabbitMqContainerFixture rabbitMq, Post
             services.AddSingleton<TimeProvider>(fakeTime);
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("inbox-events", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("inbox-events", c => c
                     .Consumes<TestEvent>(m => m
                         .WithHandler<InboxHandlerA>("a-succeeds")
@@ -186,30 +132,5 @@ public class InboxScopeAndIsolationTests(RabbitMqContainerFixture rabbitMq, Post
         public Task WaitForPollutedAsync(TimeSpan timeout) => _polluted.Task.WaitAsync(timeout);
         public void SignalCompletion() => _completed.TrySetResult();
         public Task WaitForCompletionAsync(TimeSpan timeout) => _completed.Task.WaitAsync(timeout);
-    }
-
-    private class DbWritingHandler(TestDbContext db, DbWriteTracker tracker) : IMessageHandler<TestEvent>
-    {
-        public async Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
-        {
-            db.TestEntities.Add(new TestEntity { Name = $"ct-clear-{tracker.IncrementAndGet()}" });
-            await db.SaveChangesAsync(ct);
-            tracker.SignalWrite();
-        }
-    }
-
-    private class DbWriteTracker
-    {
-        private int _count;
-        private readonly SemaphoreSlim _signal = new(0);
-
-        public int IncrementAndGet() => Interlocked.Increment(ref _count);
-        public void SignalWrite() => _signal.Release();
-        public async Task WaitForWriteCountAsync(int expected, TimeSpan timeout)
-        {
-            using var cts = new CancellationTokenSource(timeout);
-            while (Volatile.Read(ref _count) < expected)
-                await _signal.WaitAsync(cts.Token);
-        }
     }
 }

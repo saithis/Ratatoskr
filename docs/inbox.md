@@ -33,11 +33,11 @@ A unique constraint on `(MessageId, HandlerKey)` is the **deduplication key**: t
 7. If the application shuts down (cancellation) while a handler is running, the attempt is **not** counted as a failure. The handler status remains in "processing" state and is recovered by stuck message detection on the next startup.
 8. For deterministically unrecoverable errors (e.g. `InboxMessage` row deleted, handler key unregistered), the status is poisoned **immediately** without going through the retry cycle.
 
-### Crash safety (local transport)
+### EF Core Transport Durability
 
-When using `UseInbox<TDbContext>()` on a consume channel together with `UseLocalTransport`, the regular `LocalMessageSender` is replaced by `DurableLocalMessageSender`. Its `SendAsync` writes inbox entries to the database **before** writing to the in-memory channel. Combined with the outbox's deduplication, this guarantees no message loss at any crash point in the pipeline.
+The EF Core transport (`WithEfCore()`) writes messages directly to the inbox tables via `EfCoreMessageSender` → `InboxAcceptor`. There is no in-memory channel — all messages are persisted to the database before handler invocation.
 
-> **Important:** This replacement means that local publish calls (`PublishDirectAsync`) now depend on database availability and will have database-level latency. If the database is slow or unavailable, local publishes will be affected. Plan database capacity accordingly.
+When using the outbox with the same DbContext as the inbox, the `OutboxTriggerInterceptor` writes inbox entries in the **same database transaction** as business data. No outbox entry is created for same-DbContext channels — the inbox processor picks up the entries directly. For cross-DbContext scenarios, an outbox entry is created and delivered via the `OutboxProcessor`.
 
 ## Setup
 
@@ -67,8 +67,6 @@ Per-DbContext inbox and outbox options are configured centrally via `AddEfCoreDu
 ```csharp
 services.AddRatatoskr(bus =>
 {
-    bus.UseLocalTransport(); // or UseRabbitMq(...)
-
     // Configure durability for this DbContext — inbox + outbox options in one place
     bus.AddEfCoreDurability<AppDbContext>(d =>
     {
@@ -81,11 +79,11 @@ services.AddRatatoskr(bus =>
         d.UseOutbox();
     });
 
+    bus.AddEventPublishChannel("orders.events", c => c.WithEfCore().Produces<OrderPlaced>());
     bus.AddEventConsumeChannel("orders.events", c => c
         .Consumes<OrderPlaced>(m => m
             .WithHandler<FulfillmentHandler>("fulfillment")   // inbox-managed
-            .WithHandler<NotificationHandler>("notification") // inbox-managed
-            .WithHandler<AuditLogHandler>("audit", h => h.WithoutInbox()))  // explicit fire-and-forget
+            .WithHandler<NotificationHandler>("notification")) // inbox-managed
         .UseInbox<AppDbContext>());  // enables inbox on this channel
 });
 
@@ -98,24 +96,23 @@ services.AddDbContext<AppDbContext>((sp, opts) =>
 
 ### 3. Register handlers with stable keys
 
-Handlers are registered inside the `Consumes<T>()` builder. Inbox-managed handlers provide a stable key; fire-and-forget handlers must explicitly opt out with `WithoutInbox()`:
+Handlers are registered inside the `Consumes<T>()` builder with a stable key:
 
 ```csharp
 .Consumes<OrderPlaced>(m => m
-    .WithHandler<FulfillmentHandler>("fulfillment")                    // inbox-managed
-    .WithHandler<AuditLogHandler>("audit", h => h.WithoutInbox()))     // explicit fire-and-forget
+    .WithHandler<FulfillmentHandler>("fulfillment")
+    .WithHandler<NotificationHandler>("notification"))
 ```
 
 The **handler key** (`"fulfillment"`) is persisted in the database. It must be stable across deployments — renaming the key will cause existing in-flight messages to be poisoned with an "unknown handler key" error.
 
-> **Validation**: On channels with `UseInbox<TDbContext>()`, every handler must either provide a stable key (inbox-managed) or explicitly opt out with `WithoutInbox()`. Registering a handler without a key on an inbox channel throws `InvalidOperationException` at startup. Handler keys must be **globally unique** across all channels and DbContexts.
+> **Validation**: On channels with `UseInbox<TDbContext>()`, every handler must have a stable key. Registering a handler without a key on an inbox channel throws `InvalidOperationException` at startup. Handler keys must be **globally unique** across all channels and DbContexts.
 
 #### Handler registration API
 
 | Method | Effect |
 |---|---|
 | `.WithHandler<THandler>("key")` | Register handler as inbox-managed with the given stable key. |
-| `.WithHandler<THandler>("key", h => h.WithoutInbox())` | Register handler as fire-and-forget on an inbox channel (explicit opt-out). |
 | `.WithHandler<THandler>()` | Register handler as fire-and-forget (only on channels **without** `UseInbox`). |
 
 ## Configuration Options
@@ -182,21 +179,13 @@ bus.AddEfCoreDurability<AppDbContext>(d => d.UseOutbox(outbox =>
 
 Use `WithoutBackgroundProcessing()` to disable the outbox background service in integration tests, analogous to the inbox pattern.
 
-## Mixing Inbox and Non-Inbox Handlers
+## Handler Isolation
 
-You can register both inbox-managed and fire-and-forget handlers for the same message type within the same `Consumes<T>()` builder. Fire-and-forget handlers on inbox channels must explicitly opt out:
+All handlers on an inbox channel are inbox-managed and delivered by `InboxProcessor`. Each handler runs in its own DI scope, so a failure or `ChangeTracker.Clear()` in one scope cannot affect another.
 
-```csharp
-.Consumes<OrderPlaced>(m => m
-    .WithHandler<FulfillmentHandler>("fulfillment")                    // inbox
-    .WithHandler<AuditLogHandler>("audit", h => h.WithoutInbox()))     // explicit fire-and-forget
-```
+If you need fire-and-forget handlers alongside inbox-managed handlers for the same message type, register them on a separate consume channel without `UseInbox()`.
 
-- **Non-inbox handlers** are called synchronously during message dispatch, each in its own DI scope.
-- **Inbox-managed handlers** are queued to the database and delivered by `InboxProcessor`.
-- Each handler and the inbox acceptor run in **separate DI scopes**, so a failure or `ChangeTracker.Clear()` in one scope cannot affect another.
-
-> **Recommendation**: avoid mixing on the same consume channel where possible. If a non-inbox handler fails, the transport may redeliver the message; inbox handlers will deduplicate correctly, but non-inbox handlers will run again.
+> **EF Core transport restriction:** When using the EF Core transport (`WithEfCore()`), `EfCoreMessageSender` requires **all** matching consume channels to have `UseInbox<TDbContext>()` configured. A channel without `UseInbox` will cause an `InvalidOperationException` at send time. This means the "separate fire-and-forget channel" pattern described above **does not work** with the EF Core transport. To mix durable and fire-and-forget delivery with EF Core, use a separate message type for fire-and-forget handlers so that the consume channel does not match the inbox-managed channels, or use a non-EF Core transport (e.g. RabbitMQ) for the fire-and-forget channel.
 
 ## Deduplication
 
@@ -234,7 +223,7 @@ var dispatched = await session.WaitForInboxDispatched<MyMessage>();
 var poisoned = await session.WaitForInboxPoisoned<MyMessage>();
 ```
 
-`TrackedMessage.TransportName` reflects the transport that delivered the message to the inbox (e.g. `"rabbitmq"`, `"local"`).
+`TrackedMessage.TransportName` reflects the transport that delivered the message to the inbox (e.g. `"rabbitmq"`, `"efcore"`).
 `TrackedMessage.IsSuccess` indicates whether the handler succeeded (`true`) or failed (`false`) at the `InboxDispatched` stage.
 
 ## Testing
@@ -244,10 +233,10 @@ Use `WithoutBackgroundProcessing()` to disable the `InboxProcessor` background s
 ```csharp
 services.AddRatatoskr(bus =>
 {
-    bus.UseLocalTransport();
     bus.AddEfCoreDurability<AppDbContext>(d =>
         d.UseInbox(inbox => inbox.WithoutBackgroundProcessing()));
 
+    bus.AddEventPublishChannel("events", c => c.WithEfCore().Produces<OrderPlaced>());
     bus.AddEventConsumeChannel("events", c => c
         .Consumes<OrderPlaced>(m => m
             .WithHandler<FulfillmentHandler>("fulfillment"))
@@ -268,8 +257,7 @@ Per-DbContext durability is configured centrally via `AddEfCoreDurability`, and 
 ```csharp
 services.AddRatatoskr(bus =>
 {
-    bus.UseLocalTransport();
-    bus.AddEventPublishChannel("shared-events", c => c.WithLocal().Produces<OrderPlaced>());
+    bus.AddEventPublishChannel("shared-events", c => c.WithEfCore().Produces<OrderPlaced>());
 
     // Per-DbContext durability configuration
     bus.AddEfCoreDurability<OrdersDbContext>(d => d.UseInbox());
@@ -303,16 +291,6 @@ Each `DbContext` type gets its own:
 Per-DbContext services are registered once (idempotent), so multiple channels sharing the same `DbContext` reuse the same processor and options.
 
 > **Important:** Each `DbContext` type is expected to have its own database. The `InboxMessageProcessor` queries all pending handler statuses from its database — if two `DbContext` types share a database, they will see each other's data.
-
-### Opting out of inbox for specific handlers
-
-On a channel with `UseInbox<TDbContext>()`, handlers with a stable key are automatically inbox-managed. To opt a specific handler out of inbox processing (making it fire-and-forget even on an inbox channel), use `WithoutInbox()`:
-
-```csharp
-.Consumes<OrderPlaced>(m => m
-    .WithHandler<FulfillmentHandler>("fulfillment")          // inbox-managed
-    .WithHandler<AuditLogHandler>("audit", h => h.WithoutInbox())) // fire-and-forget despite having a key
-```
 
 ## Data Retention
 

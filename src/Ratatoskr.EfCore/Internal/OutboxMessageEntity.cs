@@ -43,7 +43,7 @@ internal class OutboxMessageEntity
     public DateTimeOffset? ProcessingStartedAt { get; private set; }
 
     /// <summary>
-    /// The transport this outbox entry targets (e.g. "rabbitmq", "local").
+    /// The transport this outbox entry targets (e.g. "rabbitmq", "efcore").
     /// </summary>
     [MaxLength(50)]
     public string TransportName { get; private set; } = string.Empty;

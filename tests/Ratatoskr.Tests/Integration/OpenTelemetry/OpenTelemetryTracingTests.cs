@@ -5,7 +5,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
-using Ratatoskr.Local;
 using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.OpenTelemetry;
@@ -146,13 +145,12 @@ public class OpenTelemetryTracingTests(RabbitMqContainerFixture rabbitMq, Postgr
         using var listener = CreateActivityListener(activities);
         ActivitySource.AddActivityListener(listener);
 
-        // 2. Setup local transport + inbox
+        // 2. Setup EF Core transport + inbox
         await StartTestAsync(services =>
         {
             services.AddRatatoskr(bus =>
             {
-                bus.UseLocalTransport();
-                bus.AddEventPublishChannel("otel-inbox-trace", c => c.WithLocal().Produces<TestEvent>());
+                bus.AddEventPublishChannel("otel-inbox-trace", c => c.WithEfCore().Produces<TestEvent>());
                 bus.AddEventConsumeChannel("otel-inbox-trace", c => c
                     .Consumes<TestEvent>(m => m.WithHandler<NoOpTestEventHandler>("otel-trace-noop"))
                     .UseInbox<TestDbContext>());

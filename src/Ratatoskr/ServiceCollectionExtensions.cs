@@ -44,6 +44,7 @@ public static class ServiceCollectionExtensions
         // Register serializer
         services.AddSingleton<IMessageSerializer, JsonMessageSerializer>();
 
+        services.TryAddSingleton<HandlerInvoker>();
         services.AddSingleton<IRatatoskr, Ratatoskr>();
 
         // AsyncAPI document generation

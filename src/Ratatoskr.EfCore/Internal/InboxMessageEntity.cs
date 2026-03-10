@@ -12,7 +12,7 @@ internal class InboxMessageEntity
     /// <summary>CloudEvents "id" of the received message. Primary key and deduplication key.</summary>
     public string Id { get; private set; } = string.Empty;
 
-    /// <summary>Name of the transport that delivered the message (e.g. "local", "rabbitmq").</summary>
+    /// <summary>Name of the transport that delivered the message (e.g. "efcore", "rabbitmq").</summary>
     public string TransportName { get; private set; } = string.Empty;
 
     public required byte[] Content { get; init; }
