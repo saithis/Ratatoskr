@@ -92,6 +92,8 @@ public static class PublicApiExtensions
             ratatoskrBuilder.Services.AddSingleton<OutboxProcessor<TDbContext>>();
             if (outboxBuilder.RegisterBackgroundService)
                 ratatoskrBuilder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<OutboxProcessor<TDbContext>>());
+
+            ratatoskrBuilder.AddValidator(EfCoreConfigurationValidator.Validate);
         }
     }
 

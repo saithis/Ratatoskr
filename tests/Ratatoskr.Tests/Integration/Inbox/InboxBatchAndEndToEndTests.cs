@@ -177,7 +177,7 @@ public class InboxBatchAndEndToEndTests(RabbitMqContainerFixture rabbitMq, Postg
             var props = new MessageProperties { Id = messageId, Type = "test.event" };
 
             db.Set<InboxMessageEntity>().Add(
-                InboxMessageEntity.Create(messageId, "efcore", body, props, timeProvider));
+                InboxMessageEntity.Create(messageId, EfCoreTransportConstants.TransportName, body, props, timeProvider));
 
             var status = InboxHandlerStatusEntity.Create(messageId, "handler-a", timeProvider);
             status.MarkAsProcessing(timeProvider); // Simulate in-progress at startTime
