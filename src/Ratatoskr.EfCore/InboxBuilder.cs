@@ -105,6 +105,39 @@ public class InboxBuilder<TDbContext> where TDbContext : DbContext
     }
 
     /// <summary>
+    /// Enables automatic cleanup of completed handler statuses older than the specified retention period.
+    /// Poisoned statuses are never auto-deleted — they require manual investigation.
+    /// Orphaned inbox messages (with no remaining handler statuses) are also deleted.
+    /// </summary>
+    public InboxBuilder<TDbContext> WithRetention(TimeSpan period)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(period, TimeSpan.Zero, nameof(period));
+        Options.RetentionPeriod = period;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets how often the cleanup service runs. Only applies when <see cref="WithRetention"/> is configured.
+    /// </summary>
+    public InboxBuilder<TDbContext> WithCleanupInterval(TimeSpan interval)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(interval, TimeSpan.Zero, nameof(interval));
+        Options.CleanupInterval = interval;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the maximum number of rows to delete per cleanup batch.
+    /// Only applies when <see cref="WithRetention"/> is configured.
+    /// </summary>
+    public InboxBuilder<TDbContext> WithCleanupBatchSize(int batchSize)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(batchSize, 0, nameof(batchSize));
+        Options.CleanupBatchSize = batchSize;
+        return this;
+    }
+
+    /// <summary>
     /// Prevents the <see cref="InboxProcessor{TDbContext}"/> from being registered as a hosted service.
     /// Use this in integration tests where you want deterministic control over when inbox processing runs
     /// (e.g. by calling <c>InboxMessageProcessor.ProcessBatchAsync</c> directly).

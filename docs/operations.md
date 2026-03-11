@@ -126,9 +126,30 @@ The processor will pick up the message on its next polling cycle.
 
 ## Data Retention
 
-The outbox and inbox tables grow unbounded. Implement periodic cleanup based on your retention policy.
+The outbox and inbox tables grow unbounded. Configure automatic cleanup to delete old processed messages, or run manual SQL for more control.
 
-### Outbox Cleanup
+### Automatic Cleanup
+
+Enable automatic cleanup by configuring a retention period on the outbox and/or inbox builders. The cleanup service runs as a background `IHostedService` and periodically deletes old successfully processed messages in batches. **Poisoned messages are never auto-deleted** — they require manual investigation.
+
+```csharp
+builder.AddEfCoreDurability<MyDbContext>(d => d
+    .UseOutbox(outbox => outbox
+        .WithRetention(TimeSpan.FromDays(7))         // delete processed messages after 7 days
+        .WithCleanupInterval(TimeSpan.FromHours(1))   // run cleanup every hour (default)
+        .WithCleanupBatchSize(10_000))                 // delete up to 10k rows per batch (default)
+    .UseInbox(inbox => inbox
+        .WithRetention(TimeSpan.FromDays(30)))         // delete completed handler statuses after 30 days
+);
+```
+
+The inbox cleanup also removes orphaned `InboxMessages` rows that no longer have any associated handler statuses.
+
+### Manual Cleanup (SQL)
+
+For manual cleanup or if you prefer to run cleanup as an external scheduled job:
+
+**Outbox:**
 
 **PostgreSQL:**
 ```sql
@@ -156,7 +177,7 @@ WHERE [IsPoisoned] = 1
   AND [FailedAt] < DATEADD(DAY, -30, GETUTCDATE());
 ```
 
-### Inbox Cleanup
+**Inbox:**
 
 **PostgreSQL:**
 ```sql
@@ -198,9 +219,7 @@ WHERE NOT EXISTS (
 );
 ```
 
-### Automation
-
-Consider running cleanup as a scheduled job (e.g., cron, Hangfire, or a Kubernetes CronJob). Run during low-traffic windows and use batched deletes to avoid long-running transactions:
+For large tables, use batched deletes to avoid long-running transactions:
 
 **PostgreSQL:**
 ```sql

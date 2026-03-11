@@ -25,6 +25,9 @@ public class OutboxBuilderTests
         builder.Options.StuckMessageThreshold.Should().Be(TimeSpan.FromMinutes(5));
         builder.Options.MaxRetryDelay.Should().Be(TimeSpan.FromMinutes(5));
         builder.Options.LockName.Should().Be("OutboxProcessor");
+        builder.Options.RetentionPeriod.Should().BeNull();
+        builder.Options.CleanupInterval.Should().Be(TimeSpan.FromHours(1));
+        builder.Options.CleanupBatchSize.Should().Be(10_000);
         builder.RegisterBackgroundService.Should().BeTrue();
     }
 
@@ -359,6 +362,87 @@ public class OutboxBuilderTests
     }
 
     [Test]
+    public void WithRetention_SetsOption()
+    {
+        // Arrange
+        var builder = CreateBuilder();
+
+        // Act
+        builder.WithRetention(TimeSpan.FromDays(7));
+
+        // Assert
+        builder.Options.RetentionPeriod.Should().Be(TimeSpan.FromDays(7));
+    }
+
+    [Test]
+    public void WithRetention_ZeroOrNegative_Throws()
+    {
+        // Arrange
+        var builder = CreateBuilder();
+
+        // Act & Assert
+        var actZero = () => builder.WithRetention(TimeSpan.Zero);
+        var actNegative = () => builder.WithRetention(TimeSpan.FromDays(-1));
+
+        actZero.Should().Throw<ArgumentOutOfRangeException>();
+        actNegative.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Test]
+    public void WithCleanupInterval_SetsOption()
+    {
+        // Arrange
+        var builder = CreateBuilder();
+
+        // Act
+        builder.WithCleanupInterval(TimeSpan.FromMinutes(30));
+
+        // Assert
+        builder.Options.CleanupInterval.Should().Be(TimeSpan.FromMinutes(30));
+    }
+
+    [Test]
+    public void WithCleanupInterval_ZeroOrNegative_Throws()
+    {
+        // Arrange
+        var builder = CreateBuilder();
+
+        // Act & Assert
+        var actZero = () => builder.WithCleanupInterval(TimeSpan.Zero);
+        var actNegative = () => builder.WithCleanupInterval(TimeSpan.FromSeconds(-1));
+
+        actZero.Should().Throw<ArgumentOutOfRangeException>();
+        actNegative.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Test]
+    public void WithCleanupBatchSize_SetsOption()
+    {
+        // Arrange
+        var builder = CreateBuilder();
+
+        // Act
+        builder.WithCleanupBatchSize(5000);
+
+        // Assert
+        builder.Options.CleanupBatchSize.Should().Be(5000);
+    }
+
+    [Test]
+    public void WithCleanupBatchSize_ZeroOrNegative_Throws()
+    {
+        // Arrange
+        var builder = CreateBuilder();
+
+        // Act & Assert
+        var actZero = () => builder.WithCleanupBatchSize(0);
+        var actNegative = () => builder.WithCleanupBatchSize(-1);
+
+        actZero.Should().Throw<ArgumentOutOfRangeException>();
+        actNegative.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Test]
     public void FluentApi_ReturnsSameBuilderInstance()
     {
         // Arrange
@@ -375,7 +459,10 @@ public class OutboxBuilderTests
             .WithLockAcquireTimeout(TimeSpan.FromSeconds(30))
             .WithLockName("TestLock")
             .WithSendTimeout(TimeSpan.FromSeconds(5))
-            .WithMaxMessageSize(1_048_576);
+            .WithMaxMessageSize(1_048_576)
+            .WithRetention(TimeSpan.FromDays(7))
+            .WithCleanupInterval(TimeSpan.FromMinutes(30))
+            .WithCleanupBatchSize(5000);
 
         // Assert
         result.Should().BeSameAs(builder);
