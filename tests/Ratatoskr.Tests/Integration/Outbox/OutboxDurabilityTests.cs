@@ -287,7 +287,7 @@ public class OutboxDurabilityTests(RabbitMqContainerFixture rabbitMq, PostgresCo
     {
         // Verifies that when the caller's cancellation token fires during send,
         // the OperationCanceledException propagates (not treated as a transport failure).
-        var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var fakeTime = new FakeTimeProvider(new DateTimeOffset(2023, 1, 1, 0, 0, 0, TimeSpan.Zero));
         var blockingSender = new BlockingMessageSender(RabbitMqConstants.TransportName);
 
         await StartTestAsync(services =>
@@ -332,7 +332,8 @@ public class OutboxDurabilityTests(RabbitMqContainerFixture rabbitMq, PostgresCo
             await processor.ProcessBatchAsync(includeStuckMessageDetection: false, cts.Token);
         });
 
-        await blockingSender.SendStarted.WaitAsync(TimeSpan.FromSeconds(5));
+        var sendStarted = await blockingSender.SendStarted.WaitAsync(TimeSpan.FromSeconds(5));
+        sendStarted.Should().BeTrue("the sender should have started within 5 seconds");
         await cts.CancelAsync();
         blockingSender.UnblockSend();
 
@@ -347,6 +348,124 @@ public class OutboxDurabilityTests(RabbitMqContainerFixture rabbitMq, PostgresCo
             var entity = await dbContext.Set<OutboxMessageEntity>().FirstAsync();
             entity.ErrorCount.Should().Be(0, "cancellation should not count as a send failure");
             entity.IsPoisoned.Should().BeFalse("cancellation should not poison the message");
+        });
+    }
+
+    [Test]
+    public async Task Outbox_DeserializationFailure_PoisonsImmediately()
+    {
+        // Verifies that a message with corrupt serialized properties is immediately poisoned
+        // without consuming any retry budget.
+        var fakeTime = new FakeTimeProvider(new DateTimeOffset(2023, 1, 1, 0, 0, 0, TimeSpan.Zero));
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TimeProvider>(fakeTime);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddEventPublishChannel(ExchangeName, c => c
+                    .WithRabbitMq(r => r.WithTopicExchange())
+                    .Produces<TestEvent>());
+            });
+            services.AddSingleton<OutboxTelemetry>();
+            services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
+            services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
+            services.AddSingleton<OutboxProcessor<TestDbContext>>();
+            services.AddSingleton(new OutboxOptionsHolder<TestDbContext>(new OutboxOptions { MaxRetries = 5 }));
+            services.AddDbContext<TestDbContext>((sp, options) =>
+            {
+                options.UseNpgsql(PostgresConnectionString);
+                options.RegisterOutbox<TestDbContext>(sp);
+            });
+        });
+
+        await InitializeDatabase();
+
+        // Stage a valid message, then corrupt its serialized properties in the database
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            dbContext.OutboxMessages.Add(new TestEvent { Data = "corrupt-msg" });
+            await dbContext.SaveChangesAsync();
+
+            var tableName = dbContext.Model.FindEntityType(typeof(OutboxMessageEntity))!.GetTableName()!;
+            await dbContext.Database.ExecuteSqlRawAsync(
+                $"UPDATE \"{tableName}\" SET \"SerializedProperties\" = 'invalid-json'");
+        });
+
+        // Act
+        await InScopeAsync(async ctx =>
+        {
+            await ProcessOutboxAsync<TestDbContext>(ctx.ServiceProvider);
+        });
+
+        // Assert — must be poisoned immediately, with no retry budget consumed
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var entity = await dbContext.Set<OutboxMessageEntity>().FirstAsync();
+            entity.IsPoisoned.Should().BeTrue("deserialization failure is a terminal configuration error");
+            entity.ErrorCount.Should().Be(0, "poison on deserialization should not increment the retry counter");
+            entity.ProcessedAt.Should().BeNull();
+        });
+    }
+
+    [Test]
+    public async Task Outbox_MissingSender_PoisonsImmediately()
+    {
+        // Verifies that a message targeting an unregistered transport is immediately poisoned
+        // without consuming any retry budget.
+        var fakeTime = new FakeTimeProvider(new DateTimeOffset(2023, 1, 1, 0, 0, 0, TimeSpan.Zero));
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TimeProvider>(fakeTime);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddEventPublishChannel(ExchangeName, c => c
+                    .WithRabbitMq(r => r.WithTopicExchange())
+                    .Produces<TestEvent>());
+            });
+            services.AddSingleton<OutboxTelemetry>();
+            services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
+            services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
+            services.AddSingleton<OutboxProcessor<TestDbContext>>();
+            services.AddSingleton(new OutboxOptionsHolder<TestDbContext>(new OutboxOptions { MaxRetries = 5 }));
+            services.AddDbContext<TestDbContext>((sp, options) =>
+            {
+                options.UseNpgsql(PostgresConnectionString);
+                options.RegisterOutbox<TestDbContext>(sp);
+            });
+            // Remove all senders so no sender exists for the staged message's transport
+            services.RemoveAll<IMessageSender>();
+        });
+
+        await InitializeDatabase();
+
+        // Stage a message (it will have the RabbitMQ transport name, but no sender is registered)
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            dbContext.OutboxMessages.Add(new TestEvent { Data = "no-sender-msg" });
+            await dbContext.SaveChangesAsync();
+        });
+
+        // Act
+        await InScopeAsync(async ctx =>
+        {
+            await ProcessOutboxAsync<TestDbContext>(ctx.ServiceProvider);
+        });
+
+        // Assert — must be poisoned immediately, with no retry budget consumed
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var entity = await dbContext.Set<OutboxMessageEntity>().FirstAsync();
+            entity.IsPoisoned.Should().BeTrue("missing sender is a terminal configuration error");
+            entity.ErrorCount.Should().Be(0, "poison on missing sender should not increment the retry counter");
+            entity.ProcessedAt.Should().BeNull();
         });
     }
 
