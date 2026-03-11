@@ -190,12 +190,12 @@ internal class OutboxMessageProcessor<TDbContext>(
                 }, logger);
             }
 
-            if (message.IsPoisoned && props != null)
+            if (message.IsPoisoned)
             {
                 await observers.NotifyAsync(new MessageActivity
                 {
                     Stage = MessageStage.OutboxPoisoned,
-                    Properties = props,
+                    Properties = props ?? new MessageProperties(),
                     SerializedBody = message.Content,
                     TransportName = message.TransportName,
                     Exception = sendException,
