@@ -119,6 +119,8 @@ public class OutboxBuilder<TDbContext> where TDbContext : DbContext
     /// Prevents the <see cref="Internal.OutboxProcessor{TDbContext}"/> from being registered as a hosted service.
     /// Use this in integration tests where you want deterministic control over when outbox processing runs
     /// (e.g. by calling <c>OutboxMessageProcessor.ProcessBatchAsync</c> directly).
+    /// Note: this also prevents <see cref="Internal.OutboxCleanupService{TDbContext}"/> from running,
+    /// even when <see cref="WithRetention"/> is configured.
     /// </summary>
     public OutboxBuilder<TDbContext> WithoutBackgroundProcessing()
     {

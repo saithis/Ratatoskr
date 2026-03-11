@@ -145,6 +145,10 @@ builder.AddEfCoreDurability<MyDbContext>(d => d
 
 The inbox cleanup also removes orphaned `InboxMessages` rows that no longer have any associated handler statuses.
 
+> **Note:** The cleanup service waits one full `CleanupInterval` (default: 1 hour) before its first run. If you enable retention on a table that has already grown large, use the manual SQL queries below to perform an initial cleanup immediately after deploying.
+
+> **Note:** Calling `WithoutBackgroundProcessing()` also disables the cleanup service, even when `WithRetention()` is configured.
+
 ### Manual Cleanup (SQL)
 
 For manual cleanup or if you prefer to run cleanup as an external scheduled job:

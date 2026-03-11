@@ -237,6 +237,57 @@ public class InboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgre
     }
 
     [Test]
+    public async Task Cleanup_RespectsCleanupBatchSize()
+    {
+        // Arrange
+        await SetupAsync();
+
+        // Insert 5 messages each with a completed handler status
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            for (var i = 0; i < 5; i++)
+            {
+                var message = CreateInboxMessage($"msg-{i}");
+                db.Set<InboxMessageEntity>().Add(message);
+                var status = InboxHandlerStatusEntity.Create($"msg-{i}", "handler-a", _timeProvider);
+                status.MarkAsProcessing(_timeProvider);
+                status.MarkAsCompleted(_timeProvider);
+                db.Set<InboxHandlerStatusEntity>().Add(status);
+            }
+            await db.SaveChangesAsync();
+        });
+
+        // Advance past retention
+        _timeProvider.Advance(TimeSpan.FromDays(10));
+
+        // Use batch size of 2 — should still delete all 5 in multiple batches
+        var options = new InboxOptions { RetentionPeriod = TimeSpan.FromDays(1), CleanupBatchSize = 2 };
+        var service = CreateCleanupService(options);
+
+        // Act
+        var (handlerStatuses, orphanedMessages) = await service.CleanupAsync(CancellationToken.None);
+
+        // Assert
+        handlerStatuses.Should().Be(5);
+        orphanedMessages.Should().Be(5);
+
+        var remainingStatuses = await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            return await db.Set<InboxHandlerStatusEntity>().CountAsync();
+        });
+        remainingStatuses.Should().Be(0);
+
+        var remainingMessages = await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            return await db.Set<InboxMessageEntity>().CountAsync();
+        });
+        remainingMessages.Should().Be(0);
+    }
+
+    [Test]
     public async Task Cleanup_KeepsMessageWhenSomeStatusesRemain()
     {
         // Arrange

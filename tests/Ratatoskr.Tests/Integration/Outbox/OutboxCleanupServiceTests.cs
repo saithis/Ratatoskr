@@ -33,16 +33,6 @@ public class OutboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgr
         await InitializeDatabase();
     }
 
-    private OutboxMessageEntity CreateProcessedMessage(DateTimeOffset processedAt)
-    {
-        var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties { Type = "test" }, _timeProvider, "rabbitmq");
-        entity.MarkAsProcessing(_timeProvider);
-        entity.MarkAsProcessed(_timeProvider);
-        // Override ProcessedAt via the fact that MarkAsProcessed uses timeProvider.GetUtcNow()
-        // We'll insert with the current time and adjust the cutoff instead
-        return entity;
-    }
-
     [Test]
     public async Task Cleanup_DeletesProcessedMessagesOlderThanRetention()
     {

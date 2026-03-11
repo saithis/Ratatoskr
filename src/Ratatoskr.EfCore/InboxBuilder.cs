@@ -138,9 +138,20 @@ public class InboxBuilder<TDbContext> where TDbContext : DbContext
     }
 
     /// <summary>
+    /// Configures all options via an action.
+    /// </summary>
+    public InboxBuilder<TDbContext> Configure(Action<InboxOptions> configure)
+    {
+        configure(Options);
+        return this;
+    }
+
+    /// <summary>
     /// Prevents the <see cref="InboxProcessor{TDbContext}"/> from being registered as a hosted service.
     /// Use this in integration tests where you want deterministic control over when inbox processing runs
     /// (e.g. by calling <c>InboxMessageProcessor.ProcessBatchAsync</c> directly).
+    /// Note: this also prevents <see cref="InboxCleanupService{TDbContext}"/> from running,
+    /// even when <see cref="WithRetention"/> is configured.
     /// </summary>
     public InboxBuilder<TDbContext> WithoutBackgroundProcessing()
     {
