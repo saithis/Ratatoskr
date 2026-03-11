@@ -97,34 +97,12 @@ internal class OutboxMessageProcessor<TDbContext>(
             try
             {
                 props = message.GetProperties();
-
-                using var activity = telemetry.StartCreateActivity(props);
-
-                logger.LogInformation("Processing message '{Id}' for transport '{Transport}'", message.Id, message.TransportName);
-
-                var targetSender = _senderMap.GetValueOrDefault(message.TransportName)
-                                   ?? throw new InvalidOperationException($"No sender found for transport '{message.TransportName}'");
-
-                if (_options.SendTimeout.HasValue)
-                {
-                    using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                    timeoutCts.CancelAfter(_options.SendTimeout.Value);
-                    await targetSender.SendAsync(message.Content, props, timeoutCts.Token);
-                }
-                else
-                {
-                    await targetSender.SendAsync(message.Content, props, cancellationToken);
-                }
-                message.MarkAsProcessed(timeProvider);
-                processedCount++;
-                telemetry.RecordProcessed(success: true);
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                sendException = e;
-                logger.LogWarning(e, "Failed to send message '{Id}', attempt {Attempt}",
-                    message.Id, message.ErrorCount + 1);
-                message.PublishFailed(e.Message, timeProvider,
+                sendException = ex;
+                logger.LogWarning(ex, "Failed to deserialize properties for message '{Id}'", message.Id);
+                message.PublishFailed(ex.Message, timeProvider,
                     _options.MaxRetries, _options.MaxRetryDelay);
                 telemetry.RecordProcessed(success: false);
 
@@ -132,11 +110,73 @@ internal class OutboxMessageProcessor<TDbContext>(
                 {
                     telemetry.RecordPoisoned();
                     logger.LogError("Outbox message '{Id}' for transport '{Transport}' has been poisoned after {Attempts} failed attempts. Last error: {Error}",
-                        message.Id, message.TransportName, message.ErrorCount, e.Message);
+                        message.Id, message.TransportName, message.ErrorCount, ex.Message);
                 }
             }
 
-            await dbContext.SaveChangesAsync(CancellationToken.None);
+            if (sendException == null && props != null)
+            {
+                try
+                {
+                    using var activity = telemetry.StartCreateActivity(props);
+
+                    logger.LogInformation("Processing message '{Id}' for transport '{Transport}'", message.Id, message.TransportName);
+
+                    var targetSender = _senderMap.GetValueOrDefault(message.TransportName)
+                                       ?? throw new InvalidOperationException($"No sender found for transport '{message.TransportName}'");
+
+                    if (_options.SendTimeout.HasValue)
+                    {
+                        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                        timeoutCts.CancelAfter(_options.SendTimeout.Value);
+                        await targetSender.SendAsync(message.Content, props, timeoutCts.Token);
+                    }
+                    else
+                    {
+                        await targetSender.SendAsync(message.Content, props, cancellationToken);
+                    }
+                    message.MarkAsProcessed(timeProvider);
+                    processedCount++;
+                    telemetry.RecordProcessed(success: true);
+                }
+                catch (Exception e)
+                {
+                    sendException = e;
+                    logger.LogWarning(e, "Failed to send message '{Id}', attempt {Attempt}",
+                        message.Id, message.ErrorCount + 1);
+                    message.PublishFailed(e.Message, timeProvider,
+                        _options.MaxRetries, _options.MaxRetryDelay);
+                    telemetry.RecordProcessed(success: false);
+
+                    if (message.IsPoisoned)
+                    {
+                        telemetry.RecordPoisoned();
+                        logger.LogError("Outbox message '{Id}' for transport '{Transport}' has been poisoned after {Attempts} failed attempts. Last error: {Error}",
+                            message.Id, message.TransportName, message.ErrorCount, e.Message);
+                    }
+                }
+            }
+
+            try
+            {
+                await dbContext.SaveChangesAsync(CancellationToken.None);
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                var conflictIds = new HashSet<Guid>();
+                foreach (var entry in ex.Entries)
+                {
+                    conflictIds.Add(((OutboxMessageEntity)entry.Entity).Id);
+                    await entry.ReloadAsync(CancellationToken.None);
+                }
+
+                logger.LogDebug(
+                    "Skipped {ConflictCount} outbox message(s) already claimed by another worker during save",
+                    conflictIds.Count);
+
+                if (conflictIds.Contains(message.Id))
+                    continue;
+            }
 
             if (sendException == null && props != null)
             {

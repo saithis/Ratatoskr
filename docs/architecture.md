@@ -409,7 +409,7 @@ Ratatoskr integrates with OpenTelemetry via `System.Diagnostics.Activity`:
 
 ### Message Activity Observers
 
-`IMessageActivityObserver` implementations are notified at various pipeline stages (`Published`, `Received`, `Dispatched`, `OutboxStaged`, `OutboxSent`, `OutboxPoisoned`, `InboxQueued`, `InboxDispatched`, `InboxPoisoned`). Observers are designed for **testing and instrumentation** — they are not a mechanism for reliable side effects:
+`IMessageActivityObserver` implementations are notified at various pipeline stages (`Published`, `Sent`, `Received`, `Dispatched`, `OutboxStaged`, `OutboxSent`, `OutboxPoisoned`, `InboxQueued`, `InboxDispatched`, `InboxPoisoned`). Observers are designed for **testing and instrumentation** — they are not a mechanism for reliable side effects:
 
 - Observer exceptions are always caught and logged at `Warning` level. They never affect the message pipeline.
 - If an observer throws, the message is still processed normally.

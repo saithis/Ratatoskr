@@ -38,7 +38,7 @@ Set up alerts for:
 
 Poisoned messages are messages that have exhausted their retry budget. They remain in the database for manual investigation.
 
-**Outbox:**
+**Outbox (PostgreSQL):**
 ```sql
 SELECT "Id", "TransportName", "ErrorCount", "Error", "CreatedAt", "FailedAt"
 FROM "OutboxMessages"
@@ -46,7 +46,15 @@ WHERE "IsPoisoned" = true
 ORDER BY "FailedAt" DESC;
 ```
 
-**Inbox:**
+**Outbox (SQL Server):**
+```sql
+SELECT [Id], [TransportName], [ErrorCount], [Error], [CreatedAt], [FailedAt]
+FROM [OutboxMessages]
+WHERE [IsPoisoned] = 1
+ORDER BY [FailedAt] DESC;
+```
+
+**Inbox (PostgreSQL):**
 ```sql
 SELECT s."Id", s."MessageId", s."HandlerKey", s."ErrorCount", s."LastError", s."CreatedAt",
        m."SerializedProperties"
@@ -56,28 +64,62 @@ WHERE s."IsPoisoned" = true
 ORDER BY s."CreatedAt" DESC;
 ```
 
+**Inbox (SQL Server):**
+```sql
+SELECT s.[Id], s.[MessageId], s.[HandlerKey], s.[ErrorCount], s.[LastError], s.[CreatedAt],
+       m.[SerializedProperties]
+FROM [InboxHandlerStatuses] s
+JOIN [InboxMessages] m ON m.[Id] = s.[MessageId]
+WHERE s.[IsPoisoned] = 1
+ORDER BY s.[CreatedAt] DESC;
+```
+
 ### Manual Retry
 
 To retry a poisoned message, reset its state:
 
-**Outbox:**
+**Outbox (PostgreSQL):**
 ```sql
 UPDATE "OutboxMessages"
 SET "IsPoisoned" = false,
     "ErrorCount" = 0,
     "NextAttemptAt" = NULL,
-    "ProcessingStartedAt" = NULL
+    "ProcessingStartedAt" = NULL,
+    "Version" = "Version" + 1
 WHERE "Id" = '<message-id>';
 ```
 
-**Inbox:**
+**Outbox (SQL Server):**
+```sql
+UPDATE [OutboxMessages]
+SET [IsPoisoned] = 0,
+    [ErrorCount] = 0,
+    [NextAttemptAt] = NULL,
+    [ProcessingStartedAt] = NULL,
+    [Version] = [Version] + 1
+WHERE [Id] = '<message-id>';
+```
+
+**Inbox (PostgreSQL):**
 ```sql
 UPDATE "InboxHandlerStatuses"
 SET "IsPoisoned" = false,
     "ErrorCount" = 0,
     "NextAttemptAt" = NULL,
-    "ProcessingStartedAt" = NULL
+    "ProcessingStartedAt" = NULL,
+    "Version" = "Version" + 1
 WHERE "Id" = '<status-id>';
+```
+
+**Inbox (SQL Server):**
+```sql
+UPDATE [InboxHandlerStatuses]
+SET [IsPoisoned] = 0,
+    [ErrorCount] = 0,
+    [NextAttemptAt] = NULL,
+    [ProcessingStartedAt] = NULL,
+    [Version] = [Version] + 1
+WHERE [Id] = '<status-id>';
 ```
 
 The processor will pick up the message on its next polling cycle.
@@ -88,6 +130,7 @@ The outbox and inbox tables grow unbounded. Implement periodic cleanup based on 
 
 ### Outbox Cleanup
 
+**PostgreSQL:**
 ```sql
 -- Delete successfully processed messages older than 7 days
 DELETE FROM "OutboxMessages"
@@ -100,8 +143,22 @@ WHERE "IsPoisoned" = true
   AND "FailedAt" < NOW() - INTERVAL '30 days';
 ```
 
+**SQL Server:**
+```sql
+-- Delete successfully processed messages older than 7 days
+DELETE FROM [OutboxMessages]
+WHERE [ProcessedAt] IS NOT NULL
+  AND [ProcessedAt] < DATEADD(DAY, -7, GETUTCDATE());
+
+-- Delete poisoned messages older than 30 days (after investigation)
+DELETE FROM [OutboxMessages]
+WHERE [IsPoisoned] = 1
+  AND [FailedAt] < DATEADD(DAY, -30, GETUTCDATE());
+```
+
 ### Inbox Cleanup
 
+**PostgreSQL:**
 ```sql
 -- Delete completed handler statuses older than 30 days
 DELETE FROM "InboxHandlerStatuses"
@@ -121,12 +178,32 @@ WHERE NOT EXISTS (
 );
 ```
 
+**SQL Server:**
+```sql
+-- Delete completed handler statuses older than 30 days
+DELETE FROM [InboxHandlerStatuses]
+WHERE [CompletedAt] IS NOT NULL
+  AND [CompletedAt] < DATEADD(DAY, -30, GETUTCDATE());
+
+-- Delete poisoned statuses older than 30 days (after investigation)
+DELETE FROM [InboxHandlerStatuses]
+WHERE [IsPoisoned] = 1
+  AND [CreatedAt] < DATEADD(DAY, -30, GETUTCDATE());
+
+-- Delete orphaned inbox messages (no remaining handler statuses)
+DELETE FROM [InboxMessages]
+WHERE NOT EXISTS (
+    SELECT 1 FROM [InboxHandlerStatuses]
+    WHERE [MessageId] = [InboxMessages].[Id]
+);
+```
+
 ### Automation
 
-Consider running cleanup as a scheduled job (e.g., cron, Hangfire, or a Kubernetes CronJob). Run during low-traffic windows and use `LIMIT` / batched deletes to avoid long-running transactions:
+Consider running cleanup as a scheduled job (e.g., cron, Hangfire, or a Kubernetes CronJob). Run during low-traffic windows and use batched deletes to avoid long-running transactions:
 
+**PostgreSQL:**
 ```sql
--- Batched delete (PostgreSQL)
 DELETE FROM "OutboxMessages"
 WHERE "Id" IN (
     SELECT "Id" FROM "OutboxMessages"
@@ -134,6 +211,13 @@ WHERE "Id" IN (
       AND "ProcessedAt" < NOW() - INTERVAL '7 days'
     LIMIT 10000
 );
+```
+
+**SQL Server:**
+```sql
+DELETE TOP (10000) FROM [OutboxMessages]
+WHERE [ProcessedAt] IS NOT NULL
+  AND [ProcessedAt] < DATEADD(DAY, -7, GETUTCDATE());
 ```
 
 ## Distributed Lock Provider
@@ -190,20 +274,42 @@ If a processor crashes mid-batch, messages may be left in "processing" state (`P
 
 To manually clear stuck messages:
 
+**PostgreSQL:**
 ```sql
 -- Outbox
 UPDATE "OutboxMessages"
-SET "ProcessingStartedAt" = NULL
+SET "ProcessingStartedAt" = NULL,
+    "Version" = "Version" + 1
 WHERE "ProcessingStartedAt" IS NOT NULL
   AND "ProcessedAt" IS NULL
   AND "IsPoisoned" = false;
 
 -- Inbox
 UPDATE "InboxHandlerStatuses"
-SET "ProcessingStartedAt" = NULL
+SET "ProcessingStartedAt" = NULL,
+    "Version" = "Version" + 1
 WHERE "ProcessingStartedAt" IS NOT NULL
   AND "CompletedAt" IS NULL
   AND "IsPoisoned" = false;
+```
+
+**SQL Server:**
+```sql
+-- Outbox
+UPDATE [OutboxMessages]
+SET [ProcessingStartedAt] = NULL,
+    [Version] = [Version] + 1
+WHERE [ProcessingStartedAt] IS NOT NULL
+  AND [ProcessedAt] IS NULL
+  AND [IsPoisoned] = 0;
+
+-- Inbox
+UPDATE [InboxHandlerStatuses]
+SET [ProcessingStartedAt] = NULL,
+    [Version] = [Version] + 1
+WHERE [ProcessingStartedAt] IS NOT NULL
+  AND [CompletedAt] IS NULL
+  AND [IsPoisoned] = 0;
 ```
 
 ### Processor Not Running

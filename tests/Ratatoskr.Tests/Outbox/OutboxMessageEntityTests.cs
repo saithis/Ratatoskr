@@ -273,7 +273,7 @@ public class OutboxMessageEntityTests
     }
 
     [Test]
-    public void Version_IncrementedOnEveryStateMutation()
+    public void MarkAsProcessingAndMarkAsProcessed_WhenCalled_IncrementVersion()
     {
         // Arrange
         var fakeTime = new FakeTimeProvider();
@@ -290,7 +290,7 @@ public class OutboxMessageEntityTests
     }
 
     [Test]
-    public void Version_IncrementedOnPublishFailed()
+    public void PublishFailed_WhenCalled_IncrementVersion()
     {
         // Arrange
         var fakeTime = new FakeTimeProvider();
@@ -304,7 +304,7 @@ public class OutboxMessageEntityTests
     }
 
     [Test]
-    public void Version_IncrementedOnMarkAsPoisoned()
+    public void MarkAsPoisoned_WhenCalled_IncrementVersion()
     {
         // Arrange
         var fakeTime = new FakeTimeProvider();

@@ -1,6 +1,6 @@
 # Inbox Pattern (`Ratatoskr.EfCore`)
 
-The inbox pattern provides **durable, per-handler delivery** of received messages. Once a message is accepted into the inbox (persisted to the database), each registered handler will process it exactly once — even if the application crashes mid-delivery — with automatic exponential-backoff retry and per-handler deduplication.
+The inbox pattern provides **durable, per-handler delivery** of received messages. Once a message is accepted into the inbox (persisted to the database), each registered handler will receive it exactly once per (message ID, handler) pair — with automatic exponential-backoff retry and per-handler deduplication. **Handlers must be idempotent** — see the note below.
 
 > **Important: Handlers must be idempotent.** The inbox guarantees exactly-once *delivery* per (message ID, handler) pair, but it cannot guarantee exactly-once *processing*. If a handler succeeds but the process crashes before `SaveChangesAsync` persists the completion status, the handler will be re-invoked on the next cycle. Handlers should be designed so that running them twice with the same message produces the same result — for example, by using upserts, checking for existing records, or using the message ID as an idempotency key.
 
