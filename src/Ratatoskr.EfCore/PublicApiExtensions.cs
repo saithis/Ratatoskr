@@ -59,7 +59,11 @@ public static class PublicApiExtensions
             ratatoskrBuilder.Services.AddSingleton<InboxProcessor<TDbContext>>();
             ratatoskrBuilder.Services.AddSingleton<IProcessorTrigger>(sp => sp.GetRequiredService<InboxProcessor<TDbContext>>());
             if (inboxBuilder.RegisterBackgroundService)
+            {
                 ratatoskrBuilder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<InboxProcessor<TDbContext>>());
+                if (inboxBuilder.Options.RetentionPeriod.HasValue)
+                    ratatoskrBuilder.Services.AddSingleton<IHostedService, InboxCleanupService<TDbContext>>();
+            }
             ratatoskrBuilder.Services.AddSingleton<InboxAcceptor<TDbContext>>();
             ratatoskrBuilder.Services.AddSingleton<IEfCoreInboxAcceptor>(sp => sp.GetRequiredService<InboxAcceptor<TDbContext>>());
             ratatoskrBuilder.Services.AddSingleton<IMessageRouteInterceptor, InboxRouteInterceptor<TDbContext>>();
@@ -91,7 +95,11 @@ public static class PublicApiExtensions
             ratatoskrBuilder.Services.AddTransient<OutboxMessageProcessor<TDbContext>>();
             ratatoskrBuilder.Services.AddSingleton<OutboxProcessor<TDbContext>>();
             if (outboxBuilder.RegisterBackgroundService)
+            {
                 ratatoskrBuilder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<OutboxProcessor<TDbContext>>());
+                if (outboxBuilder.Options.RetentionPeriod.HasValue)
+                    ratatoskrBuilder.Services.AddSingleton<IHostedService, OutboxCleanupService<TDbContext>>();
+            }
 
             ratatoskrBuilder.AddValidator(EfCoreConfigurationValidator.Validate);
         }

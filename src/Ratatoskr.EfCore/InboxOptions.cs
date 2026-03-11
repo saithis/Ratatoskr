@@ -69,4 +69,25 @@ public class InboxOptions
     /// </summary>
     public TimeSpan? HandlerTimeout { get; set; }
 
+    /// <summary>
+    /// How long to keep completed handler statuses before automatic cleanup deletes them.
+    /// Poisoned statuses are never auto-deleted — they require manual investigation.
+    /// Orphaned inbox messages (with no remaining handler statuses) are also deleted.
+    /// Default: null (automatic cleanup disabled).
+    /// </summary>
+    public TimeSpan? RetentionPeriod { get; set; }
+
+    /// <summary>
+    /// How often the cleanup service runs to delete old completed handler statuses.
+    /// Only applies when <see cref="RetentionPeriod"/> is set.
+    /// Default: 1 hour.
+    /// </summary>
+    public TimeSpan CleanupInterval { get; set; } = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// Maximum number of rows to delete per cleanup batch to avoid long-running transactions.
+    /// Only applies when <see cref="RetentionPeriod"/> is set.
+    /// Default: 10000.
+    /// </summary>
+    public int CleanupBatchSize { get; set; } = 10_000;
 }

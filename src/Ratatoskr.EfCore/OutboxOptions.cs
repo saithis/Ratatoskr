@@ -76,4 +76,25 @@ public class OutboxOptions
     /// Default: null (no limit).
     /// </summary>
     public int? MaxMessageSize { get; set; }
+
+    /// <summary>
+    /// How long to keep successfully processed messages before automatic cleanup deletes them.
+    /// Poisoned messages are never auto-deleted — they require manual investigation.
+    /// Default: null (automatic cleanup disabled).
+    /// </summary>
+    public TimeSpan? RetentionPeriod { get; set; }
+
+    /// <summary>
+    /// How often the cleanup service runs to delete old processed messages.
+    /// Only applies when <see cref="RetentionPeriod"/> is set.
+    /// Default: 1 hour.
+    /// </summary>
+    public TimeSpan CleanupInterval { get; set; } = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// Maximum number of rows to delete per cleanup batch to avoid long-running transactions.
+    /// Only applies when <see cref="RetentionPeriod"/> is set.
+    /// Default: 10000.
+    /// </summary>
+    public int CleanupBatchSize { get; set; } = 10_000;
 }

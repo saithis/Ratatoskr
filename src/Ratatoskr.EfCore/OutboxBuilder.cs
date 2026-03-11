@@ -119,10 +119,44 @@ public class OutboxBuilder<TDbContext> where TDbContext : DbContext
     /// Prevents the <see cref="Internal.OutboxProcessor{TDbContext}"/> from being registered as a hosted service.
     /// Use this in integration tests where you want deterministic control over when outbox processing runs
     /// (e.g. by calling <c>OutboxMessageProcessor.ProcessBatchAsync</c> directly).
+    /// Note: this also prevents <see cref="Internal.OutboxCleanupService{TDbContext}"/> from running,
+    /// even when <see cref="WithRetention"/> is configured.
     /// </summary>
     public OutboxBuilder<TDbContext> WithoutBackgroundProcessing()
     {
         RegisterBackgroundService = false;
+        return this;
+    }
+
+    /// <summary>
+    /// Enables automatic cleanup of successfully processed messages older than the specified retention period.
+    /// Poisoned messages are never auto-deleted — they require manual investigation.
+    /// </summary>
+    public OutboxBuilder<TDbContext> WithRetention(TimeSpan period)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(period, TimeSpan.Zero, nameof(period));
+        Options.RetentionPeriod = period;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets how often the cleanup service runs. Only applies when <see cref="WithRetention"/> is configured.
+    /// </summary>
+    public OutboxBuilder<TDbContext> WithCleanupInterval(TimeSpan interval)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(interval, TimeSpan.Zero, nameof(interval));
+        Options.CleanupInterval = interval;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the maximum number of rows to delete per cleanup batch.
+    /// Only applies when <see cref="WithRetention"/> is configured.
+    /// </summary>
+    public OutboxBuilder<TDbContext> WithCleanupBatchSize(int batchSize)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(batchSize, 0, nameof(batchSize));
+        Options.CleanupBatchSize = batchSize;
         return this;
     }
 
