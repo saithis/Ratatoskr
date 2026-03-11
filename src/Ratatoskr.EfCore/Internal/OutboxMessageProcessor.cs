@@ -129,6 +129,10 @@ internal class OutboxMessageProcessor<TDbContext>(
                     }
                     message.MarkAsProcessed(timeProvider);
                 }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
                 catch (Exception e)
                 {
                     sendException = e;
