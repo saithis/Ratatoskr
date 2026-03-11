@@ -68,4 +68,12 @@ public class OutboxOptions
     /// Default: null (no timeout).
     /// </summary>
     public TimeSpan? SendTimeout { get; set; }
+
+    /// <summary>
+    /// Maximum allowed size of the serialized message body in bytes.
+    /// Messages exceeding this limit will cause <c>SaveChangesAsync</c> to throw
+    /// an <see cref="InvalidOperationException"/>, rolling back the entire transaction.
+    /// Default: null (no limit).
+    /// </summary>
+    public int? MaxMessageSize { get; set; }
 }

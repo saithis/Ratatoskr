@@ -1,6 +1,8 @@
 # Inbox Pattern (`Ratatoskr.EfCore`)
 
-The inbox pattern provides **durable, per-handler delivery** of received messages. Once a message is accepted into the inbox (persisted to the database), each registered handler will process it exactly once — even if the application crashes mid-delivery — with automatic exponential-backoff retry and per-handler deduplication.
+The inbox pattern provides **durable, per-handler delivery** of received messages. Once a message is accepted into the inbox (persisted to the database), each registered handler will receive it exactly once per (message ID, handler) pair — with automatic exponential-backoff retry and per-handler deduplication. **Handlers must be idempotent** — see the note below.
+
+> **Important: Handlers must be idempotent.** The inbox guarantees exactly-once *delivery* per (message ID, handler) pair, but it cannot guarantee exactly-once *processing*. If a handler succeeds but the process crashes before `SaveChangesAsync` persists the completion status, the handler will be re-invoked on the next cycle. Handlers should be designed so that running them twice with the same message produces the same result — for example, by using upserts, checking for existing records, or using the message ID as an idempotency key.
 
 ## When to Use
 
@@ -159,6 +161,7 @@ bus.AddEfCoreDurability<AppDbContext>(d => d.UseOutbox(outbox =>
     outbox.WithBatchSize(100);
     outbox.WithStuckMessageThreshold(TimeSpan.FromMinutes(5));
     outbox.WithSendTimeout(TimeSpan.FromSeconds(30));
+    outbox.WithMaxMessageSize(1_048_576); // 1 MB
     outbox.WithRestartDelay(TimeSpan.FromSeconds(5));
     outbox.WithLockAcquireTimeout(TimeSpan.FromSeconds(60));
     outbox.WithLockName("custom-outbox-lock");
@@ -173,6 +176,7 @@ bus.AddEfCoreDurability<AppDbContext>(d => d.UseOutbox(outbox =>
 | `WithBatchSize(int)` | `100` | Messages processed per batch. |
 | `WithStuckMessageThreshold(TimeSpan)` | `5 minutes` | How long a message can remain in "processing" state before it is considered stuck. |
 | `WithSendTimeout(TimeSpan)` | *none* | Maximum time a send operation is allowed to run. Timeout cancellation counts as a failure (increments ErrorCount). |
+| `WithMaxMessageSize(int)` | *none* | Maximum allowed serialized message body size in bytes. Messages exceeding this limit cause `SaveChangesAsync` to throw, rolling back the transaction. |
 | `WithRestartDelay(TimeSpan)` | `5 seconds` | Delay before restarting the processor after an unexpected crash. |
 | `WithLockAcquireTimeout(TimeSpan)` | `60 seconds` | Timeout for acquiring the distributed lock. |
 | `WithLockName(string)` | `"OutboxProcessor_{DbContextTypeName}"` | Distributed lock name. Auto-generated per DbContext type. |

@@ -12,11 +12,13 @@ internal class OutboxTriggerInterceptor<TDbContext>(
     ChannelRegistry channelRegistry,
     ChannelHandlerRegistry channelHandlerRegistry,
     IEnumerable<IMessageActivityObserver> observers,
+    OutboxOptionsHolder<TDbContext> optionsHolder,
     TimeProvider timeProvider,
     ILogger<OutboxTriggerInterceptor<TDbContext>> logger,
     IProcessorTrigger? inboxProcessorTrigger = null)
     : SaveChangesInterceptor where TDbContext : DbContext, IOutboxDbContext
 {
+    private readonly OutboxOptions _options = optionsHolder.Options;
     public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
         DbContextEventData eventData,
         InterceptionResult<int> result,
@@ -37,6 +39,13 @@ internal class OutboxTriggerInterceptor<TDbContext>(
             var enrichedProperties = enricher.Enrich(item.Message.GetType(), item.Properties);
             var serializedMessage = messageSerializer.Serialize(item.Message);
             enrichedProperties.ContentType = messageSerializer.ContentType;
+
+            if (_options.MaxMessageSize.HasValue && serializedMessage.Length > _options.MaxMessageSize.Value)
+            {
+                throw new InvalidOperationException(
+                    $"Serialized message of type '{item.Message.GetType().Name}' is {serializedMessage.Length} bytes, " +
+                    $"which exceeds the configured maximum of {_options.MaxMessageSize.Value} bytes.");
+            }
 
             if (enrichedProperties.Transports.Count == 0)
             {

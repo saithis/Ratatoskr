@@ -287,6 +287,43 @@ public class OutboxBuilderTests
     }
 
     [Test]
+    public void WithMaxMessageSize_SetsOption()
+    {
+        // Arrange
+        var builder = CreateBuilder();
+
+        // Act
+        builder.WithMaxMessageSize(1_048_576);
+
+        // Assert
+        builder.Options.MaxMessageSize.Should().Be(1_048_576);
+    }
+
+    [Test]
+    public void WithMaxMessageSize_ZeroOrNegative_Throws()
+    {
+        // Arrange
+        var builder = CreateBuilder();
+
+        // Act & Assert
+        var actZero = () => builder.WithMaxMessageSize(0);
+        var actNegative = () => builder.WithMaxMessageSize(-1);
+
+        actZero.Should().Throw<ArgumentOutOfRangeException>();
+        actNegative.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Test]
+    public void DefaultOptions_MaxMessageSize_IsNull()
+    {
+        // Arrange
+        var builder = CreateBuilder();
+
+        // Assert
+        builder.Options.MaxMessageSize.Should().BeNull();
+    }
+
+    [Test]
     public void WithoutBackgroundProcessing_DisablesHostedService()
     {
         // Arrange
@@ -337,7 +374,8 @@ public class OutboxBuilderTests
             .WithRestartDelay(TimeSpan.FromSeconds(3))
             .WithLockAcquireTimeout(TimeSpan.FromSeconds(30))
             .WithLockName("TestLock")
-            .WithSendTimeout(TimeSpan.FromSeconds(5));
+            .WithSendTimeout(TimeSpan.FromSeconds(5))
+            .WithMaxMessageSize(1_048_576);
 
         // Assert
         result.Should().BeSameAs(builder);

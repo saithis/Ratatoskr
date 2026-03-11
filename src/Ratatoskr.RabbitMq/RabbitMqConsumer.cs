@@ -23,6 +23,7 @@ internal class RabbitMqConsumer(
     ILogger<RabbitMqConsumer> logger)
     : BackgroundService
 {
+    private readonly Lock _channelsLock = new();
     private readonly List<IChannel> _channels = new();
     private static readonly TimeSpan InitialReconnectDelay = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan MaxReconnectDelay = TimeSpan.FromSeconds(30);
@@ -30,7 +31,16 @@ internal class RabbitMqConsumer(
     /// <summary>
     /// Gets whether the consumer is healthy (all channels are open).
     /// </summary>
-    public virtual bool IsHealthy => _channels.Count > 0 && _channels.All(c => c.IsOpen);
+    public virtual bool IsHealthy
+    {
+        get
+        {
+            lock (_channelsLock)
+            {
+                return _channels.Count > 0 && _channels.All(c => c.IsOpen);
+            }
+        }
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -124,13 +134,23 @@ internal class RabbitMqConsumer(
                 consumer: consumer,
                 cancellationToken: stoppingToken);
 
-            _channels.Add(channel);
+            lock (_channelsLock)
+            {
+                _channels.Add(channel);
+            }
         }
     }
 
     private async Task CleanupChannelsAsync()
     {
-        foreach (var channel in _channels)
+        List<IChannel> channelsToCleanup;
+        lock (_channelsLock)
+        {
+            channelsToCleanup = [.._channels];
+            _channels.Clear();
+        }
+
+        foreach (var channel in channelsToCleanup)
         {
             try
             {
@@ -143,7 +163,6 @@ internal class RabbitMqConsumer(
                 logger.LogDebug(ex, "Error cleaning up RabbitMQ channel during reconnection");
             }
         }
-        _channels.Clear();
     }
 
     private static TimeSpan CalculateReconnectDelay(int attempt)

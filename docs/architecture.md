@@ -355,6 +355,7 @@ If a handler has been in "processing" state longer than the configured threshold
 | `Error` | Last error message |
 | `NextAttemptAt` | Exponential backoff timestamp |
 | `IsPoisoned` | True after max retries exceeded |
+| `Version` | Optimistic concurrency token |
 
 ### Inbox
 
@@ -392,7 +393,7 @@ The unique constraint on `(MessageId, HandlerKey)` provides deduplication — co
 Ratatoskr is designed for multi-instance deployment:
 
 - **Distributed locks** (via Medallion.Threading) — Both `OutboxProcessor` and `InboxProcessor` acquire a named lock before processing. Only one instance processes at a time. Lock names are auto-generated per DbContext type (e.g. `InboxProcessor_OrdersDbContext`) to avoid collisions.
-- **Optimistic concurrency** — `InboxHandlerStatusEntity.Version` prevents two workers from processing the same handler status simultaneously.
+- **Optimistic concurrency** — Both `OutboxMessageEntity.Version` and `InboxHandlerStatusEntity.Version` prevent two workers from processing the same message or handler status simultaneously.
 - **Idempotent persistence** — The inbox acceptor uses unique constraints for deduplication. Concurrent inserts safely resolve via constraint violations.
 - **Multi-DbContext isolation** — Each `DbContext` type gets its own processor, lock, and options. Different channels can use different `DbContext` types for bounded context isolation. Per-DbContext services are registered once (idempotent across channels sharing a `DbContext`).
 
@@ -408,7 +409,7 @@ Ratatoskr integrates with OpenTelemetry via `System.Diagnostics.Activity`:
 
 ### Message Activity Observers
 
-`IMessageActivityObserver` implementations are notified at various pipeline stages (`Published`, `Received`, `Dispatched`, `OutboxStaged`, `OutboxSent`, `InboxQueued`, `InboxDispatched`, `InboxPoisoned`). Observers are designed for **testing and instrumentation** — they are not a mechanism for reliable side effects:
+`IMessageActivityObserver` implementations are notified at various pipeline stages (`Published`, `Sent`, `Received`, `Dispatched`, `OutboxStaged`, `OutboxSent`, `OutboxPoisoned`, `InboxQueued`, `InboxDispatched`, `InboxPoisoned`). Observers are designed for **testing and instrumentation** — they are not a mechanism for reliable side effects:
 
 - Observer exceptions are always caught and logged at `Warning` level. They never affect the message pipeline.
 - If an observer throws, the message is still processed normally.

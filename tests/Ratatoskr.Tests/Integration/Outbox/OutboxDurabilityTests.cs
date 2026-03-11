@@ -282,6 +282,193 @@ public class OutboxDurabilityTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         });
     }
 
+    [Test]
+    public async Task Outbox_CallerCancellation_PropagatesInsteadOfRecordingFailure()
+    {
+        // Verifies that when the caller's cancellation token fires during send,
+        // the OperationCanceledException propagates (not treated as a transport failure).
+        var fakeTime = new FakeTimeProvider(new DateTimeOffset(2023, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        var blockingSender = new BlockingMessageSender(RabbitMqConstants.TransportName);
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TimeProvider>(fakeTime);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddEventPublishChannel(ExchangeName, c => c
+                    .WithRabbitMq(r => r.WithTopicExchange())
+                    .Produces<TestEvent>());
+            });
+            services.AddSingleton<OutboxTelemetry>();
+            services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
+            services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
+            services.AddSingleton<OutboxProcessor<TestDbContext>>();
+            services.AddSingleton(new OutboxOptionsHolder<TestDbContext>(new OutboxOptions()));
+            services.AddDbContext<TestDbContext>((sp, options) =>
+            {
+                options.UseNpgsql(PostgresConnectionString);
+                options.RegisterOutbox<TestDbContext>(sp);
+            });
+            services.RemoveAll<IMessageSender>();
+            services.AddSingleton<IMessageSender>(blockingSender);
+        });
+
+        await InitializeDatabase();
+
+        // Stage a message
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            dbContext.OutboxMessages.Add(new TestEvent { Data = "cancel-msg" });
+            await dbContext.SaveChangesAsync();
+        });
+
+        // Act — cancel the caller token while the sender is blocked
+        using var cts = new CancellationTokenSource();
+        var processTask = InScopeAsync(async ctx =>
+        {
+            var processor = ctx.ServiceProvider.GetRequiredService<OutboxMessageProcessor<TestDbContext>>();
+            await processor.ProcessBatchAsync(includeStuckMessageDetection: false, cts.Token);
+        });
+
+        var sendStarted = await blockingSender.SendStarted.WaitAsync(TimeSpan.FromSeconds(5));
+        sendStarted.Should().BeTrue("the sender should have started within 5 seconds");
+        await cts.CancelAsync();
+        blockingSender.UnblockSend();
+
+        // Assert — should throw OperationCanceledException, not swallow it
+        Func<Task> act = async () => await processTask;
+        await act.Should().ThrowAsync<OperationCanceledException>();
+
+        // Message should NOT have been marked as failed (no PublishFailed call)
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var entity = await dbContext.Set<OutboxMessageEntity>().FirstAsync();
+            entity.ErrorCount.Should().Be(0, "cancellation should not count as a send failure");
+            entity.IsPoisoned.Should().BeFalse("cancellation should not poison the message");
+        });
+    }
+
+    [Test]
+    public async Task Outbox_DeserializationFailure_PoisonsImmediately()
+    {
+        // Verifies that a message with corrupt serialized properties is immediately poisoned
+        // without consuming any retry budget.
+        var fakeTime = new FakeTimeProvider(new DateTimeOffset(2023, 1, 1, 0, 0, 0, TimeSpan.Zero));
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TimeProvider>(fakeTime);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddEventPublishChannel(ExchangeName, c => c
+                    .WithRabbitMq(r => r.WithTopicExchange())
+                    .Produces<TestEvent>());
+            });
+            services.AddSingleton<OutboxTelemetry>();
+            services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
+            services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
+            services.AddSingleton<OutboxProcessor<TestDbContext>>();
+            services.AddSingleton(new OutboxOptionsHolder<TestDbContext>(new OutboxOptions { MaxRetries = 5 }));
+            services.AddDbContext<TestDbContext>((sp, options) =>
+            {
+                options.UseNpgsql(PostgresConnectionString);
+                options.RegisterOutbox<TestDbContext>(sp);
+            });
+        });
+
+        await InitializeDatabase();
+
+        // Stage a valid message, then corrupt its serialized properties in the database
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            dbContext.OutboxMessages.Add(new TestEvent { Data = "corrupt-msg" });
+            await dbContext.SaveChangesAsync();
+
+            var tableName = dbContext.Model.FindEntityType(typeof(OutboxMessageEntity))!.GetTableName()!;
+            await dbContext.Database.ExecuteSqlRawAsync(
+                $"UPDATE \"{tableName}\" SET \"SerializedProperties\" = 'invalid-json'");
+        });
+
+        // Act
+        await InScopeAsync(async ctx =>
+        {
+            await ProcessOutboxAsync<TestDbContext>(ctx.ServiceProvider);
+        });
+
+        // Assert — must be poisoned immediately, with no retry budget consumed
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var entity = await dbContext.Set<OutboxMessageEntity>().FirstAsync();
+            entity.IsPoisoned.Should().BeTrue("deserialization failure is a terminal configuration error");
+            entity.ErrorCount.Should().Be(0, "poison on deserialization should not increment the retry counter");
+            entity.ProcessedAt.Should().BeNull();
+        });
+    }
+
+    [Test]
+    public async Task Outbox_MissingSender_PoisonsImmediately()
+    {
+        // Verifies that a message targeting an unregistered transport is immediately poisoned
+        // without consuming any retry budget.
+        var fakeTime = new FakeTimeProvider(new DateTimeOffset(2023, 1, 1, 0, 0, 0, TimeSpan.Zero));
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TimeProvider>(fakeTime);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddEventPublishChannel(ExchangeName, c => c
+                    .WithRabbitMq(r => r.WithTopicExchange())
+                    .Produces<TestEvent>());
+            });
+            services.AddSingleton<OutboxTelemetry>();
+            services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
+            services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
+            services.AddSingleton<OutboxProcessor<TestDbContext>>();
+            services.AddSingleton(new OutboxOptionsHolder<TestDbContext>(new OutboxOptions { MaxRetries = 5 }));
+            services.AddDbContext<TestDbContext>((sp, options) =>
+            {
+                options.UseNpgsql(PostgresConnectionString);
+                options.RegisterOutbox<TestDbContext>(sp);
+            });
+            // Remove all senders so no sender exists for the staged message's transport
+            services.RemoveAll<IMessageSender>();
+        });
+
+        await InitializeDatabase();
+
+        // Stage a message (it will have the RabbitMQ transport name, but no sender is registered)
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            dbContext.OutboxMessages.Add(new TestEvent { Data = "no-sender-msg" });
+            await dbContext.SaveChangesAsync();
+        });
+
+        // Act
+        await InScopeAsync(async ctx =>
+        {
+            await ProcessOutboxAsync<TestDbContext>(ctx.ServiceProvider);
+        });
+
+        // Assert — must be poisoned immediately, with no retry budget consumed
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var entity = await dbContext.Set<OutboxMessageEntity>().FirstAsync();
+            entity.IsPoisoned.Should().BeTrue("missing sender is a terminal configuration error");
+            entity.ErrorCount.Should().Be(0, "poison on missing sender should not increment the retry counter");
+            entity.ProcessedAt.Should().BeNull();
+        });
+    }
+
     /// <summary>
     /// Sender that succeeds for the first N calls, then always fails.
     /// Used to test per-message save behavior.
@@ -311,6 +498,27 @@ public class OutboxDurabilityTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         public async Task SendAsync(byte[] content, MessageProperties props, CancellationToken cancellationToken)
         {
             await Task.Delay(Timeout.Infinite, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Sender that blocks until explicitly unblocked, propagating the cancellation token.
+    /// Used to test caller cancellation behavior.
+    /// </summary>
+    private class BlockingMessageSender(string transportName) : IMessageSender
+    {
+        private readonly SemaphoreSlim _sendStarted = new(0, 1);
+        private readonly SemaphoreSlim _gate = new(0, 1);
+        public string TransportName => transportName;
+        public SemaphoreSlim SendStarted => _sendStarted;
+
+        public void UnblockSend() => _gate.Release();
+
+        public async Task SendAsync(byte[] content, MessageProperties props, CancellationToken cancellationToken)
+        {
+            _sendStarted.Release();
+            await _gate.WaitAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
         }
     }
 }

@@ -53,6 +53,7 @@ public static class RatatoskrDiagnostics
 
     // Outbox Metrics
     public static readonly Counter<long> OutboxProcessCount = Meter.CreateCounter<long>("ratatoskr.outbox.process.count", "{message}", "Number of messages processed from the outbox.");
+    public static readonly Counter<long> OutboxPoisonCount = Meter.CreateCounter<long>("ratatoskr.outbox.poison.count", "{message}", "Number of outbox messages marked as poisoned.");
     public static readonly Histogram<double> OutboxProcessDuration = Meter.CreateHistogram<double>("ratatoskr.outbox.process.duration", "s", "Duration of the outbox processing batch.");
     public static readonly Histogram<long> OutboxBatchSize = Meter.CreateHistogram<long>("ratatoskr.outbox.batch.size", "{message}", "Number of messages picked up in a batch.");
 
