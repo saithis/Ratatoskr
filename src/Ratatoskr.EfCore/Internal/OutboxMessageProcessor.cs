@@ -104,14 +104,6 @@ internal class OutboxMessageProcessor<TDbContext>(
                 logger.LogWarning(ex, "Failed to deserialize properties for message '{Id}'", message.Id);
                 message.PublishFailed(ex.Message, timeProvider,
                     _options.MaxRetries, _options.MaxRetryDelay);
-                telemetry.RecordProcessed(success: false);
-
-                if (message.IsPoisoned)
-                {
-                    telemetry.RecordPoisoned();
-                    logger.LogError("Outbox message '{Id}' for transport '{Transport}' has been poisoned after {Attempts} failed attempts. Last error: {Error}",
-                        message.Id, message.TransportName, message.ErrorCount, ex.Message);
-                }
             }
 
             if (sendException == null && props != null)
@@ -136,8 +128,6 @@ internal class OutboxMessageProcessor<TDbContext>(
                         await targetSender.SendAsync(message.Content, props, cancellationToken);
                     }
                     message.MarkAsProcessed(timeProvider);
-                    processedCount++;
-                    telemetry.RecordProcessed(success: true);
                 }
                 catch (Exception e)
                 {
@@ -146,14 +136,6 @@ internal class OutboxMessageProcessor<TDbContext>(
                         message.Id, message.ErrorCount + 1);
                     message.PublishFailed(e.Message, timeProvider,
                         _options.MaxRetries, _options.MaxRetryDelay);
-                    telemetry.RecordProcessed(success: false);
-
-                    if (message.IsPoisoned)
-                    {
-                        telemetry.RecordPoisoned();
-                        logger.LogError("Outbox message '{Id}' for transport '{Transport}' has been poisoned after {Attempts} failed attempts. Last error: {Error}",
-                            message.Id, message.TransportName, message.ErrorCount, e.Message);
-                    }
                 }
             }
 
@@ -176,6 +158,24 @@ internal class OutboxMessageProcessor<TDbContext>(
 
                 if (conflictIds.Contains(message.Id))
                     continue;
+            }
+
+            // Record telemetry only after persistence succeeds
+            if (sendException == null && props != null)
+            {
+                processedCount++;
+                telemetry.RecordProcessed(success: true);
+            }
+            else
+            {
+                telemetry.RecordProcessed(success: false);
+
+                if (message.IsPoisoned)
+                {
+                    telemetry.RecordPoisoned();
+                    logger.LogError("Outbox message '{Id}' for transport '{Transport}' has been poisoned after {Attempts} failed attempts. Last error: {Error}",
+                        message.Id, message.TransportName, message.ErrorCount, sendException?.Message);
+                }
             }
 
             if (sendException == null && props != null)

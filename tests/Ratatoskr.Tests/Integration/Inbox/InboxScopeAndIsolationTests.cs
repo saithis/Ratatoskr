@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -44,8 +45,11 @@ public class InboxScopeAndIsolationTests(RabbitMqContainerFixture rabbitMq, Post
                 new MessageProperties { Id = "scope-isolation-1" });
         });
 
-        await tracker.WaitForCompletionAsync(TimeSpan.FromSeconds(10));
+        await tracker.WaitForBothHandlersAsync(TimeSpan.FromSeconds(10));
 
+        tracker.DbContextIds.Should().HaveCount(2, "both handlers should have run");
+        tracker.DbContextIds.Values.Distinct().Should().HaveCount(2,
+            "each handler should receive its own DbContext instance");
         tracker.CheckingHandlerSawChanges.Should().BeFalse(
             "handlers should have isolated DI scopes — ChangeTrackerCheckingHandler should not see ChangeTrackerPollutingHandler's tracked entities");
     }
@@ -107,30 +111,35 @@ public class InboxScopeAndIsolationTests(RabbitMqContainerFixture rabbitMq, Post
         public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
         {
             db.TestEntities.Add(new TestEntity { Name = "leaked-from-polluting-handler" });
-            tracker.SignalPolluted();
+            tracker.RecordHandler("polluting", db.GetHashCode());
             return Task.CompletedTask;
         }
     }
 
     private class ChangeTrackerCheckingHandler(TestDbContext db, ScopeIsolationTracker tracker) : IMessageHandler<TestEvent>
     {
-        public async Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
+        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
         {
-            await tracker.WaitForPollutedAsync(TimeSpan.FromSeconds(5));
             tracker.CheckingHandlerSawChanges = db.ChangeTracker.HasChanges();
-            tracker.SignalCompletion();
+            tracker.RecordHandler("checking", db.GetHashCode());
+            return Task.CompletedTask;
         }
     }
 
     private class ScopeIsolationTracker
     {
-        private readonly TaskCompletionSource _completed = new();
-        private readonly TaskCompletionSource _polluted = new();
+        private readonly TaskCompletionSource _allDone = new();
+        private int _handlerCount;
         public bool CheckingHandlerSawChanges { get; set; }
+        public ConcurrentDictionary<string, int> DbContextIds { get; } = new();
 
-        public void SignalPolluted() => _polluted.TrySetResult();
-        public Task WaitForPollutedAsync(TimeSpan timeout) => _polluted.Task.WaitAsync(timeout);
-        public void SignalCompletion() => _completed.TrySetResult();
-        public Task WaitForCompletionAsync(TimeSpan timeout) => _completed.Task.WaitAsync(timeout);
+        public void RecordHandler(string name, int dbContextId)
+        {
+            DbContextIds[name] = dbContextId;
+            if (Interlocked.Increment(ref _handlerCount) >= 2)
+                _allDone.TrySetResult();
+        }
+
+        public Task WaitForBothHandlersAsync(TimeSpan timeout) => _allDone.Task.WaitAsync(timeout);
     }
 }
