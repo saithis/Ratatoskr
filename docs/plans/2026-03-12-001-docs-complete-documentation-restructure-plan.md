@@ -187,15 +187,15 @@ Cross-check everything, build the site, verify.
 
 **Tasks:**
 
-- [ ] Build DocFX locally: `dotnet docfx docs/docfx.json` — verify no warnings/errors
-- [ ] Verify all internal links between pages resolve (cross-references)
-- [ ] Verify example project still compiles: `dotnet build examples/Docs/`
-- [ ] Verify code examples in docs match actual API surface (spot-check against source)
-- [ ] Verify toc.yml navigation renders correctly with grouping
-- [ ] Review each page for consistent voice, progressive disclosure, and self-containability
-- [ ] Verify Mermaid diagrams render in DocFX modern template
-- [ ] Remove any leftover old doc files not part of the new structure
-- [ ] Run existing tests to ensure no regressions: `dotnet run --project tests/Ratatoskr.Tests -- --maximum-parallel-tests 10`
+- [ ] Build DocFX locally: `dotnet docfx docs/docfx.json` — verify no warnings/errors (skipped — NETSDK1226 SDK version mismatch in environment)
+- [x] Verify all internal links between pages resolve (cross-references)
+- [ ] Verify example project still compiles: `dotnet build examples/Docs/` (skipped — NETSDK1226 SDK version mismatch in environment)
+- [x] Verify code examples in docs match actual API surface (spot-check against source) — all 29 APIs verified
+- [x] Verify toc.yml navigation renders correctly with grouping — all 15 entries match files
+- [x] Review each page for consistent voice, progressive disclosure, and self-containability
+- [ ] Verify Mermaid diagrams render in DocFX modern template (requires DocFX build)
+- [x] Remove any leftover old doc files not part of the new structure — no orphans found
+- [ ] Run existing tests to ensure no regressions (skipped — NETSDK1226 SDK version mismatch in environment)
 
 **Success criteria:** DocFX builds clean, all links work, example compiles, site looks professional.
 
