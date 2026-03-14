@@ -2,7 +2,7 @@
 title: "Inbox handler key required when UseInbox is configured on a channel"
 category: documentation-issues
 date: 2026-03-14
-tags: [inbox, handler-key, example-project, docfx, startup-validation]
+tags: [inbox, handler-key, example-project, docfx, build-time-validation]
 module: Ratatoskr.EfCore
 symptom: "Example project throws InvalidOperationException at startup"
 root_cause: "Handler registered without key on inbox-enabled channel"
@@ -26,7 +26,7 @@ Ratatoskr requires stable handler keys for inbox-managed handlers because the in
 
 When `UseInbox<TDbContext>()` is called on a consume channel, all handlers on that channel become inbox-managed. Inbox-managed handlers require a stable string key passed to `WithHandler<T>("key")`. The key-less overload `WithHandler<T>()` is only valid for fire-and-forget handlers (channels without inbox).
 
-Startup validation in `InboxHandlerRegistry` catches this and throws immediately.
+Startup validation in `InboxConfigurationValidator` catches this and throws immediately.
 
 ## Solution
 

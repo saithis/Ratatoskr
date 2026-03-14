@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
@@ -21,9 +22,16 @@ internal class OutboxTriggerInterceptor<TDbContext>(
     private readonly OutboxOptions _options = optionsHolder.Options;
     private readonly IMessageActivityObserver[] _observers = observers.ToArray();
 
-    // Flags set in SavingChangesAsync so SavedChangesAsync can skip change tracker enumeration
-    private bool _outboxEntitiesStaged;
-    private bool _inboxEntitiesStaged;
+    // Per-DbContext state for flags set in SavingChangesAsync and read in SavedChangesAsync.
+    // ConditionalWeakTable ensures no memory leak — entries are collected when the DbContext is GC'd.
+    // This is safe for a singleton interceptor shared across concurrent SaveChanges calls.
+    private static readonly ConditionalWeakTable<DbContext, StagedFlags> _perContextFlags = new();
+
+    private sealed class StagedFlags
+    {
+        public bool OutboxEntitiesStaged;
+        public bool InboxEntitiesStaged;
+    }
 
     public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
         DbContextEventData eventData,
@@ -40,8 +48,9 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         if (context is not IOutboxDbContext outboxDbContext)
             throw new InvalidOperationException("Expected IOutboxDbContext");
 
-        _outboxEntitiesStaged = false;
-        _inboxEntitiesStaged = false;
+        var flags = _perContextFlags.GetOrCreateValue(context);
+        flags.OutboxEntitiesStaged = false;
+        flags.InboxEntitiesStaged = false;
 
         while (outboxDbContext.OutboxMessages.Queue.TryPeek(out var item))
         {
@@ -71,7 +80,7 @@ internal class OutboxTriggerInterceptor<TDbContext>(
                 && enrichedProperties.Type != null)
             {
                 var (sameDbCreated, hasCrossDbChannels) = CreateSameTransactionInboxEntries(
-                    context, enrichedProperties, serializedMessage);
+                    context, flags, enrichedProperties, serializedMessage);
                 skipEfCoreOutbox = sameDbCreated && !hasCrossDbChannels;
 
                 if (sameDbCreated && hasCrossDbChannels)
@@ -105,7 +114,7 @@ internal class OutboxTriggerInterceptor<TDbContext>(
 
                 var outboxMessage = OutboxMessageEntity.Create(serializedMessage, enrichedProperties, timeProvider, transport);
                 context.Set<OutboxMessageEntity>().Add(outboxMessage);
-                _outboxEntitiesStaged = true;
+                flags.OutboxEntitiesStaged = true;
             }
 
             outboxDbContext.OutboxMessages.Queue.TryDequeue(out _);
@@ -133,6 +142,7 @@ internal class OutboxTriggerInterceptor<TDbContext>(
     /// </summary>
     private (bool SameDbCreated, bool HasCrossDbChannels) CreateSameTransactionInboxEntries(
         DbContext context,
+        StagedFlags flags,
         MessageProperties enrichedProperties,
         byte[] serializedMessage)
     {
@@ -169,7 +179,7 @@ internal class OutboxTriggerInterceptor<TDbContext>(
                     InboxMessageEntity.Create(enrichedProperties.Id, EfCoreTransportConstants.TransportName,
                         serializedMessage, enrichedProperties, timeProvider));
                 inboxEntriesCreated = true;
-                _inboxEntitiesStaged = true;
+                flags.InboxEntitiesStaged = true;
             }
 
             foreach (var handler in inboxHandlers)
@@ -195,14 +205,19 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         if (eventData.EntitiesSavedCount == 0)
             return result;
 
-        if (_outboxEntitiesStaged)
+        if (eventData.Context != null && _perContextFlags.TryGetValue(eventData.Context, out var flags))
         {
-            await outboxProcessor.TriggerAsync(cancellationToken);
-        }
+            if (flags.OutboxEntitiesStaged)
+            {
+                await outboxProcessor.TriggerAsync(cancellationToken);
+            }
 
-        if (_inboxEntitiesStaged && inboxProcessorTrigger != null)
-        {
-            await inboxProcessorTrigger.TriggerAsync(cancellationToken);
+            if (flags.InboxEntitiesStaged && inboxProcessorTrigger != null)
+            {
+                await inboxProcessorTrigger.TriggerAsync(cancellationToken);
+            }
+
+            _perContextFlags.Remove(eventData.Context);
         }
 
         return result;
