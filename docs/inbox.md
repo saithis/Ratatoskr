@@ -1,128 +1,128 @@
-# Inbox Pattern (`Ratatoskr.EfCore`)
+# Inbox
 
-The inbox pattern provides **durable, per-handler delivery** of received messages. Once a message is accepted into the inbox (persisted to the database), each registered handler will receive it exactly once per (message ID, handler) pair — with automatic exponential-backoff retry and per-handler deduplication. **Handlers must be idempotent** — see the note below.
+The inbox pattern provides **durable, per-handler delivery** with automatic retry and deduplication. Once a message is accepted into the inbox, each registered handler receives it exactly once per (message ID, handler) pair — surviving application crashes, redeliveries, and concurrent processing.
 
-> **Important: Handlers must be idempotent.** The inbox guarantees exactly-once *delivery* per (message ID, handler) pair, but it cannot guarantee exactly-once *processing*. If a handler succeeds but the process crashes before `SaveChangesAsync` persists the completion status, the handler will be re-invoked on the next cycle. Handlers should be designed so that running them twice with the same message produces the same result — for example, by using upserts, checking for existing records, or using the message ID as an idempotency key.
+> [!IMPORTANT]
+> **Handlers must be idempotent.** The inbox guarantees exactly-once *delivery* per (message ID, handler) pair, but not exactly-once *processing*. If a handler succeeds but the process crashes before the completion status is persisted, the handler will be re-invoked. Design handlers to produce the same result when called twice — use upserts, check for existing records, or use the message ID as an idempotency key.
 
 ## When to Use
 
-Use the inbox pattern when:
+Use the inbox when:
 
-- A handler failure must not prevent other handlers from succeeding (per-handler isolation).
-- Message processing must survive application crashes without redelivery from the broker.
-- Exactly-once delivery semantics are required for a given (message ID, handler) pair.
-- You want durable retry with backoff instead of relying entirely on the transport's retry mechanism.
-
-## How It Works
-
-### Two-table schema
-
-| Table | Purpose |
-|---|---|
-| `InboxMessages` | One row per unique CloudEvents `id` received. Stores the serialized message body and properties. |
-| `InboxHandlerStatuses` | One row per (message, handler) pair. Tracks retry state, backoff schedule, completion, and `CreatedAt` timestamp. |
-
-A unique constraint on `(MessageId, HandlerKey)` is the **deduplication key**: the same handler will never run twice for the same message ID, even on redelivery.
-
-### Processing flow
-
-1. A message arrives (from RabbitMQ, the outbox, or a direct publish).
-2. The message and one `InboxHandlerStatus` row per inbox-managed handler are written to the database **before** the transport acknowledges receipt.
-3. The background `InboxProcessor` polls (and is also woken up via a trigger channel) for pending handler statuses and delivers them in batches.
-4. On success: `CompletedAt` is set on the status row. Each handler's result is **persisted immediately** — completed handlers are not lost if a subsequent handler or the process fails.
-5. On failure: `ErrorCount` is incremented, `NextAttemptAt` is set using exponential backoff (`2^n` seconds, capped at `MaxRetryDelay`).
-6. After `MaxRetries` failures: the status is marked `IsPoisoned = true` and no longer retried (kept for future manual retry).
-7. If the application shuts down (cancellation) while a handler is running, the attempt is **not** counted as a failure. The handler status remains in "processing" state and is recovered by stuck message detection on the next startup.
-8. For deterministically unrecoverable errors (e.g. `InboxMessage` row deleted, handler key unregistered), the status is poisoned **immediately** without going through the retry cycle.
-
-### EF Core Transport Durability
-
-The EF Core transport (`WithEfCore()`) writes messages directly to the inbox tables via `EfCoreMessageSender` → `InboxAcceptor`. There is no in-memory channel — all messages are persisted to the database before handler invocation.
-
-When using the outbox with the same DbContext as the inbox, the `OutboxTriggerInterceptor` writes inbox entries in the **same database transaction** as business data. No outbox entry is created for same-DbContext channels — the inbox processor picks up the entries directly. For cross-DbContext scenarios, an outbox entry is created and delivered via the `OutboxProcessor`.
+- Handler failures must not prevent other handlers from succeeding (per-handler isolation)
+- Message processing must survive application crashes without redelivery from the broker
+- Exactly-once delivery semantics are required per (message ID, handler) pair
+- You want durable retry with backoff instead of relying on the transport's retry mechanism
 
 ## Setup
 
-### 1. Implement DbContext interfaces
+### 1. Configure Durability
 
-DbContext classes must implement both `IInboxDbContext` and `IOutboxDbContext`:
+[!code-csharp[](../examples/Docs/Program.cs#ConfigureDurability)]
+
+### 2. Implement DbContext Interfaces
+
+Your `DbContext` must implement `IInboxDbContext` (and `IOutboxDbContext` if using the outbox):
+
+[!code-csharp[](../examples/Docs/Data/OrderDbContext.cs#OrderDbContext)]
+
+### 3. Register Handlers with Stable Keys
+
+Handlers on inbox channels must have a stable key:
 
 ```csharp
-public class AppDbContext : DbContext, IOutboxDbContext, IInboxDbContext
-{
-    public OutboxStagingCollection OutboxMessages { get; } = new();
-
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        base.OnModelCreating(modelBuilder);
-        // Pass Database to enable provider-specific partial indexes (PostgreSQL, SQL Server)
-        modelBuilder.AddOutboxEntities(Database);
-        modelBuilder.AddInboxEntities(Database);
-    }
-}
+bus.AddEventConsumeChannel("orders.events", c => c
+    .WithRabbitMq(r => r
+        .WithQueueName("orders.events.subscriptions")
+        .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(30)))
+    .Consumes<OrderPlaced>(m => m
+        .WithHandler<OrderPlacedHandler>("order-handler"))
+    .UseInbox<OrderDbContext>());
 ```
 
-### 2. Configure durability with `AddEfCoreDurability`
+The handler key (`"order-handler"`) is persisted in the database. It must be stable across deployments — renaming causes in-flight messages to be poisoned.
 
-Per-DbContext inbox and outbox options are configured centrally via `AddEfCoreDurability<TDbContext>()`. Channels then opt in to the inbox with `UseInbox<TDbContext>()` (no options).
+> [!WARNING]
+> On channels with `UseInbox()`, every handler **must** have a key. Registering a handler without a key throws `InvalidOperationException` at startup. Handler keys must be **globally unique** across all channels and DbContexts.
 
-```csharp
-services.AddRatatoskr(bus =>
-{
-    // Configure durability for this DbContext — inbox + outbox options in one place
-    bus.AddEfCoreDurability<AppDbContext>(d =>
-    {
-        d.UseInbox(inbox =>
-        {
-            inbox.WithMaxRetries(5);
-            inbox.WithMaxRetryDelay(TimeSpan.FromMinutes(5));
-            inbox.WithPollingInterval(TimeSpan.FromSeconds(30));
-        });
-        d.UseOutbox();
-    });
+## Processing Flow
 
-    bus.AddEventPublishChannel("orders.events", c => c.WithEfCore().Produces<OrderPlaced>());
-    bus.AddEventConsumeChannel("orders.events", c => c
-        .Consumes<OrderPlaced>(m => m
-            .WithHandler<FulfillmentHandler>("fulfillment")   // inbox-managed
-            .WithHandler<NotificationHandler>("notification")) // inbox-managed
-        .UseInbox<AppDbContext>());  // enables inbox on this channel
-});
+```mermaid
+sequenceDiagram
+    participant IP as InboxProcessor
+    participant DB as Database
+    participant DI as DI Container
+    participant H as IMessageHandler
 
-services.AddDbContext<AppDbContext>((sp, opts) =>
-{
-    opts.UseNpgsql("...");
-    opts.RegisterOutbox<AppDbContext>(sp); // wire up outbox interceptor
-});
+    loop Polling / triggered
+        IP->>DB: Acquire distributed lock
+        IP->>DB: Query pending InboxHandlerStatusEntity<br/>(not completed, not poisoned, due for retry)
+        IP->>DB: Mark as processing (Version++)
+        loop For each handler status
+            IP->>DB: Load InboxMessageEntity
+            IP->>DI: Resolve handler by key
+            IP->>H: HandleAsync(message, props)
+            alt Success
+                IP->>DB: MarkAsCompleted (CompletedAt = now)
+            else Failure
+                IP->>DB: MarkAsFailed (ErrorCount++, NextAttemptAt = backoff)
+                Note over DB: If ErrorCount >= MaxRetries → IsPoisoned = true
+            end
+            IP->>DB: SaveChangesAsync (per handler)
+        end
+    end
 ```
 
-### 3. Register handlers with stable keys
+1. A message arrives (from RabbitMQ, the outbox, or `PublishDirectAsync`)
+2. The message and one `InboxHandlerStatus` row per handler are written to the database **before** the transport acknowledges receipt
+3. The `InboxProcessor` polls for pending handler statuses and delivers them in batches
+4. On success: `CompletedAt` is set. Each handler's result is persisted immediately — completed handlers are not lost if a subsequent handler fails.
+5. On failure: `ErrorCount` is incremented, `NextAttemptAt` is set with exponential backoff
+6. After `MaxRetries` failures: the status is marked `IsPoisoned = true` and no longer retried
+7. On application shutdown (cancellation): the attempt is **not** counted as a failure. The status remains in "processing" state and is recovered by stuck message detection on next startup.
 
-Handlers are registered inside the `Consumes<T>()` builder with a stable key:
+## Handler Isolation
 
-```csharp
-.Consumes<OrderPlaced>(m => m
-    .WithHandler<FulfillmentHandler>("fulfillment")
-    .WithHandler<NotificationHandler>("notification"))
+Each handler runs in its own DI scope. A failure or `ChangeTracker.Clear()` in one handler's scope does not affect other handlers for the same message.
+
+If you need fire-and-forget handlers alongside inbox-managed handlers for the same message type, register them on a separate consume channel without `UseInbox()`.
+
+## Deduplication
+
+Deduplication is per **(message ID, handler key)**. If the same CloudEvents `id` is received twice (e.g., RabbitMQ redelivery or outbox retry), the second delivery is a no-op: the unique constraint on `(MessageId, HandlerKey)` prevents duplicate handler status rows.
+
+> [!NOTE]
+> The CloudEvents `id` (i.e., `MessageProperties.Id`) must not exceed **200 characters**. Messages with longer IDs are rejected with an `InvalidOperationException`.
+
+## Retry and Backoff
+
+Failed handlers are retried with exponential backoff:
+
+```
+NextAttemptAt = now + min(2^ErrorCount seconds, MaxRetryDelay)
+
+Example with MaxRetryDelay = 5 min:
+  Attempt 1 → retry after 2s
+  Attempt 2 → retry after 4s
+  Attempt 3 → retry after 8s
+  ...
+  Attempt 9+ → capped at 300s (5 min)
 ```
 
-The **handler key** (`"fulfillment"`) is persisted in the database. It must be stable across deployments — renaming the key will cause existing in-flight messages to be poisoned with an "unknown handler key" error.
+After exceeding `MaxRetries`, the handler status is marked as poisoned and no longer retried. Deterministically unrecoverable errors (deleted inbox message, unregistered handler key) are poisoned immediately without going through the retry cycle.
 
-> **Validation**: On channels with `UseInbox<TDbContext>()`, every handler must have a stable key. Registering a handler without a key on an inbox channel throws `InvalidOperationException` at startup. Handler keys must be **globally unique** across all channels and DbContexts.
+## Stuck Message Detection
 
-#### Handler registration API
+If a handler has been in "processing" state longer than `StuckMessageThreshold` (default: 5 minutes), the processor clears its `ProcessingStartedAt` field, making it eligible for retry. This handles cases where a worker crashes mid-processing.
 
-| Method | Effect |
-|---|---|
-| `.WithHandler<THandler>("key")` | Register handler as inbox-managed with the given stable key. |
-| `.WithHandler<THandler>()` | Register handler as fire-and-forget (only on channels **without** `UseInbox`). |
+## Distributed Lock Safety
 
-## Configuration Options
+The `InboxProcessor` acquires a distributed lock before processing batches. If the lock is lost mid-processing (e.g., network partition), the processor detects it immediately and stops. Any in-flight handler status is recovered by stuck message detection on the next cycle.
 
-All options are configurable via fluent methods on the `AddEfCoreDurability` inbox builder:
+## Configuration
 
 ```csharp
-bus.AddEfCoreDurability<AppDbContext>(d => d.UseInbox(inbox =>
+bus.AddEfCoreDurability<OrderDbContext>(d => d.UseInbox(inbox =>
 {
     inbox.WithMaxRetries(5);
     inbox.WithMaxRetryDelay(TimeSpan.FromMinutes(5));
@@ -132,191 +132,92 @@ bus.AddEfCoreDurability<AppDbContext>(d => d.UseInbox(inbox =>
     inbox.WithHandlerTimeout(TimeSpan.FromMinutes(2));
     inbox.WithRestartDelay(TimeSpan.FromSeconds(5));
     inbox.WithLockAcquireTimeout(TimeSpan.FromSeconds(60));
-    inbox.WithLockName("custom-lock-name");
+    inbox.WithLockName("custom-inbox-lock");
 }));
 ```
 
-| Fluent Method | Default | Description |
-|---|---|---|
-| `WithMaxRetries(int)` | `5` | Number of delivery attempts before marking a status as poisoned. Must be >= 1. A value of 1 means one attempt, poisoned on the first failure. |
-| `WithMaxRetryDelay(TimeSpan)` | `5 minutes` | Maximum backoff delay (`2^n` seconds, capped). Jitter is applied to prevent thundering herd. |
-| `WithPollingInterval(TimeSpan)` | `30 seconds` | How often the background processor polls the DB when idle. |
-| `WithBatchSize(int)` | `100` | Handler statuses processed per batch. |
-| `WithStuckMessageThreshold(TimeSpan)` | `5 minutes` | How long a status can remain in "processing" state before it is considered stuck (crash recovery). |
-| `WithHandlerTimeout(TimeSpan)` | *none* | Maximum time a handler is allowed to run. Timeout cancellation counts as a failure (increments ErrorCount). |
-| `WithRestartDelay(TimeSpan)` | `5 seconds` | Delay before restarting the processor after an unexpected crash. |
-| `WithLockAcquireTimeout(TimeSpan)` | `60 seconds` | Timeout for acquiring the distributed lock. |
-| `WithLockName(string)` | `"InboxProcessor_{DbContextTypeName}"` | Distributed lock name. Auto-generated per DbContext type to avoid collisions. Override only if you need a custom name. |
-
-## Outbox Configuration Options
-
-The outbox builder supports the same set of tuning options as the inbox:
-
-```csharp
-bus.AddEfCoreDurability<AppDbContext>(d => d.UseOutbox(outbox =>
-{
-    outbox.WithMaxRetries(5);
-    outbox.WithMaxRetryDelay(TimeSpan.FromMinutes(5));
-    outbox.WithPollingInterval(TimeSpan.FromSeconds(60));
-    outbox.WithBatchSize(100);
-    outbox.WithStuckMessageThreshold(TimeSpan.FromMinutes(5));
-    outbox.WithSendTimeout(TimeSpan.FromSeconds(30));
-    outbox.WithMaxMessageSize(1_048_576); // 1 MB
-    outbox.WithRestartDelay(TimeSpan.FromSeconds(5));
-    outbox.WithLockAcquireTimeout(TimeSpan.FromSeconds(60));
-    outbox.WithLockName("custom-outbox-lock");
-}));
-```
-
-| Fluent Method | Default | Description |
-|---|---|---|
-| `WithMaxRetries(int)` | `5` | Number of send attempts before marking a message as poisoned. A value of 0 means poisoned on the first failure. |
-| `WithMaxRetryDelay(TimeSpan)` | `5 minutes` | Maximum backoff delay between retries. |
-| `WithPollingInterval(TimeSpan)` | `60 seconds` | How often the background processor polls the DB when idle. |
-| `WithBatchSize(int)` | `100` | Messages processed per batch. |
-| `WithStuckMessageThreshold(TimeSpan)` | `5 minutes` | How long a message can remain in "processing" state before it is considered stuck. |
-| `WithSendTimeout(TimeSpan)` | *none* | Maximum time a send operation is allowed to run. Timeout cancellation counts as a failure (increments ErrorCount). |
-| `WithMaxMessageSize(int)` | *none* | Maximum allowed serialized message body size in bytes. Messages exceeding this limit cause `SaveChangesAsync` to throw, rolling back the transaction. |
-| `WithRestartDelay(TimeSpan)` | `5 seconds` | Delay before restarting the processor after an unexpected crash. |
-| `WithLockAcquireTimeout(TimeSpan)` | `60 seconds` | Timeout for acquiring the distributed lock. |
-| `WithLockName(string)` | `"OutboxProcessor_{DbContextTypeName}"` | Distributed lock name. Auto-generated per DbContext type. |
-
-Use `WithoutBackgroundProcessing()` to disable the outbox background service in integration tests, analogous to the inbox pattern.
-
-## Handler Isolation
-
-All handlers on an inbox channel are inbox-managed and delivered by `InboxProcessor`. Each handler runs in its own DI scope, so a failure or `ChangeTracker.Clear()` in one scope cannot affect another.
-
-If you need fire-and-forget handlers alongside inbox-managed handlers for the same message type, register them on a separate consume channel without `UseInbox()`.
-
-> **EF Core transport restriction:** When using the EF Core transport (`WithEfCore()`), `EfCoreMessageSender` requires **all** matching consume channels to have `UseInbox<TDbContext>()` configured. A channel without `UseInbox` will cause an `InvalidOperationException` at send time. This means the "separate fire-and-forget channel" pattern described above **does not work** with the EF Core transport. To mix durable and fire-and-forget delivery with EF Core, use a separate message type for fire-and-forget handlers so that the consume channel does not match the inbox-managed channels, or use a non-EF Core transport (e.g. RabbitMQ) for the fire-and-forget channel.
-
-## Deduplication
-
-Deduplication is per **(message ID, handler key)**. If the same CloudEvents `id` is received twice (e.g. RabbitMQ redelivery or outbox retry), the second delivery is a no-op for the inbox: the unique constraint on `(MessageId, HandlerKey)` prevents duplicate handler status rows from being inserted.
-
-> **Note**: The CloudEvents `id` (i.e., `MessageProperties.Id`) must not exceed **200 characters**. Messages with IDs longer than this limit are rejected with an `InvalidOperationException` before the database insert is attempted.
-
-## Distributed Lock Safety
-
-`InboxProcessor` acquires a distributed lock before processing batches to prevent multiple instances from processing the same messages concurrently. If the lock is lost mid-processing (e.g. network partition, Postgres connection drop), the processor detects it immediately via `HandleLostToken` and stops processing. Any in-flight handler status that was being processed will be picked up by stuck message detection on the next cycle.
-
-## RabbitMQ Integration
-
-When using RabbitMQ, the `RabbitMqConsumer` delegates to `MessageRouter`, which calls `InboxAcceptor` before dispatching the message through `MessageDispatcher`. The consumer itself has no inbox awareness. The acceptor creates its own DI scope, so its `DbContext` is fully isolated from handler scopes. The message and handler statuses are persisted to the database, then the dispatcher invokes only fire-and-forget handlers. If all handlers are inbox-managed, the router treats this as success. `InboxProcessor` delivers inbox-managed handlers independently — failures in inbox-managed handlers do not affect broker acknowledgement.
-
-## Observability
-
-Three `MessageStage` values are emitted to all registered `IMessageActivityObserver` implementations:
-
-| Stage | When |
-|---|---|
-| `MessageStage.InboxQueued` | Message accepted into inbox (interceptor called). |
-| `MessageStage.InboxDispatched` | A single handler status was attempted by `InboxProcessor` (success or failure). `IsSuccess` is `true` on success, `false` on failure. `Exception` is set on failure. |
-| `MessageStage.InboxPoisoned` | A handler status exceeded `MaxRetries` and was marked as poisoned. |
-
-The `ratatoskr.inbox.poison.count` metric counter is incremented each time a handler status is poisoned.
-
-When using `Ratatoskr.Testing`, these stages are available on `MessageTrackingSession`:
-
-```csharp
-await using var session = Services.CreateTrackingSession();
-// ... publish message ...
-var queued = await session.WaitForInboxQueued<MyMessage>();
-var dispatched = await session.WaitForInboxDispatched<MyMessage>();
-var poisoned = await session.WaitForInboxPoisoned<MyMessage>();
-```
-
-`TrackedMessage.TransportName` reflects the transport that delivered the message to the inbox (e.g. `"rabbitmq"`, `"efcore"`).
-`TrackedMessage.IsSuccess` indicates whether the handler succeeded (`true`) or failed (`false`) at the `InboxDispatched` stage.
-
-## Testing
-
-Use `WithoutBackgroundProcessing()` to disable the `InboxProcessor` background service in integration tests. This gives deterministic control over when inbox processing runs, so tests can inspect the database state between acceptance and delivery:
-
-```csharp
-services.AddRatatoskr(bus =>
-{
-    bus.AddEfCoreDurability<AppDbContext>(d =>
-        d.UseInbox(inbox => inbox.WithoutBackgroundProcessing()));
-
-    bus.AddEventPublishChannel("events", c => c.WithEfCore().Produces<OrderPlaced>());
-    bus.AddEventConsumeChannel("events", c => c
-        .Consumes<OrderPlaced>(m => m
-            .WithHandler<FulfillmentHandler>("fulfillment"))
-        .UseInbox<AppDbContext>());
-});
-
-// In the test body, trigger processing manually:
-var processor = Services.GetRequiredService<InboxMessageProcessor<AppDbContext>>();
-await processor.ProcessBatchAsync(includeStuckMessageDetection: false, CancellationToken.None);
-```
-
-## Multi-DbContext Support
-
-Each consume channel can use a different `DbContext` for its inbox. This enables bounded context isolation — for example, an Orders service and a Shipping service sharing the same application but using separate databases.
-
-Per-DbContext durability is configured centrally via `AddEfCoreDurability`, and channels opt in with `UseInbox`:
-
-```csharp
-services.AddRatatoskr(bus =>
-{
-    bus.AddEventPublishChannel("shared-events", c => c.WithEfCore().Produces<OrderPlaced>());
-
-    // Per-DbContext durability configuration
-    bus.AddEfCoreDurability<OrdersDbContext>(d => d.UseInbox());
-    bus.AddEfCoreDurability<ShippingDbContext>(d => d.UseInbox());
-
-    // Orders inbox — persists to OrdersDbContext
-    bus.AddEventConsumeChannel("orders.inbox", c => c
-        .Consumes<OrderPlaced>(m => m
-            .WithHandler<FulfillmentHandler>("fulfillment"))
-        .UseInbox<OrdersDbContext>());
-
-    // Shipping inbox — persists to ShippingDbContext
-    bus.AddEventConsumeChannel("shipping.inbox", c => c
-        .Consumes<OrderPlaced>(m => m
-            .WithHandler<ShipmentHandler>("shipment"))
-        .UseInbox<ShippingDbContext>());
-});
-
-services.AddDbContext<OrdersDbContext>((sp, opts) =>
-    opts.UseNpgsql("Host=...;Database=orders"));
-services.AddDbContext<ShippingDbContext>((sp, opts) =>
-    opts.UseNpgsql("Host=...;Database=shipping"));
-```
-
-Each `DbContext` type gets its own:
-- `InboxProcessor<TDbContext>` background service
-- `InboxMessageProcessor<TDbContext>` batch processor
-- `InboxAcceptor<TDbContext>` for persistence
-- Distributed lock (auto-named `InboxProcessor_{DbContextTypeName}`)
-
-Per-DbContext services are registered once (idempotent), so multiple channels sharing the same `DbContext` reuse the same processor and options.
-
-> **Important:** Each `DbContext` type is expected to have its own database. The `InboxMessageProcessor` queries all pending handler statuses from its database — if two `DbContext` types share a database, they will see each other's data.
+| Option | Default | Description |
+|--------|---------|-------------|
+| `WithMaxRetries(int)` | `5` | Delivery attempts before marking as poisoned. 1 = poisoned on first failure. |
+| `WithMaxRetryDelay(TimeSpan)` | `5 minutes` | Maximum backoff delay. Jitter is applied to prevent thundering herd. |
+| `WithPollingInterval(TimeSpan)` | `30 seconds` | How often the processor polls the DB when idle |
+| `WithBatchSize(int)` | `100` | Handler statuses processed per batch |
+| `WithStuckMessageThreshold(TimeSpan)` | `5 minutes` | Time before a "processing" status is considered stuck |
+| `WithHandlerTimeout(TimeSpan)` | *none* | Maximum handler execution time. Timeout counts as a failure. |
+| `WithRestartDelay(TimeSpan)` | `5 seconds` | Delay before restarting the processor after a crash |
+| `WithLockAcquireTimeout(TimeSpan)` | `60 seconds` | Timeout for acquiring the distributed lock |
+| `WithLockName(string)` | `"InboxProcessor_{DbContext}"` | Distributed lock name (auto-generated per DbContext) |
 
 ## Data Retention
 
-The `InboxMessages` and `InboxHandlerStatuses` tables grow unbounded as messages are processed. Completed and poisoned rows are never deleted automatically — you should implement periodic cleanup based on your retention requirements.
+Configure automatic cleanup:
 
-Example SQL for PostgreSQL:
-
-```sql
--- Delete handler statuses completed more than 30 days ago
-DELETE FROM "InboxHandlerStatuses"
-WHERE "CompletedAt" IS NOT NULL
-  AND "CompletedAt" < NOW() - INTERVAL '30 days';
-
--- Delete poisoned statuses older than 30 days
-DELETE FROM "InboxHandlerStatuses"
-WHERE "IsPoisoned" = true
-  AND "CreatedAt" < NOW() - INTERVAL '30 days';
-
--- Delete orphaned inbox messages (no remaining handler statuses)
-DELETE FROM "InboxMessages"
-WHERE NOT EXISTS (
-    SELECT 1 FROM "InboxHandlerStatuses"
-    WHERE "MessageId" = "InboxMessages"."Id"
-);
+```csharp
+d.UseInbox(inbox => inbox
+    .WithRetention(TimeSpan.FromDays(30)));
 ```
+
+The cleanup service deletes completed handler statuses older than the retention period and removes orphaned `InboxMessages` rows. **Poisoned statuses are never auto-deleted.**
+
+## Multi-DbContext Support
+
+Each consume channel can use a different `DbContext` for its inbox, enabling bounded context isolation:
+
+```csharp
+bus.AddEfCoreDurability<OrdersDbContext>(d => d.UseInbox());
+bus.AddEfCoreDurability<ShippingDbContext>(d => d.UseInbox());
+
+bus.AddEventConsumeChannel("orders.inbox", c => c
+    .Consumes<OrderPlaced>(m => m
+        .WithHandler<FulfillmentHandler>("fulfillment"))
+    .UseInbox<OrdersDbContext>());
+
+bus.AddEventConsumeChannel("shipping.inbox", c => c
+    .Consumes<OrderPlaced>(m => m
+        .WithHandler<ShipmentHandler>("shipment"))
+    .UseInbox<ShippingDbContext>());
+```
+
+Each `DbContext` type gets its own processor, lock, and configuration. Multiple channels sharing the same `DbContext` reuse the same processor.
+
+> [!NOTE]
+> Each `DbContext` type is expected to have its own database. If two `DbContext` types share a database, their processors will see each other's data.
+
+## Database Schema
+
+**`InboxMessageEntity`** — one row per unique message (keyed by CloudEvents ID):
+
+| Column | Description |
+|--------|-------------|
+| `Id` | CloudEvents message ID (string, PK) |
+| `TransportName` | Source transport |
+| `Content` | Serialized message body |
+| `SerializedProperties` | JSON-encoded MessageProperties |
+| `ReceivedAt` | When the message was first received |
+
+**`InboxHandlerStatusEntity`** — one row per (message, handler) pair:
+
+| Column | Description |
+|--------|-------------|
+| `Id` | Primary key (GUID v7) |
+| `MessageId` | FK → InboxMessageEntity.Id |
+| `HandlerKey` | Stable handler key (unique with MessageId) |
+| `ErrorCount` | Number of failed attempts |
+| `LastError` | Last error message |
+| `ProcessingStartedAt` | Set during processing, cleared on completion |
+| `NextAttemptAt` | Exponential backoff timestamp |
+| `IsPoisoned` | True after max retries exceeded |
+| `CompletedAt` | When successfully handled (null while pending) |
+| `Version` | Optimistic concurrency token |
+
+The unique constraint on `(MessageId, HandlerKey)` provides deduplication.
+
+## RabbitMQ Integration
+
+When using RabbitMQ, the consumer delegates to `MessageRouter`, which calls `InboxAcceptor` before dispatching. The consumer has no inbox awareness — it just calls `RouteAsync`. The acceptor creates its own DI scope, so its `DbContext` is fully isolated from handler scopes. Failures in inbox-managed handlers do not affect broker acknowledgement.
+
+## What's Next
+
+- [Outbox](outbox.md) — Transactional message staging
+- [Operations](operations.md) — Poisoned message investigation and manual retry
+- [Testing](testing.md) — Testing inbox behavior with `WithoutBackgroundProcessing()`

@@ -1,114 +1,177 @@
-# Configuration
+# Configuration Reference
 
-**Channel-First, Intent-Based Fluent API** that:
+This page provides a quick-reference index of all configuration options across Ratatoskr. Each table links to the feature page where the option is documented in detail.
 
-1.  **Centralizes Topology**: You define a "Channel" (Exchange) once, applying transport settings (Type, Durability) to the Channel.
-2.  **Groups Messages**: You attach multiple Message Types to a Channel.
-3.  **Enforces Ownership**: Distinct methods for `EventPublish`, `CommandPublish`, `CommandConsume`, `EventConsume` enforce who declares vs who validates.
-4.  **Fails Fast**: Validates topological dependencies on startup.
-
-## Ownership Rules
-
-| Intent | API Method | Ownership | Action (RabbitMQ) |
-| :--- | :--- | :--- | :--- |
-| **Produces Event** | `AddEventPublishChannel` | **Us** (Originator) | **Declare** Exchange (Topic) |
-| **Sends/Produces Command** | `AddCommandPublishChannel` | **Them** (Receiver) | **Validate** Exchange Exists |
-| **Consumes Command** | `AddCommandConsumeChannel` | **Us** (Processor) | **Declare** Exchange (Direct) + Queue |
-| **Consumes Event** | `AddEventConsumeChannel` | **Them** (Publisher) | **Validate** Exchange + **Declare** Queue + **Bind** |
-
-## API Design: Channel-First
-
-Everything happens inside `AddRatatoskr`.
-
-### Configuration Example
+## Core
 
 ```csharp
-services.AddRatatoskr(builder =>
+builder.Services.AddRatatoskr(bus =>
 {
-    builder.WithServiceName("OrderService");
-
-    // Transport Configuration (Global)
-    builder.UseRabbitMq(mq => mq.ConnectionString("amqp://..."));
-
-    // EF Core Durability (Inbox/Outbox)
-    builder.AddEfCoreDurability<AppDbContext>(d => d
-        .UseInbox()
-        .UseOutbox());
-
-    // ==========================================
-    // 1. PRODUCER: Events we own
-    // Intent: We govern "orders.events". We declare it.
-    // ==========================================
-    builder.AddEventPublishChannel("orders.events")
-           .WithRabbitMq(cfg => cfg
-               .WithTopicExchange()
-           )
-           // Default Routing Key: Uses [RatatoskrMessage("type")] or typeof(T).Name
-           .Produces<OrderCreated>()
-           // Overridden Routing Key
-           .Produces<OrderCancelled>(cfg => cfg.WithRoutingKey("order.cancelled"));
-
-    // ==========================================
-    // 2. SENDER: Commands to others
-    // Intent: We send to "payments.commands". We expect it to exist.
-    // ==========================================
-    builder.AddCommandPublishChannel("payments.commands")
-           // We validate it exists and matches expectations (e.g. is Topic/Direct as expected)
-           .WithRabbitMq(cfg => cfg
-               .WithDirectExchange()
-           )
-           .Produces<ProcessPayment>(cfg => cfg.WithRoutingKey("cmd.pay"));
-
-    // ==========================================
-    // 3. CONSUMER: Commands we own
-    // Intent: We own "orders.commands". We declare it and our queue.
-    // Handlers are registered inside Consumes<T>().
-    // ==========================================
-    builder.AddCommandConsumeChannel("orders.commands", c => c
-           .WithRabbitMq(cfg => cfg
-                .WithDirectExchange()
-                // For Command Consumption, we usually bind a specific queue
-                .WithQueueName("orders.process")
-           )
-           // Implicitly binds using Routing Key derived from Type or Attribute
-           // Handlers are registered per message type
-           .Consumes<CreateOrder>(m => m
-                .WithHandler<CreateOrderHandler>()));
-
-    // ==========================================
-    // 4. CONSUMER: Events from others
-    // Intent: We listen to "users.events". We expect it to exist. We declare our queue.
-    // Handlers are registered inside Consumes<T>().
-    // Inbox is enabled per channel via UseInbox<TDbContext>().
-    // ==========================================
-    builder.AddEventConsumeChannel("users.events", c => c
-           .WithRabbitMq(cfg => cfg
-                .WithTopicExchange() // We expect this type
-                // The shared queue for this channel's subscriptions
-                .WithQueueName("orders.user-handler")
-                // Optional: Global settings for this consumer (e.g. Prefetch)
-            )
-           // Binds queue "orders.user-handler" to exchange "users.events" with key "user.registered"
-           // Handlers: inbox-managed (with key)
-           .Consumes<UserRegistered>(m => m
-                .WithHandler<UserRegisteredHandler>("user-audit")
-                .WithHandler<UserRegisteredInboxHandler>("user-reg"),
-                cfg => cfg.WithType("user.registered"))
-           // Enable inbox on this channel — each channel can use a different DbContext
-           .UseInbox<AppDbContext>());
+    // All configuration happens here
 });
 ```
 
+### Channel Methods
+
+| Method | Intent | Details |
+|--------|--------|---------|
+| `AddEventPublishChannel(name, ...)` | Publish events you own | [Channels & Routing](channels-routing.md) |
+| `AddCommandPublishChannel(name, ...)` | Send commands to others | [Channels & Routing](channels-routing.md) |
+| `AddEventConsumeChannel(name, ...)` | Subscribe to others' events | [Channels & Routing](channels-routing.md) |
+| `AddCommandConsumeChannel(name, ...)` | Process commands you own | [Channels & Routing](channels-routing.md) |
+
+### Message & Handler Registration
+
+| Method | Description | Details |
+|--------|-------------|---------|
+| `.Produces<T>()` | Register a message type on a publish channel | [Channels & Routing](channels-routing.md) |
+| `.Consumes<T>(m => ...)` | Register a message type and handlers on a consume channel | [Messages & Handlers](messages-handlers.md) |
+| `.WithHandler<T>()` | Fire-and-forget handler (no persistence) | [Messages & Handlers](messages-handlers.md) |
+| `.WithHandler<T>("key")` | Inbox-managed handler with stable key | [Inbox](inbox.md) |
+
 ### Attributes
 
-Instead of specifying the type via `WithType`, you can also use `[RatatoskrMessage("type")]` to identify messages.
+| Attribute | Target | Description | Details |
+|-----------|--------|-------------|---------|
+| `[RatatoskrMessage("type")]` | Class/Record | Sets the CloudEvents `type` and default routing key | [Messages & Handlers](messages-handlers.md) |
+| `[AsyncApiMessage(...)]` | Class/Record | Adds AsyncAPI documentation metadata | [AsyncAPI](asyncapi.md) |
+
+## CloudEvents
 
 ```csharp
-[RatatoskrMessage("order.created")]
-public record OrderCreated(string OrderId);
+bus.ConfigureCloudEvents(ce =>
+{
+    ce.DefaultSource = "/order-service";
+    ce.ContentMode = CloudEventsContentMode.Binary;
+});
 ```
 
-## Registry Architecture
+| Property | Default | Description | Details |
+|----------|---------|-------------|---------|
+| `DefaultSource` | `"/"` | CloudEvents `source` URI | [CloudEvents](cloudevents.md) |
+| `ContentMode` | `Binary` | Wire encoding mode (`Binary` or `Structured`) | [CloudEvents](cloudevents.md) |
 
-### 1. ChannelRegistry
-The root container that holds all the channel information, which in turn hold all the message and handler registrations. This is populated from the `AddRatatoskr` configuration. Consume channels contain the handler registrations for each message type, including whether each handler is fire-and-forget or inbox-managed.
+## RabbitMQ Transport
+
+```csharp
+bus.UseRabbitMq(c =>
+{
+    c.ConnectionString = new Uri("amqp://guest:guest@localhost:5672/");
+});
+```
+
+### Channel Options
+
+| Option | Default | Description | Details |
+|--------|---------|-------------|---------|
+| `WithTopicExchange()` | Topic | Pattern-based routing | [RabbitMQ](rabbitmq.md) |
+| `WithDirectExchange()` | — | Exact routing key match | [RabbitMQ](rabbitmq.md) |
+| `WithFanoutExchange()` | — | Broadcast to all queues | [RabbitMQ](rabbitmq.md) |
+| `WithQueueName(string)` | (required) | Queue to consume from | [RabbitMQ](rabbitmq.md) |
+| `WithPrefetch(ushort)` | `10` | Max unacknowledged messages | [RabbitMQ](rabbitmq.md) |
+| `WithQueueType(QueueType)` | `Quorum` | Queue implementation (Quorum/Classic) | [RabbitMQ](rabbitmq.md) |
+| `WithAutoAck(bool)` | `false` | Auto-acknowledge on delivery | [RabbitMQ](rabbitmq.md) |
+| `WithDurableQueue()` | (default) | Survives broker restarts | [RabbitMQ](rabbitmq.md) |
+| `WithTransientQueue()` | — | Auto-deleted when empty | [RabbitMQ](rabbitmq.md) |
+
+### Retry Options
+
+| Option | Default | Description | Details |
+|--------|---------|-------------|---------|
+| `WithMaxRetries(int)` | `3` | Attempts before DLQ | [RabbitMQ](rabbitmq.md) |
+| `WithDelay(TimeSpan)` | `30s` | TTL on retry queue | [RabbitMQ](rabbitmq.md) |
+| `WithManaged(bool)` | `true` | Auto-provision retry/DLQ topology | [RabbitMQ](rabbitmq.md) |
+| `WithDeadLetterSuffix(string)` | `".dlq"` | DLQ name suffix | [RabbitMQ](rabbitmq.md) |
+| `WithRetrySuffix(string)` | `".retry"` | Retry queue name suffix | [RabbitMQ](rabbitmq.md) |
+
+## EF Core Durability
+
+```csharp
+bus.AddEfCoreDurability<OrderDbContext>(d =>
+{
+    d.UseOutbox(outbox => { /* options */ });
+    d.UseInbox(inbox => { /* options */ });
+});
+```
+
+### Outbox Options
+
+| Option | Default | Description | Details |
+|--------|---------|-------------|---------|
+| `WithMaxRetries(int)` | `5` | Send attempts before poisoned | [Outbox](outbox.md) |
+| `WithMaxRetryDelay(TimeSpan)` | `5 min` | Max backoff delay | [Outbox](outbox.md) |
+| `WithPollingInterval(TimeSpan)` | `60s` | Idle polling interval | [Outbox](outbox.md) |
+| `WithBatchSize(int)` | `100` | Messages per batch | [Outbox](outbox.md) |
+| `WithStuckMessageThreshold(TimeSpan)` | `5 min` | Stuck detection timeout | [Outbox](outbox.md) |
+| `WithSendTimeout(TimeSpan)` | *none* | Send operation timeout | [Outbox](outbox.md) |
+| `WithMaxMessageSize(int)` | *none* | Max body size in bytes | [Outbox](outbox.md) |
+| `WithRestartDelay(TimeSpan)` | `5s` | Processor restart delay | [Outbox](outbox.md) |
+| `WithLockAcquireTimeout(TimeSpan)` | `60s` | Lock acquire timeout | [Outbox](outbox.md) |
+| `WithLockName(string)` | `"OutboxProcessor_{DbContext}"` | Distributed lock name | [Outbox](outbox.md) |
+| `WithRetention(TimeSpan)` | *none* | Auto-cleanup retention | [Outbox](outbox.md) |
+| `WithCleanupInterval(TimeSpan)` | `1h` | Cleanup run interval | [Outbox](outbox.md) |
+| `WithCleanupBatchSize(int)` | `10,000` | Cleanup batch size | [Outbox](outbox.md) |
+| `WithoutBackgroundProcessing()` | — | Disable background service (testing) | [Testing](testing.md) |
+
+### Inbox Options
+
+| Option | Default | Description | Details |
+|--------|---------|-------------|---------|
+| `WithMaxRetries(int)` | `5` | Delivery attempts before poisoned | [Inbox](inbox.md) |
+| `WithMaxRetryDelay(TimeSpan)` | `5 min` | Max backoff delay (with jitter) | [Inbox](inbox.md) |
+| `WithPollingInterval(TimeSpan)` | `30s` | Idle polling interval | [Inbox](inbox.md) |
+| `WithBatchSize(int)` | `100` | Handler statuses per batch | [Inbox](inbox.md) |
+| `WithStuckMessageThreshold(TimeSpan)` | `5 min` | Stuck detection timeout | [Inbox](inbox.md) |
+| `WithHandlerTimeout(TimeSpan)` | *none* | Handler execution timeout | [Inbox](inbox.md) |
+| `WithRestartDelay(TimeSpan)` | `5s` | Processor restart delay | [Inbox](inbox.md) |
+| `WithLockAcquireTimeout(TimeSpan)` | `60s` | Lock acquire timeout | [Inbox](inbox.md) |
+| `WithLockName(string)` | `"InboxProcessor_{DbContext}"` | Distributed lock name | [Inbox](inbox.md) |
+| `WithRetention(TimeSpan)` | *none* | Auto-cleanup retention | [Inbox](inbox.md) |
+| `WithoutBackgroundProcessing()` | — | Disable background service (testing) | [Testing](testing.md) |
+
+## AsyncAPI
+
+```csharp
+bus.ConfigureAsyncApi(api =>
+{
+    api.WithTitle("Order Processing API");
+    api.WithVersion("1.0.0");
+    api.WithDescription("Order processing messaging API");
+});
+```
+
+| Method | Description | Details |
+|--------|-------------|---------|
+| `WithTitle(string)` | API document title | [AsyncAPI](asyncapi.md) |
+| `WithVersion(string)` | API version | [AsyncAPI](asyncapi.md) |
+| `WithDescription(string)` | API description | [AsyncAPI](asyncapi.md) |
+| `app.MapAsyncApi()` | Map the AsyncAPI JSON endpoint | [AsyncAPI](asyncapi.md) |
+
+## OpenTelemetry
+
+```csharp
+builder.Services.AddOpenTelemetry()
+    .WithTracing(t => t.AddSource(RatatoskrDiagnostics.ActivitySourceName))
+    .WithMetrics(m => m.AddMeter(RatatoskrDiagnostics.MeterName));
+```
+
+| Constant | Value | Description | Details |
+|----------|-------|-------------|---------|
+| `RatatoskrDiagnostics.ActivitySourceName` | `"Ratatoskr"` | Tracing activity source | [Observability](observability.md) |
+| `RatatoskrDiagnostics.MeterName` | `"Ratatoskr"` | Metrics meter | [Observability](observability.md) |
+
+## Testing
+
+```csharp
+services.AddRatatoskrTesting();
+```
+
+| Method | Description | Details |
+|--------|-------------|---------|
+| `AddRatatoskrTesting()` | Register the message tracker | [Testing](testing.md) |
+| `CreateTrackingSession()` | Create a trace-isolated test session | [Testing](testing.md) |
+| `TrackActivity()` | Start the action-based tracking API | [Testing](testing.md) |
+
+## Distributed Lock Provider
+
+The lock provider is registered as `IDistributedLockProvider` in DI. See [Operations](operations.md) for provider options (File, PostgreSQL, SQL Server, Redis).

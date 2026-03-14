@@ -1,29 +1,20 @@
 # Testing
 
-Ratatoskr provides a dedicated testing package `Ratatoskr.Testing` that makes it easy to write high-confidence integration tests with full pipeline observability, parallel test isolation, and ergonomic assertion APIs.
+The `Ratatoskr.Testing` package provides pipeline observability, parallel test isolation via W3C trace IDs, and ergonomic assertion APIs. It has zero overhead in production — the observer collection is empty when not registered.
 
 ## Setup
 
-Install the `Ratatoskr.Testing` package and register it in your test setup:
+Install the package and register it in your test setup:
+
+```bash
+dotnet add package Ratatoskr.Testing
+```
 
 ```csharp
 services.AddRatatoskrTesting();
 ```
 
-This registers a `MessageTracker` singleton that observes all message activities flowing through the pipeline. In production (when not registered), there is zero overhead — the observer collection is simply empty.
-
-## Pipeline Stages
-
-The tracker captures messages at every stage of the pipeline:
-
-| Stage | Description |
-|:---|:---|
-| `Published` | Fired once per transport after each send attempt during `PublishDirectAsync` (includes `TransportName` and `Exception`) |
-| `Sent` | After bytes are sent to the transport (e.g. RabbitMQ) |
-| `Received` | When the consumer receives a message from the transport |
-| `Dispatched` | After handler invocation completes (includes result and exception) |
-| `OutboxStaged` | When a message is serialized into an outbox entity during `SaveChanges` |
-| `OutboxSent` | When the outbox processor sends a message to the transport |
+This registers a `MessageTracker` singleton that observes all message activities flowing through the pipeline.
 
 ## Session-Based API
 
@@ -31,22 +22,18 @@ The primary API creates a `MessageTrackingSession` per test. Each session genera
 
 ```csharp
 [Test]
-public async Task OrderCreated_HandlerProcessesSuccessfully()
+public async Task OrderPlaced_HandlerProcessesSuccessfully()
 {
-    // ... setup with AddRatatoskrTesting() ...
-
     await using var session = Services.CreateTrackingSession();
 
-    // Publish within the session's trace context
     await InScopeAsync(async ctx =>
     {
         var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
-        await bus.PublishDirectAsync(new OrderCreatedEvent { OrderId = "123" });
+        await bus.PublishDirectAsync(new OrderPlaced(Guid.NewGuid(), "test@example.com", 99.99m));
     });
 
-    // Wait for the handler to complete — returns the tracked message directly
-    var dispatched = await session.WaitForDispatched<OrderCreatedEvent>();
-    dispatched.GetMessage<OrderCreatedEvent>().OrderId.Should().Be("123");
+    var dispatched = await session.WaitForDispatched<OrderPlaced>();
+    dispatched.GetMessage<OrderPlaced>().CustomerEmail.Should().Be("test@example.com");
     dispatched.Result.Should().Be(DispatchResult.Success);
 }
 ```
@@ -67,261 +54,202 @@ await using var session = services.CreateTrackingSession(
 
 ### Waiting for Messages
 
-Each wait method blocks until a matching message arrives or the timeout expires, and returns the `TrackedMessage` directly:
+Each wait method blocks until a matching message arrives or the timeout expires:
 
 ```csharp
-var published = await session.WaitForPublished<OrderCreatedEvent>();
-var sent = await session.WaitForSent<OrderCreatedEvent>();
-var received = await session.WaitForReceived<OrderCreatedEvent>();
-var dispatched = await session.WaitForDispatched<OrderCreatedEvent>();
+var published = await session.WaitForPublished<OrderPlaced>();
+var sent = await session.WaitForSent<OrderPlaced>();
+var received = await session.WaitForReceived<OrderPlaced>();
+var dispatched = await session.WaitForDispatched<OrderPlaced>();
 
 // With custom timeout
-var dispatched = await session.WaitForDispatched<OrderCreatedEvent>(
+var dispatched = await session.WaitForDispatched<OrderPlaced>(
     TimeSpan.FromSeconds(15));
 
-// With additional predicate
-var dispatched = await session.WaitForDispatched<OrderCreatedEvent>(
-    predicate: m => m.GetMessage<OrderCreatedEvent>().OrderId == "123");
+// With predicate
+var dispatched = await session.WaitForDispatched<OrderPlaced>(
+    predicate: m => m.GetMessage<OrderPlaced>().OrderId == orderId);
 ```
 
-Prefer using the return value directly over querying the collection afterward — this avoids race conditions where a later stage completes before an earlier stage's observer notification is recorded.
+> [!TIP]
+> Prefer using the return value from `WaitFor*` directly over querying the collection afterward — this avoids race conditions where a later stage completes before an earlier stage's observer notification is recorded.
 
-### Querying Messages
+## Pipeline Stages
 
-Each stage has a `MessageCollection` property for querying captured messages:
+The tracker captures messages at every stage:
+
+| Stage | Description |
+|-------|-------------|
+| `Published` | After each send attempt during `PublishDirectAsync` (includes `TransportName` and `Exception`) |
+| `Sent` | After bytes are sent to the transport |
+| `Received` | When the consumer receives a message from the transport |
+| `Dispatched` | After handler invocation completes (includes result and exception) |
+| `OutboxStaged` | When a message is serialized into an outbox entity during `SaveChanges` |
+| `OutboxSent` | When the outbox processor sends a message to the transport |
+| `InboxQueued` | When a message is accepted into the inbox |
+| `InboxDispatched` | When an inbox handler delivery is attempted (success or failure) |
+| `InboxPoisoned` | When an inbox handler status exceeds max retries |
+
+## Querying Messages
+
+Each stage has a `MessageCollection` for querying:
 
 ```csharp
-// Get single message of type (throws if 0 or >1)
-var msg = session.Dispatched.Single<OrderCreatedEvent>();
-
-// Get first message of type
-var msg = session.Dispatched.First<OrderCreatedEvent>();
-
-// Get all messages of type
-IReadOnlyList<TrackedMessage> all = session.Dispatched.All<OrderCreatedEvent>();
-
-// Count
+var msg = session.Dispatched.Single<OrderPlaced>();
+var msg = session.Dispatched.First<OrderPlaced>();
+IReadOnlyList<TrackedMessage> all = session.Dispatched.All<OrderPlaced>();
 int count = session.Published.Count;
 ```
 
 ### Assertion Helpers
 
 ```csharp
-// Assert at least one message of type exists (returns it)
-var msg = session.Dispatched.ShouldHaveMessage<OrderCreatedEvent>();
-
-// Assert no messages of type exist
-session.Published.ShouldHaveNoMessage<OrderCancelledEvent>();
+var msg = session.Dispatched.ShouldHaveMessage<OrderPlaced>();
+session.Published.ShouldHaveNoMessage<OrderCancelled>();
 ```
 
 ### TrackedMessage Properties
 
-Each `TrackedMessage` provides rich access to the captured data:
-
 ```csharp
-var msg = session.Dispatched.Single<OrderCreatedEvent>();
+var msg = session.Dispatched.Single<OrderPlaced>();
 
-// Typed access to the deserialized message
-OrderCreatedEvent order = msg.GetMessage<OrderCreatedEvent>();
-
-// Message properties (CloudEvents metadata)
-msg.Properties.Type    // "order.created"
-msg.Properties.Id      // message ID
-msg.Properties.Source  // source URI
-
-// Dispatch result (only at Dispatched stage)
-msg.Result             // DispatchResult.Success, RecoverableError, etc.
-
-// Exception (if handler threw)
-msg.Exception          // null on success
-
-// Raw serialized bytes (exact wire format at Sent stage)
-byte[] raw = msg.RawBody;
-
-// Pipeline stage
-msg.Stage              // MessageStage.Dispatched
-
-// Trace ID for correlation
-msg.TraceId            // W3C trace ID string
+OrderPlaced order = msg.GetMessage<OrderPlaced>();  // Deserialized message
+msg.Properties.Type   // "order.placed"
+msg.Properties.Id     // CloudEvents message ID
+msg.Result            // DispatchResult.Success (Dispatched stage only)
+msg.Exception         // null on success
+byte[] raw = msg.RawBody;  // Serialized bytes
+msg.Stage             // MessageStage.Dispatched
+msg.TraceId           // W3C trace ID
 ```
 
 ## Action-Based API
 
-For simpler scenarios, the action-based API wraps session creation and waiting into a single call:
+For simpler scenarios, the action-based API wraps session creation and waiting:
 
 ```csharp
 [Test]
 public async Task CreateOrder_PublishesEvent()
 {
-    // ... setup ...
-
     await using var session = await Services
         .TrackActivity()
         .Timeout(TimeSpan.FromSeconds(10))
-        .WaitForMessage<OrderCreatedEvent>(MessageStage.Dispatched)
+        .WaitForMessage<OrderPlaced>(MessageStage.Dispatched)
         .ExecuteAndWaitAsync(async () =>
         {
             using var scope = Services.CreateScope();
             var bus = scope.ServiceProvider.GetRequiredService<IRatatoskr>();
-            await bus.PublishDirectAsync(new OrderCreatedEvent { OrderId = "123" });
+            await bus.PublishDirectAsync(new OrderPlaced(Guid.NewGuid(), "test@example.com", 99.99m));
         });
 
-    // Assert
-    session.Dispatched.Single<OrderCreatedEvent>()
+    session.Dispatched.Single<OrderPlaced>()
         .Result.Should().Be(DispatchResult.Success);
 }
 ```
 
 ### PublishAndWaitAsync
 
-A convenience method that resolves `IRatatoskr` and publishes for you. It always waits for `MessageStage.Dispatched`:
+A convenience method that resolves `IRatatoskr` and publishes for you (always waits for `Dispatched`):
 
 ```csharp
 await using var session = await Services
     .TrackActivity()
-    .PublishAndWaitAsync(new OrderCreatedEvent { OrderId = "123" });
+    .PublishAndWaitAsync(new OrderPlaced(Guid.NewGuid(), "test@example.com", 99.99m));
 
-session.Dispatched.ShouldHaveMessage<OrderCreatedEvent>();
+session.Dispatched.ShouldHaveMessage<OrderPlaced>();
 ```
 
-> **Note:** `PublishAndWaitAsync` does not support custom `WaitForMessage` conditions. If you chain `WaitForMessage()` before calling `PublishAndWaitAsync`, it will throw an `InvalidOperationException`. Use `ExecuteAndWaitAsync` instead when you need custom wait conditions.
+> [!NOTE]
+> `PublishAndWaitAsync` does not support custom `WaitForMessage` conditions. Use `ExecuteAndWaitAsync` when you need custom wait conditions.
 
 ## Transport Wire Format Assertions
 
-The `TransportMessage` property on `TrackedMessage` captures the transport-level wire representation of a message. It's available at the **Sent** stage (after envelope mapping) and the **Received** stage (before envelope mapping). This lets you verify transport-specific details like AMQP headers, CloudEvents attributes, and the raw wire body — catching bugs in envelope mappers that would be invisible through `MessageProperties` alone.
+The `TransportMessage` property captures the transport-level wire representation at the **Sent** and **Received** stages:
 
 ```csharp
-await using var session = Services.CreateTrackingSession();
-
-await InScopeAsync(async ctx =>
-{
-    var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
-    await bus.PublishDirectAsync(new OrderCreatedEvent { OrderId = "123" });
-});
-
-// Verify outgoing wire format
-var sent = await session.WaitForSent<OrderCreatedEvent>();
+var sent = await session.WaitForSent<OrderPlaced>();
 var transport = sent.TransportMessage!;
 
-// Assert on AMQP properties
+// AMQP properties
 transport.Headers["content-type"].Should().Be("application/json");
-transport.Headers["type"].Should().Be("order.created");
-transport.Headers["delivery-mode"].Should().Be(2); // Persistent
+transport.Headers["type"].Should().Be("order.placed");
 
-// Assert on CloudEvents AMQP headers (binary mode)
+// CloudEvents AMQP headers (binary mode)
 transport.Headers["cloudEvents_specversion"].Should().Be("1.0");
-transport.Headers["cloudEvents_type"].Should().Be("order.created");
+transport.Headers["cloudEvents_type"].Should().Be("order.placed");
 
-// Assert on the raw wire body
+// Raw wire body
 var wireBody = Encoding.UTF8.GetString(transport.Body);
-wireBody.Should().Contain("123");
+wireBody.Should().Contain("test@example.com");
 
-// Routing metadata (separate from protocol headers)
-transport.Metadata["exchange"].Should().Be("orders-exchange");
-transport.Metadata["routing-key"].Should().Be("order.created");
+// Routing metadata
+transport.Metadata["exchange"].Should().Be("orders.events");
+transport.Metadata["routing-key"].Should().Be("order.placed");
 ```
-
-### Received stage
-
-On the receive side, `TransportMessage` captures the raw data before the envelope mapper unwraps it. Delivery metadata is available via the `Metadata` dictionary:
-
-```csharp
-var received = await session.WaitForReceived<OrderCreatedEvent>();
-var transport = received.TransportMessage!;
-
-// Delivery metadata
-transport.Metadata["exchange"].Should().Be("orders-exchange");
-transport.Metadata["routing-key"].Should().Be("order.created");
-transport.Metadata["redelivered"].Should().Be(false);
-
-// Raw wire body (before envelope unwrapping)
-transport.Body.Should().NotBeEmpty();
-```
-
-### Stage availability
-
-| Stage | `TransportMessage` | `TransportName` | Notes |
-|:---|:---|:---|:---|
-| Published | `null` | set | Per-transport; includes `Exception` on failure |
-| **Sent** | **populated** | set | After envelope mapping — AMQP properties + wire body |
-| OutboxStaged | `null` | `null` | No transport involved yet |
-| OutboxSent | `null` | set | Transport details captured in the corresponding Sent activity |
-| **Received** | **populated** | set | Before envelope mapping — raw AMQP delivery + wire body |
-| Dispatched | `null` | `null` | No transport at this stage |
-
-### Legacy: RawBody
-
-The `RawBody` property on `TrackedMessage` still provides the serialized body bytes. At the `Sent` stage this happens to be the wire body, but `TransportMessage` is the preferred way to assert on wire format since it also includes the transport headers.
 
 ## Outbox Testing
 
-The tracker captures outbox-specific stages, making it easy to verify the full outbox flow:
+Verify the full outbox flow:
 
 ```csharp
 await using var session = Services.CreateTrackingSession();
 
 await InScopeAsync(async ctx =>
 {
-    var dbContext = ctx.ServiceProvider.GetRequiredService<MyDbContext>();
-    dbContext.OutboxMessages.Add(
-        new OrderCreatedEvent { OrderId = "123" },
-        new MessageProperties().SetExchange("orders"));
+    var dbContext = ctx.ServiceProvider.GetRequiredService<OrderDbContext>();
+    dbContext.OutboxMessages.Add(new OrderPlaced(Guid.NewGuid(), "test@example.com", 99.99m));
     await dbContext.SaveChangesAsync();
 });
 
-var dispatched = await session.WaitForDispatched<OrderCreatedEvent>(
+var dispatched = await session.WaitForDispatched<OrderPlaced>(
     TimeSpan.FromSeconds(10));
 dispatched.Result.Should().Be(DispatchResult.Success);
 
-// Verify it went through the outbox (OutboxStaged is synchronous during SaveChanges)
-session.OutboxStaged.ShouldHaveMessage<OrderCreatedEvent>();
+session.OutboxStaged.ShouldHaveMessage<OrderPlaced>();
 ```
+
+## Inbox Testing
+
+Use `WithoutBackgroundProcessing()` for deterministic inbox testing:
+
+```csharp
+services.AddRatatoskr(bus =>
+{
+    bus.AddEfCoreDurability<OrderDbContext>(d =>
+        d.UseInbox(inbox => inbox.WithoutBackgroundProcessing()));
+
+    // ... channel configuration ...
+});
+
+// In the test body, trigger processing manually:
+var processor = Services.GetRequiredService<InboxMessageProcessor<OrderDbContext>>();
+await processor.ProcessBatchAsync(
+    includeStuckMessageDetection: false,
+    CancellationToken.None);
+```
+
+This gives you full control over when inbox processing runs, so you can inspect database state between acceptance and delivery.
+
+> [!NOTE]
+> `WithoutBackgroundProcessing()` also disables the cleanup service.
 
 ## Parallel Test Isolation
 
-Each `MessageTrackingSession` creates a unique W3C trace ID. Messages published within a session inherit this trace ID through `Activity.Current`. The consumer propagates the trace ID via message headers. Sessions filter messages by matching trace ID, so **parallel tests never interfere with each other**.
+Each session creates a unique W3C trace ID. Messages published within a session inherit this trace ID through `Activity.Current`. Sessions filter by matching trace ID, so **parallel tests never interfere with each other**:
 
 ```csharp
-// Two sessions running concurrently see only their own messages
 await using var session1 = Services.CreateTrackingSession();
 // ... publish message A in session1's context ...
 
 await using var session2 = Services.CreateTrackingSession();
 // ... publish message B in session2's context ...
 
-session1.Dispatched.Single<MyEvent>().GetMessage<MyEvent>().Id.Should().Be("A");
-session2.Dispatched.Single<MyEvent>().GetMessage<MyEvent>().Id.Should().Be("B");
-
-// Trace IDs are different
-session1.TraceId.Should().NotBe(session2.TraceId);
+session1.Dispatched.Single<OrderPlaced>().GetMessage<OrderPlaced>().OrderId.Should().Be(idA);
+session2.Dispatched.Single<OrderPlaced>().GetMessage<OrderPlaced>().OrderId.Should().Be(idB);
 ```
 
-## Architecture
+## What's Next
 
-```mermaid
-graph TD
-    subgraph core["Core Library (Ratatoskr)"]
-        observer["IMessageActivityObserver interface"]
-        hooks["Hooks in: Ratatoskr, MessageDispatcher,<br/>OutboxTriggerInterceptor, OutboxMessageProcessor"]
-    end
-
-    subgraph rmq["RabbitMQ Transport (Ratatoskr.RabbitMq)"]
-        rmqhooks["Hooks in: RabbitMqMessageSender, RabbitMqConsumer"]
-    end
-
-    subgraph testing["Ratatoskr.Testing"]
-        tracker["MessageTracker<br/>(singleton, collects all activities)"]
-        session["MessageTrackingSession<br/>(per-test, trace-ID-scoped view)"]
-        collection["MessageCollection<br/>(queryable + assertion helpers)"]
-        tracked["TrackedMessage<br/>(rich model per captured message)"]
-        activity["ActivityTracker<br/>(action-based convenience API)"]
-    end
-
-    hooks --> observer
-    rmqhooks --> observer
-    tracker -->|implements| observer
-    activity --> tracker
-    tracker --> session
-    session --> collection
-    collection --> tracked
-```
+- [Observability](observability.md) — OpenTelemetry tracing and metrics setup
+- [Inbox](inbox.md) — Understanding inbox processing for test scenarios
+- [Outbox](outbox.md) — Understanding outbox processing for test scenarios

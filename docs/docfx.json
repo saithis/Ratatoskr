@@ -21,7 +21,7 @@
       { "files": ["api/*.yml", "api/.manifest"] },
       {
         "files": ["**/*.md", "toc.yml"],
-        "exclude": ["_site/**", "AGENT.md", "brainstorms/**"]
+        "exclude": ["_site/**", "AGENT.md", "brainstorms/**", "plans/**"]
       }
     ],
     "resource": [{ "files": ["../images/**"] }],
