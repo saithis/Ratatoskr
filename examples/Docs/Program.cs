@@ -63,7 +63,7 @@ builder.Services.AddRatatoskr(bus =>
 
     bus.AddCommandConsumeChannel("orders.commands", c => c
         .WithRabbitMq(r => r
-            .WithTopicExchange()
+            .WithDirectExchange()
             .WithQueueName("orders.commands.queue"))
         .Consumes<ProcessPayment>(m => m
             .WithHandler<ProcessPaymentHandler>("process-payment"))
@@ -93,9 +93,12 @@ builder.Services.AddRatatoskr(bus =>
 #endregion
 
 #region ConfigureDbContext
+var ordersConnectionString = builder.Configuration.GetConnectionString("OrdersDb")
+    ?? throw new InvalidOperationException("Connection string 'OrdersDb' is not configured.");
+
 builder.Services.AddDbContext<OrderDbContext>((sp, options) =>
 {
-    options.UseNpgsql(builder.Configuration.GetConnectionString("OrdersDb"));
+    options.UseNpgsql(ordersConnectionString);
     options.RegisterOutbox<OrderDbContext>(sp);
 });
 #endregion

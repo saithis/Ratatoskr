@@ -99,14 +99,15 @@ Deduplication is per **(message ID, handler key)**. If the same CloudEvents `id`
 Failed handlers are retried with exponential backoff:
 
 ```text
-NextAttemptAt = now + min(2^ErrorCount seconds, MaxRetryDelay)
+base = min(2^ErrorCount seconds, MaxRetryDelay)
+NextAttemptAt = now + base/2 + random(0..base/2)
 
 Example with MaxRetryDelay = 5 min:
-  Attempt 1 → retry after 2s
-  Attempt 2 → retry after 4s
-  Attempt 3 → retry after 8s
+  Attempt 1 → retry after 1–2s
+  Attempt 2 → retry after 2–4s
+  Attempt 3 → retry after 4–8s
   ...
-  Attempt 9+ → capped at 300s (5 min)
+  Attempt 9+ → capped at 150–300s (2.5–5 min)
 ```
 
 After exceeding `MaxRetries`, the handler status is marked as poisoned and no longer retried. Deterministically unrecoverable errors (deleted inbox message, unregistered handler key) are poisoned immediately without going through the retry cycle.

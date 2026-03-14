@@ -72,7 +72,7 @@ bus.UseRabbitMq(c =>
 | `WithQueueType(QueueType)` | `Quorum` | Queue implementation (Quorum/Classic) | [RabbitMQ](rabbitmq.md) |
 | `WithAutoAck(bool)` | `false` | Auto-acknowledge on delivery | [RabbitMQ](rabbitmq.md) |
 | `WithDurableQueue()` | (default) | Survives broker restarts | [RabbitMQ](rabbitmq.md) |
-| `WithTransientQueue()` | — | Auto-deleted when empty | [RabbitMQ](rabbitmq.md) |
+| `WithTransientQueue()` | — | Deleted when the last consumer disconnects | [RabbitMQ](rabbitmq.md) |
 
 ### Retry Options
 
