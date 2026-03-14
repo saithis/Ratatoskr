@@ -31,7 +31,7 @@
       "_appTitle": "Ratatoskr",
       "_appFooter": "Ratatoskr — MIT License",
       "_enableSearch": true,
-      "_appLogoPath": "../images/icon.png"
+      "_appLogoPath": "images/icon.png"
     },
     "sitemap": {
       "baseUrl": "https://saithis.github.io/Ratatoskr"

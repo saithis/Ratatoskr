@@ -142,8 +142,7 @@ The inbox cleanup also removes orphaned `InboxMessages` rows with no remaining h
 
 > [!NOTE]
 > The cleanup service waits one full `CleanupInterval` (default: 1 hour) before its first run. Use the manual SQL below for initial cleanup on large existing tables.
-
-> [!NOTE]
+>
 > `WithoutBackgroundProcessing()` disables the cleanup service even when `WithRetention()` is configured.
 
 ### Manual Cleanup

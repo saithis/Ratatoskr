@@ -275,7 +275,7 @@ Ratatoskr provides **at-least-once delivery**:
 - **No ordering guarantees** across retries — messages may be reprocessed in a different order than they were originally received
 
 > [!IMPORTANT]
-> Handlers must be **idempotent**. The inbox guarantees exactly-once *delivery* per (message ID, handler) pair, but if a handler succeeds and the process crashes before the completion status is persisted, the handler will be re-invoked. Design handlers to produce the same result when called twice with the same message.
+> Handlers must be **idempotent**. The inbox deduplicates deliveries per (message ID, handler) pair to minimize duplicate processing, but if a handler succeeds and the process crashes before the completion status is persisted, the handler will be re-invoked. Design handlers to produce the same result when called twice with the same message.
 
 ## Key Distinction: Transport vs. Durability
 

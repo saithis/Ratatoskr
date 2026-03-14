@@ -78,7 +78,7 @@ When the outbox and inbox share the same `DbContext`, the interceptor writes inb
 
 Failed messages are retried with exponential backoff:
 
-```
+```text
 NextAttemptAt = now + min(2^ErrorCount seconds, MaxRetryDelay)
 
 Example with MaxRetryDelay = 5 min:

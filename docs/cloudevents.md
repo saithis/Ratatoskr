@@ -50,7 +50,7 @@ CloudEvents defines two encoding modes for transport:
 
 CloudEvents attributes are placed in transport headers (e.g., AMQP application properties). The message body contains only the serialized data payload.
 
-```
+```text
 AMQP Headers:
   cloudEvents_specversion: 1.0
   cloudEvents_type: order.placed
@@ -67,7 +67,7 @@ Binary mode is the default and recommended for most use cases. It keeps the payl
 
 All CloudEvents attributes and the data payload are combined into a single JSON envelope in the message body.
 
-```
+```json
 Body:
 {
   "specversion": "1.0",

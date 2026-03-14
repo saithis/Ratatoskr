@@ -1,9 +1,9 @@
 # Inbox
 
-The inbox pattern provides **durable, per-handler delivery** with automatic retry and deduplication. Once a message is accepted into the inbox, each registered handler receives it exactly once per (message ID, handler) pair — surviving application crashes, redeliveries, and concurrent processing.
+The inbox pattern provides **durable, per-handler delivery** with automatic retry and deduplication. Once a message is accepted into the inbox, each registered handler is invoked at least once per (message ID, handler) pair — surviving application crashes, redeliveries, and concurrent processing. Persisted completion records prevent duplicate deliveries under normal operation.
 
 > [!IMPORTANT]
-> **Handlers must be idempotent.** The inbox guarantees exactly-once *delivery* per (message ID, handler) pair, but not exactly-once *processing*. If a handler succeeds but the process crashes before the completion status is persisted, the handler will be re-invoked. Design handlers to produce the same result when called twice — use upserts, check for existing records, or use the message ID as an idempotency key.
+> **Handlers must be idempotent.** The inbox deduplicates deliveries per (message ID, handler) pair, but does not guarantee exactly-once *processing*. If a handler succeeds but the process crashes before the completion status is persisted, the handler will be re-invoked. Design handlers to produce the same result when called twice — use upserts, check for existing records, or use the message ID as an idempotency key.
 
 ## When to Use
 
@@ -11,7 +11,7 @@ Use the inbox when:
 
 - Handler failures must not prevent other handlers from succeeding (per-handler isolation)
 - Message processing must survive application crashes without redelivery from the broker
-- Exactly-once delivery semantics are required per (message ID, handler) pair
+- Deduplication per (message ID, handler) pair is required to minimize duplicate processing
 - You want durable retry with backoff instead of relying on the transport's retry mechanism
 
 ## Setup
@@ -98,7 +98,7 @@ Deduplication is per **(message ID, handler key)**. If the same CloudEvents `id`
 
 Failed handlers are retried with exponential backoff:
 
-```
+```text
 NextAttemptAt = now + min(2^ErrorCount seconds, MaxRetryDelay)
 
 Example with MaxRetryDelay = 5 min:

@@ -6,6 +6,9 @@ on:
     paths:
       - 'src/**'
       - 'docs/**'
+      - 'images/**'
+      - 'Directory.Build.props'
+      - '.config/dotnet-tools.json'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 
