@@ -138,7 +138,7 @@ bus.AddEfCoreDurability<OrderDbContext>(d => d.UseInbox(inbox =>
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `WithMaxRetries(int)` | `5` | Delivery attempts before marking as poisoned. 1 = poisoned on first failure. |
+| `WithMaxRetries(int)` | `5` | Maximum failed attempts before marking as poisoned. 0 = poisoned on first failure. |
 | `WithMaxRetryDelay(TimeSpan)` | `5 minutes` | Maximum backoff delay. Jitter is applied to prevent thundering herd. |
 | `WithPollingInterval(TimeSpan)` | `30 seconds` | How often the processor polls the DB when idle |
 | `WithBatchSize(int)` | `100` | Handler statuses processed per batch |
@@ -147,6 +147,9 @@ bus.AddEfCoreDurability<OrderDbContext>(d => d.UseInbox(inbox =>
 | `WithRestartDelay(TimeSpan)` | `5 seconds` | Delay before restarting the processor after a crash |
 | `WithLockAcquireTimeout(TimeSpan)` | `60 seconds` | Timeout for acquiring the distributed lock |
 | `WithLockName(string)` | `"InboxProcessor_{DbContext}"` | Distributed lock name (auto-generated per DbContext) |
+| `WithRetention(TimeSpan)` | *none* | Auto-cleanup retention period for completed messages |
+| `WithCleanupInterval(TimeSpan)` | `1 hour` | How often the cleanup service runs |
+| `WithCleanupBatchSize(int)` | `10,000` | Messages deleted per cleanup batch |
 
 ## Data Retention
 

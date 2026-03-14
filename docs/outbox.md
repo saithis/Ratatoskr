@@ -124,7 +124,7 @@ bus.AddEfCoreDurability<OrderDbContext>(d => d.UseOutbox(outbox =>
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `WithMaxRetries(int)` | `5` | Send attempts before marking as poisoned. 0 = poisoned on first failure. |
+| `WithMaxRetries(int)` | `5` | Maximum failed attempts before marking as poisoned. 0 = poisoned on first failure. |
 | `WithMaxRetryDelay(TimeSpan)` | `5 minutes` | Maximum backoff delay between retries |
 | `WithPollingInterval(TimeSpan)` | `60 seconds` | How often the processor polls the DB when idle |
 | `WithBatchSize(int)` | `100` | Messages processed per batch |

@@ -127,6 +127,8 @@ bus.AddEfCoreDurability<OrderDbContext>(d =>
 | `WithLockAcquireTimeout(TimeSpan)` | `60s` | Lock acquire timeout | [Inbox](inbox.md) |
 | `WithLockName(string)` | `"InboxProcessor_{DbContext}"` | Distributed lock name | [Inbox](inbox.md) |
 | `WithRetention(TimeSpan)` | *none* | Auto-cleanup retention | [Inbox](inbox.md) |
+| `WithCleanupInterval(TimeSpan)` | `1h` | Cleanup run interval | [Inbox](inbox.md) |
+| `WithCleanupBatchSize(int)` | `10,000` | Cleanup batch size | [Inbox](inbox.md) |
 | `WithoutBackgroundProcessing()` | — | Disable background service (testing) | [Testing](testing.md) |
 
 ## AsyncAPI

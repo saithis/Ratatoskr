@@ -58,7 +58,7 @@ builder.Services.AddRatatoskr(bus =>
         .WithRabbitMq(r => r
             .WithQueueName("orders.events.subscriptions")
             .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(30)))
-        .Consumes<OrderPlaced>(m => m.WithHandler<OrderPlacedHandler>())
+        .Consumes<OrderPlaced>(m => m.WithHandler<OrderPlacedHandler>("order-placed"))
         .UseInbox<OrderDbContext>());
 
     bus.AddCommandConsumeChannel("orders.commands", c => c

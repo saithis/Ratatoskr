@@ -99,7 +99,23 @@ public class OrderDbContext(DbContextOptions<OrderDbContext> options)
 }
 ```
 
-## 6. Configure Ratatoskr
+## 6. Configure Connection Strings
+
+Add connection strings to `appsettings.json`:
+
+```json
+{
+  "ConnectionStrings": {
+    "RabbitMq": "amqp://guest:guest@localhost:5672/",
+    "OrdersDb": "Host=localhost;Database=orders;Username=ratatoskr;Password=ratatoskr"
+  }
+}
+```
+
+> [!WARNING]
+> Never hardcode connection strings in production code. Use [user secrets](https://learn.microsoft.com/en-us/aspnet/core/security/app-secrets), environment variables, or a secrets manager.
+
+## 7. Configure Ratatoskr
 
 Replace the contents of `Program.cs`:
 
@@ -125,7 +141,7 @@ builder.Services.AddRatatoskr(bus =>
     // Configure RabbitMQ transport
     bus.UseRabbitMq(c =>
     {
-        c.ConnectionString = new Uri("amqp://guest:guest@localhost:5672/");
+        c.ConnectionString = new Uri(builder.Configuration.GetConnectionString("RabbitMq")!);
     });
 
     // Configure transactional outbox
@@ -151,7 +167,7 @@ builder.Services.AddRatatoskr(bus =>
 // Configure EF Core with PostgreSQL
 builder.Services.AddDbContext<OrderDbContext>((sp, options) =>
 {
-    options.UseNpgsql("Host=localhost;Database=orders;Username=ratatoskr;Password=ratatoskr");
+    options.UseNpgsql(builder.Configuration.GetConnectionString("OrdersDb"));
     options.RegisterOutbox<OrderDbContext>(sp);
 });
 
@@ -176,7 +192,7 @@ app.MapPost("/orders", async (OrderDbContext db) =>
 app.Run();
 ```
 
-## 7. Run the Application
+## 8. Run the Application
 
 ```bash
 dotnet run
