@@ -1,42 +1,40 @@
-# Operations Runbook
+# Operations
 
-This guide covers day-to-day operational concerns: monitoring, handling failures, data retention, and deployment considerations.
+This page covers day-to-day operational concerns: monitoring, handling failures, data retention, distributed lock providers, and deployment considerations.
 
 ## Monitoring
 
 ### Key Metrics
 
-Ratatoskr exposes OpenTelemetry metrics via `System.Diagnostics.Metrics`. Use your preferred metrics backend (Prometheus, Datadog, Azure Monitor, etc.) to collect and alert on these:
+Ratatoskr exposes OpenTelemetry metrics via `System.Diagnostics.Metrics`. See [Observability](observability.md) for the complete metrics reference and setup.
 
-| Metric | Type | Description | Alert Threshold |
-|---|---|---|---|
-| `ratatoskr.outbox.process.count` | Counter | Outbox messages processed (tagged `status=success\|failure`) | High failure rate |
-| `ratatoskr.outbox.poison.count` | Counter | Outbox messages permanently failed | Any increment |
-| `ratatoskr.outbox.batch.size` | Histogram | Messages per outbox batch | Sustained high values (backlog) |
-| `ratatoskr.outbox.process.duration` | Histogram | Duration of outbox batch processing | > 30s |
-| `ratatoskr.inbox.deliver.count` | Counter | Inbox handler deliveries attempted (tagged `status`) | High failure rate |
-| `ratatoskr.inbox.poison.count` | Counter | Inbox handlers permanently failed | Any increment |
-| `ratatoskr.inbox.batch.size` | Histogram | Handler statuses per inbox batch | Sustained high values (backlog) |
-| `ratatoskr.inbox.process.duration` | Histogram | Duration of inbox batch processing | > 30s |
-| `ratatoskr.lock.acquisition.failure` | Counter | Failed lock acquisitions | Sustained failures |
-| `ratatoskr.lock.lost` | Counter | Lock losses during processing | Any increment |
-| `ratatoskr.receive.lag` | Histogram | Time from message creation to reception | Growing lag |
-| `ratatoskr.process.lag` | Histogram | Time from message creation to processing completion | Growing lag |
+| Metric | Type | Alert Threshold |
+|--------|------|-----------------|
+| `ratatoskr.outbox.process.count` | Counter | High failure rate |
+| `ratatoskr.outbox.poison.count` | Counter | Any increment |
+| `ratatoskr.outbox.batch.size` | Histogram | Sustained high values (backlog) |
+| `ratatoskr.outbox.process.duration` | Histogram | > 30s |
+| `ratatoskr.inbox.deliver.count` | Counter | High failure rate |
+| `ratatoskr.inbox.poison.count` | Counter | Any increment |
+| `ratatoskr.inbox.batch.size` | Histogram | Sustained high values (backlog) |
+| `ratatoskr.inbox.process.duration` | Histogram | > 30s |
+| `ratatoskr.lock.acquisition.failure` | Counter | Sustained failures |
+| `ratatoskr.lock.lost` | Counter | Any increment |
+| `ratatoskr.receive.lag` | Histogram | Growing lag |
+| `ratatoskr.process.lag` | Histogram | Growing lag |
 
 ### Critical Alerts
 
-Set up alerts for:
-
-1. **Poison count > 0** — Both `ratatoskr.outbox.poison.count` and `ratatoskr.inbox.poison.count`. Any poisoned message requires investigation.
-2. **Lock lost** — `ratatoskr.lock.lost` indicates infrastructure issues (database connection drops, network partitions).
-3. **Growing backlog** — If `ratatoskr.outbox.batch.size` or `ratatoskr.inbox.batch.size` consistently equals `BatchSize`, the processor cannot keep up.
-4. **Receive/process lag trending up** — Indicates throughput is insufficient for message volume.
+1. **Poison count > 0** — Any poisoned message requires investigation
+2. **Lock lost** — Indicates infrastructure issues (database connection drops, network partitions)
+3. **Growing backlog** — If batch size consistently equals `BatchSize`, the processor cannot keep up
+4. **Receive/process lag trending up** — Throughput is insufficient for message volume
 
 ## Handling Poisoned Messages
 
 ### Investigation
 
-Poisoned messages are messages that have exhausted their retry budget. They remain in the database for manual investigation.
+Poisoned messages have exhausted their retry budget and remain in the database for manual investigation.
 
 **Outbox (PostgreSQL):**
 ```sql
@@ -76,7 +74,7 @@ ORDER BY s.[CreatedAt] DESC;
 
 ### Manual Retry
 
-To retry a poisoned message, reset its state:
+Reset a poisoned message's state to retry it:
 
 **Outbox (PostgreSQL):**
 ```sql
@@ -122,80 +120,64 @@ SET [IsPoisoned] = 0,
 WHERE [Id] = '<status-id>';
 ```
 
-The processor will pick up the message on its next polling cycle.
+The processor picks up the message on its next polling cycle.
 
 ## Data Retention
 
-The outbox and inbox tables grow unbounded. Configure automatic cleanup to delete old processed messages, or run manual SQL for more control.
-
 ### Automatic Cleanup
 
-Enable automatic cleanup by configuring a retention period on the outbox and/or inbox builders. The cleanup service runs as a background `IHostedService` and periodically deletes old successfully processed messages in batches. **Poisoned messages are never auto-deleted** — they require manual investigation.
+Configure retention on the outbox and inbox builders. The cleanup service runs as a background `IHostedService` and deletes old processed messages in batches. **Poisoned messages are never auto-deleted.**
 
 ```csharp
-builder.AddEfCoreDurability<MyDbContext>(d => d
+bus.AddEfCoreDurability<OrderDbContext>(d => d
     .UseOutbox(outbox => outbox
-        .WithRetention(TimeSpan.FromDays(7))         // delete processed messages after 7 days
-        .WithCleanupInterval(TimeSpan.FromHours(1))   // run cleanup every hour (default)
-        .WithCleanupBatchSize(10_000))                 // delete up to 10k rows per batch (default)
+        .WithRetention(TimeSpan.FromDays(7))
+        .WithCleanupInterval(TimeSpan.FromHours(1))
+        .WithCleanupBatchSize(10_000))
     .UseInbox(inbox => inbox
-        .WithRetention(TimeSpan.FromDays(30)))         // delete completed handler statuses after 30 days
-);
+        .WithRetention(TimeSpan.FromDays(30))));
 ```
 
-The inbox cleanup also removes orphaned `InboxMessages` rows that no longer have any associated handler statuses.
+The inbox cleanup also removes orphaned `InboxMessages` rows with no remaining handler statuses.
 
-> **Note:** The cleanup service waits one full `CleanupInterval` (default: 1 hour) before its first run. If you enable retention on a table that has already grown large, use the manual SQL queries below to perform an initial cleanup immediately after deploying.
+> [!NOTE]
+> The cleanup service waits one full `CleanupInterval` (default: 1 hour) before its first run. Use the manual SQL below for initial cleanup on large existing tables.
+> `WithoutBackgroundProcessing()` disables the cleanup service even when `WithRetention()` is configured.
 
-> **Note:** Calling `WithoutBackgroundProcessing()` also disables the cleanup service, even when `WithRetention()` is configured.
+### Manual Cleanup
 
-### Manual Cleanup (SQL)
-
-For manual cleanup or if you prefer to run cleanup as an external scheduled job:
-
-**Outbox:**
-
-**PostgreSQL:**
+**Outbox (PostgreSQL):**
 ```sql
--- Delete successfully processed messages older than 7 days
 DELETE FROM "OutboxMessages"
 WHERE "ProcessedAt" IS NOT NULL
   AND "ProcessedAt" < NOW() - INTERVAL '7 days';
 
--- Delete poisoned messages older than 30 days (after investigation)
 DELETE FROM "OutboxMessages"
 WHERE "IsPoisoned" = true
   AND "FailedAt" < NOW() - INTERVAL '30 days';
 ```
 
-**SQL Server:**
+**Outbox (SQL Server):**
 ```sql
--- Delete successfully processed messages older than 7 days
 DELETE FROM [OutboxMessages]
 WHERE [ProcessedAt] IS NOT NULL
   AND [ProcessedAt] < DATEADD(DAY, -7, GETUTCDATE());
 
--- Delete poisoned messages older than 30 days (after investigation)
 DELETE FROM [OutboxMessages]
 WHERE [IsPoisoned] = 1
   AND [FailedAt] < DATEADD(DAY, -30, GETUTCDATE());
 ```
 
-**Inbox:**
-
-**PostgreSQL:**
+**Inbox (PostgreSQL):**
 ```sql
--- Delete completed handler statuses older than 30 days
 DELETE FROM "InboxHandlerStatuses"
 WHERE "CompletedAt" IS NOT NULL
   AND "CompletedAt" < NOW() - INTERVAL '30 days';
 
--- Delete poisoned statuses older than 30 days (after investigation)
 DELETE FROM "InboxHandlerStatuses"
 WHERE "IsPoisoned" = true
   AND "CreatedAt" < NOW() - INTERVAL '30 days';
 
--- Delete orphaned inbox messages (no remaining handler statuses)
 DELETE FROM "InboxMessages"
 WHERE NOT EXISTS (
     SELECT 1 FROM "InboxHandlerStatuses"
@@ -203,19 +185,16 @@ WHERE NOT EXISTS (
 );
 ```
 
-**SQL Server:**
+**Inbox (SQL Server):**
 ```sql
--- Delete completed handler statuses older than 30 days
 DELETE FROM [InboxHandlerStatuses]
 WHERE [CompletedAt] IS NOT NULL
   AND [CompletedAt] < DATEADD(DAY, -30, GETUTCDATE());
 
--- Delete poisoned statuses older than 30 days (after investigation)
 DELETE FROM [InboxHandlerStatuses]
 WHERE [IsPoisoned] = 1
   AND [CreatedAt] < DATEADD(DAY, -30, GETUTCDATE());
 
--- Delete orphaned inbox messages (no remaining handler statuses)
 DELETE FROM [InboxMessages]
 WHERE NOT EXISTS (
     SELECT 1 FROM [InboxHandlerStatuses]
@@ -223,7 +202,7 @@ WHERE NOT EXISTS (
 );
 ```
 
-For large tables, use batched deletes to avoid long-running transactions:
+For large tables, use batched deletes:
 
 **PostgreSQL:**
 ```sql
@@ -245,11 +224,9 @@ WHERE [ProcessedAt] IS NOT NULL
 
 ## Distributed Lock Provider
 
-Ratatoskr uses [Medallion.Threading](https://github.com/madelson/DistributedLock) for distributed locks. The lock provider must be chosen based on your deployment topology.
+Ratatoskr uses [Medallion.Threading](https://github.com/madelson/DistributedLock) for distributed locks. Choose a provider based on your deployment topology.
 
-### Single Machine / Single Instance
-
-File-based locks work for development and single-machine deployments:
+### Single Machine / Development
 
 ```csharp
 services.AddSingleton<IDistributedLockProvider>(_ =>
@@ -257,43 +234,44 @@ services.AddSingleton<IDistributedLockProvider>(_ =>
         new DirectoryInfo("/var/locks/ratatoskr")));
 ```
 
-### Multi-Instance / Kubernetes
+### Multi-Instance (PostgreSQL)
 
-For horizontally scaled deployments, use a database or Redis-backed lock provider:
-
-**PostgreSQL (recommended when you already use PostgreSQL):**
 ```csharp
 services.AddSingleton<IDistributedLockProvider>(_ =>
     new PostgresDistributedSynchronizationProvider(connectionString));
 ```
 
-**SQL Server:**
+### Multi-Instance (SQL Server)
+
 ```csharp
 services.AddSingleton<IDistributedLockProvider>(_ =>
     new SqlDistributedSynchronizationProvider(connectionString));
 ```
 
-**Redis:**
+### Multi-Instance (Redis)
+
 ```csharp
 services.AddSingleton<IDistributedLockProvider>(sp =>
-    new RedisDistributedSynchronizationProvider("ratatoskr", sp.GetRequiredService<IDatabase>()));
+    new RedisDistributedSynchronizationProvider(
+        "ratatoskr", sp.GetRequiredService<IDatabase>()));
 ```
 
-> **Important:** File-based locks do NOT work across machines. If you deploy multiple instances, you **must** use a shared lock provider (database or Redis). Failure to do so will result in multiple processors running concurrently, potentially causing duplicate message processing.
+> [!IMPORTANT]
+> File-based locks do **not** work across machines. For horizontally scaled deployments, use a database or Redis-backed provider. Without a shared lock provider, multiple processors may run concurrently, causing duplicate message processing.
 
 ### Lock Names
 
-Lock names are auto-generated per DbContext type:
+Lock names are auto-generated per `DbContext` type:
 - Outbox: `OutboxProcessor_{DbContextTypeName}`
 - Inbox: `InboxProcessor_{DbContextTypeName}`
 
-These are configurable via `WithLockName()` if you need custom names.
+Override with `WithLockName("custom-name")` if needed.
 
 ## Disaster Recovery
 
 ### Stuck Messages
 
-If a processor crashes mid-batch, messages may be left in "processing" state (`ProcessingStartedAt` is set but never cleared). The stuck message detection mechanism automatically recovers these after the configured threshold (default: 5 minutes).
+If a processor crashes mid-batch, messages may be left in "processing" state. Stuck message detection automatically recovers them after the configured threshold (default: 5 minutes).
 
 To manually clear stuck messages:
 
@@ -301,53 +279,73 @@ To manually clear stuck messages:
 ```sql
 -- Outbox
 UPDATE "OutboxMessages"
-SET "ProcessingStartedAt" = NULL,
-    "Version" = "Version" + 1
+SET "ProcessingStartedAt" = NULL, "Version" = "Version" + 1
 WHERE "ProcessingStartedAt" IS NOT NULL
-  AND "ProcessedAt" IS NULL
-  AND "IsPoisoned" = false;
+  AND "ProcessedAt" IS NULL AND "IsPoisoned" = false;
 
 -- Inbox
 UPDATE "InboxHandlerStatuses"
-SET "ProcessingStartedAt" = NULL,
-    "Version" = "Version" + 1
+SET "ProcessingStartedAt" = NULL, "Version" = "Version" + 1
 WHERE "ProcessingStartedAt" IS NOT NULL
-  AND "CompletedAt" IS NULL
-  AND "IsPoisoned" = false;
+  AND "CompletedAt" IS NULL AND "IsPoisoned" = false;
 ```
 
 **SQL Server:**
 ```sql
 -- Outbox
 UPDATE [OutboxMessages]
-SET [ProcessingStartedAt] = NULL,
-    [Version] = [Version] + 1
+SET [ProcessingStartedAt] = NULL, [Version] = [Version] + 1
 WHERE [ProcessingStartedAt] IS NOT NULL
-  AND [ProcessedAt] IS NULL
-  AND [IsPoisoned] = 0;
+  AND [ProcessedAt] IS NULL AND [IsPoisoned] = 0;
 
 -- Inbox
 UPDATE [InboxHandlerStatuses]
-SET [ProcessingStartedAt] = NULL,
-    [Version] = [Version] + 1
+SET [ProcessingStartedAt] = NULL, [Version] = [Version] + 1
 WHERE [ProcessingStartedAt] IS NOT NULL
-  AND [CompletedAt] IS NULL
-  AND [IsPoisoned] = 0;
+  AND [CompletedAt] IS NULL AND [IsPoisoned] = 0;
 ```
 
 ### Processor Not Running
 
 If no processor is picking up messages:
 
-1. Check that the `IHostedService` is registered (ensure `WithoutBackgroundProcessing()` is NOT called in production).
-2. Check distributed lock acquisition — another instance may hold the lock. Monitor `ratatoskr.lock.acquisition.failure`.
-3. Check database connectivity — the processor needs to reach the database for both queries and locks.
-4. Check logs for `OutboxProcessor` / `InboxProcessor` — errors are logged at `Warning` and `Error` levels.
+1. Check that `WithoutBackgroundProcessing()` is **not** called in production
+2. Check distributed lock acquisition — another instance may hold the lock. Monitor `ratatoskr.lock.acquisition.failure`
+3. Check database connectivity
+4. Check logs for `OutboxProcessor` / `InboxProcessor` at `Warning` and `Error` levels
 
 ### RabbitMQ Consumer Disconnection
 
-The `RabbitMqConsumer` automatically reconnects with exponential backoff (1s to 30s with jitter). If the consumer is persistently disconnected:
+The `RabbitMqConsumer` automatically reconnects with exponential backoff (1s to 30s with jitter). If persistently disconnected:
 
-1. Check RabbitMQ connectivity and credentials.
-2. Check the `RabbitMqConsumer` logs for error details.
-3. Verify queue and exchange topology matches the configuration.
+1. Check RabbitMQ connectivity and credentials
+2. Check consumer logs for error details
+3. Verify queue and exchange topology matches configuration
+
+## Graceful Shutdown
+
+On `SIGTERM` or application shutdown:
+
+- The `OutboxProcessor` and `InboxProcessor` stop accepting new batches and wait for the current batch to complete
+- The `RabbitMqConsumer` stops consuming and waits for in-flight messages to be acknowledged
+- If a handler is running during inbox shutdown, the `CancellationToken` is triggered. The attempt is **not** counted as a failure — it's recovered by stuck message detection on next startup
+
+For rolling deployments, ensure `StuckMessageThreshold` is longer than your shutdown grace period.
+
+## EF Core Migrations
+
+When upgrading Ratatoskr versions, the outbox/inbox database schema may change. Generate a new migration after updating the package:
+
+```bash
+dotnet ef migrations add UpgradeRatatoskr
+dotnet ef database update
+```
+
+Review the generated migration to understand schema changes before applying to production.
+
+## What's Next
+
+- [Observability](observability.md) — Complete metrics reference and setup
+- [Configuration Reference](configuration.md) — All configuration options at a glance
+- [Outbox](outbox.md) — Outbox configuration and processing details
+- [Inbox](inbox.md) — Inbox configuration and processing details

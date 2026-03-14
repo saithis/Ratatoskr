@@ -1,0 +1,40 @@
+{
+  "metadata": [
+    {
+      "src": [
+        {
+          "src": "../",
+          "files": ["src/**/*.csproj"],
+          "exclude": ["**/bin/**", "**/obj/**", "_site/**"]
+        }
+      ],
+      "dest": "api",
+      "memberLayout": "separatePages",
+      "namespaceLayout": "nested",
+      "properties": {
+        "TargetFramework": "net10.0"
+      }
+    }
+  ],
+  "build": {
+    "content": [
+      { "files": ["api/*.yml", "api/.manifest"] },
+      {
+        "files": ["**/*.md", "toc.yml"],
+        "exclude": ["_site/**", "AGENT.md", "brainstorms/**", "plans/**"]
+      }
+    ],
+    "resource": [{ "files": ["../images/**"] }],
+    "output": "_site",
+    "template": ["default", "modern"],
+    "globalMetadata": {
+      "_appTitle": "Ratatoskr",
+      "_appFooter": "Ratatoskr — MIT License",
+      "_enableSearch": true,
+      "_appLogoPath": "images/icon.png"
+    },
+    "sitemap": {
+      "baseUrl": "https://saithis.github.io/Ratatoskr"
+    }
+  }
+}

@@ -79,3 +79,7 @@ nunit-*.xml
 
 # AI
 .claude/settings.local.json
+
+# DocFX
+docs/_site/
+docs/api/
