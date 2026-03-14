@@ -1,7 +1,7 @@
 ---
 title: "docs: Complete Documentation Restructure with DocFX"
 type: docs
-status: active
+status: completed
 date: 2026-03-12
 origin: docs/brainstorms/2026-03-12-documentation-restructure-brainstorm.md
 ---
