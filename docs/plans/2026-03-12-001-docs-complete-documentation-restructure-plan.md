@@ -63,7 +63,7 @@ This single domain covers: events, commands, multiple handlers, outbox (order cr
 
 ### Architecture
 
-```
+```text
 examples/Docs/
 ├── Docs.csproj                    # Minimal, no Aspire. References all 4 Ratatoskr packages
 ├── Program.cs                     # Full working app setup with #region markers for DocFX snippets

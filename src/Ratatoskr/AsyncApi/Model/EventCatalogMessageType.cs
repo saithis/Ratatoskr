@@ -4,5 +4,4 @@ public enum EventCatalogMessageType
 {
     Event,
     Command,
-    Query,
 }

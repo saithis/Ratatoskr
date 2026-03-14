@@ -6,11 +6,6 @@ namespace Ratatoskr.EfCore;
 public class OutboxOptions
 {
     /// <summary>
-    /// Section name in configuration files.
-    /// </summary>
-    public const string SectionName = "Ratatoskr:Outbox";
-    
-    /// <summary>
     /// How often to poll the database for unsent messages.
     /// Default: 60 seconds.
     /// </summary>

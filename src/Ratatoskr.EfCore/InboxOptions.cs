@@ -6,11 +6,6 @@ namespace Ratatoskr.EfCore;
 public class InboxOptions
 {
     /// <summary>
-    /// Section name in configuration files.
-    /// </summary>
-    public const string SectionName = "Ratatoskr:Inbox";
-
-    /// <summary>
     /// How often to poll the database for pending handler deliveries.
     /// Default: 30 seconds.
     /// </summary>
