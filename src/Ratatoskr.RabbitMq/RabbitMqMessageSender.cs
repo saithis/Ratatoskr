@@ -17,11 +17,13 @@ internal class RabbitMqMessageSender(
     ILogger<RabbitMqMessageSender> logger)
     : IMessageSender, IAsyncDisposable
 {
+    private readonly IMessageActivityObserver[] _observers = observers.ToArray();
+
     public string TransportName => RabbitMqConstants.TransportName;
 
     public async Task SendAsync(byte[] content, MessageProperties props, CancellationToken cancellationToken)
     {
-        await using var channel = await connectionManager.CreateChannelAsync(options.UsePublisherConfirms, cancellationToken);
+        var channel = await connectionManager.GetOrCreateSendChannelAsync(options.UsePublisherConfirms, cancellationToken);
 
         var basicProps = new BasicProperties();
         var exchange = props.GetExchange() ?? "";
@@ -60,7 +62,7 @@ internal class RabbitMqMessageSender(
         {
             telemetry.RecordSent(startTimestamp, publishException, destination, routingKey);
 
-            await observers.NotifyAsync(new MessageActivity
+            await _observers.NotifyAsync(new MessageActivity
             {
                 Stage = MessageStage.Sent,
                 Properties = props,

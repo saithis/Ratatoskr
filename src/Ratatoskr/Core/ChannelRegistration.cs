@@ -19,13 +19,32 @@ public class ChannelRegistration(string channelName, ChannelType intent)
 
     public List<MessageRegistration> Messages { get; } = new();
 
+    // O(1) lookup indexes — populated by ChannelRegistry.Freeze()
+    internal Dictionary<Type, MessageRegistration> MessagesByType { get; } = new();
+    internal Dictionary<string, MessageRegistration> MessagesByTypeName { get; } = new(StringComparer.Ordinal);
+
+    internal void BuildLookups()
+    {
+        MessagesByType.Clear();
+        MessagesByTypeName.Clear();
+        foreach (var msg in Messages)
+        {
+            MessagesByType[msg.MessageType] = msg;
+            MessagesByTypeName[msg.MessageTypeName] = msg;
+        }
+    }
+
     public MessageRegistration? GetMessage(Type messageType)
     {
+        if (MessagesByType.Count > 0)
+            return MessagesByType.GetValueOrDefault(messageType);
         return Messages.FirstOrDefault(m => m.MessageType == messageType);
     }
 
     public MessageRegistration? GetMessage(string messageTypeName)
     {
+        if (MessagesByTypeName.Count > 0)
+            return MessagesByTypeName.GetValueOrDefault(messageTypeName);
         return Messages.FirstOrDefault(m => m.MessageTypeName == messageTypeName);
     }
 }

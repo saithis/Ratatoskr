@@ -19,6 +19,12 @@ internal class OutboxTriggerInterceptor<TDbContext>(
     : SaveChangesInterceptor where TDbContext : DbContext, IOutboxDbContext
 {
     private readonly OutboxOptions _options = optionsHolder.Options;
+    private readonly IMessageActivityObserver[] _observers = observers.ToArray();
+
+    // Flags set in SavingChangesAsync so SavedChangesAsync can skip change tracker enumeration
+    private bool _outboxEntitiesStaged;
+    private bool _inboxEntitiesStaged;
+
     public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
         DbContextEventData eventData,
         InterceptionResult<int> result,
@@ -33,6 +39,9 @@ internal class OutboxTriggerInterceptor<TDbContext>(
 
         if (context is not IOutboxDbContext outboxDbContext)
             throw new InvalidOperationException("Expected IOutboxDbContext");
+
+        _outboxEntitiesStaged = false;
+        _inboxEntitiesStaged = false;
 
         while (outboxDbContext.OutboxMessages.Queue.TryPeek(out var item))
         {
@@ -76,7 +85,7 @@ internal class OutboxTriggerInterceptor<TDbContext>(
 
                 if (sameDbCreated)
                 {
-                    await observers.NotifyAsync(new MessageActivity
+                    await _observers.NotifyAsync(new MessageActivity
                     {
                         Stage = MessageStage.InboxQueued,
                         Properties = enrichedProperties,
@@ -96,11 +105,12 @@ internal class OutboxTriggerInterceptor<TDbContext>(
 
                 var outboxMessage = OutboxMessageEntity.Create(serializedMessage, enrichedProperties, timeProvider, transport);
                 context.Set<OutboxMessageEntity>().Add(outboxMessage);
+                _outboxEntitiesStaged = true;
             }
 
             outboxDbContext.OutboxMessages.Queue.TryDequeue(out _);
 
-            await observers.NotifyAsync(new MessageActivity
+            await _observers.NotifyAsync(new MessageActivity
             {
                 Stage = MessageStage.OutboxStaged,
                 Properties = enrichedProperties,
@@ -143,7 +153,7 @@ internal class OutboxTriggerInterceptor<TDbContext>(
                 continue;
             }
 
-            var msgReg = channel.Messages.FirstOrDefault(m => m.MessageTypeName == enrichedProperties.Type);
+            var msgReg = channel.GetMessage(enrichedProperties.Type!);
             if (msgReg == null) continue;
 
             var inboxHandlers = channelHandlerRegistry.GetInboxHandlers(channel.ChannelName, msgReg.MessageType);
@@ -159,6 +169,7 @@ internal class OutboxTriggerInterceptor<TDbContext>(
                     InboxMessageEntity.Create(enrichedProperties.Id, EfCoreTransportConstants.TransportName,
                         serializedMessage, enrichedProperties, timeProvider));
                 inboxEntriesCreated = true;
+                _inboxEntitiesStaged = true;
             }
 
             foreach (var handler in inboxHandlers)
@@ -184,19 +195,14 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         if (eventData.EntitiesSavedCount == 0)
             return result;
 
-        var outboxMessages = eventData.Context?.ChangeTracker.Entries<OutboxMessageEntity>() ?? [];
-        if (outboxMessages.Any(e => e.Entity.ProcessedAt == null))
+        if (_outboxEntitiesStaged)
         {
             await outboxProcessor.TriggerAsync(cancellationToken);
         }
 
-        if (inboxProcessorTrigger != null)
+        if (_inboxEntitiesStaged && inboxProcessorTrigger != null)
         {
-            var inboxStatuses = eventData.Context?.ChangeTracker.Entries<InboxHandlerStatusEntity>() ?? [];
-            if (inboxStatuses.Any(e => e.Entity.CompletedAt == null))
-            {
-                await inboxProcessorTrigger.TriggerAsync(cancellationToken);
-            }
+            await inboxProcessorTrigger.TriggerAsync(cancellationToken);
         }
 
         return result;

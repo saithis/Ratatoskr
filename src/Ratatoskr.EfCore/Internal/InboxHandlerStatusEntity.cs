@@ -86,11 +86,7 @@ internal class InboxHandlerStatusEntity
         }
         else
         {
-            // Exponential backoff with equal jitter: base/2 + random(0, base/2)
-            // Prevents thundering herd while maintaining a predictable minimum delay
-            var baseDelay = Math.Min(Math.Pow(2, ErrorCount), maxRetryDelay.TotalSeconds);
-            var delaySeconds = baseDelay * 0.5 + baseDelay * 0.5 * Random.Shared.NextDouble();
-            NextAttemptAt = timeProvider.GetUtcNow().AddSeconds(delaySeconds);
+            NextAttemptAt = timeProvider.GetUtcNow().Add(BackoffCalculator.CalculateDelay(ErrorCount, maxRetryDelay));
         }
     }
 

@@ -12,6 +12,8 @@ public class MessageRouter(
     MessageDispatcher dispatcher,
     IEnumerable<IMessageRouteInterceptor> interceptors)
 {
+    private readonly IMessageRouteInterceptor[] _interceptors = interceptors.ToArray();
+
     public async Task<DispatchResult> RouteAsync(
         byte[] body,
         MessageProperties properties,
@@ -20,7 +22,7 @@ public class MessageRouter(
         string channelName)
     {
         var handlersAccepted = false;
-        foreach (var interceptor in interceptors)
+        foreach (var interceptor in _interceptors)
         {
             var interceptResult = await interceptor.BeforeDispatchAsync(
                 body, properties, transportName, channelName, cancellationToken);

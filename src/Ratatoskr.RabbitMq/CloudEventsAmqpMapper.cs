@@ -232,8 +232,8 @@ public class CloudEventsAmqpMapper(
             : GetCloudEventHeader(incomingHeaders, CloudEventsAmqpConstants.TraceParentHeader);
             
         var traceState = incomingHeaders.TryGetValue("tracestate", out var ts)
-            ? ConvertToString(ts) 
-            : GetCloudEventHeader(incomingHeaders, CloudEventsAmqpConstants.TraceParentHeader);
+            ? ConvertToString(ts)
+            : GetCloudEventHeader(incomingHeaders, CloudEventsAmqpConstants.TraceStateHeader);
         
         // Build headers dictionary (include all headers)
         var headers = new Dictionary<string, string>();
@@ -271,8 +271,7 @@ public class CloudEventsAmqpMapper(
         byte[] dataBytes;
         if (cloudEvent.Data != null)
         {
-            var dataJson = JsonSerializer.Serialize(cloudEvent.Data);
-            dataBytes = Encoding.UTF8.GetBytes(dataJson);
+            dataBytes = JsonSerializer.SerializeToUtf8Bytes(cloudEvent.Data);
         }
         else
         {

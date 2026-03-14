@@ -36,6 +36,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IMessagePropertiesEnricher, MessagePropertiesEnricher>();
 
         // Register ChannelRegistry and ChannelHandlerRegistry
+        builder.ChannelRegistry.Freeze();
         services.AddSingleton(builder.ChannelRegistry);
         var handlerRegistry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
         builder.ValidateHandlers(handlerRegistry);

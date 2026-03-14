@@ -17,7 +17,7 @@ A complete, restructured documentation site for Ratatoskr using DocFX. The docs 
 
 ### Navigation (toc.yml)
 
-```
+```yaml
 - Introduction
 - Getting Started
 - Core Concepts

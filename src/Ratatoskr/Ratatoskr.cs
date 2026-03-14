@@ -12,6 +12,8 @@ public class Ratatoskr(
     IEnumerable<IMessageActivityObserver> observers,
     ILogger<Ratatoskr> logger) : IRatatoskr
 {
+    private readonly IMessageSender[] _senders = senders.ToArray();
+    private readonly IMessageActivityObserver[] _observers = observers.ToArray();
     public async Task PublishDirectAsync<TMessage>(
         TMessage message,
         MessageProperties? props = null,
@@ -39,8 +41,8 @@ public class Ratatoskr(
             throw new InvalidOperationException($"No transport found for message '{typeof(TMessage)}'");
         }
 
-        var sendersToUse = senders.Where(sender => props.Transports.Contains(sender.TransportName)).ToArray();
-        if (!sendersToUse.Any())
+        var sendersToUse = _senders.Where(sender => props.Transports.Contains(sender.TransportName)).ToArray();
+        if (sendersToUse.Length == 0)
         {
             throw new InvalidOperationException($"No transport found for message '{typeof(TMessage)}'");
         }
@@ -62,7 +64,7 @@ public class Ratatoskr(
                 exceptions.Add(ex);
             }
 
-            await observers.NotifyAsync(new MessageActivity
+            await _observers.NotifyAsync(new MessageActivity
             {
                 Stage = MessageStage.Published,
                 Properties = props,

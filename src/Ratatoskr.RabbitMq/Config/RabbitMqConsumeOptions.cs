@@ -38,6 +38,20 @@ public class RabbitMqConsumeOptions(RabbitMqChannelOptions inner)
         return this;
     }
 
+    /// <summary>Sets whether the exchange survives broker restarts.</summary>
+    public RabbitMqConsumeOptions WithExchangeDurable(bool durable = true)
+    {
+        inner.WithExchangeDurable(durable);
+        return this;
+    }
+
+    /// <summary>Sets whether the exchange is deleted when the last queue is unbound.</summary>
+    public RabbitMqConsumeOptions WithExchangeAutoDelete(bool autoDelete = true)
+    {
+        inner.WithExchangeAutoDelete(autoDelete);
+        return this;
+    }
+
     // ── Queue / Consumer ─────────────────────────────────────────────
 
     /// <summary>Sets the queue name. Required for consume channels.</summary>

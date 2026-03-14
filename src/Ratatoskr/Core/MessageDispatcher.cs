@@ -16,6 +16,8 @@ public class MessageDispatcher(
     IEnumerable<IMessageActivityObserver> observers,
     ILogger<MessageDispatcher> logger)
 {
+    private readonly IMessageActivityObserver[] _observers = observers.ToArray();
+
     /// <summary>
     /// Dispatches a message to all registered fire-and-forget handlers for the channel, each in its own DI scope.
     /// </summary>
@@ -31,7 +33,7 @@ public class MessageDispatcher(
         Type? messageType = null;
 
         var channel = channelRegistry.GetConsumeChannel(channelName);
-        var msgReg = channel?.Messages.FirstOrDefault(m => m.MessageTypeName == properties.Type);
+        var msgReg = channel?.GetMessage(properties.Type);
         if (msgReg != null)
         {
             messageType = msgReg.MessageType;
@@ -80,14 +82,12 @@ public class MessageDispatcher(
 
         // 4. Invoke each handler in its own DI scope for full isolation.
         List<Exception>? exceptions = null;
-        var invoked = 0;
 
         foreach (var handler in handlers)
         {
             try
             {
                 await handlerInvoker.InvokeAsync(handler.HandlerType, message, properties, cancellationToken);
-                invoked++;
 
                 logger.LogDebug("Handler '{Handler}' processed message '{Id}' of type '{Type}'",
                     handler.HandlerType.Name, properties.Id, properties.Type);
@@ -96,21 +96,14 @@ public class MessageDispatcher(
             {
                 logger.LogError(ex, "Handler '{Handler}' failed for message '{Id}' of type '{Type}'",
                     handler.HandlerType.Name, properties.Id, properties.Type);
-                invoked++;
                 exceptions ??= [];
                 exceptions.Add(ex);
             }
         }
 
-        DispatchResult result;
-        if (exceptions != null)
-            result = DispatchResult.RecoverableError;
-        else if (invoked == 0)
-            result = DispatchResult.NoHandlers;
-        else
-            result = DispatchResult.Success;
+        var result = exceptions != null ? DispatchResult.RecoverableError : DispatchResult.Success;
 
-        await observers.NotifyAsync(new MessageActivity
+        await _observers.NotifyAsync(new MessageActivity
         {
             Stage = MessageStage.Dispatched,
             Properties = properties,
