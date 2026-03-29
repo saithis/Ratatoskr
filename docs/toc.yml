@@ -1,9 +1,7 @@
 items:
-- name: Introduction
-  href: index.md
 - name: Getting Started
   href: getting-started.md
-- name: Core Concepts
+- name: Concepts
   items:
   - name: Architecture
     href: architecture.md
@@ -13,27 +11,29 @@ items:
     href: channels-routing.md
   - name: CloudEvents
     href: cloudevents.md
-- name: Transports
+  - name: Glossary
+    href: glossary.md
+- name: Transports & Durability
   items:
   - name: RabbitMQ
     href: rabbitmq.md
   - name: EF Core (Database)
     href: efcore-transport.md
-- name: Durability
-  items:
   - name: Outbox
     href: outbox.md
   - name: Inbox
     href: inbox.md
-- name: AsyncAPI
-  href: asyncapi.md
-- name: Observability
-  href: observability.md
-- name: Testing
-  href: testing.md
-- name: Configuration Reference
-  href: configuration.md
 - name: Operations
-  href: operations.md
+  items:
+  - name: Configuration Reference
+    href: configuration.md
+  - name: Observability
+    href: observability.md
+  - name: Testing
+    href: testing.md
+  - name: AsyncAPI
+    href: asyncapi.md
+  - name: Operations Guide
+    href: operations.md
 - name: API Reference
   href: api/
