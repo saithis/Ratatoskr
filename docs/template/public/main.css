@@ -1,0 +1,418 @@
+/* ==========================================================================
+   Ratatoskr — Custom DocFX Modern Theme
+   Brand colors: orange (#e8562a), teal/cyan (#2bbcc4), dark (#1a1a2e)
+   ========================================================================== */
+
+/* ---------- CSS Variables ---------- */
+:root {
+  --rat-orange: #e8562a;
+  --rat-orange-light: #f4845f;
+  --rat-teal: #2bbcc4;
+  --rat-teal-light: #5dd9df;
+  --rat-dark: #1a1a2e;
+  --rat-dark-mid: #16213e;
+  --rat-gradient: linear-gradient(135deg, var(--rat-dark) 0%, var(--rat-dark-mid) 100%);
+}
+
+/* ---------- Landing: Hero Section ---------- */
+body[data-layout="landing"] .hero {
+  width: 100vw;
+  position: relative;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+  background: var(--rat-gradient);
+  color: #f0f0f0;
+  overflow: hidden;
+}
+
+body[data-layout="landing"] .hero::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background:
+    radial-gradient(ellipse at 20% 80%, rgba(43, 188, 196, 0.12) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(232, 86, 42, 0.1) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+body[data-layout="landing"] .hero-inner {
+  position: relative;
+  z-index: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 4rem 2rem 3.5rem;
+  display: flex;
+  align-items: center;
+  gap: 3rem;
+}
+
+body[data-layout="landing"] .hero-text {
+  flex: 1;
+  min-width: 0;
+}
+
+body[data-layout="landing"] .hero-text h1 {
+  font-size: 3rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 1rem;
+  color: #fff;
+}
+
+body[data-layout="landing"] .hero-text h1 .accent {
+  background: linear-gradient(90deg, var(--rat-orange), var(--rat-orange-light));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+body[data-layout="landing"] .hero-text .tagline {
+  font-size: 1.25rem;
+  line-height: 1.6;
+  color: #b0b8c8;
+  margin-bottom: 2rem;
+  max-width: 540px;
+}
+
+body[data-layout="landing"] .hero-mascot {
+  flex-shrink: 0;
+}
+
+body[data-layout="landing"] .hero-mascot img {
+  max-height: 280px;
+  width: auto;
+  filter: drop-shadow(0 0 40px rgba(43, 188, 196, 0.25));
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+
+/* Hero buttons */
+body[data-layout="landing"] .hero-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+body[data-layout="landing"] .hero-actions .btn-hero {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.75rem;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 1rem;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+body[data-layout="landing"] .btn-hero.primary {
+  background: var(--rat-orange);
+  color: #fff;
+  border: 2px solid var(--rat-orange);
+}
+
+body[data-layout="landing"] .btn-hero.primary:hover {
+  background: var(--rat-orange-light);
+  border-color: var(--rat-orange-light);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(232, 86, 42, 0.35);
+}
+
+body[data-layout="landing"] .btn-hero.secondary {
+  background: transparent;
+  color: #d0d6e0;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+body[data-layout="landing"] .btn-hero.secondary:hover {
+  border-color: var(--rat-teal);
+  color: var(--rat-teal-light);
+  transform: translateY(-1px);
+}
+
+/* ---------- Landing: Install Banner ---------- */
+body[data-layout="landing"] .install-banner {
+  width: 100vw;
+  position: relative;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+  background: rgba(43, 188, 196, 0.06);
+  border-top: 1px solid rgba(43, 188, 196, 0.15);
+  border-bottom: 1px solid rgba(43, 188, 196, 0.15);
+}
+
+body[data-layout="landing"] .install-banner-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.25rem 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+body[data-layout="landing"] .install-banner code {
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  padding: 0.5rem 1.25rem;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-family: var(--bs-font-monospace);
+  user-select: all;
+}
+
+/* ---------- Landing: Feature Grid ---------- */
+body[data-layout="landing"] .features {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 3.5rem 2rem;
+}
+
+body[data-layout="landing"] .features h2 {
+  text-align: center;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+body[data-layout="landing"] .features .section-subtitle {
+  text-align: center;
+  color: var(--bs-secondary-color);
+  margin-bottom: 2.5rem;
+  font-size: 1.1rem;
+}
+
+body[data-layout="landing"] .feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+
+body[data-layout="landing"] .feature-card {
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 12px;
+  padding: 1.75rem;
+  transition: all 0.2s ease;
+}
+
+body[data-layout="landing"] .feature-card:hover {
+  border-color: var(--rat-teal);
+  box-shadow: 0 4px 24px rgba(43, 188, 196, 0.1);
+  transform: translateY(-2px);
+}
+
+body[data-layout="landing"] .feature-card .feature-icon {
+  font-size: 1.75rem;
+  margin-bottom: 0.75rem;
+  display: block;
+}
+
+body[data-layout="landing"] .feature-card h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+body[data-layout="landing"] .feature-card p {
+  color: var(--bs-secondary-color);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ---------- Landing: Packages Table ---------- */
+body[data-layout="landing"] .packages {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 2rem 3.5rem;
+}
+
+body[data-layout="landing"] .packages h2 {
+  text-align: center;
+  font-weight: 700;
+  margin-bottom: 2rem;
+}
+
+body[data-layout="landing"] .package-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+body[data-layout="landing"] .package-item {
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 10px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+body[data-layout="landing"] .package-item code {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--rat-orange);
+}
+
+body[data-layout="landing"] .package-item p {
+  color: var(--bs-secondary-color);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ---------- Landing: Quick Example ---------- */
+body[data-layout="landing"] .quick-example {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 2rem 3.5rem;
+}
+
+body[data-layout="landing"] .quick-example h2 {
+  text-align: center;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+body[data-layout="landing"] .quick-example .section-subtitle {
+  text-align: center;
+  color: var(--bs-secondary-color);
+  margin-bottom: 2rem;
+  font-size: 1.1rem;
+}
+
+/* ---------- Landing: CTA Footer ---------- */
+body[data-layout="landing"] .cta-section {
+  width: 100vw;
+  position: relative;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+  background: var(--rat-gradient);
+  color: #f0f0f0;
+  text-align: center;
+  padding: 3.5rem 2rem;
+  margin-bottom: -1rem;
+}
+
+body[data-layout="landing"] .cta-section h2 {
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 0.75rem;
+}
+
+body[data-layout="landing"] .cta-section p {
+  color: #b0b8c8;
+  margin-bottom: 1.5rem;
+  font-size: 1.1rem;
+}
+
+body[data-layout="landing"] .cta-section .hero-actions {
+  justify-content: center;
+}
+
+/* ---------- Landing: "When to Use" Section ---------- */
+body[data-layout="landing"] .when-to-use {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 2rem 3.5rem;
+}
+
+body[data-layout="landing"] .when-to-use h2 {
+  text-align: center;
+  font-weight: 700;
+  margin-bottom: 2rem;
+}
+
+body[data-layout="landing"] .use-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+body[data-layout="landing"] .use-column h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+body[data-layout="landing"] .use-column.good h3 { color: #22c55e; }
+body[data-layout="landing"] .use-column.not-for h3 { color: var(--bs-secondary-color); }
+
+body[data-layout="landing"] .use-column ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+body[data-layout="landing"] .use-column ul li {
+  padding: 0.4rem 0;
+  color: var(--bs-secondary-color);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+body[data-layout="landing"] .use-column.good ul li::before {
+  content: "\2713\00a0";
+  color: #22c55e;
+  font-weight: 700;
+}
+
+body[data-layout="landing"] .use-column.not-for ul li::before {
+  content: "\2014\00a0";
+  color: var(--bs-secondary-color);
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 768px) {
+  body[data-layout="landing"] .hero-inner {
+    flex-direction: column-reverse;
+    text-align: center;
+    padding: 2.5rem 1.5rem 2rem;
+  }
+
+  body[data-layout="landing"] .hero-text h1 {
+    font-size: 2.2rem;
+  }
+
+  body[data-layout="landing"] .hero-text .tagline {
+    max-width: none;
+  }
+
+  body[data-layout="landing"] .hero-actions {
+    justify-content: center;
+  }
+
+  body[data-layout="landing"] .hero-mascot img {
+    max-height: 180px;
+  }
+
+  body[data-layout="landing"] .use-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- Navbar logo polish ---------- */
+.navbar .navbar-brand img {
+  height: 28px;
+  width: auto;
+}
+
+/* ---------- Smooth scrolling ---------- */
+html {
+  scroll-behavior: smooth;
+}
