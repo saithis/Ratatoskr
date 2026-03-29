@@ -12,7 +12,7 @@ _layout: landing
       <div class="hero-actions">
         <a href="getting-started.md" class="btn-hero primary">Get Started</a>
         <a href="architecture.md" class="btn-hero secondary">Architecture</a>
-        <a href="api/Ratatoskr.html" class="btn-hero secondary">API Reference</a>
+        <a href="api/" class="btn-hero secondary">API Reference</a>
       </div>
     </div>
     <div class="hero-mascot">

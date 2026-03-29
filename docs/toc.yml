@@ -11,6 +11,8 @@ items:
     href: channels-routing.md
   - name: CloudEvents
     href: cloudevents.md
+  - name: Glossary
+    href: glossary.md
 - name: Transports & Durability
   items:
   - name: RabbitMQ

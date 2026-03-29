@@ -16,12 +16,8 @@
 
 /* ---------- Landing: Hero Section ---------- */
 body[data-layout="landing"] .hero {
-  width: 100vw;
   position: relative;
-  left: 50%;
-  right: 50%;
-  margin-left: -50vw;
-  margin-right: -50vw;
+  margin-inline: calc(50% - 50vw);
   background: var(--rat-gradient);
   color: #f0f0f0;
   overflow: hidden;
@@ -111,7 +107,7 @@ body[data-layout="landing"] .hero-actions .btn-hero {
   font-weight: 600;
   font-size: 1rem;
   text-decoration: none;
-  transition: all 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 body[data-layout="landing"] .btn-hero.primary {
@@ -141,12 +137,8 @@ body[data-layout="landing"] .btn-hero.secondary:hover {
 
 /* ---------- Landing: Install Banner ---------- */
 body[data-layout="landing"] .install-banner {
-  width: 100vw;
   position: relative;
-  left: 50%;
-  right: 50%;
-  margin-left: -50vw;
-  margin-right: -50vw;
+  margin-inline: calc(50% - 50vw);
   background: rgba(43, 188, 196, 0.06);
   border-top: 1px solid rgba(43, 188, 196, 0.15);
   border-bottom: 1px solid rgba(43, 188, 196, 0.15);
@@ -204,7 +196,7 @@ body[data-layout="landing"] .feature-card {
   border: 1px solid var(--bs-border-color);
   border-radius: 12px;
   padding: 1.75rem;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 body[data-layout="landing"] .feature-card:hover {
@@ -296,12 +288,8 @@ body[data-layout="landing"] .quick-example .section-subtitle {
 
 /* ---------- Landing: CTA Footer ---------- */
 body[data-layout="landing"] .cta-section {
-  width: 100vw;
   position: relative;
-  left: 50%;
-  right: 50%;
-  margin-left: -50vw;
-  margin-right: -50vw;
+  margin-inline: calc(50% - 50vw);
   background: var(--rat-gradient);
   color: #f0f0f0;
   text-align: center;
@@ -415,4 +403,15 @@ body[data-layout="landing"] .use-column.not-for ul li::before {
 /* ---------- Smooth scrolling ---------- */
 html {
   scroll-behavior: smooth;
+}
+
+/* ---------- Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  body[data-layout="landing"] .hero-mascot img {
+    animation: none;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
 }
