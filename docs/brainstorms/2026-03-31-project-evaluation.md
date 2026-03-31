@@ -221,13 +221,14 @@ Validation approach:
 - Evidence: `src/Ratatoskr/AsyncApi/Extensions/AsyncApiEndpointExtensions.cs`
 - Source(s): Claude
 
-### A-LOW-8 · Inconsistent logging patterns across inbox and outbox processors
+### A-LOW-8 · ~~Inconsistent logging patterns across inbox and outbox processors~~ ✅ DONE
 
 - Verdict: `Valid`
 - Severity: Low
 - Detail: Outbox processor uses source-generated `LoggerMessage` (best-practice, zero-allocation). Inbox processor uses direct `logger.LogXxx()` calls. Inconsistency increases maintenance surface and means inbox logging incurs boxing overhead.
 - Evidence: `src/Ratatoskr.EfCore/Internal/OutboxMessageProcessor.cs` (partial class at bottom), `src/Ratatoskr.EfCore/Internal/InboxMessageProcessor.cs`
 - Source(s): Claude
+- **Resolution:** Converted all 9 direct `logger.LogXxx()` calls in `InboxMessageProcessor` to source-generated `[LoggerMessage]` pattern via `InboxMessageProcessorLog` partial class, matching the `OutboxMessageProcessorLog` pattern.
 
 ### A-LOW-9 · `BackoffCalculator` uses `Random.Shared` (non-injectable, non-deterministic in tests)
 
