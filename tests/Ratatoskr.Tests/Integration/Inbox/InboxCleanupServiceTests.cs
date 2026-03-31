@@ -288,6 +288,57 @@ public class InboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgre
     }
 
     [Test]
+    public async Task Cleanup_OrphanedMessages_DeletesAllAcrossMultipleBatches()
+    {
+        // Arrange — verifies deterministic batching with OrderBy works across multiple loop iterations
+        await SetupAsync();
+
+        // Insert 3 orphaned messages (no handler statuses) at different times
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            db.Set<InboxMessageEntity>().Add(CreateInboxMessage("msg-oldest"));
+            await db.SaveChangesAsync();
+        });
+
+        _timeProvider.Advance(TimeSpan.FromHours(1));
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            db.Set<InboxMessageEntity>().Add(CreateInboxMessage("msg-middle"));
+            await db.SaveChangesAsync();
+        });
+
+        _timeProvider.Advance(TimeSpan.FromHours(1));
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            db.Set<InboxMessageEntity>().Add(CreateInboxMessage("msg-newest"));
+            await db.SaveChangesAsync();
+        });
+
+        // Batch size 1 forces 3 loop iterations — deterministic ordering prevents
+        // non-deterministic Take() from causing repeated work or skipped rows
+        var options = new InboxOptions { RetentionPeriod = TimeSpan.FromDays(1), CleanupBatchSize = 1 };
+        var service = CreateCleanupService(options);
+
+        // Act
+        var (_, orphanedMessages) = await service.CleanupAsync(CancellationToken.None);
+
+        // Assert — all 3 orphans deleted across 3 batches
+        orphanedMessages.Should().Be(3);
+
+        var remainingMessages = await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            return await db.Set<InboxMessageEntity>().CountAsync();
+        });
+        remainingMessages.Should().Be(0);
+    }
+
+    [Test]
     public async Task Cleanup_KeepsMessageWhenSomeStatusesRemain()
     {
         // Arrange
