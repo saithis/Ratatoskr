@@ -77,13 +77,14 @@ Validation approach:
 - Evidence: `docs/operations.md` (§ Manual Retry)
 - Source(s): Claude (original claim overstated), Gemini (overstated in the opposite direction)
 
-### A-HIGH-6 · Rolling deployments can permanently poison in-flight messages
+### A-HIGH-6 · ~~Rolling deployments can permanently poison in-flight messages~~ ✅ DONE
 
 - Verdict: `Valid`
 - Severity: High
 - Detail: When a handler key is renamed between v1 and v2, any `InboxHandlerStatusEntity` written by v1 and picked up by a v2 instance will be immediately and irrecoverably poisoned (no grace period, no fallback). Field renames in message CLR types cause silent data loss; type changes cause `JsonException` leading to eventual poisoning. There is no documented blue-green or drain-first upgrade procedure.
 - Evidence: `src/Ratatoskr.EfCore/Internal/InboxMessageProcessor.cs` (lines 129–149)
 - Source(s): Claude
+- **Resolution:** Documented handler key stability contract, drain-rename-restart migration procedure, two-phase zero-downtime approach, and rolling deployment safety checklist in `docs/inbox.md` and `docs/operations.md`.
 
 ### A-HIGH-7 · Graceful shutdown does not drain in-flight consumer messages
 
@@ -117,13 +118,14 @@ Validation approach:
 - Evidence: `src/Ratatoskr/Core/MessageProperties.cs`, `src/Ratatoskr.EfCore/Internal/InboxMessageEntity.cs`
 - Source(s): Claude
 
-### A-MED-4 · Handler key stability is operationally critical and fragile across deployments
+### A-MED-4 · ~~Handler key stability is operationally critical and fragile across deployments~~ ✅ DONE
 
 - Verdict: `Valid`
 - Severity: Medium (operational coupling)
 - Detail: Renaming a handler key between deployments immediately poisons all in-flight statuses for that key. Documentation warns about this, but there is no framework-level rename migration or grace period.
 - Evidence: `src/Ratatoskr.EfCore/Internal/InboxMessageProcessor.cs` (lines 129–149), `docs/inbox.md`
 - Source(s): Claude
+- **Resolution:** Documented handler key stability contract and drain-rename-restart migration procedure in `docs/inbox.md`. Added deployment safety checklist to `docs/operations.md`.
 
 ### A-MED-5 · Cleanup services do not use distributed locks (redundant DELETEs in multi-instance)
 
@@ -149,13 +151,14 @@ Validation approach:
 - Evidence: `src/Ratatoskr.EfCore/` registration paths, `docs/inbox.md`
 - Source(s): Gemini
 
-### A-MED-8 · Strict message ordering is not preserved under horizontal scale-out
+### A-MED-8 · ~~Strict message ordering is not preserved under horizontal scale-out~~ ✅ DONE
 
 - Verdict: `Valid`
 - Severity: Medium (semantic / correctness risk)
 - Detail: Outbox/inbox processors poll the DB in batches (`Take(BatchSize)`) and process asynchronously. Multiple worker instances grab overlapping batches in parallel, destroying chronological delivery ordering. Business processes that assume `OrderUpdated` always follows `OrderCreated` must implement compensating logic (sequence numbers, sagas, etc.).
 - Evidence: `src/Ratatoskr.EfCore/Internal/OutboxMessageProcessor.cs`, `src/Ratatoskr.EfCore/Internal/InboxMessageProcessor.cs`
 - Source(s): Gemini
+- **Resolution:** Documented ordering guarantees, compensating patterns (sequence numbers, partition keys, sagas), and what the library does guarantee in `docs/architecture.md`.
 
 ### A-MED-9 · ~~Configurable `JsonSerializerOptions` not exposed~~ ✅ DONE
 

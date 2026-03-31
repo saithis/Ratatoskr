@@ -220,6 +220,40 @@ The unique constraint on `(MessageId, HandlerKey)` provides deduplication.
 
 When using RabbitMQ, the consumer delegates to `MessageRouter`, which calls `InboxAcceptor` before dispatching. The consumer has no inbox awareness — it just calls `RouteAsync`. The acceptor creates its own DI scope, so its `DbContext` is fully isolated from handler scopes. Failures in inbox-managed handlers do not affect broker acknowledgement.
 
+## Handler Key Stability
+
+Handler keys are the inbox's deduplication and retry key. They are persisted in the database as part of `InboxHandlerStatusEntity` and are used to match in-flight messages to handlers across deployments. Changing a handler key is a **breaking operation** that will poison in-flight messages.
+
+### What happens when a handler key changes
+
+When a handler key is renamed between v1 and v2:
+
+1. A v1 instance writes `InboxHandlerStatusEntity` rows with the old key
+2. A v2 instance picks up those rows, looks up the handler by key, and finds no match
+3. The processor immediately marks the status as **poisoned** — there is no grace period or fallback
+
+### How to safely rename a handler key
+
+Use the **drain-rename-restart** procedure:
+
+1. **Stop new message production** or ensure the affected channel is quiesced
+2. **Wait for in-flight messages to complete** — monitor the `InboxHandlerStatusEntity` table until all rows with `CompletedAt IS NULL` for the old key are processed
+3. **Deploy the new version** with the renamed handler key
+4. **Resume message production**
+
+For zero-downtime deployments, use a two-phase approach:
+
+1. **Deploy v2** that registers handlers under **both** the old and new keys (using two `AddHandler` calls for the same handler type)
+2. **Wait for all in-flight messages** with the old key to complete
+3. **Deploy v3** that removes the old key registration
+
+### Best practices
+
+- Choose handler keys that are stable, descriptive, and unlikely to change (e.g., `"process-order-v1"`, not `"OrderHandler"`)
+- Document handler keys in your codebase so renames are deliberate, not accidental
+- Include handler key changes in your deployment checklist
+- Monitor `InboxHandlerStatusEntity` for poisoned rows after deployments — a sudden spike indicates a key mismatch
+
 ## What's Next
 
 - [Outbox](outbox.md) — Transactional message staging

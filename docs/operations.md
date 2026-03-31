@@ -343,6 +343,32 @@ dotnet ef database update
 
 Review the generated migration to understand schema changes before applying to production.
 
+## Deployment Safety
+
+### Rolling Deployment Checklist
+
+Before deploying a new version that changes handler configuration:
+
+- [ ] **Handler keys unchanged** — Verify no handler keys were renamed. Key renames poison in-flight messages. See [Inbox: Handler Key Stability](inbox.md#handler-key-stability).
+- [ ] **Message types backward-compatible** — Only additive field changes. No renames or removals. See [Architecture: Schema Evolution](architecture.md#schema-evolution).
+- [ ] **EF Core migrations applied** — Run `dotnet ef migrations add` and `dotnet ef database update` before deploying the new application version.
+- [ ] **Monitoring in place** — Verify `ratatoskr.outbox.poison.count` and `ratatoskr.inbox.poison.count` counters are being collected. A spike after deployment indicates a compatibility issue.
+
+### Handler Key Rename Procedure
+
+If you must rename a handler key, follow the drain-rename-restart procedure documented in [Inbox: Handler Key Stability](inbox.md#handler-key-stability).
+
+### Monitoring After Deployment
+
+After deploying a new version, monitor these signals for 15-30 minutes:
+
+| Signal | What it means | Action |
+|--------|---------------|--------|
+| `ratatoskr.inbox.poison.count` spike | Handler key mismatch or deserialization failure | Rollback or investigate poisoned rows |
+| `ratatoskr.outbox.poison.count` spike | Transport misconfiguration or serialization mismatch | Rollback or investigate poisoned rows |
+| Health check unhealthy | Processor or consumer not running | Check logs for startup errors |
+| `ratatoskr.lock.acquisition.failure` spike | Distributed lock contention from old instances | Wait for old instances to drain |
+
 ## What's Next
 
 - [Observability](observability.md) — Complete metrics reference and setup
