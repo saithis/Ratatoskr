@@ -57,15 +57,15 @@ internal class OutboxCleanupService<TDbContext>(
                 .Take(_options.CleanupBatchSize)
                 .ExecuteDeleteAsync(cancellationToken);
 
+            if (deleted > 0)
+                RatatoskrDiagnostics.OutboxCleanupCount.Add(deleted);
+
             totalDeleted += deleted;
         } while (deleted == _options.CleanupBatchSize);
 
         RatatoskrDiagnostics.OutboxCleanupDuration.Record(Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds);
         if (totalDeleted > 0)
-        {
-            RatatoskrDiagnostics.OutboxCleanupCount.Add(totalDeleted);
             logger.LogInformation("OutboxCleanupService deleted {Count} processed message(s)", totalDeleted);
-        }
 
         return totalDeleted;
     }

@@ -58,6 +58,9 @@ internal class InboxCleanupService<TDbContext>(
                 .Take(_options.CleanupBatchSize)
                 .ExecuteDeleteAsync(cancellationToken);
 
+            if (deleted > 0)
+                RatatoskrDiagnostics.InboxCleanupStatusCount.Add(deleted);
+
             totalStatusesDeleted += deleted;
         } while (deleted == _options.CleanupBatchSize);
 
@@ -73,14 +76,13 @@ internal class InboxCleanupService<TDbContext>(
                 .Take(_options.CleanupBatchSize)
                 .ExecuteDeleteAsync(cancellationToken);
 
+            if (deleted > 0)
+                RatatoskrDiagnostics.InboxCleanupMessageCount.Add(deleted);
+
             totalMessagesDeleted += deleted;
         } while (deleted == _options.CleanupBatchSize);
 
         RatatoskrDiagnostics.InboxCleanupDuration.Record(Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds);
-        if (totalStatusesDeleted > 0)
-            RatatoskrDiagnostics.InboxCleanupStatusCount.Add(totalStatusesDeleted);
-        if (totalMessagesDeleted > 0)
-            RatatoskrDiagnostics.InboxCleanupMessageCount.Add(totalMessagesDeleted);
 
         if (totalStatusesDeleted > 0 || totalMessagesDeleted > 0)
             logger.LogInformation(

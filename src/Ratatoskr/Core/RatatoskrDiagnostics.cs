@@ -64,11 +64,14 @@ public static class RatatoskrDiagnostics
     public static readonly Histogram<long> InboxBatchSize = Meter.CreateHistogram<long>("ratatoskr.inbox.batch.size", "{message}", "Number of inbox handler statuses picked up in a batch.");
 
     // Cleanup Metrics
+    private static readonly double[] CleanupDurationBuckets =
+        [0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0, 120.0];
+
     public static readonly Counter<long> OutboxCleanupCount = Meter.CreateCounter<long>("ratatoskr.outbox.cleanup.count", "{message}", "Number of processed outbox messages deleted by cleanup.");
-    public static readonly Histogram<double> OutboxCleanupDuration = Meter.CreateHistogram<double>("ratatoskr.outbox.cleanup.duration", "s", "Duration of outbox cleanup operation.", advice: new InstrumentAdvice<double> { HistogramBucketBoundaries = DurationBuckets });
+    public static readonly Histogram<double> OutboxCleanupDuration = Meter.CreateHistogram<double>("ratatoskr.outbox.cleanup.duration", "s", "Duration of outbox cleanup operation.", advice: new InstrumentAdvice<double> { HistogramBucketBoundaries = CleanupDurationBuckets });
     public static readonly Counter<long> InboxCleanupStatusCount = Meter.CreateCounter<long>("ratatoskr.inbox.cleanup.status.count", "{status}", "Number of completed inbox handler statuses deleted by cleanup.");
     public static readonly Counter<long> InboxCleanupMessageCount = Meter.CreateCounter<long>("ratatoskr.inbox.cleanup.message.count", "{message}", "Number of orphaned inbox messages deleted by cleanup.");
-    public static readonly Histogram<double> InboxCleanupDuration = Meter.CreateHistogram<double>("ratatoskr.inbox.cleanup.duration", "s", "Duration of inbox cleanup operation.", advice: new InstrumentAdvice<double> { HistogramBucketBoundaries = DurationBuckets });
+    public static readonly Histogram<double> InboxCleanupDuration = Meter.CreateHistogram<double>("ratatoskr.inbox.cleanup.duration", "s", "Duration of inbox cleanup operation.", advice: new InstrumentAdvice<double> { HistogramBucketBoundaries = CleanupDurationBuckets });
 
     // Distributed Lock Metrics
     public static readonly Counter<long> LockAcquisitionFailure = Meter.CreateCounter<long>("ratatoskr.lock.acquisition.failure", "{attempt}", "Number of times a distributed lock could not be acquired.");
