@@ -20,19 +20,32 @@ When a message is published, Ratatoskr automatically populates these CloudEvents
 
 ### Data Schema
 
-The optional `dataschema` attribute identifies the schema that the event data adheres to. When present, it must be a valid URI (per the CloudEvents spec). Set it via `MessageProperties.DataSchema`:
+The optional `dataschema` attribute identifies the schema that the event data adheres to. When present, it must be a valid URI (per the CloudEvents spec).
+
+Configure it per message type via the `[RatatoskrMessage]` attribute:
 
 ```csharp
-var props = new MessageProperties
+[RatatoskrMessage("order.placed", DataSchema = "https://schemas.example.com/events/order.placed/v1.json")]
+public class OrderPlaced { ... }
+```
+
+Or via the fluent channel builder:
+
+```csharp
+bus.AddEventPublishChannel("orders", c => c
+    .Produces<OrderPlaced>(m => m.WithDataSchema("https://schemas.example.com/events/order.placed/v1.json")));
+```
+
+You can also set it per-publish via `MessageProperties.DataSchema` (overrides the defaults above):
+
+```csharp
+await bus.PublishDirectAsync(orderPlaced, new MessageProperties
 {
     DataSchema = "https://schemas.example.com/events/order.placed/v1.json",
-};
-await bus.PublishDirectAsync(orderPlaced, props);
+});
 ```
 
 The attribute is preserved in both binary mode (as a `cloudEvents_dataschema` header) and structured mode (as the `dataschema` envelope field). Consumers receive it on `MessageProperties.DataSchema`.
-
-> **Note:** Per-message-type default configuration (e.g. via `[RatatoskrMessage]` attribute or a channel-level setting) is not yet supported. `DataSchema` must be set explicitly on each `MessageProperties` instance.
 
 ### Extension Attributes
 

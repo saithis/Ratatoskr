@@ -41,6 +41,12 @@ public class MessagePropertiesEnricher(ChannelRegistry registry, CloudEventsOpti
             properties.Type = GetMessageType(messageType, publishInfo);
         }
 
+        // Enrich DataSchema if not already set
+        if (string.IsNullOrEmpty(properties.DataSchema))
+        {
+            properties.DataSchema = GetDataSchema(messageType, publishInfo);
+        }
+
         if (publishInfo != null)
         {
             foreach (var transport in publishInfo.Channel.Transports)
@@ -62,8 +68,19 @@ public class MessagePropertiesEnricher(ChannelRegistry registry, CloudEventsOpti
         {
             return publishInfo.Message.MessageTypeName;
         }
-        
+
         var attr = messageType.GetCustomAttribute<RatatoskrMessageAttribute>();
         return attr?.Type;
+    }
+
+    private string? GetDataSchema(Type messageType, PublishInformation? publishInfo)
+    {
+        if (!string.IsNullOrEmpty(publishInfo?.Message.DataSchema))
+        {
+            return publishInfo!.Message.DataSchema;
+        }
+
+        var attr = messageType.GetCustomAttribute<RatatoskrMessageAttribute>();
+        return attr?.DataSchema;
     }
 }
