@@ -25,11 +25,12 @@ public static class AsyncApiEndpointExtensions
         this IEndpointRouteBuilder endpoints,
         string routePattern = "/asyncapi.json")
     {
+        string? cachedJson = null;
+
         endpoints.MapGet(routePattern, (AsyncApiDocumentGenerator generator) =>
         {
-            var document = generator.Generate();
-            var json = JsonSerializer.Serialize(document, _serializerOptions);
-            return Results.Content(json, "application/json");
+            cachedJson ??= JsonSerializer.Serialize(generator.Generate(), _serializerOptions);
+            return Results.Content(cachedJson, "application/json");
         })
         .WithName("asyncapi")
         .WithDisplayName("AsyncAPI Document")
