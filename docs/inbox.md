@@ -241,12 +241,6 @@ Use the **drain-rename-restart** procedure:
 3. **Deploy the new version** with the renamed handler key
 4. **Resume message production**
 
-For zero-downtime deployments, use a two-phase approach:
-
-1. **Deploy v2** that registers handlers under **both** the old and new keys (using two `AddHandler` calls for the same handler type)
-2. **Wait for all in-flight messages** with the old key to complete
-3. **Deploy v3** that removes the old key registration
-
 ### Best practices
 
 - Choose handler keys that are stable, descriptive, and unlikely to change (e.g., `"process-order-v1"`, not `"OrderHandler"`)

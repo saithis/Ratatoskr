@@ -333,7 +333,7 @@ If your business logic requires that `OrderUpdated` always follows `OrderCreated
 
 - Messages are eventually delivered at least once (assuming the processor is running and the database is available)
 - Within a single batch on a single processor instance, messages are processed in a deterministic order (`CreatedAt` for the outbox, `MessageId` for the inbox)
-- Deduplication via the inbox pattern ensures each (MessageId, HandlerKey) pair is processed exactly once
+- Deduplication via the inbox pattern prevents duplicate processing for the same (MessageId, HandlerKey) pair in the common case; delivery is still at-least-once because a crash between handler completion and status update can trigger a re-run
 
 ## What's Next
 

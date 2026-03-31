@@ -354,10 +354,6 @@ Before deploying a new version that changes handler configuration:
 - [ ] **EF Core migrations applied** — Run `dotnet ef migrations add` and `dotnet ef database update` before deploying the new application version.
 - [ ] **Monitoring in place** — Verify `ratatoskr.outbox.poison.count` and `ratatoskr.inbox.poison.count` counters are being collected. A spike after deployment indicates a compatibility issue.
 
-### Handler Key Rename Procedure
-
-If you must rename a handler key, follow the drain-rename-restart procedure documented in [Inbox: Handler Key Stability](inbox.md#handler-key-stability).
-
 ### Monitoring After Deployment
 
 After deploying a new version, monitor these signals for 15-30 minutes:
