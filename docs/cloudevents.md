@@ -32,6 +32,8 @@ await bus.PublishDirectAsync(orderPlaced, props);
 
 The attribute is preserved in both binary mode (as a `cloudEvents_dataschema` header) and structured mode (as the `dataschema` envelope field). Consumers receive it on `MessageProperties.DataSchema`.
 
+> **Note:** Per-message-type default configuration (e.g. via `[RatatoskrMessage]` attribute or a channel-level setting) is not yet supported. `DataSchema` must be set explicitly on each `MessageProperties` instance.
+
 ### Extension Attributes
 
 You can attach custom extension attributes via `MessageProperties.Extensions`:
