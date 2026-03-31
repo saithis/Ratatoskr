@@ -36,6 +36,7 @@ public class ChannelBuilder(ChannelRegistration channel)
                 $"Message type '{type.FullName}' is already registered on this channel.");
         
         var registration = new MessageRegistration(type, typeName);
+        registration.DataSchema = GetDataSchema(type);
 
         if (configure != null)
         {
@@ -50,5 +51,11 @@ public class ChannelBuilder(ChannelRegistration channel)
     {
         var attr = type.GetCustomAttribute<RatatoskrMessageAttribute>();
         return attr?.Type ?? type.Name;
+    }
+
+    private static string? GetDataSchema(Type type)
+    {
+        var attr = type.GetCustomAttribute<RatatoskrMessageAttribute>();
+        return attr?.DataSchema;
     }
 }

@@ -11,4 +11,10 @@ public class MessageBuilder(MessageRegistration message)
         message.MessageTypeName = typeName;
         return this;
     }
+
+    public MessageBuilder WithDataSchema(string dataSchema)
+    {
+        message.DataSchema = dataSchema;
+        return this;
+    }
 }

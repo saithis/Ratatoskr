@@ -10,7 +10,12 @@ public class RatatoskrMessageAttribute : Attribute
     /// The CloudEvent type identifier (e.g., "com.example.order.created").
     /// </summary>
     public string Type { get; }
-    
+
+    /// <summary>
+    /// Optional URI identifying the schema that the event data adheres to (CloudEvents <c>dataschema</c> attribute).
+    /// </summary>
+    public string? DataSchema { get; set; }
+
     public RatatoskrMessageAttribute(string type)
     {
         if (string.IsNullOrWhiteSpace(type))

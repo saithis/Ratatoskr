@@ -4,6 +4,7 @@ public class MessageRegistration(Type messageType, string messageTypeName)
 {
     public Type MessageType { get; } = messageType;
     public string MessageTypeName { get; internal set; } = messageTypeName;
+    public string? DataSchema { get; internal set; }
 
     private readonly Dictionary<Type, object> _extensions = new();
 

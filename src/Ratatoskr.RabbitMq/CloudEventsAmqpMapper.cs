@@ -92,7 +92,12 @@ public class CloudEventsAmqpMapper(
         {
             SetCloudEventHeader(outgoing.Headers, "subject", props.Subject);
         }
-        
+
+        if (!string.IsNullOrEmpty(props.DataSchema))
+        {
+            SetCloudEventHeader(outgoing.Headers, CloudEventsAmqpConstants.DataSchemaHeader, props.DataSchema);
+        }
+
         // Add CloudEvent extensions as headers
         foreach (var ext in props.CloudEventExtensions)
         {
@@ -146,6 +151,7 @@ public class CloudEventsAmqpMapper(
             Type = props.Type!,
             Time = props.Time,
             DataContentType = props.ContentType,
+            DataSchema = props.DataSchema,
             Subject = props.Subject,
             Data = data,
             Extensions = props.CloudEventExtensions.Count > 0 ? props.CloudEventExtensions : null
@@ -225,7 +231,8 @@ public class CloudEventsAmqpMapper(
                          ?? GetCloudEventHeader(incomingHeaders, CloudEventsAmqpConstants.DataContentTypeHeader);
         
         var subject = GetCloudEventHeader(incomingHeaders, CloudEventsAmqpConstants.SubjectHeader);
-        
+        var dataSchema = GetCloudEventHeader(incomingHeaders, CloudEventsAmqpConstants.DataSchemaHeader);
+
         // Extract trace context (prefer standard W3C headers, fallback to CloudEvents attributes)
         var traceParent = incomingHeaders.TryGetValue("traceparent", out var tp) 
             ? ConvertToString(tp) 
@@ -249,12 +256,13 @@ public class CloudEventsAmqpMapper(
             Source = source,
             Time = time,
             ContentType = contentType,
+            DataSchema = dataSchema,
             Subject = subject,
             Headers = headers,
             TraceParent = traceParent,
             TraceState = traceState,
         };
-        
+
         return (incoming.Body.ToArray(), props);
     }
     
@@ -297,6 +305,7 @@ public class CloudEventsAmqpMapper(
             Source = cloudEvent.Source,
             Time = cloudEvent.Time,
             ContentType = cloudEvent.DataContentType ?? "application/json",
+            DataSchema = cloudEvent.DataSchema,
             Subject = cloudEvent.Subject,
             TraceParent = traceParent,
             TraceState = traceState,

@@ -14,8 +14,38 @@ When a message is published, Ratatoskr automatically populates these CloudEvents
 | `specversion` | (always `"1.0"`) | Hardcoded |
 | `time` | `Time` | Current UTC timestamp from `TimeProvider` |
 | `datacontenttype` | `DataContentType` | `"application/json"` (default) |
+| `dataschema` | `DataSchema` | Optional URI identifying the data schema |
 | `traceparent` | `TraceParent` | W3C trace context from `Activity.Current` |
 | `tracestate` | `TraceState` | W3C trace state from `Activity.Current` |
+
+### Data Schema
+
+The optional `dataschema` attribute identifies the schema that the event data adheres to. When present, it must be a valid URI (per the CloudEvents spec).
+
+Configure it per message type via the `[RatatoskrMessage]` attribute:
+
+```csharp
+[RatatoskrMessage("order.placed", DataSchema = "https://schemas.example.com/events/order.placed/v1.json")]
+public class OrderPlaced { ... }
+```
+
+Or via the fluent channel builder:
+
+```csharp
+bus.AddEventPublishChannel("orders", c => c
+    .Produces<OrderPlaced>(m => m.WithDataSchema("https://schemas.example.com/events/order.placed/v1.json")));
+```
+
+You can also set it per-publish via `MessageProperties.DataSchema` (overrides the defaults above):
+
+```csharp
+await bus.PublishDirectAsync(orderPlaced, new MessageProperties
+{
+    DataSchema = "https://schemas.example.com/events/order.placed/v1.json",
+});
+```
+
+The attribute is preserved in both binary mode (as a `cloudEvents_dataschema` header) and structured mode (as the `dataschema` envelope field). Consumers receive it on `MessageProperties.DataSchema`.
 
 ### Extension Attributes
 

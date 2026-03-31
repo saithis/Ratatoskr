@@ -96,4 +96,57 @@ public class RatatoskrBuilderTests
             concreteHandler.Should().NotBeNull();
         }
     }
+
+    [Test]
+    public void Produces_WithDataSchema_SetsDataSchemaOnRegistration()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var builder = new RatatoskrBuilder(services);
+
+        // Act
+        builder.AddEventPublishChannel("pub-channel", c => c
+            .Produces<TestEvent>(m => m.WithDataSchema("https://schemas.example.com/test-event/v1.json")));
+
+        // Assert
+        var channel = builder.ChannelRegistry.GetPublishChannel("pub-channel");
+        var msg = channel!.GetMessage(typeof(TestEvent));
+        msg!.DataSchema.Should().Be("https://schemas.example.com/test-event/v1.json");
+    }
+
+    [Test]
+    public void Produces_WithDataSchemaAttribute_SetsDataSchemaFromAttribute()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var builder = new RatatoskrBuilder(services);
+
+        // Act
+        builder.AddEventPublishChannel("pub-channel", c => c.Produces<EventWithSchema>());
+
+        // Assert
+        var channel = builder.ChannelRegistry.GetPublishChannel("pub-channel");
+        var msg = channel!.GetMessage(typeof(EventWithSchema));
+        msg!.DataSchema.Should().Be("https://schemas.example.com/event-with-schema/v1.json");
+    }
+
+    [Test]
+    public void Produces_WithDataSchemaBuilder_OverridesAttribute()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var builder = new RatatoskrBuilder(services);
+
+        // Act
+        builder.AddEventPublishChannel("pub-channel", c => c
+            .Produces<EventWithSchema>(m => m.WithDataSchema("https://override.example.com/v2.json")));
+
+        // Assert
+        var channel = builder.ChannelRegistry.GetPublishChannel("pub-channel");
+        var msg = channel!.GetMessage(typeof(EventWithSchema));
+        msg!.DataSchema.Should().Be("https://override.example.com/v2.json");
+    }
+
+    [RatatoskrMessage("event.with.schema", DataSchema = "https://schemas.example.com/event-with-schema/v1.json")]
+    private record EventWithSchema;
 }

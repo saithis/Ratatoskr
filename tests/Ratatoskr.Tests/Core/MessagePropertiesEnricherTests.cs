@@ -217,6 +217,70 @@ public class MessagePropertiesEnricherTests
         result.Id.Should().NotBeNullOrEmpty();
     }
 
+    [Test]
+    public void Enrich_WithRegisteredDataSchema_SetsDataSchemaFromRegistry()
+    {
+        // Arrange
+        var channel = new ChannelRegistration("test.exchange", ChannelType.EventPublish);
+        var msgReg = new MessageRegistration(typeof(TestEvent), "test.event") { DataSchema = "https://schemas.example.com/v1.json" };
+        channel.Messages.Add(msgReg);
+        _registry.Register(channel);
+        var enricher = CreateEnricher();
+
+        // Act
+        var result = enricher.Enrich<TestEvent>(null);
+
+        // Assert
+        result.DataSchema.Should().Be("https://schemas.example.com/v1.json");
+    }
+
+    [Test]
+    public void Enrich_WithExplicitDataSchema_DoesNotOverwrite()
+    {
+        // Arrange
+        var channel = new ChannelRegistration("test.exchange", ChannelType.EventPublish);
+        var msgReg = new MessageRegistration(typeof(TestEvent), "test.event") { DataSchema = "https://schemas.example.com/v1.json" };
+        channel.Messages.Add(msgReg);
+        _registry.Register(channel);
+        var enricher = CreateEnricher();
+        var properties = new MessageProperties { DataSchema = "https://custom.example.com/v2.json" };
+
+        // Act
+        var result = enricher.Enrich<TestEvent>(properties);
+
+        // Assert
+        result.DataSchema.Should().Be("https://custom.example.com/v2.json");
+    }
+
+    [Test]
+    public void Enrich_UnregisteredMessageWithDataSchemaAttribute_SetsDataSchemaFromAttribute()
+    {
+        // Arrange — EventWithDataSchema has DataSchema on [RatatoskrMessage] but is NOT registered in the registry
+        var enricher = CreateEnricher();
+
+        // Act
+        var result = enricher.Enrich<EventWithDataSchema>(null);
+
+        // Assert
+        result.DataSchema.Should().Be("https://schemas.example.com/event-with-schema/v1.json");
+    }
+
+    [Test]
+    public void Enrich_WithoutDataSchema_LeavesNull()
+    {
+        // Arrange
+        var enricher = CreateEnricher();
+
+        // Act
+        var result = enricher.Enrich<TestEvent>(null);
+
+        // Assert
+        result.DataSchema.Should().BeNull();
+    }
+
+    [RatatoskrMessage("event.with.schema", DataSchema = "https://schemas.example.com/event-with-schema/v1.json")]
+    private record EventWithDataSchema;
+
     private class NoOpTransportEnricher : ITransportMessageMetadataEnricher
     {
         public string TransportName => "test";
