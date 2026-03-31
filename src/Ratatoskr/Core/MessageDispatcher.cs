@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -23,9 +24,20 @@ public class MessageDispatcher(
     /// </summary>
     public async Task<DispatchResult> DispatchAsync(byte[] body, MessageProperties properties, CancellationToken cancellationToken, string channelName, string transportName)
     {
+        using var activity = RatatoskrDiagnostics.ActivitySource.StartActivity("dispatch", ActivityKind.Consumer);
+        if (activity != null)
+        {
+            activity.SetTag(MessagingSemanticConventions.OperationName, "dispatch");
+            activity.SetTag(MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeProcess);
+            activity.SetTag(MessagingSemanticConventions.System, "ratatoskr");
+            activity.SetTag(MessagingSemanticConventions.DestinationName, channelName);
+            activity.SetTag(MessagingSemanticConventions.MessageId, properties.Id);
+        }
+
         if (properties.Type == null)
         {
             logger.LogError("Received message without a type");
+            activity?.SetStatus(ActivityStatusCode.Error, "Message has no type");
             return DispatchResult.PermanentError;
         }
 
@@ -51,6 +63,7 @@ public class MessageDispatcher(
         if (messageType == null)
         {
             logger.LogWarning("No registration found for event type '{EventType}'", properties.Type);
+            activity?.SetStatus(ActivityStatusCode.Error, $"No registration found for event type '{properties.Type}'");
             return DispatchResult.NoHandlers;
         }
 
@@ -63,11 +76,14 @@ public class MessageDispatcher(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to deserialize message of type '{EventType}'", properties.Type);
+            activity?.SetTag(MessagingSemanticConventions.ErrorType, ex.GetType().FullName);
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             return DispatchResult.PermanentError;
         }
         if (message == null)
         {
             logger.LogError("Message of type '{EventType}' deserialized to null", properties.Type);
+            activity?.SetStatus(ActivityStatusCode.Error, $"Message of type '{properties.Type}' deserialized to null");
             return DispatchResult.PermanentError;
         }
 
@@ -102,6 +118,14 @@ public class MessageDispatcher(
         }
 
         var result = exceptions != null ? DispatchResult.RecoverableError : DispatchResult.Success;
+
+        if (result == DispatchResult.RecoverableError && activity != null)
+        {
+            activity.SetTag(MessagingSemanticConventions.ErrorType,
+                exceptions!.Count == 1 ? exceptions[0].GetType().FullName : typeof(AggregateException).FullName);
+            activity.SetStatus(ActivityStatusCode.Error,
+                exceptions.Count == 1 ? exceptions[0].Message : $"Multiple handlers failed ({exceptions.Count} errors)");
+        }
 
         await _observers.NotifyAsync(new MessageActivity
         {

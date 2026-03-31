@@ -138,9 +138,13 @@ public class OpenTelemetryMetricsTests(RabbitMqContainerFixture rabbitMq, Postgr
             AssertMetricTags(retryMetric, ExchangeName, QueueName, RoutingKey);
         }
 
-        // Verify Traces
+        // Verify Traces — filter to RabbitMQ receive spans only (dispatch spans are also Consumer kind)
         var relevantActivities = GetRelevantActivities(activities, eventId);
-        var consumerActivities = relevantActivities.Where(a => a.Kind == ActivityKind.Consumer).OrderBy(a => a.StartTimeUtc).ToList();
+        var consumerActivities = relevantActivities
+            .Where(a => a.Kind == ActivityKind.Consumer
+                && a.TagObjects.Any(t => t.Key == "messaging.system" && (string?)t.Value == "rabbitmq"))
+            .OrderBy(a => a.StartTimeUtc)
+            .ToList();
 
         consumerActivities.Count.Should().Be(3);
 
@@ -216,9 +220,13 @@ public class OpenTelemetryMetricsTests(RabbitMqContainerFixture rabbitMq, Postgr
             AssertMetricTags(retryMetric, ExchangeName, QueueName, RoutingKey);
         }
 
-        // Verify Traces
+        // Verify Traces — filter to RabbitMQ receive spans only (dispatch spans are also Consumer kind)
         var relevantActivities = GetRelevantActivities(activities, eventId);
-        var consumerActivities = relevantActivities.Where(a => a.Kind == ActivityKind.Consumer).OrderBy(a => a.StartTimeUtc).ToList();
+        var consumerActivities = relevantActivities
+            .Where(a => a.Kind == ActivityKind.Consumer
+                && a.TagObjects.Any(t => t.Key == "messaging.system" && (string?)t.Value == "rabbitmq"))
+            .OrderBy(a => a.StartTimeUtc)
+            .ToList();
 
         consumerActivities.Count.Should().Be(3);
 

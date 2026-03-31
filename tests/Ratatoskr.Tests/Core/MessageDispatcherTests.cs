@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using AwesomeAssertions;
@@ -452,6 +453,241 @@ public class MessageDispatcherTests
         // Assert
         result.Should().Be(DispatchResult.Success);
         handler.HandledMessages.Should().HaveCount(1);
+    }
+
+    [Test]
+    public async Task DispatchAsync_WithRegisteredHandler_CreatesActivitySpan()
+    {
+        // Arrange
+        var handler = new TestEventHandler();
+        var dispatcher = CreateDispatcher(
+            services =>
+            {
+                services.AddScoped<TestEventHandler>(_ => handler);
+                services.AddScoped<IMessageHandler<TestEvent>>(_ => handler);
+            },
+            registry =>
+            {
+                registry.Register(CreateTestChannel(typeof(TestEventHandler)));
+            });
+
+        // Use a unique message ID to avoid capturing activities from other parallel tests
+        var testEvent = new TestEvent { Id = "span-ok", Data = "test data" };
+        var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testEvent));
+        var context = new MessageProperties
+        {
+            Id = "dispatch-span-ok",
+            Type = "test.event",
+            Source = "/test",
+        };
+
+        Activity? capturedActivity = null;
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == RatatoskrDiagnostics.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            ActivityStopped = activity =>
+            {
+                if (activity.OperationName == "dispatch"
+                    && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString() == "dispatch-span-ok")
+                    capturedActivity = activity;
+            },
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        // Act
+        await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
+
+        // Assert
+        capturedActivity.Should().NotBeNull();
+        capturedActivity!.OperationName.Should().Be("dispatch");
+        capturedActivity.Kind.Should().Be(ActivityKind.Consumer);
+        capturedActivity.GetTagItem(MessagingSemanticConventions.MessageId).Should().Be("dispatch-span-ok");
+        capturedActivity.GetTagItem(MessagingSemanticConventions.System).Should().Be("ratatoskr");
+        capturedActivity.GetTagItem(MessagingSemanticConventions.DestinationName).Should().Be("test");
+        capturedActivity.GetTagItem(MessagingSemanticConventions.OperationName).Should().Be("dispatch");
+        capturedActivity.GetTagItem(MessagingSemanticConventions.OperationType).Should().Be(MessagingSemanticConventions.OperationTypeProcess);
+        capturedActivity.Status.Should().Be(ActivityStatusCode.Unset);
+    }
+
+    [Test]
+    public async Task DispatchAsync_HandlerThrows_SetsActivityErrorStatus()
+    {
+        // Arrange
+        var handler = new ThrowingTestEventHandler();
+        var dispatcher = CreateDispatcher(
+            services =>
+            {
+                services.AddScoped<ThrowingTestEventHandler>(_ => handler);
+                services.AddScoped<IMessageHandler<TestEvent>>(_ => handler);
+            },
+            registry =>
+            {
+                registry.Register(CreateTestChannel(typeof(ThrowingTestEventHandler)));
+            });
+
+        // Use a unique message ID to avoid capturing activities from other parallel tests
+        var testEvent = new TestEvent { Id = "span-err", Data = "test data" };
+        var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testEvent));
+        var context = new MessageProperties { Id = "dispatch-span-err", Type = "test.event", Source = "/test" };
+
+        Activity? capturedActivity = null;
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == RatatoskrDiagnostics.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            ActivityStopped = activity =>
+            {
+                if (activity.OperationName == "dispatch"
+                    && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString() == "dispatch-span-err")
+                    capturedActivity = activity;
+            },
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        // Act
+        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
+
+        // Assert
+        result.Should().Be(DispatchResult.RecoverableError);
+        capturedActivity.Should().NotBeNull();
+        capturedActivity!.Status.Should().Be(ActivityStatusCode.Error);
+        capturedActivity.GetTagItem(MessagingSemanticConventions.ErrorType).Should().NotBeNull();
+    }
+
+    [Test]
+    public async Task DispatchAsync_NullType_SetsActivityErrorStatus()
+    {
+        // Arrange
+        var dispatcher = CreateDispatcher(
+            registry =>
+            {
+                registry.Register(CreateTestChannel(typeof(TestEventHandler)));
+            });
+
+        var body = Encoding.UTF8.GetBytes("{}");
+        var messageId = $"dispatch-nulltype-{Guid.NewGuid():N}";
+        var context = new MessageProperties
+        {
+            Id = messageId,
+            Type = null!,
+            Source = "/test",
+        };
+
+        Activity? capturedActivity = null;
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == RatatoskrDiagnostics.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            ActivityStopped = activity =>
+            {
+                if (activity.OperationName == "dispatch"
+                    && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString() == messageId)
+                    capturedActivity = activity;
+            },
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        // Act
+        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
+
+        // Assert
+        result.Should().Be(DispatchResult.PermanentError);
+        capturedActivity.Should().NotBeNull();
+        capturedActivity!.Status.Should().Be(ActivityStatusCode.Error);
+        capturedActivity.StatusDescription.Should().Be("Message has no type");
+    }
+
+    [Test]
+    public async Task DispatchAsync_UnknownType_SetsActivityErrorStatus()
+    {
+        // Arrange
+        var dispatcher = CreateDispatcher(
+            registry =>
+            {
+                registry.Register(CreateTestChannel(typeof(TestEventHandler)));
+            });
+
+        var body = Encoding.UTF8.GetBytes("{}");
+        var messageId = $"dispatch-unknowntype-{Guid.NewGuid():N}";
+        var context = new MessageProperties
+        {
+            Id = messageId,
+            Type = "unknown.type",
+            Source = "/test",
+        };
+
+        Activity? capturedActivity = null;
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == RatatoskrDiagnostics.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            ActivityStopped = activity =>
+            {
+                if (activity.OperationName == "dispatch"
+                    && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString() == messageId)
+                    capturedActivity = activity;
+            },
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        // Act
+        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
+
+        // Assert
+        result.Should().Be(DispatchResult.NoHandlers);
+        capturedActivity.Should().NotBeNull();
+        capturedActivity!.Status.Should().Be(ActivityStatusCode.Error);
+        capturedActivity.StatusDescription.Should().Contain("unknown.type");
+    }
+
+    [Test]
+    public async Task DispatchAsync_DeserializationException_SetsActivityErrorStatus()
+    {
+        // Arrange
+        var handler = new TestEventHandler();
+        var dispatcher = CreateDispatcher(
+            services =>
+            {
+                services.AddScoped<TestEventHandler>(_ => handler);
+                services.AddScoped<IMessageHandler<TestEvent>>(_ => handler);
+            },
+            registry =>
+            {
+                registry.Register(CreateTestChannel(typeof(TestEventHandler)));
+            });
+
+        var invalidBody = Encoding.UTF8.GetBytes("not valid json");
+        var messageId = $"dispatch-deserr-{Guid.NewGuid():N}";
+        var context = new MessageProperties
+        {
+            Id = messageId,
+            Type = "test.event",
+            Source = "/test",
+        };
+
+        Activity? capturedActivity = null;
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == RatatoskrDiagnostics.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            ActivityStopped = activity =>
+            {
+                if (activity.OperationName == "dispatch"
+                    && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString() == messageId)
+                    capturedActivity = activity;
+            },
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        // Act
+        var result = await dispatcher.DispatchAsync(invalidBody, context, CancellationToken.None, "test", "test");
+
+        // Assert
+        result.Should().Be(DispatchResult.PermanentError);
+        capturedActivity.Should().NotBeNull();
+        capturedActivity!.Status.Should().Be(ActivityStatusCode.Error);
+        capturedActivity.GetTagItem(MessagingSemanticConventions.ErrorType).Should().NotBeNull();
     }
 
     private static ChannelRegistration CreateTestChannel(params Type[] handlerTypes)
