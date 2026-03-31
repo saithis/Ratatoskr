@@ -147,4 +147,40 @@ public class JsonMessageSerializerTests
         // Assert
         act.Should().Throw<JsonException>();
     }
+
+    [Test]
+    public void Serialize_WithCamelCaseOptions_ProducesCamelCaseJson()
+    {
+        // Arrange
+        var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+        var serializer = new JsonMessageSerializer(options);
+        var testEvent = new TestEvent { Id = "123", Data = "test data" };
+
+        // Act
+        var body = serializer.Serialize(testEvent);
+        var json = Encoding.UTF8.GetString(body);
+
+        // Assert
+        json.Should().Contain("\"id\":");
+        json.Should().Contain("\"data\":");
+        json.Should().NotContain("\"Id\":");
+        json.Should().NotContain("\"Data\":");
+    }
+
+    [Test]
+    public void Deserialize_WithCamelCaseOptions_ReadsFromCamelCaseJson()
+    {
+        // Arrange
+        var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+        var serializer = new JsonMessageSerializer(options);
+        var body = Encoding.UTF8.GetBytes("""{"id":"456","data":"camel case data"}""");
+
+        // Act
+        var result = serializer.Deserialize<TestEvent>(body);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.Id.Should().Be("456");
+        result.Data.Should().Be("camel case data");
+    }
 }

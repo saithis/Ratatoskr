@@ -105,7 +105,27 @@ See [CloudEvents](cloudevents.md) for the full list of standard and extension at
 
 ## Serialization
 
-Ratatoskr uses `System.Text.Json` by default. You can customize serialization by registering a custom `IMessageSerializer`:
+Ratatoskr uses `System.Text.Json` by default.
+
+### Configuring JsonSerializerOptions
+
+To customize the built-in JSON serializer (e.g. camelCase naming, custom converters), register a configured `JsonMessageSerializer` **before** calling `AddRatatoskr`:
+
+```csharp
+builder.Services.AddSingleton<IMessageSerializer>(
+    new JsonMessageSerializer(new JsonSerializerOptions
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    }));
+
+builder.Services.AddRatatoskr(bus => { ... });
+```
+
+The default serializer uses `System.Text.Json` defaults (PascalCase, case-sensitive). Pre-registering your own `IMessageSerializer` takes precedence over the built-in default.
+
+### Custom Serializer
+
+For full control, implement `IMessageSerializer` directly:
 
 ```csharp
 public class CustomSerializer : IMessageSerializer
@@ -122,7 +142,7 @@ public class CustomSerializer : IMessageSerializer
 }
 ```
 
-Register it in the DI container:
+Register it in the DI container **before** calling `AddRatatoskr`:
 
 ```csharp
 builder.Services.AddSingleton<IMessageSerializer, CustomSerializer>();
