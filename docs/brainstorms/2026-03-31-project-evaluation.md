@@ -233,13 +233,14 @@ Validation approach:
 - Source(s): Claude
 - **Resolution:** Converted all 9 direct `logger.LogXxx()` calls in `InboxMessageProcessor` to source-generated `[LoggerMessage]` pattern via `InboxMessageProcessorLog` partial class, matching the `OutboxMessageProcessorLog` pattern.
 
-### A-LOW-9 · `BackoffCalculator` uses `Random.Shared` (non-injectable, non-deterministic in tests)
+### A-LOW-9 · ~~`BackoffCalculator` uses `Random.Shared` (non-injectable, non-deterministic in tests)~~ ✅ DONE
 
 - Verdict: `Valid`
 - Severity: Low
 - Detail: Static randomness cannot be seeded or controlled in test scenarios.
 - Evidence: `src/Ratatoskr.EfCore/Internal/BackoffCalculator.cs`
 - Source(s): Claude
+- **Resolution:** Added optional `Random? random = null` parameter to `BackoffCalculator.CalculateDelay()`. Defaults to `Random.Shared` for production use. Test callers pass a seeded `Random` for deterministic results.
 
 ### A-LOW-10 · Inbox/outbox code duplication (shared ~80% of logic)
 
