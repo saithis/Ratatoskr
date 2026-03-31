@@ -37,6 +37,7 @@ public class MessageDispatcher(
         if (properties.Type == null)
         {
             logger.LogError("Received message without a type");
+            activity?.SetStatus(ActivityStatusCode.Error, "Message has no type");
             return DispatchResult.PermanentError;
         }
 
@@ -62,6 +63,7 @@ public class MessageDispatcher(
         if (messageType == null)
         {
             logger.LogWarning("No registration found for event type '{EventType}'", properties.Type);
+            activity?.SetStatus(ActivityStatusCode.Error, $"No registration found for event type '{properties.Type}'");
             return DispatchResult.NoHandlers;
         }
 
@@ -81,6 +83,7 @@ public class MessageDispatcher(
         if (message == null)
         {
             logger.LogError("Message of type '{EventType}' deserialized to null", properties.Type);
+            activity?.SetStatus(ActivityStatusCode.Error, $"Message of type '{properties.Type}' deserialized to null");
             return DispatchResult.PermanentError;
         }
 
