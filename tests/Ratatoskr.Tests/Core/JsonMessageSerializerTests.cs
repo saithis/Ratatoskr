@@ -149,6 +149,24 @@ public class JsonMessageSerializerTests
     }
 
     [Test]
+    public void Serialize_DefaultOptions_ProducesPascalCaseJson()
+    {
+        // Arrange
+        var serializer = new JsonMessageSerializer();
+        var testEvent = new TestEvent { Id = "123", Data = "test data" };
+
+        // Act
+        var body = serializer.Serialize(testEvent);
+        var json = Encoding.UTF8.GetString(body);
+
+        // Assert
+        json.Should().Contain("\"Id\":");
+        json.Should().Contain("\"Data\":");
+        json.Should().NotContain("\"id\":");
+        json.Should().NotContain("\"data\":");
+    }
+
+    [Test]
     public void Serialize_WithCamelCaseOptions_ProducesCamelCaseJson()
     {
         // Arrange

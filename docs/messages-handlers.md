@@ -109,19 +109,19 @@ Ratatoskr uses `System.Text.Json` by default.
 
 ### Configuring JsonSerializerOptions
 
-To customize the built-in JSON serializer (e.g. camelCase naming, custom converters), register a configured `JsonMessageSerializer` **before** calling `AddRatatoskr`:
+To customize the built-in JSON serializer (e.g. camelCase naming, custom converters), use `ConfigureJsonSerialization`:
 
 ```csharp
-builder.Services.AddSingleton<IMessageSerializer>(
-    new JsonMessageSerializer(new JsonSerializerOptions
+builder.Services.AddRatatoskr(bus =>
+{
+    bus.ConfigureJsonSerialization(json =>
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    }));
-
-builder.Services.AddRatatoskr(bus => { ... });
+        json.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    });
+});
 ```
 
-The default serializer uses `System.Text.Json` defaults (PascalCase, case-sensitive). Pre-registering your own `IMessageSerializer` takes precedence over the built-in default.
+The default serializer uses `System.Text.Json` defaults (PascalCase, case-sensitive).
 
 ### Custom Serializer
 
