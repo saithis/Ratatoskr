@@ -26,7 +26,24 @@ public class MessageConsumptionBuilder<TMessage> where TMessage : notnull
         where THandler : class, IMessageHandler<TMessage>
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(stableKey);
-        AddHandler<THandler>(isInbox: true, inboxKey: stableKey);
+        AddHandler<THandler>(isInbox: true, inboxKey: stableKey, fallbackKeys: null);
+        return this;
+    }
+
+    /// <summary>
+    /// Registers an inbox handler with a stable key and fallback keys from previous renames.
+    /// Existing inbox entries matching any fallback key will be processed by this handler.
+    /// New inbox entries are always created with <paramref name="stableKey"/>, not fallback keys.
+    /// </summary>
+    /// <param name="stableKey">The current handler key used for new inbox entries.</param>
+    /// <param name="fallbackKeys">Previous handler keys to match against for existing inbox entries.</param>
+    public MessageConsumptionBuilder<TMessage> WithHandler<THandler>(string stableKey, params string[] fallbackKeys)
+        where THandler : class, IMessageHandler<TMessage>
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(stableKey);
+        foreach (var key in fallbackKeys)
+            ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        AddHandler<THandler>(isInbox: true, inboxKey: stableKey, fallbackKeys: fallbackKeys);
         return this;
     }
 
@@ -37,11 +54,11 @@ public class MessageConsumptionBuilder<TMessage> where TMessage : notnull
     public MessageConsumptionBuilder<TMessage> WithHandler<THandler>()
         where THandler : class, IMessageHandler<TMessage>
     {
-        AddHandler<THandler>(isInbox: false, inboxKey: null);
+        AddHandler<THandler>(isInbox: false, inboxKey: null, fallbackKeys: null);
         return this;
     }
 
-    private void AddHandler<THandler>(bool isInbox, string? inboxKey)
+    private void AddHandler<THandler>(bool isInbox, string? inboxKey, IReadOnlyList<string>? fallbackKeys)
         where THandler : class, IMessageHandler<TMessage>
     {
         _services.TryAddScoped<THandler>();
@@ -50,6 +67,7 @@ public class MessageConsumptionBuilder<TMessage> where TMessage : notnull
             typeof(TMessage),
             typeof(THandler),
             isInbox,
-            inboxKey));
+            inboxKey,
+            fallbackKeys));
     }
 }

@@ -40,10 +40,32 @@ bus.AddEventConsumeChannel("orders.events", c => c
     .UseInbox<OrderDbContext>());
 ```
 
-The handler key (`"order-handler"`) is persisted in the database. It must be stable across deployments — renaming causes in-flight messages to be poisoned.
+The handler key (`"order-handler"`) is persisted in the database. It must be stable across deployments — renaming without fallback keys causes in-flight messages to be poisoned.
 
 > [!WARNING]
 > On channels with `UseInbox()`, every handler **must** have a key. Registering a handler without a key throws `InvalidOperationException` at startup. Handler keys must be **globally unique** across all channels and DbContexts.
+
+### Renaming Handler Keys (Fallback Keys)
+
+When you need to rename a handler key, use **fallback keys** to keep processing existing inbox entries written under the old key:
+
+```csharp
+.Consumes<OrderPlaced>(m => m
+    .WithHandler<OrderPlacedHandler>("order-handler-v2", "order-handler"))
+```
+
+The second parameter (`"order-handler"`) is a fallback key. The inbox processor matches it against existing entries, but new entries are always created with the current key (`"order-handler-v2"`).
+
+You can specify multiple fallback keys for handlers that have been renamed more than once:
+
+```csharp
+.WithHandler<OrderPlacedHandler>("order-handler-v3", "order-handler-v1", "order-handler-v2")
+```
+
+Once all old inbox entries have been processed (drained), you can safely remove the fallback keys.
+
+> [!TIP]
+> Fallback keys must be globally unique — they cannot overlap with any other handler's primary or fallback keys.
 
 ## Processing Flow
 

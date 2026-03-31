@@ -41,15 +41,13 @@ public class ChannelHandlerRegistry
 
                         if (handler.InboxKey != null)
                         {
-                            if (inboxByKey.TryGetValue(handler.InboxKey, out var existing))
-                                throw new InvalidOperationException(
-                                    $"Duplicate inbox handler key '{handler.InboxKey}' registered on channel '{channel.ChannelName}' " +
-                                    $"for handler '{handler.HandlerType.Name}'. " +
-                                    $"Key is already used by handler '{existing.HandlerType.Name}'. " +
-                                    $"Inbox handler keys must be globally unique because the inbox processor " +
-                                    $"looks up handlers by key across all channels and DbContexts.");
+                            RegisterKey(inboxByKey, handler.InboxKey, handler, channel.ChannelName);
 
-                            inboxByKey[handler.InboxKey] = handler;
+                            if (handler.FallbackKeys != null)
+                            {
+                                foreach (var fallbackKey in handler.FallbackKeys)
+                                    RegisterKey(inboxByKey, fallbackKey, handler, channel.ChannelName);
+                            }
                         }
                     }
                     else
@@ -72,6 +70,23 @@ public class ChannelHandlerRegistry
             registry._inboxByKey[key] = value;
 
         return registry;
+    }
+
+    private static void RegisterKey(
+        Dictionary<string, ChannelHandlerRegistration> dict,
+        string key,
+        ChannelHandlerRegistration handler,
+        string channelName)
+    {
+        if (dict.TryGetValue(key, out var existing))
+            throw new InvalidOperationException(
+                $"Duplicate inbox handler key '{key}' registered on channel '{channelName}' " +
+                $"for handler '{handler.HandlerType.Name}'. " +
+                $"Key is already used by handler '{existing.HandlerType.Name}'. " +
+                $"Inbox handler keys (including fallback keys) must be globally unique because the inbox processor " +
+                $"looks up handlers by key across all channels and DbContexts.");
+
+        dict[key] = handler;
     }
 
     private static void AddToList<TKey>(Dictionary<TKey, List<ChannelHandlerRegistration>> dict, TKey key, ChannelHandlerRegistration handler)

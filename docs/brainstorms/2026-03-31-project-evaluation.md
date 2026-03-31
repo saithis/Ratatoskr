@@ -77,13 +77,14 @@ Validation approach:
 - Evidence: `docs/operations.md` (§ Manual Retry)
 - Source(s): Claude (original claim overstated), Gemini (overstated in the opposite direction)
 
-### A-HIGH-6 · Rolling deployments can permanently poison in-flight messages
+### A-HIGH-6 · ~~Rolling deployments can permanently poison in-flight messages~~ ✅ DONE (handler key renames)
 
 - Verdict: `Valid`
 - Severity: High
 - Detail: When a handler key is renamed between v1 and v2, any `InboxHandlerStatusEntity` written by v1 and picked up by a v2 instance will be immediately and irrecoverably poisoned (no grace period, no fallback). Field renames in message CLR types cause silent data loss; type changes cause `JsonException` leading to eventual poisoning. There is no documented blue-green or drain-first upgrade procedure.
 - Evidence: `src/Ratatoskr.EfCore/Internal/InboxMessageProcessor.cs` (lines 129–149)
 - Source(s): Claude
+- **Resolution:** Added fallback keys feature: `.WithHandler<T>("new-key", "old-key")`. Existing inbox entries with old keys are processed by the handler; new entries use the current key. Documented in `docs/inbox.md`.
 
 ### A-HIGH-7 · Graceful shutdown does not drain in-flight consumer messages
 
@@ -117,13 +118,14 @@ Validation approach:
 - Evidence: `src/Ratatoskr/Core/MessageProperties.cs`, `src/Ratatoskr.EfCore/Internal/InboxMessageEntity.cs`
 - Source(s): Claude
 
-### A-MED-4 · Handler key stability is operationally critical and fragile across deployments
+### A-MED-4 · ~~Handler key stability is operationally critical and fragile across deployments~~ ✅ DONE
 
 - Verdict: `Valid`
 - Severity: Medium (operational coupling)
 - Detail: Renaming a handler key between deployments immediately poisons all in-flight statuses for that key. Documentation warns about this, but there is no framework-level rename migration or grace period.
 - Evidence: `src/Ratatoskr.EfCore/Internal/InboxMessageProcessor.cs` (lines 129–149), `docs/inbox.md`
 - Source(s): Claude
+- **Resolution:** Added fallback keys feature via `.WithHandler<T>("new-key", "old-key-1", "old-key-2")`. Fallback keys are registered in the handler registry alongside the primary key, allowing safe handler key renames without poisoning in-flight messages.
 
 ### A-MED-5 · Cleanup services do not use distributed locks (redundant DELETEs in multi-instance)
 
