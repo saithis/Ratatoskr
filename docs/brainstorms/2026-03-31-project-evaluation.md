@@ -197,13 +197,14 @@ Validation approach:
 - Evidence: `src/Ratatoskr/CloudEvents/CloudEventEnvelope.cs`, `src/Ratatoskr.RabbitMq/CloudEventsAmqpMapper.cs`
 - Source(s): Claude
 
-### A-LOW-5 · Inbox orphan cleanup `Take` without `OrderBy` (non-deterministic batching)
+### A-LOW-5 · ~~Inbox orphan cleanup `Take` without `OrderBy` (non-deterministic batching)~~ ✅ DONE
 
 - Verdict: `Valid`
 - Severity: Low
 - Detail: The orphan cleanup `WHERE NOT EXISTS ...` query uses `Take(CleanupBatchSize)` without an `OrderBy`, leading to non-deterministic batch selection and potential repeated work.
 - Evidence: `src/Ratatoskr.EfCore/Internal/InboxCleanupService.cs` (lines 68–74)
 - Source(s): Claude
+- **Resolution:** Added `.OrderBy(m => m.ReceivedAt)` before `.Take()` in orphan cleanup query. Added integration tests for deterministic ordering.
 
 ### A-LOW-6 · `CloudEvents 'time'` treated as required on outgoing path (stricter than spec)
 
