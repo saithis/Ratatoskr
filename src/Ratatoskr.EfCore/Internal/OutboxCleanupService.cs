@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Ratatoskr.Core;
 
 namespace Ratatoskr.EfCore.Internal;
 
@@ -37,6 +39,7 @@ internal class OutboxCleanupService<TDbContext>(
 
     internal async Task<int> CleanupAsync(CancellationToken cancellationToken)
     {
+        var startTimestamp = Stopwatch.GetTimestamp();
         var cutoff = timeProvider.GetUtcNow() - _options.RetentionPeriod!.Value;
         var totalDeleted = 0;
         int deleted;
@@ -57,8 +60,12 @@ internal class OutboxCleanupService<TDbContext>(
             totalDeleted += deleted;
         } while (deleted == _options.CleanupBatchSize);
 
+        RatatoskrDiagnostics.OutboxCleanupDuration.Record(Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds);
         if (totalDeleted > 0)
+        {
+            RatatoskrDiagnostics.OutboxCleanupCount.Add(totalDeleted);
             logger.LogInformation("OutboxCleanupService deleted {Count} processed message(s)", totalDeleted);
+        }
 
         return totalDeleted;
     }
