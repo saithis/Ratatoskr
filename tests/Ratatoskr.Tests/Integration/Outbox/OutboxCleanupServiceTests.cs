@@ -1,5 +1,6 @@
 using System.Diagnostics.Metrics;
 using AwesomeAssertions;
+using Medallion.Threading;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -21,6 +22,7 @@ public class OutboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgr
         new(
             Services.GetRequiredService<IServiceScopeFactory>(),
             new OutboxOptionsHolder<TestDbContext>(options),
+            Services.GetRequiredService<IDistributedLockProvider>(),
             _timeProvider,
             Services.GetRequiredService<ILogger<OutboxCleanupService<TestDbContext>>>());
 
@@ -271,5 +273,77 @@ public class OutboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgr
         // Assert — use >= 1 since static counters may accumulate from parallel tests
         cleanupCount.Should().BeGreaterThanOrEqualTo(1);
         cleanupDuration.Should().BeGreaterThanOrEqualTo(0);
+    }
+
+    [Test]
+    public async Task TryCleanupWithLock_AcquiresLockAndCleansUp()
+    {
+        // Arrange
+        await SetupAsync();
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties { Type = "test" }, _timeProvider, "rabbitmq");
+            entity.MarkAsProcessing(_timeProvider);
+            entity.MarkAsProcessed(_timeProvider);
+            db.Set<OutboxMessageEntity>().Add(entity);
+            await db.SaveChangesAsync();
+        });
+
+        _timeProvider.Advance(TimeSpan.FromDays(10));
+
+        var options = new OutboxOptions { RetentionPeriod = TimeSpan.FromDays(1) };
+        var service = CreateCleanupService(options);
+
+        // Act
+        var acquired = await service.TryCleanupWithLockAsync(CancellationToken.None);
+
+        // Assert
+        acquired.Should().BeTrue();
+        var remaining = await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            return await db.Set<OutboxMessageEntity>().CountAsync();
+        });
+        remaining.Should().Be(0);
+    }
+
+    [Test]
+    public async Task TryCleanupWithLock_SkipsWhenLockIsHeld()
+    {
+        // Arrange
+        await SetupAsync();
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties { Type = "test" }, _timeProvider, "rabbitmq");
+            entity.MarkAsProcessing(_timeProvider);
+            entity.MarkAsProcessed(_timeProvider);
+            db.Set<OutboxMessageEntity>().Add(entity);
+            await db.SaveChangesAsync();
+        });
+
+        _timeProvider.Advance(TimeSpan.FromDays(10));
+
+        var options = new OutboxOptions { RetentionPeriod = TimeSpan.FromDays(1) };
+        var service = CreateCleanupService(options);
+
+        // Hold the lock externally
+        var lockProvider = Services.GetRequiredService<IDistributedLockProvider>();
+        await using var heldLock = await lockProvider.AcquireLockAsync(options.CleanupLockName);
+
+        // Act
+        var acquired = await service.TryCleanupWithLockAsync(CancellationToken.None);
+
+        // Assert — lock not acquired, cleanup skipped
+        acquired.Should().BeFalse();
+        var remaining = await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            return await db.Set<OutboxMessageEntity>().CountAsync();
+        });
+        remaining.Should().Be(1);
     }
 }

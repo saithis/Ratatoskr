@@ -52,6 +52,8 @@ public static class PublicApiExtensions
         {
             if (inboxBuilder.Options.LockName == InboxOptions.DefaultLockName)
                 inboxBuilder.Options.LockName = $"InboxProcessor_{typeof(TDbContext).Name}";
+            if (inboxBuilder.Options.CleanupLockName == InboxOptions.DefaultCleanupLockName)
+                inboxBuilder.Options.CleanupLockName = $"InboxCleanup_{typeof(TDbContext).Name}";
 
             ratatoskrBuilder.Services.AddSingleton(new InboxOptionsHolder<TDbContext>(inboxBuilder.Options));
             ratatoskrBuilder.Services.TryAddSingleton<InboxTelemetry>();
@@ -82,6 +84,8 @@ public static class PublicApiExtensions
         {
             if (outboxBuilder.Options.LockName == OutboxOptions.DefaultLockName)
                 outboxBuilder.Options.LockName = $"OutboxProcessor_{typeof(TDbContext).Name}";
+            if (outboxBuilder.Options.CleanupLockName == OutboxOptions.DefaultCleanupLockName)
+                outboxBuilder.Options.CleanupLockName = $"OutboxCleanup_{typeof(TDbContext).Name}";
 
             ratatoskrBuilder.Services.AddSingleton(new OutboxOptionsHolder<TDbContext>(outboxBuilder.Options));
             ratatoskrBuilder.Services.TryAddSingleton<OutboxTelemetry>();

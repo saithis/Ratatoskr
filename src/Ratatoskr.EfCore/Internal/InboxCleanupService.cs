@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Medallion.Threading;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -10,6 +11,7 @@ namespace Ratatoskr.EfCore.Internal;
 internal class InboxCleanupService<TDbContext>(
     IServiceScopeFactory serviceScopeFactory,
     InboxOptionsHolder<TDbContext> optionsHolder,
+    IDistributedLockProvider distributedLockProvider,
     TimeProvider timeProvider,
     ILogger<InboxCleanupService<TDbContext>> logger) : BackgroundService
     where TDbContext : DbContext, IInboxDbContext
@@ -26,7 +28,7 @@ internal class InboxCleanupService<TDbContext>(
 
             try
             {
-                await CleanupAsync(stoppingToken);
+                await TryCleanupWithLockAsync(stoppingToken);
             }
             catch (Exception e) when (!stoppingToken.IsCancellationRequested)
             {
@@ -35,6 +37,23 @@ internal class InboxCleanupService<TDbContext>(
         }
 
         logger.LogInformation("Stopped InboxCleanupService");
+    }
+
+    internal async Task<bool> TryCleanupWithLockAsync(CancellationToken cancellationToken)
+    {
+        await using var dLock = await distributedLockProvider.TryAcquireLockAsync(
+            _options.CleanupLockName, TimeSpan.Zero, cancellationToken);
+
+        if (dLock == null)
+        {
+            logger.LogDebug("InboxCleanupService skipped — another instance holds the lock");
+            RatatoskrDiagnostics.LockAcquisitionFailure.Add(1,
+                new TagList { { "processor", "InboxCleanupService" } });
+            return false;
+        }
+
+        await CleanupAsync(cancellationToken);
+        return true;
     }
 
     internal async Task<(int HandlerStatuses, int OrphanedMessages)> CleanupAsync(CancellationToken cancellationToken)

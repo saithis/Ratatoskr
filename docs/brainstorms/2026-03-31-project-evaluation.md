@@ -134,6 +134,7 @@ Validation approach:
 - Detail: Unlike outbox/inbox processors, `InboxCleanupService` and `OutboxCleanupService` are plain hosted services with no distributed lock. In horizontally scaled deployments, every instance runs independent cleanup batches, causing redundant DELETE operations.
 - Evidence: `src/Ratatoskr.EfCore/Internal/InboxCleanupService.cs`, `src/Ratatoskr.EfCore/Internal/OutboxCleanupService.cs`
 - Source(s): Claude
+- **Resolution:** Added distributed lock acquisition (`TryAcquireLockAsync` with `TimeSpan.Zero`) to both cleanup services. Only one instance runs cleanup per cycle; others skip. Added `CleanupLockName` option and `WithCleanupLockName()` fluent API. Lock names auto-generated per DbContext: `OutboxCleanup_{DbContext}`, `InboxCleanup_{DbContext}`.
 
 ### A-MED-6 · Health check is internal and not registered by the builder
 
@@ -577,7 +578,7 @@ Overall architecture: sound. Core at-least-once guarantee: holds (with the stagi
 8. **A-MED-1** — Per-channel serializer / content-type negotiation (high priority for interop).
 9. **A-HIGH-6** — Document handler key stability guarantees and rolling deployment procedure.
 10. **A-HIGH-7** — Graceful consumer shutdown drain.
-11. **A-MED-5** — Distributed locks for cleanup services.
+11. ~~**A-MED-5** — Distributed locks for cleanup services.~~ **DONE**
 12. **A-PERF-1** — Channel pool for concurrent RabbitMQ sends (see Section A-PERF).
 13. **A-MED-2** — Startup schema drift detection or documented migration protocol.
 14. **D-NF-6** — Data governance / PII retention position documented.

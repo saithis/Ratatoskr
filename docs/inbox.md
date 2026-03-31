@@ -179,6 +179,7 @@ bus.AddEfCoreDurability<OrderDbContext>(d => d.UseInbox(inbox =>
 | `WithRetention(TimeSpan)` | *none* | Auto-cleanup retention period for completed messages |
 | `WithCleanupInterval(TimeSpan)` | `1 hour` | How often the cleanup service runs |
 | `WithCleanupBatchSize(int)` | `10,000` | Messages deleted per cleanup batch |
+| `WithCleanupLockName(string)` | `"InboxCleanup_{DbContext}"` | Cleanup distributed lock name (auto-generated per DbContext) |
 
 ## Data Retention
 
