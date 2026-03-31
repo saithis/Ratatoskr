@@ -471,11 +471,12 @@ public class MessageDispatcherTests
                 registry.Register(CreateTestChannel(typeof(TestEventHandler)));
             });
 
-        var testEvent = new TestEvent { Id = "123", Data = "test data" };
+        // Use a unique message ID to avoid capturing activities from other parallel tests
+        var testEvent = new TestEvent { Id = "span-ok", Data = "test data" };
         var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testEvent));
         var context = new MessageProperties
         {
-            Id = "event-123",
+            Id = "dispatch-span-ok",
             Type = "test.event",
             Source = "/test",
         };
@@ -487,7 +488,8 @@ public class MessageDispatcherTests
             Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
             ActivityStopped = activity =>
             {
-                if (activity.OperationName == "dispatch")
+                if (activity.OperationName == "dispatch"
+                    && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString() == "dispatch-span-ok")
                     capturedActivity = activity;
             },
         };
@@ -500,7 +502,7 @@ public class MessageDispatcherTests
         capturedActivity.Should().NotBeNull();
         capturedActivity!.OperationName.Should().Be("dispatch");
         capturedActivity.Kind.Should().Be(ActivityKind.Consumer);
-        capturedActivity.GetTagItem(MessagingSemanticConventions.MessageId).Should().Be("event-123");
+        capturedActivity.GetTagItem(MessagingSemanticConventions.MessageId).Should().Be("dispatch-span-ok");
         capturedActivity.GetTagItem(MessagingSemanticConventions.System).Should().Be("ratatoskr");
         capturedActivity.GetTagItem(MessagingSemanticConventions.DestinationName).Should().Be("test");
         capturedActivity.GetTagItem(MessagingSemanticConventions.OperationName).Should().Be("dispatch");
@@ -524,9 +526,10 @@ public class MessageDispatcherTests
                 registry.Register(CreateTestChannel(typeof(ThrowingTestEventHandler)));
             });
 
-        var testEvent = new TestEvent { Id = "123", Data = "test data" };
+        // Use a unique message ID to avoid capturing activities from other parallel tests
+        var testEvent = new TestEvent { Id = "span-err", Data = "test data" };
         var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testEvent));
-        var context = new MessageProperties { Id = "event-err", Type = "test.event", Source = "/test" };
+        var context = new MessageProperties { Id = "dispatch-span-err", Type = "test.event", Source = "/test" };
 
         Activity? capturedActivity = null;
         using var listener = new ActivityListener
@@ -535,7 +538,8 @@ public class MessageDispatcherTests
             Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
             ActivityStopped = activity =>
             {
-                if (activity.OperationName == "dispatch")
+                if (activity.OperationName == "dispatch"
+                    && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString() == "dispatch-span-err")
                     capturedActivity = activity;
             },
         };
