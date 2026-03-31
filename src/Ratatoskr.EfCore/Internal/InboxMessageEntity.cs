@@ -22,8 +22,10 @@ internal class InboxMessageEntity
 
     public required DateTimeOffset ReceivedAt { get; init; }
 
+    private MessageProperties? _cachedProperties;
+
     public MessageProperties GetProperties() =>
-        JsonSerializer.Deserialize<MessageProperties>(SerializedProperties)
+        _cachedProperties ??= JsonSerializer.Deserialize<MessageProperties>(SerializedProperties)
         ?? throw new InvalidOperationException($"Could not deserialize MessageProperties for inbox message '{Id}'.");
 
     internal const int MaxIdLength = 200;
