@@ -7,8 +7,20 @@ namespace Ratatoskr.Core;
 /// <param name="HandlerType">CLR type of the handler class to resolve from DI.</param>
 /// <param name="IsInbox">Whether this handler is managed by the inbox processor.</param>
 /// <param name="InboxKey">Stable key for inbox deduplication. Required when <paramref name="IsInbox"/> is true.</param>
+/// <param name="LegacyKeys">
+/// Previous handler keys that should still be matched when processing existing inbox entries
+/// during a handler rename transition. Legacy keys are never used to create new inbox entries.
+/// </param>
 public record ChannelHandlerRegistration(
     Type MessageType,
     Type HandlerType,
     bool IsInbox,
-    string? InboxKey);
+    string? InboxKey,
+    IReadOnlyList<string> LegacyKeys)
+{
+    /// <summary>
+    /// Creates a registration without legacy keys.
+    /// </summary>
+    public ChannelHandlerRegistration(Type MessageType, Type HandlerType, bool IsInbox, string? InboxKey)
+        : this(MessageType, HandlerType, IsInbox, InboxKey, Array.Empty<string>()) { }
+}

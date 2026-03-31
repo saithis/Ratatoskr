@@ -97,6 +97,135 @@ public class InboxConfigurationTests(RabbitMqContainerFixture rabbitMq, Postgres
     }
 
     [Test]
+    public async Task Inbox_LegacyKey_ProcessesExistingEntries()
+    {
+        var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
+
+        // Register handler with new key "handler-v2" and legacy key "handler-v1"
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TimeProvider>(fakeTime);
+            services.AddRatatoskr(bus =>
+            {
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-v2", "handler-v1"))
+                    .UseInbox<TestDbContext>());
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox =>
+                    inbox.WithoutBackgroundProcessing()));
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await InitializeDatabase();
+
+        // Publish a message — creates inbox entry with primary key "handler-v2"
+        await InScopeAsync(async ctx =>
+        {
+            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+            await bus.PublishDirectAsync(
+                new TestEvent { Id = "business-legacy-1" },
+                new MessageProperties { Id = "legacy-1" });
+        });
+
+        await WaitForInboxEntriesAsync(1);
+
+        // Simulate a pre-existing inbox entry from before the rename
+        // by changing the handler key in the database to the old key
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            await db.Database.ExecuteSqlRawAsync(
+                """UPDATE "InboxHandlerStatusEntity" SET "HandlerKey" = 'handler-v1' WHERE "HandlerKey" = 'handler-v2'""");
+        });
+
+        // Process — the legacy key should resolve to the handler
+        await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
+
+        // Assert — entry with legacy key should be completed (not poisoned)
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var status = await db.Set<InboxHandlerStatusEntity>()
+                .SingleAsync(s => s.HandlerKey == "handler-v1");
+            status.CompletedAt.Should().NotBeNull("legacy key should resolve and handler should succeed");
+            status.IsPoisoned.Should().BeFalse();
+            status.ErrorCount.Should().Be(0);
+        });
+    }
+
+    [Test]
+    public async Task Inbox_LegacyKey_NewEntriesUseCurrentKey()
+    {
+        var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TimeProvider>(fakeTime);
+            services.AddRatatoskr(bus =>
+            {
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-v2", "handler-v1"))
+                    .UseInbox<TestDbContext>());
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox =>
+                    inbox.WithoutBackgroundProcessing()));
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await InitializeDatabase();
+
+        // Publish a new message — should create inbox entry with primary key "handler-v2", not the legacy key
+        await InScopeAsync(async ctx =>
+        {
+            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+            await bus.PublishDirectAsync(
+                new TestEvent { Id = "business-newentry-1" },
+                new MessageProperties { Id = "newentry-1" });
+        });
+
+        await WaitForInboxEntriesAsync(1);
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var status = await db.Set<InboxHandlerStatusEntity>().SingleAsync();
+            status.HandlerKey.Should().Be("handler-v2", "new entries must use the current primary key, not legacy keys");
+        });
+    }
+
+    [Test]
+    public async Task Inbox_DuplicateHandlerKey_ViaLegacyKey_ThrowsAtStartup()
+    {
+        var act = async () =>
+        {
+            await StartTestAsync(services =>
+            {
+                services.AddRatatoskr(bus =>
+                {
+                    bus.AddEventConsumeChannel("inbox-events", c => c
+                        .Consumes<TestEvent>(m => m
+                            .WithHandler<InboxHandlerA>("handler-a")
+                            .WithHandler<InboxHandlerB>("handler-b", "handler-a"))
+                        .UseInbox<TestDbContext>());
+                    bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox());
+                });
+
+                services.AddDbContext<TestDbContext>((sp, opts) =>
+                    opts.UseNpgsql(PostgresConnectionString));
+            });
+        };
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Duplicate inbox handler key*handler-a*");
+    }
+
+    [Test]
     public async Task Inbox_MessageIdExactly200Chars_Accepted()
     {
         var longId = new string('a', 200);

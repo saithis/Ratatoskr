@@ -26,7 +26,22 @@ public class MessageConsumptionBuilder<TMessage> where TMessage : notnull
         where THandler : class, IMessageHandler<TMessage>
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(stableKey);
-        AddHandler<THandler>(isInbox: true, inboxKey: stableKey);
+        AddHandler<THandler>(isInbox: true, inboxKey: stableKey, legacyKeys: []);
+        return this;
+    }
+
+    /// <summary>
+    /// Registers an inbox handler with a stable key and legacy keys for handler rename transitions.
+    /// Legacy keys match existing inbox entries for processing but never create new entries.
+    /// Requires the channel to have <c>UseInbox&lt;TDbContext&gt;()</c> configured.
+    /// </summary>
+    public MessageConsumptionBuilder<TMessage> WithHandler<THandler>(string stableKey, params string[] legacyKeys)
+        where THandler : class, IMessageHandler<TMessage>
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(stableKey);
+        foreach (var legacyKey in legacyKeys)
+            ArgumentException.ThrowIfNullOrWhiteSpace(legacyKey);
+        AddHandler<THandler>(isInbox: true, inboxKey: stableKey, legacyKeys: legacyKeys);
         return this;
     }
 
@@ -37,11 +52,11 @@ public class MessageConsumptionBuilder<TMessage> where TMessage : notnull
     public MessageConsumptionBuilder<TMessage> WithHandler<THandler>()
         where THandler : class, IMessageHandler<TMessage>
     {
-        AddHandler<THandler>(isInbox: false, inboxKey: null);
+        AddHandler<THandler>(isInbox: false, inboxKey: null, legacyKeys: []);
         return this;
     }
 
-    private void AddHandler<THandler>(bool isInbox, string? inboxKey)
+    private void AddHandler<THandler>(bool isInbox, string? inboxKey, IReadOnlyList<string> legacyKeys)
         where THandler : class, IMessageHandler<TMessage>
     {
         _services.TryAddScoped<THandler>();
@@ -50,6 +65,7 @@ public class MessageConsumptionBuilder<TMessage> where TMessage : notnull
             typeof(TMessage),
             typeof(THandler),
             isInbox,
-            inboxKey));
+            inboxKey,
+            legacyKeys));
     }
 }

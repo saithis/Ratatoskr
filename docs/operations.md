@@ -349,7 +349,7 @@ Review the generated migration to understand schema changes before applying to p
 
 Before deploying a new version that changes handler configuration:
 
-- [ ] **Handler keys unchanged** — Verify no handler keys were renamed. Key renames poison in-flight messages. See [Inbox: Handler Key Stability](inbox.md#handler-key-stability).
+- [ ] **Handler keys stable** — If renaming a handler key, use legacy keys to drain in-flight messages. See [Inbox: Handler Key Renaming](inbox.md#handler-key-renaming-legacy-keys).
 - [ ] **Message types backward-compatible** — Only additive field changes. No renames or removals. See [Architecture: Schema Evolution](architecture.md#schema-evolution).
 - [ ] **EF Core migrations applied** — Run `dotnet ef migrations add` and `dotnet ef database update` before deploying the new application version.
 - [ ] **Monitoring in place** — Verify `ratatoskr.outbox.poison.count` and `ratatoskr.inbox.poison.count` counters are being collected. A spike after deployment indicates a compatibility issue.
