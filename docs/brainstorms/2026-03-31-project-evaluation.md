@@ -182,13 +182,14 @@ Validation approach:
 - Evidence: `src/Ratatoskr/Core/MessageDispatcher.cs`, `src/Ratatoskr/Core/MessageRouter.cs`
 - Source(s): Claude
 
-### A-LOW-3 · No metrics for cleanup operations *(priority elevated from Low)*
+### A-LOW-3 · ~~No metrics for cleanup operations~~ *(priority elevated from Low)* ✅ DONE
 
 - Verdict: `Valid`
 - Severity: Medium
 - Detail: `InboxCleanupService` and `OutboxCleanupService` do not record any metrics for rows deleted or batch duration.
 - Evidence: `src/Ratatoskr.EfCore/Internal/InboxCleanupService.cs`, `src/Ratatoskr.EfCore/Internal/OutboxCleanupService.cs`
 - Source(s): Claude
+- **Resolution:** Added 5 cleanup metrics to `RatatoskrDiagnostics` (outbox cleanup count/duration, inbox cleanup status count/message count/duration). Instrumented both cleanup services. Updated docs/observability.md.
 
 ### A-LOW-4 · No `dataschema` attribute populated on publish path
 

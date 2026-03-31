@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -381,5 +382,63 @@ public class InboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgre
             return await db.Set<InboxMessageEntity>().CountAsync();
         });
         remainingMessages.Should().Be(1);
+    }
+
+    [Test]
+    public async Task Cleanup_RecordsMetrics()
+    {
+        // Arrange
+        await SetupAsync();
+
+        long statusCleanupCount = 0;
+        long messageCleanupCount = 0;
+        double cleanupDuration = -1;
+
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, meterListener) =>
+        {
+            if (instrument.Meter.Name == RatatoskrDiagnostics.MeterName)
+                meterListener.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<long>((instrument, measurement, _, _) =>
+        {
+            if (instrument.Name == "ratatoskr.inbox.cleanup.status.count")
+                Interlocked.Add(ref statusCleanupCount, measurement);
+            if (instrument.Name == "ratatoskr.inbox.cleanup.message.count")
+                Interlocked.Add(ref messageCleanupCount, measurement);
+        });
+        listener.SetMeasurementEventCallback<double>((instrument, measurement, _, _) =>
+        {
+            if (instrument.Name == "ratatoskr.inbox.cleanup.duration")
+                cleanupDuration = measurement;
+        });
+        listener.Start();
+
+        // Insert a message with a completed handler status
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var message = CreateInboxMessage("msg-metrics");
+            db.Set<InboxMessageEntity>().Add(message);
+            var status = InboxHandlerStatusEntity.Create("msg-metrics", "handler-a", _timeProvider);
+            status.MarkAsProcessing(_timeProvider);
+            status.MarkAsCompleted(_timeProvider);
+            db.Set<InboxHandlerStatusEntity>().Add(status);
+            await db.SaveChangesAsync();
+        });
+
+        _timeProvider.Advance(TimeSpan.FromDays(10));
+
+        var options = new InboxOptions { RetentionPeriod = TimeSpan.FromDays(1) };
+        var service = CreateCleanupService(options);
+
+        // Act
+        await service.CleanupAsync(CancellationToken.None);
+        listener.RecordObservableInstruments();
+
+        // Assert — use >= 1 since static counters may accumulate from parallel tests
+        statusCleanupCount.Should().BeGreaterThanOrEqualTo(1);
+        messageCleanupCount.Should().BeGreaterThanOrEqualTo(1);
+        cleanupDuration.Should().BeGreaterThanOrEqualTo(0);
     }
 }

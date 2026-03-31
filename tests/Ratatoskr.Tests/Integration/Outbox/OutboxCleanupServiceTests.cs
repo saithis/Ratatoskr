@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -218,5 +219,57 @@ public class OutboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgr
 
         // Assert
         deleted.Should().Be(0);
+    }
+
+    [Test]
+    public async Task Cleanup_RecordsMetrics()
+    {
+        // Arrange
+        await SetupAsync();
+
+        long cleanupCount = 0;
+        double cleanupDuration = -1;
+
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, meterListener) =>
+        {
+            if (instrument.Meter.Name == RatatoskrDiagnostics.MeterName)
+                meterListener.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<long>((instrument, measurement, _, _) =>
+        {
+            if (instrument.Name == "ratatoskr.outbox.cleanup.count")
+                Interlocked.Add(ref cleanupCount, measurement);
+        });
+        listener.SetMeasurementEventCallback<double>((instrument, measurement, _, _) =>
+        {
+            if (instrument.Name == "ratatoskr.outbox.cleanup.duration")
+                cleanupDuration = measurement;
+        });
+        listener.Start();
+
+        // Insert a processed message
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties { Type = "test" }, _timeProvider, "rabbitmq");
+            entity.MarkAsProcessing(_timeProvider);
+            entity.MarkAsProcessed(_timeProvider);
+            db.Set<OutboxMessageEntity>().Add(entity);
+            await db.SaveChangesAsync();
+        });
+
+        _timeProvider.Advance(TimeSpan.FromDays(10));
+
+        var options = new OutboxOptions { RetentionPeriod = TimeSpan.FromDays(1) };
+        var service = CreateCleanupService(options);
+
+        // Act
+        await service.CleanupAsync(CancellationToken.None);
+        listener.RecordObservableInstruments();
+
+        // Assert — use >= 1 since static counters may accumulate from parallel tests
+        cleanupCount.Should().BeGreaterThanOrEqualTo(1);
+        cleanupDuration.Should().BeGreaterThanOrEqualTo(0);
     }
 }

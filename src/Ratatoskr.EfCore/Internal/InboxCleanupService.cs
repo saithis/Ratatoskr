@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Ratatoskr.Core;
 
 namespace Ratatoskr.EfCore.Internal;
 
@@ -37,6 +39,7 @@ internal class InboxCleanupService<TDbContext>(
 
     internal async Task<(int HandlerStatuses, int OrphanedMessages)> CleanupAsync(CancellationToken cancellationToken)
     {
+        var startTimestamp = Stopwatch.GetTimestamp();
         var cutoff = timeProvider.GetUtcNow() - _options.RetentionPeriod!.Value;
         var totalStatusesDeleted = 0;
         int deleted;
@@ -55,6 +58,9 @@ internal class InboxCleanupService<TDbContext>(
                 .Take(_options.CleanupBatchSize)
                 .ExecuteDeleteAsync(cancellationToken);
 
+            if (deleted > 0)
+                RatatoskrDiagnostics.InboxCleanupStatusCount.Add(deleted);
+
             totalStatusesDeleted += deleted;
         } while (deleted == _options.CleanupBatchSize);
 
@@ -71,8 +77,13 @@ internal class InboxCleanupService<TDbContext>(
                 .Take(_options.CleanupBatchSize)
                 .ExecuteDeleteAsync(cancellationToken);
 
+            if (deleted > 0)
+                RatatoskrDiagnostics.InboxCleanupMessageCount.Add(deleted);
+
             totalMessagesDeleted += deleted;
         } while (deleted == _options.CleanupBatchSize);
+
+        RatatoskrDiagnostics.InboxCleanupDuration.Record(Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds);
 
         if (totalStatusesDeleted > 0 || totalMessagesDeleted > 0)
             logger.LogInformation(

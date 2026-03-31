@@ -73,6 +73,16 @@ All metrics are emitted on the `"Ratatoskr"` meter.
 | `ratatoskr.inbox.process.duration` | Histogram | `s` | Duration of inbox processing batch |
 | `ratatoskr.inbox.batch.size` | Histogram | `{message}` | Handler statuses picked up per inbox batch |
 
+### Cleanup Metrics
+
+| Metric | Type | Unit | Description |
+|--------|------|------|-------------|
+| `ratatoskr.outbox.cleanup.count` | Counter | `{message}` | Processed outbox messages deleted by cleanup |
+| `ratatoskr.outbox.cleanup.duration` | Histogram | `s` | Duration of outbox cleanup operation |
+| `ratatoskr.inbox.cleanup.status.count` | Counter | `{status}` | Completed inbox handler statuses deleted by cleanup |
+| `ratatoskr.inbox.cleanup.message.count` | Counter | `{message}` | Orphaned inbox messages deleted by cleanup |
+| `ratatoskr.inbox.cleanup.duration` | Histogram | `s` | Duration of inbox cleanup operation |
+
 ### Distributed Lock Metrics
 
 | Metric | Type | Unit | Description |
