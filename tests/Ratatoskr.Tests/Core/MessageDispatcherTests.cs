@@ -456,7 +456,7 @@ public class MessageDispatcherTests
     }
 
     [Test]
-    public async Task DispatchAsync_CreatesActivitySpan()
+    public async Task DispatchAsync_WithRegisteredHandler_CreatesActivitySpan()
     {
         // Arrange
         var handler = new TestEventHandler();
@@ -502,6 +502,7 @@ public class MessageDispatcherTests
         capturedActivity.Kind.Should().Be(ActivityKind.Consumer);
         capturedActivity.GetTagItem(MessagingSemanticConventions.MessageId).Should().Be("event-123");
         capturedActivity.GetTagItem(MessagingSemanticConventions.System).Should().Be("ratatoskr");
+        capturedActivity.GetTagItem(MessagingSemanticConventions.DestinationName).Should().Be("test");
     }
 
     private static ChannelRegistration CreateTestChannel(params Type[] handlerTypes)

@@ -24,6 +24,16 @@ public class MessageDispatcher(
     /// </summary>
     public async Task<DispatchResult> DispatchAsync(byte[] body, MessageProperties properties, CancellationToken cancellationToken, string channelName, string transportName)
     {
+        using var activity = RatatoskrDiagnostics.ActivitySource.StartActivity("dispatch", ActivityKind.Consumer);
+        if (activity != null)
+        {
+            activity.SetTag(MessagingSemanticConventions.OperationName, "dispatch");
+            activity.SetTag(MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeProcess);
+            activity.SetTag(MessagingSemanticConventions.System, "ratatoskr");
+            activity.SetTag(MessagingSemanticConventions.DestinationName, channelName);
+            activity.SetTag(MessagingSemanticConventions.MessageId, properties.Id);
+        }
+
         if (properties.Type == null)
         {
             logger.LogError("Received message without a type");
@@ -64,6 +74,8 @@ public class MessageDispatcher(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to deserialize message of type '{EventType}'", properties.Type);
+            activity?.SetTag(MessagingSemanticConventions.ErrorType, ex.GetType().FullName);
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             return DispatchResult.PermanentError;
         }
         if (message == null)
@@ -82,15 +94,6 @@ public class MessageDispatcher(
         }
 
         // 4. Invoke each handler in its own DI scope for full isolation.
-        using var activity = RatatoskrDiagnostics.ActivitySource.StartActivity("dispatch", ActivityKind.Consumer);
-        if (activity != null)
-        {
-            activity.SetTag(MessagingSemanticConventions.OperationName, "dispatch");
-            activity.SetTag(MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeProcess);
-            activity.SetTag(MessagingSemanticConventions.System, "ratatoskr");
-            activity.SetTag(MessagingSemanticConventions.MessageId, properties.Id);
-        }
-
         List<Exception>? exceptions = null;
 
         foreach (var handler in handlers)
@@ -115,8 +118,10 @@ public class MessageDispatcher(
 
         if (result == DispatchResult.RecoverableError && activity != null)
         {
-            activity.SetTag(MessagingSemanticConventions.ErrorType, exceptions![0].GetType().FullName);
-            activity.SetStatus(ActivityStatusCode.Error, exceptions[0].Message);
+            activity.SetTag(MessagingSemanticConventions.ErrorType,
+                exceptions!.Count == 1 ? exceptions[0].GetType().FullName : typeof(AggregateException).FullName);
+            activity.SetStatus(ActivityStatusCode.Error,
+                exceptions.Count == 1 ? exceptions[0].Message : $"Multiple handlers failed ({exceptions.Count} errors)");
         }
 
         await _observers.NotifyAsync(new MessageActivity
