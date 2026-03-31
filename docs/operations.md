@@ -144,6 +144,8 @@ The inbox cleanup also removes orphaned `InboxMessages` rows with no remaining h
 > The cleanup service waits one full `CleanupInterval` (default: 1 hour) before its first run. Use the manual SQL below for initial cleanup on large existing tables.
 > `WithoutBackgroundProcessing()` disables the cleanup service even when `WithRetention()` is configured.
 
+In multi-instance deployments, cleanup services use a distributed lock to ensure only one instance runs cleanup per cycle. Other instances skip the cycle and try again at the next interval. This reduces unnecessary database I/O — cleanup is idempotent, so concurrent execution would be safe but wasteful.
+
 ### Manual Cleanup
 
 **Outbox (PostgreSQL):**
@@ -262,10 +264,12 @@ services.AddSingleton<IDistributedLockProvider>(sp =>
 ### Lock Names
 
 Lock names are auto-generated per `DbContext` type:
-- Outbox: `OutboxProcessor_{DbContextTypeName}`
-- Inbox: `InboxProcessor_{DbContextTypeName}`
+- Outbox processor: `OutboxProcessor_{DbContextTypeName}`
+- Inbox processor: `InboxProcessor_{DbContextTypeName}`
+- Outbox cleanup: `OutboxCleanup_{DbContextTypeName}`
+- Inbox cleanup: `InboxCleanup_{DbContextTypeName}`
 
-Override with `WithLockName("custom-name")` if needed.
+Override with `WithLockName("custom-name")` or `WithCleanupLockName("custom-name")` if needed.
 
 ## Disaster Recovery
 

@@ -161,6 +161,17 @@ public class OutboxBuilder<TDbContext> where TDbContext : DbContext
     }
 
     /// <summary>
+    /// Sets the distributed lock name for the cleanup service.
+    /// Only one instance acquires the lock per cleanup cycle; others skip the cycle.
+    /// </summary>
+    public OutboxBuilder<TDbContext> WithCleanupLockName(string lockName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(lockName);
+        Options.CleanupLockName = lockName;
+        return this;
+    }
+
+    /// <summary>
     /// Configures all options via an action.
     /// </summary>
     public OutboxBuilder<TDbContext> Configure(Action<OutboxOptions> configure)

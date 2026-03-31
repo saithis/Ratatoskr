@@ -138,6 +138,17 @@ public class InboxBuilder<TDbContext> where TDbContext : DbContext
     }
 
     /// <summary>
+    /// Sets the distributed lock name for the cleanup service.
+    /// Only one instance acquires the lock per cleanup cycle; others skip the cycle.
+    /// </summary>
+    public InboxBuilder<TDbContext> WithCleanupLockName(string lockName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(lockName);
+        Options.CleanupLockName = lockName;
+        return this;
+    }
+
+    /// <summary>
     /// Configures all options via an action.
     /// </summary>
     public InboxBuilder<TDbContext> Configure(Action<InboxOptions> configure)

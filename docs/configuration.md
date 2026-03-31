@@ -111,6 +111,7 @@ bus.AddEfCoreDurability<OrderDbContext>(d =>
 | `WithRetention(TimeSpan)` | *none* | Auto-cleanup retention | [Outbox](outbox.md) |
 | `WithCleanupInterval(TimeSpan)` | `1h` | Cleanup run interval | [Outbox](outbox.md) |
 | `WithCleanupBatchSize(int)` | `10,000` | Cleanup batch size | [Outbox](outbox.md) |
+| `WithCleanupLockName(string)` | `"OutboxCleanup_{DbContext}"` | Cleanup distributed lock name | [Operations](operations.md) |
 | `WithoutBackgroundProcessing()` | — | Disable background service (testing) | [Testing](testing.md) |
 
 ### Inbox Options
@@ -129,6 +130,7 @@ bus.AddEfCoreDurability<OrderDbContext>(d =>
 | `WithRetention(TimeSpan)` | *none* | Auto-cleanup retention | [Inbox](inbox.md) |
 | `WithCleanupInterval(TimeSpan)` | `1h` | Cleanup run interval | [Inbox](inbox.md) |
 | `WithCleanupBatchSize(int)` | `10,000` | Cleanup batch size | [Inbox](inbox.md) |
+| `WithCleanupLockName(string)` | `"InboxCleanup_{DbContext}"` | Cleanup distributed lock name | [Operations](operations.md) |
 | `WithoutBackgroundProcessing()` | — | Disable background service (testing) | [Testing](testing.md) |
 
 ## AsyncAPI

@@ -85,4 +85,13 @@ public class InboxOptions
     /// Default: 10000.
     /// </summary>
     public int CleanupBatchSize { get; set; } = 10_000;
+
+    internal const string DefaultCleanupLockName = "InboxCleanup";
+
+    /// <summary>
+    /// Name of the distributed lock used by the cleanup service.
+    /// Only one instance acquires the lock per cleanup cycle; others skip the cycle.
+    /// Default: "InboxCleanup_{DbContextTypeName}" (auto-generated per DbContext to avoid collisions).
+    /// </summary>
+    public string CleanupLockName { get; set; } = DefaultCleanupLockName;
 }

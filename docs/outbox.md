@@ -134,6 +134,10 @@ bus.AddEfCoreDurability<OrderDbContext>(d => d.UseOutbox(outbox =>
 | `WithRestartDelay(TimeSpan)` | `5 seconds` | Delay before restarting the processor after a crash |
 | `WithLockAcquireTimeout(TimeSpan)` | `60 seconds` | Timeout for acquiring the distributed lock |
 | `WithLockName(string)` | `"OutboxProcessor_{DbContext}"` | Distributed lock name (auto-generated per DbContext) |
+| `WithRetention(TimeSpan)` | *none* | Auto-cleanup retention period for processed messages |
+| `WithCleanupInterval(TimeSpan)` | `1 hour` | How often the cleanup service runs |
+| `WithCleanupBatchSize(int)` | `10,000` | Messages deleted per cleanup batch |
+| `WithCleanupLockName(string)` | `"OutboxCleanup_{DbContext}"` | Cleanup distributed lock name (auto-generated per DbContext) |
 
 ## Data Retention
 

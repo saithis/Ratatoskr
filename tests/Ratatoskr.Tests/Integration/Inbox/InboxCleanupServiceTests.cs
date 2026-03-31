@@ -1,5 +1,6 @@
 using System.Diagnostics.Metrics;
 using AwesomeAssertions;
+using Medallion.Threading;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -21,6 +22,7 @@ public class InboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgre
         new(
             Services.GetRequiredService<IServiceScopeFactory>(),
             new InboxOptionsHolder<TestDbContext>(options),
+            Services.GetRequiredService<IDistributedLockProvider>(),
             _timeProvider,
             Services.GetRequiredService<ILogger<InboxCleanupService<TestDbContext>>>());
 
@@ -440,5 +442,81 @@ public class InboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgre
         statusCleanupCount.Should().BeGreaterThanOrEqualTo(1);
         messageCleanupCount.Should().BeGreaterThanOrEqualTo(1);
         cleanupDuration.Should().BeGreaterThanOrEqualTo(0);
+    }
+
+    [Test]
+    public async Task TryCleanupWithLock_AcquiresLockAndCleansUp()
+    {
+        // Arrange
+        await SetupAsync();
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var message = CreateInboxMessage("msg-lock-test");
+            db.Set<InboxMessageEntity>().Add(message);
+            var status = InboxHandlerStatusEntity.Create("msg-lock-test", "handler-a", _timeProvider);
+            status.MarkAsProcessing(_timeProvider);
+            status.MarkAsCompleted(_timeProvider);
+            db.Set<InboxHandlerStatusEntity>().Add(status);
+            await db.SaveChangesAsync();
+        });
+
+        _timeProvider.Advance(TimeSpan.FromDays(10));
+
+        var options = new InboxOptions { RetentionPeriod = TimeSpan.FromDays(1) };
+        var service = CreateCleanupService(options);
+
+        // Act
+        var acquired = await service.TryCleanupWithLockAsync(CancellationToken.None);
+
+        // Assert
+        acquired.Should().BeTrue();
+        var remaining = await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            return await db.Set<InboxHandlerStatusEntity>().CountAsync();
+        });
+        remaining.Should().Be(0);
+    }
+
+    [Test]
+    public async Task TryCleanupWithLock_SkipsWhenLockIsHeld()
+    {
+        // Arrange
+        await SetupAsync();
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var message = CreateInboxMessage("msg-lock-skip");
+            db.Set<InboxMessageEntity>().Add(message);
+            var status = InboxHandlerStatusEntity.Create("msg-lock-skip", "handler-a", _timeProvider);
+            status.MarkAsProcessing(_timeProvider);
+            status.MarkAsCompleted(_timeProvider);
+            db.Set<InboxHandlerStatusEntity>().Add(status);
+            await db.SaveChangesAsync();
+        });
+
+        _timeProvider.Advance(TimeSpan.FromDays(10));
+
+        var options = new InboxOptions { RetentionPeriod = TimeSpan.FromDays(1) };
+        var service = CreateCleanupService(options);
+
+        // Hold the lock externally
+        var lockProvider = Services.GetRequiredService<IDistributedLockProvider>();
+        await using var heldLock = await lockProvider.AcquireLockAsync(options.CleanupLockName);
+
+        // Act
+        var acquired = await service.TryCleanupWithLockAsync(CancellationToken.None);
+
+        // Assert — lock not acquired, cleanup skipped
+        acquired.Should().BeFalse();
+        var remaining = await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            return await db.Set<InboxHandlerStatusEntity>().CountAsync();
+        });
+        remaining.Should().Be(1);
     }
 }
