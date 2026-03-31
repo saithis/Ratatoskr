@@ -318,7 +318,7 @@ Ratatoskr provides **at-least-once delivery** but does **not** guarantee strict 
 
 - Outbox and inbox processors poll the database in batches (`Take(BatchSize)`) and process asynchronously
 - Multiple worker instances grab overlapping batches in parallel, which can reorder messages across instances
-- Within a single processor instance, messages are processed in `CreatedAt` order within each batch, but concurrent batches from different instances have no ordering coordination
+- Within a single processor instance, messages are processed in a deterministic order within each batch (`CreatedAt` for the outbox, `MessageId` for the inbox), but concurrent batches from different instances have no ordering coordination
 
 ### When ordering matters
 
@@ -332,7 +332,7 @@ If your business logic requires that `OrderUpdated` always follows `OrderCreated
 ### What Ratatoskr does guarantee
 
 - Messages are eventually delivered at least once (assuming the processor is running and the database is available)
-- Within a single batch on a single processor instance, messages are processed in `CreatedAt` order
+- Within a single batch on a single processor instance, messages are processed in a deterministic order (`CreatedAt` for the outbox, `MessageId` for the inbox)
 - Deduplication via the inbox pattern ensures each (MessageId, HandlerKey) pair is processed exactly once
 
 ## What's Next
