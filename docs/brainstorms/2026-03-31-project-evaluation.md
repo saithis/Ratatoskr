@@ -307,13 +307,14 @@ Performance-only concerns that do not affect correctness or functional requireme
 - Evidence: `src/Ratatoskr/AsyncApi/Extensions/AsyncApiEndpointExtensions.cs`
 - Source(s): Claude
 
-### A-PERF-6 · `GetProperties()` re-deserializes JSON on every call (no caching)
+### A-PERF-6 · ~~`GetProperties()` re-deserializes JSON on every call (no caching)~~ ✅ DONE
 
 - Verdict: `Valid`
 - Severity: Low (performance)
 - Detail: `OutboxMessageEntity.GetProperties()` and `InboxMessageEntity.GetProperties()` call `JsonSerializer.Deserialize` every time they are accessed. In the outbox processor the entity is accessed multiple times per message.
 - Evidence: `src/Ratatoskr.EfCore/Internal/OutboxMessageEntity.cs`, `src/Ratatoskr.EfCore/Internal/InboxMessageEntity.cs`
 - Source(s): Claude
+- **Resolution:** Added `_cachedProperties` field with `??=` pattern to cache deserialization result on first call in both entity classes.
 
 ### A-PERF-7 · `PublishDirectAsync` allocates a filtered array on every call
 

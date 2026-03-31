@@ -54,8 +54,10 @@ internal class OutboxMessageEntity
     /// </summary>
     public uint Version { get; private set; }
 
-    public MessageProperties GetProperties() => 
-        JsonSerializer.Deserialize<MessageProperties>(SerializedProperties)
+    private MessageProperties? _cachedProperties;
+
+    public MessageProperties GetProperties() =>
+        _cachedProperties ??= JsonSerializer.Deserialize<MessageProperties>(SerializedProperties)
         ?? throw new OutboxMessageSerializationException("Could not deserialize the message properties.", SerializedProperties);
 
     private OutboxMessageEntity(){}
