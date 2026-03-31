@@ -95,7 +95,7 @@ public class CloudEventsAmqpMapper(
 
         if (!string.IsNullOrEmpty(props.DataSchema))
         {
-            SetCloudEventHeader(outgoing.Headers, "dataschema", props.DataSchema);
+            SetCloudEventHeader(outgoing.Headers, CloudEventsAmqpConstants.DataSchemaHeader, props.DataSchema);
         }
 
         // Add CloudEvent extensions as headers
