@@ -7,7 +7,7 @@ namespace Ratatoskr.Tests.EfCore;
 public class BackoffCalculatorTests
 {
     [Test]
-    public void CalculateDelay_WithSeededRandom_IsDeterministic()
+    public void CalculateDelay_WithSeededRandom_ReturnsDeterministicResult()
     {
         var maxRetryDelay = TimeSpan.FromMinutes(5);
 
@@ -18,10 +18,9 @@ public class BackoffCalculatorTests
     }
 
     [Test]
-    public void CalculateDelay_DelayGrowsExponentially()
+    public void CalculateDelay_WithIncreasingErrorCount_ReturnsExponentiallyGrowingDelay()
     {
         var maxRetryDelay = TimeSpan.FromMinutes(5);
-        var random = new Random(42);
 
         var delay1 = BackoffCalculator.CalculateDelay(1, maxRetryDelay, new Random(42));
         var delay2 = BackoffCalculator.CalculateDelay(2, maxRetryDelay, new Random(42));
@@ -33,7 +32,7 @@ public class BackoffCalculatorTests
     }
 
     [Test]
-    public void CalculateDelay_IsCappedAtMaxRetryDelay()
+    public void CalculateDelay_WithErrorCountExceedingCap_ReturnsCappedDelay()
     {
         var maxRetryDelay = TimeSpan.FromSeconds(10);
 
@@ -44,25 +43,21 @@ public class BackoffCalculatorTests
     }
 
     [Test]
-    public void CalculateDelay_MinimumIsHalfOfBaseDelay()
+    public void CalculateDelay_WithEqualJitter_ReturnsDelayBetweenHalfAndFullBase()
     {
         var maxRetryDelay = TimeSpan.FromMinutes(5);
 
-        // With jitter formula: base/2 + random(0, base/2), minimum is base/2
-        // For errorCount=1, base = 2^1 = 2s, so minimum is 1s
-        // Use a Random that returns 0.0 for NextDouble (minimum jitter)
-        // We can't easily control Random.NextDouble to return exactly 0,
-        // but we can verify the delay is at least base/2
+        // With jitter formula: base/2 + random(0, base/2), delay is in [base/2, base]
+        // For errorCount=1, base = 2^1 = 2s, so delay is in [1.0s, 2.0s]
         var delay = BackoffCalculator.CalculateDelay(1, maxRetryDelay, new Random(42));
 
-        // base = 2^1 = 2, minimum = base/2 = 1.0s
+        // base = 2^1 = 2, minimum = base/2 = 1.0s, maximum = base = 2.0s
         delay.TotalSeconds.Should().BeGreaterThanOrEqualTo(1.0);
-        // maximum = base = 2.0s
         delay.TotalSeconds.Should().BeLessThanOrEqualTo(2.0);
     }
 
     [Test]
-    public void CalculateDelay_WithoutRandom_UsesSharedRandom()
+    public void CalculateDelay_WithoutRandomParameter_UsesSharedRandom()
     {
         var maxRetryDelay = TimeSpan.FromMinutes(5);
 
@@ -70,5 +65,15 @@ public class BackoffCalculatorTests
         var delay = BackoffCalculator.CalculateDelay(1, maxRetryDelay);
 
         delay.TotalSeconds.Should().BeGreaterThan(0);
+    }
+
+    [Test]
+    public void CalculateDelay_WithNegativeMaxRetryDelay_ReturnsNonNegativeDelay()
+    {
+        var negativeMax = TimeSpan.FromSeconds(-5);
+
+        var delay = BackoffCalculator.CalculateDelay(3, negativeMax, new Random(42));
+
+        delay.Should().BeGreaterThanOrEqualTo(TimeSpan.Zero);
     }
 }
