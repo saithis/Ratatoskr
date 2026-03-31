@@ -41,15 +41,10 @@ public class ChannelHandlerRegistry
 
                         if (handler.InboxKey != null)
                         {
-                            if (inboxByKey.TryGetValue(handler.InboxKey, out var existing))
-                                throw new InvalidOperationException(
-                                    $"Duplicate inbox handler key '{handler.InboxKey}' registered on channel '{channel.ChannelName}' " +
-                                    $"for handler '{handler.HandlerType.Name}'. " +
-                                    $"Key is already used by handler '{existing.HandlerType.Name}'. " +
-                                    $"Inbox handler keys must be globally unique because the inbox processor " +
-                                    $"looks up handlers by key across all channels and DbContexts.");
+                            ValidateAndAddKey(inboxByKey, handler.InboxKey, handler, channel.ChannelName);
 
-                            inboxByKey[handler.InboxKey] = handler;
+                            foreach (var legacyKey in handler.LegacyKeys)
+                                ValidateAndAddKey(inboxByKey, legacyKey, handler, channel.ChannelName);
                         }
                     }
                     else
@@ -72,6 +67,23 @@ public class ChannelHandlerRegistry
             registry._inboxByKey[key] = value;
 
         return registry;
+    }
+
+    private static void ValidateAndAddKey(
+        Dictionary<string, ChannelHandlerRegistration> dict,
+        string key,
+        ChannelHandlerRegistration handler,
+        string channelName)
+    {
+        if (dict.TryGetValue(key, out var existing))
+            throw new InvalidOperationException(
+                $"Duplicate inbox handler key '{key}' registered on channel '{channelName}' " +
+                $"for handler '{handler.HandlerType.Name}'. " +
+                $"Key is already used by handler '{existing.HandlerType.Name}'. " +
+                $"Inbox handler keys must be globally unique because the inbox processor " +
+                $"looks up handlers by key across all channels and DbContexts.");
+
+        dict[key] = handler;
     }
 
     private static void AddToList<TKey>(Dictionary<TKey, List<ChannelHandlerRegistration>> dict, TKey key, ChannelHandlerRegistration handler)
@@ -110,15 +122,17 @@ public class ChannelHandlerRegistry
             : Array.Empty<ChannelHandlerRegistration>();
 
     /// <summary>
-    /// Looks up an inbox handler registration by its stable key.
+    /// Looks up an inbox handler registration by its stable key or a legacy key.
     /// </summary>
     public ChannelHandlerRegistration? GetInboxRegistrationByKey(string key) =>
         _inboxByKey.GetValueOrDefault(key);
 
     /// <summary>
     /// Returns all inbox handler registrations across all channels.
+    /// Legacy key aliases are excluded — each handler appears exactly once (by primary key).
     /// </summary>
-    public IReadOnlyCollection<ChannelHandlerRegistration> GetAllInboxHandlers() => [.. _inboxByKey.Values];
+    public IReadOnlyCollection<ChannelHandlerRegistration> GetAllInboxHandlers() =>
+        [.. _inboxByKey.Values.Distinct()];
 
     /// <summary>True if no inbox handlers have been registered.</summary>
     public bool HasNoInboxHandlers => _inboxByKey.Count == 0;

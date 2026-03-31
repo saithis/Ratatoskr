@@ -310,6 +310,31 @@ Ratatoskr uses `System.Text.Json` for message serialization. By default:
 - Only add fields (additive changes). Never rename or remove fields that may exist in in-flight outbox/inbox messages.
 - For breaking changes, introduce a new message type and migrate consumers before producers.
 
+## Ordering Guarantees
+
+Ratatoskr provides **at-least-once delivery** but does **not** guarantee strict message ordering across instances.
+
+### Why ordering is not preserved
+
+- Outbox and inbox processors poll the database in batches (`Take(BatchSize)`) and process asynchronously
+- Multiple worker instances grab overlapping batches in parallel, which can reorder messages across instances
+- Within a single processor instance, messages are processed in a deterministic order within each batch (`CreatedAt` for the outbox, `MessageId` for the inbox), but concurrent batches from different instances have no ordering coordination
+
+### When ordering matters
+
+If your business logic requires that `OrderUpdated` always follows `OrderCreated` for the same order:
+
+1. **Sequence numbers** — Include a monotonically increasing sequence number in your message payload. Consumers reject or reorder out-of-sequence messages.
+2. **Partition keys** — Route related messages to the same queue/partition using RabbitMQ routing keys. A single consumer on that queue preserves ordering.
+3. **Sagas / process managers** — Use a saga pattern to track expected message sequences and compensate when messages arrive out of order.
+4. **Single-instance processing** — For low-throughput scenarios, run a single processor instance per message type to preserve ordering within that type.
+
+### What Ratatoskr does guarantee
+
+- Messages are eventually delivered at least once (assuming the processor is running and the database is available)
+- Within a single batch on a single processor instance, messages are processed in a deterministic order (`CreatedAt` for the outbox, `MessageId` for the inbox)
+- Deduplication via the inbox pattern prevents duplicate processing for the same (MessageId, HandlerKey) pair in the common case; delivery is still at-least-once because a crash between handler completion and status update can trigger a re-run
+
 ## What's Next
 
 - [Messages & Handlers](messages-handlers.md) — Message types, handler patterns, and serialization

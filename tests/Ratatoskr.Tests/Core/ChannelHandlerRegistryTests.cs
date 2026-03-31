@@ -258,6 +258,94 @@ public class ChannelHandlerRegistryTests
         orderHandlers.Should().HaveCount(1);
         orderHandlers[0].HandlerType.Should().Be(typeof(NoOpOrderHandler));
     }
+    [Test]
+    public void Build_LegacyKey_ResolvesViaGetInboxRegistrationByKey()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var builder = new RatatoskrBuilder(services);
+        builder.AddEventConsumeChannel("test-channel", c => c
+            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("handler-v2", "handler-v1")));
+
+        // Act
+        var registry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
+
+        // Assert — both primary and legacy key resolve to the same registration
+        var byPrimary = registry.GetInboxRegistrationByKey("handler-v2");
+        var byLegacy = registry.GetInboxRegistrationByKey("handler-v1");
+        byPrimary.Should().NotBeNull();
+        byLegacy.Should().NotBeNull();
+        byLegacy.Should().BeSameAs(byPrimary);
+    }
+
+    [Test]
+    public void Build_MultipleLegacyKeys_AllResolve()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var builder = new RatatoskrBuilder(services);
+        builder.AddEventConsumeChannel("test-channel", c => c
+            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("handler-v3", "handler-v1", "handler-v2")));
+
+        // Act
+        var registry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
+
+        // Assert
+        var primary = registry.GetInboxRegistrationByKey("handler-v3");
+        registry.GetInboxRegistrationByKey("handler-v1").Should().BeSameAs(primary);
+        registry.GetInboxRegistrationByKey("handler-v2").Should().BeSameAs(primary);
+    }
+
+    [Test]
+    public void Build_LegacyKeyConflictsWithPrimaryKey_ThrowsInvalidOperationException()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var builder = new RatatoskrBuilder(services);
+        builder.AddEventConsumeChannel("test-channel", c => c
+            .Consumes<TestEvent>(m => m
+                .WithHandler<TestEventHandler>("handler-a")
+                .WithHandler<SecondTestEventHandler>("handler-b", "handler-a")));
+
+        // Act & Assert
+        var act = () => ChannelHandlerRegistry.Build(builder.ChannelRegistry);
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Duplicate inbox handler key*handler-a*");
+    }
+
+    [Test]
+    public void Build_LegacyKeyConflictsWithOtherLegacyKey_ThrowsInvalidOperationException()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var builder = new RatatoskrBuilder(services);
+        builder.AddEventConsumeChannel("test-channel", c => c
+            .Consumes<TestEvent>(m => m
+                .WithHandler<TestEventHandler>("handler-a", "shared-legacy")
+                .WithHandler<SecondTestEventHandler>("handler-b", "shared-legacy")));
+
+        // Act & Assert
+        var act = () => ChannelHandlerRegistry.Build(builder.ChannelRegistry);
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Duplicate inbox handler key*shared-legacy*");
+    }
+
+    [Test]
+    public void Build_LegacyKeys_NotIncludedInGetAllInboxHandlers()
+    {
+        // Arrange — legacy keys should not cause duplicate registrations
+        var services = new ServiceCollection();
+        var builder = new RatatoskrBuilder(services);
+        builder.AddEventConsumeChannel("test-channel", c => c
+            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("handler-v2", "handler-v1")));
+
+        // Act
+        var registry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
+
+        // Assert — only one handler registration, not two
+        registry.GetAllInboxHandlers().Should().HaveCount(1);
+        registry.GetAllInboxHandlers().First().InboxKey.Should().Be("handler-v2");
+    }
 }
 
 /// <summary>

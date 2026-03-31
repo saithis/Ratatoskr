@@ -40,10 +40,38 @@ bus.AddEventConsumeChannel("orders.events", c => c
     .UseInbox<OrderDbContext>());
 ```
 
-The handler key (`"order-handler"`) is persisted in the database. It must be stable across deployments — renaming causes in-flight messages to be poisoned.
+The handler key (`"order-handler"`) is persisted in the database. It must be stable across deployments — renaming without a transition causes in-flight messages to be poisoned.
 
 > [!WARNING]
 > On channels with `UseInbox()`, every handler **must** have a key. Registering a handler without a key throws `InvalidOperationException` at startup. Handler keys must be **globally unique** across all channels and DbContexts.
+
+### Handler Key Renaming (Legacy Keys)
+
+When renaming a handler key, use legacy keys to drain in-flight messages under the old key:
+
+```csharp
+// Step 1: Deploy with the new key and the old key as a legacy key.
+// New inbox entries use "order-handler-v2"; existing entries with "order-handler" are still processed.
+.Consumes<OrderPlaced>(m => m
+    .WithHandler<OrderPlacedHandler>("order-handler-v2", "order-handler"))
+```
+
+Legacy keys are matched when processing existing `InboxHandlerStatus` rows but **never** used to create new inbox entries. Once all in-flight messages under the old key have been processed or have expired via retention cleanup, remove the legacy key:
+
+```csharp
+// Step 2: After all old entries are drained, remove the legacy key.
+.Consumes<OrderPlaced>(m => m
+    .WithHandler<OrderPlacedHandler>("order-handler-v2"))
+```
+
+Multiple legacy keys are supported for handlers that have been renamed more than once:
+
+```csharp
+.WithHandler<OrderPlacedHandler>("order-handler-v3", "order-handler-v2", "order-handler")
+```
+
+> [!NOTE]
+> Legacy keys participate in the global uniqueness check — a legacy key must not collide with any other primary or legacy key.
 
 ## Processing Flow
 
@@ -219,6 +247,41 @@ The unique constraint on `(MessageId, HandlerKey)` provides deduplication.
 ## RabbitMQ Integration
 
 When using RabbitMQ, the consumer delegates to `MessageRouter`, which calls `InboxAcceptor` before dispatching. The consumer has no inbox awareness — it just calls `RouteAsync`. The acceptor creates its own DI scope, so its `DbContext` is fully isolated from handler scopes. Failures in inbox-managed handlers do not affect broker acknowledgement.
+
+## Handler Key Stability
+
+Handler keys are the inbox's deduplication and retry key. They are persisted in the database as part of `InboxHandlerStatusEntity` and are used to match in-flight messages to handlers across deployments. Changing a handler key **without a transition** will poison in-flight messages.
+
+### What happens when a handler key changes without legacy keys
+
+When a handler key is renamed between v1 and v2 without using legacy keys:
+
+1. A v1 instance writes `InboxHandlerStatusEntity` rows with the old key
+2. A v2 instance picks up those rows, looks up the handler by key, and finds no match
+3. The processor immediately marks the status as **poisoned** — there is no grace period or fallback
+
+### How to safely rename a handler key
+
+Use **legacy keys** for a zero-downtime rename (see [Handler Key Renaming](#handler-key-renaming-legacy-keys)):
+
+1. **Deploy with legacy key** — add the old key as a legacy key: `.WithHandler<T>("new-key", "old-key")`
+2. **Wait for drain** — all in-flight entries under the old key will be processed normally
+3. **Remove legacy key** — once drained, deploy with only the new key: `.WithHandler<T>("new-key")`
+
+If downtime is acceptable, you can alternatively use the **drain-rename-restart** procedure:
+
+1. **Stop new message production** or ensure the affected channel is quiesced
+2. **Wait for in-flight messages to complete** — monitor the `InboxHandlerStatusEntity` table until all rows with `CompletedAt IS NULL` for the old key are processed
+3. **Deploy the new version** with the renamed handler key
+4. **Resume message production**
+
+### Best practices
+
+- Choose handler keys that are stable, descriptive, and unlikely to change (e.g., `"process-order-v1"`, not `"OrderHandler"`)
+- Use legacy keys for zero-downtime renames instead of stopping message production
+- Document handler keys in your codebase so renames are deliberate, not accidental
+- Include handler key changes in your deployment checklist
+- Monitor `InboxHandlerStatusEntity` for poisoned rows after deployments — a sudden spike indicates a key mismatch
 
 ## What's Next
 
