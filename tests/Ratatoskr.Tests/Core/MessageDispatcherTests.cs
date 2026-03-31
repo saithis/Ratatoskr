@@ -503,6 +503,52 @@ public class MessageDispatcherTests
         capturedActivity.GetTagItem(MessagingSemanticConventions.MessageId).Should().Be("event-123");
         capturedActivity.GetTagItem(MessagingSemanticConventions.System).Should().Be("ratatoskr");
         capturedActivity.GetTagItem(MessagingSemanticConventions.DestinationName).Should().Be("test");
+        capturedActivity.GetTagItem(MessagingSemanticConventions.OperationName).Should().Be("dispatch");
+        capturedActivity.GetTagItem(MessagingSemanticConventions.OperationType).Should().Be(MessagingSemanticConventions.OperationTypeProcess);
+        capturedActivity.Status.Should().Be(ActivityStatusCode.Unset);
+    }
+
+    [Test]
+    public async Task DispatchAsync_HandlerThrows_SetsActivityErrorStatus()
+    {
+        // Arrange
+        var handler = new ThrowingTestEventHandler();
+        var dispatcher = CreateDispatcher(
+            services =>
+            {
+                services.AddScoped<ThrowingTestEventHandler>(_ => handler);
+                services.AddScoped<IMessageHandler<TestEvent>>(_ => handler);
+            },
+            registry =>
+            {
+                registry.Register(CreateTestChannel(typeof(ThrowingTestEventHandler)));
+            });
+
+        var testEvent = new TestEvent { Id = "123", Data = "test data" };
+        var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testEvent));
+        var context = new MessageProperties { Id = "event-err", Type = "test.event", Source = "/test" };
+
+        Activity? capturedActivity = null;
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == RatatoskrDiagnostics.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            ActivityStopped = activity =>
+            {
+                if (activity.OperationName == "dispatch")
+                    capturedActivity = activity;
+            },
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        // Act
+        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
+
+        // Assert
+        result.Should().Be(DispatchResult.RecoverableError);
+        capturedActivity.Should().NotBeNull();
+        capturedActivity!.Status.Should().Be(ActivityStatusCode.Error);
+        capturedActivity.GetTagItem(MessagingSemanticConventions.ErrorType).Should().NotBeNull();
     }
 
     private static ChannelRegistration CreateTestChannel(params Type[] handlerTypes)
