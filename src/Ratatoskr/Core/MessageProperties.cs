@@ -25,6 +25,12 @@ public class MessageProperties
     /// Maps to CloudEvents "subject" field.
     /// </summary>
     public string? Subject { get; set; }
+
+    /// <summary>
+    /// URI identifying the schema that the event data adheres to.
+    /// Maps to CloudEvents "dataschema" attribute (optional).
+    /// </summary>
+    public string? DataSchema { get; set; }
     
     /// <summary>
     /// Content type of the data payload.

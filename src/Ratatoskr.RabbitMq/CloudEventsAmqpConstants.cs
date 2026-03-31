@@ -36,6 +36,7 @@ public static class CloudEventsAmqpConstants
     public const string TimeHeader = "time";
     public const string SubjectHeader = "subject";
     public const string DataContentTypeHeader = "datacontenttype";
+    public const string DataSchemaHeader = "dataschema";
     
     /// <summary>
     /// Trace propagation header (W3C Trace Context).

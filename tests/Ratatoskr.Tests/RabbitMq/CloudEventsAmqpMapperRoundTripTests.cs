@@ -78,4 +78,74 @@ public class CloudEventsAmqpMapperRoundTripTests
         result.props.TraceParent.Should().Be("00-struct-trace-01");
         result.props.TraceState.Should().Be("struct=true");
     }
+
+    [Test]
+    public void MapOutgoing_BinaryMode_DataSchema_RoundTripsCorrectly()
+    {
+        // Arrange
+        var originalProps = new MessageProperties
+        {
+            Id = "ds-test-id",
+            Source = "/ds-source",
+            Type = "ds.type",
+            Time = new DateTimeOffset(2025, 6, 15, 12, 0, 0, TimeSpan.Zero),
+            DataSchema = "https://schemas.example.com/events/ds.type/v1.json",
+        };
+        var outgoing = new BasicProperties();
+        var originalBody = Encoding.UTF8.GetBytes("{\"key\":\"value\"}");
+
+        // Act — outgoing then incoming
+        var mappedBody = _mapper.MapOutgoing(originalBody, originalProps, outgoing);
+        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", outgoing, mappedBody);
+        var result = _mapper.MapIncoming(incoming);
+
+        // Assert
+        result.props.DataSchema.Should().Be("https://schemas.example.com/events/ds.type/v1.json");
+    }
+
+    [Test]
+    public void MapOutgoing_StructuredMode_DataSchema_RoundTripsCorrectly()
+    {
+        // Arrange
+        var structuredMapper = new CloudEventsAmqpMapper(new CloudEventsOptions { ContentMode = CloudEventsContentMode.Structured });
+        var originalProps = new MessageProperties
+        {
+            Id = "ds-struct-id",
+            Source = "/ds-struct",
+            Type = "ds.struct.type",
+            Time = new DateTimeOffset(2025, 6, 15, 12, 0, 0, TimeSpan.Zero),
+            DataSchema = "https://schemas.example.com/events/ds.struct.type/v1.json",
+        };
+        var outgoing = new BasicProperties();
+        var originalBody = Encoding.UTF8.GetBytes("{\"key\":\"value\"}");
+
+        // Act
+        var mappedBody = structuredMapper.MapOutgoing(originalBody, originalProps, outgoing);
+        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", outgoing, mappedBody);
+        var result = structuredMapper.MapIncoming(incoming);
+
+        // Assert
+        result.props.DataSchema.Should().Be("https://schemas.example.com/events/ds.struct.type/v1.json");
+    }
+
+    [Test]
+    public void MapOutgoing_BinaryMode_NullDataSchema_OmitsHeader()
+    {
+        // Arrange
+        var originalProps = new MessageProperties
+        {
+            Id = "no-ds-id",
+            Source = "/no-ds",
+            Type = "no.ds.type",
+            Time = new DateTimeOffset(2025, 6, 15, 12, 0, 0, TimeSpan.Zero),
+        };
+        var outgoing = new BasicProperties();
+        var originalBody = Encoding.UTF8.GetBytes("{\"key\":\"value\"}");
+
+        // Act
+        _mapper.MapOutgoing(originalBody, originalProps, outgoing);
+
+        // Assert — no dataschema header should be present
+        outgoing.Headers.Should().NotContainKey("cloudEvents_dataschema");
+    }
 }

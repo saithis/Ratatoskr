@@ -191,13 +191,14 @@ Validation approach:
 - Source(s): Claude
 - **Resolution:** Added 5 cleanup metrics to `RatatoskrDiagnostics` (outbox cleanup count/duration, inbox cleanup status count/message count/duration). Instrumented both cleanup services. Updated docs/observability.md.
 
-### A-LOW-4 · No `dataschema` attribute populated on publish path
+### A-LOW-4 · ~~No `dataschema` attribute populated on publish path~~ ✅ DONE
 
 - Verdict: `Valid`
 - Severity: Low
 - Detail: The CloudEvents `dataschema` attribute is defined in `CloudEventEnvelope` but never set by the publish path, so consumers cannot discover schema URIs from the wire message.
 - Evidence: `src/Ratatoskr/CloudEvents/CloudEventEnvelope.cs`, `src/Ratatoskr.RabbitMq/CloudEventsAmqpMapper.cs`
 - Source(s): Claude
+- **Resolution:** Added `DataSchema` property to `MessageProperties`. Set as `cloudEvents_dataschema` header in binary mode and `dataschema` field in structured mode on outgoing. Read from headers/envelope on incoming. Round-trip tested in both modes.
 
 ### A-LOW-5 · ~~Inbox orphan cleanup `Take` without `OrderBy` (non-deterministic batching)~~ ✅ DONE
 
