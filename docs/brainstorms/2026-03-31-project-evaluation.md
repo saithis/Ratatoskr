@@ -174,13 +174,14 @@ Validation approach:
 - Evidence: `src/Ratatoskr/CloudEvents/CloudEventsOptions.cs`
 - Source(s): Claude
 
-### A-LOW-2 · No local transport dispatch tracing span *(priority elevated from Low)*
+### A-LOW-2 · ~~No local transport dispatch tracing span~~ *(priority elevated from Low)* ✅ DONE
 
 - Verdict: `Valid`
 - Severity: Medium
 - Detail: `MessageRouter` and `MessageDispatcher` do not start an `Activity` for local-transport dispatch. This is a trace gap: publish → inbox acceptance is traceable, but the local-only path through `MessageDispatcher` is invisible.
 - Evidence: `src/Ratatoskr/Core/MessageDispatcher.cs`, `src/Ratatoskr/Core/MessageRouter.cs`
 - Source(s): Claude
+- **Resolution:** Added a `"dispatch"` Activity span in `MessageDispatcher.DispatchAsync` with `ActivityKind.Consumer` and standard OTEL semantic convention tags. Error status is set on the activity when handler invocation fails.
 
 ### A-LOW-3 · ~~No metrics for cleanup operations~~ *(priority elevated from Low)* ✅ DONE
 

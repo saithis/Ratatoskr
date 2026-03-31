@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using AwesomeAssertions;
@@ -452,6 +453,55 @@ public class MessageDispatcherTests
         // Assert
         result.Should().Be(DispatchResult.Success);
         handler.HandledMessages.Should().HaveCount(1);
+    }
+
+    [Test]
+    public async Task DispatchAsync_CreatesActivitySpan()
+    {
+        // Arrange
+        var handler = new TestEventHandler();
+        var dispatcher = CreateDispatcher(
+            services =>
+            {
+                services.AddScoped<TestEventHandler>(_ => handler);
+                services.AddScoped<IMessageHandler<TestEvent>>(_ => handler);
+            },
+            registry =>
+            {
+                registry.Register(CreateTestChannel(typeof(TestEventHandler)));
+            });
+
+        var testEvent = new TestEvent { Id = "123", Data = "test data" };
+        var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testEvent));
+        var context = new MessageProperties
+        {
+            Id = "event-123",
+            Type = "test.event",
+            Source = "/test",
+        };
+
+        Activity? capturedActivity = null;
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == RatatoskrDiagnostics.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            ActivityStopped = activity =>
+            {
+                if (activity.OperationName == "dispatch")
+                    capturedActivity = activity;
+            },
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        // Act
+        await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
+
+        // Assert
+        capturedActivity.Should().NotBeNull();
+        capturedActivity!.OperationName.Should().Be("dispatch");
+        capturedActivity.Kind.Should().Be(ActivityKind.Consumer);
+        capturedActivity.GetTagItem(MessagingSemanticConventions.MessageId).Should().Be("event-123");
+        capturedActivity.GetTagItem(MessagingSemanticConventions.System).Should().Be("ratatoskr");
     }
 
     private static ChannelRegistration CreateTestChannel(params Type[] handlerTypes)

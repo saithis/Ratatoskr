@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -81,6 +82,15 @@ public class MessageDispatcher(
         }
 
         // 4. Invoke each handler in its own DI scope for full isolation.
+        using var activity = RatatoskrDiagnostics.ActivitySource.StartActivity("dispatch", ActivityKind.Consumer);
+        if (activity != null)
+        {
+            activity.SetTag(MessagingSemanticConventions.OperationName, "dispatch");
+            activity.SetTag(MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeProcess);
+            activity.SetTag(MessagingSemanticConventions.System, "ratatoskr");
+            activity.SetTag(MessagingSemanticConventions.MessageId, properties.Id);
+        }
+
         List<Exception>? exceptions = null;
 
         foreach (var handler in handlers)
@@ -102,6 +112,12 @@ public class MessageDispatcher(
         }
 
         var result = exceptions != null ? DispatchResult.RecoverableError : DispatchResult.Success;
+
+        if (result == DispatchResult.RecoverableError && activity != null)
+        {
+            activity.SetTag(MessagingSemanticConventions.ErrorType, exceptions![0].GetType().FullName);
+            activity.SetStatus(ActivityStatusCode.Error, exceptions[0].Message);
+        }
 
         await _observers.NotifyAsync(new MessageActivity
         {
