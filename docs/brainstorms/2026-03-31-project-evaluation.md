@@ -157,13 +157,14 @@ Validation approach:
 - Evidence: `src/Ratatoskr.EfCore/Internal/OutboxMessageProcessor.cs`, `src/Ratatoskr.EfCore/Internal/InboxMessageProcessor.cs`
 - Source(s): Gemini
 
-### A-MED-9 · Configurable `JsonSerializerOptions` not exposed
+### A-MED-9 · ~~Configurable `JsonSerializerOptions` not exposed~~ ✅ DONE
 
 - Verdict: `Valid`
 - Severity: Medium
 - Detail: `JsonMessageSerializer` uses default `JsonSerializerOptions` with no way to configure camelCase, custom converters, or reference handling.
 - Evidence: `src/Ratatoskr/Serializers/Json/JsonMessageSerializer.cs`
 - Source(s): Claude
+- **Resolution:** Added `JsonSerializerOptions` constructor parameter to `JsonMessageSerializer`. Changed `AddRatatoskr` to use `TryAddSingleton` so users can pre-register a configured serializer. Updated docs.
 
 ### A-LOW-1 · No per-channel CloudEvents content mode *(priority elevated from Low)*
 

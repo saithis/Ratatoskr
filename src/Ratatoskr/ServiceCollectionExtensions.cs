@@ -42,8 +42,9 @@ public static class ServiceCollectionExtensions
         builder.ValidateHandlers(handlerRegistry);
         services.AddSingleton(handlerRegistry);
 
-        // Register serializer
-        services.AddSingleton<IMessageSerializer, JsonMessageSerializer>();
+        // Register serializer (TryAdd so users can pre-register a custom IMessageSerializer)
+        services.TryAddSingleton<IMessageSerializer>(
+            new JsonMessageSerializer(builder.JsonSerializerOptions));
 
         services.TryAddSingleton<HandlerInvoker>();
         services.AddSingleton<IRatatoskr, Ratatoskr>();

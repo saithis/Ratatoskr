@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Ratatoskr.AsyncApi.Config;
@@ -113,4 +114,15 @@ public class RatatoskrBuilder
         configure(AsyncApiOptions);
         return this;
     }
+
+    /// <summary>
+    /// Configures <see cref="JsonSerializerOptions"/> for the built-in JSON message serializer.
+    /// </summary>
+    public RatatoskrBuilder ConfigureJsonSerialization(Action<JsonSerializerOptions> configure)
+    {
+        configure(JsonSerializerOptions);
+        return this;
+    }
+
+    internal JsonSerializerOptions JsonSerializerOptions { get; } = new();
 }
