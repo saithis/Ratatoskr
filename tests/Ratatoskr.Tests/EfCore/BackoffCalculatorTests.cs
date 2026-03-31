@@ -6,6 +6,14 @@ namespace Ratatoskr.Tests.EfCore;
 
 public class BackoffCalculatorTests
 {
+    /// <summary>
+    /// A Random subclass that returns a fixed value from NextDouble(), enabling exact boundary testing.
+    /// </summary>
+    private sealed class FixedRandom(double value) : Random
+    {
+        public override double NextDouble() => value;
+    }
+
     [Test]
     public void CalculateDelay_WithSeededRandom_ReturnsDeterministicResult()
     {
@@ -21,14 +29,17 @@ public class BackoffCalculatorTests
     public void CalculateDelay_WithIncreasingErrorCount_ReturnsExponentiallyGrowingDelay()
     {
         var maxRetryDelay = TimeSpan.FromMinutes(5);
+        var random = new FixedRandom(0.5);
 
-        var delay1 = BackoffCalculator.CalculateDelay(1, maxRetryDelay, new Random(42));
-        var delay2 = BackoffCalculator.CalculateDelay(2, maxRetryDelay, new Random(42));
-        var delay3 = BackoffCalculator.CalculateDelay(3, maxRetryDelay, new Random(42));
+        var delay1 = BackoffCalculator.CalculateDelay(1, maxRetryDelay, random);
+        var delay2 = BackoffCalculator.CalculateDelay(2, maxRetryDelay, random);
+        var delay3 = BackoffCalculator.CalculateDelay(3, maxRetryDelay, random);
 
-        // Each successive delay should be larger (base doubles: 2^1, 2^2, 2^3)
-        delay2.Should().BeGreaterThan(delay1);
-        delay3.Should().BeGreaterThan(delay2);
+        // base doubles each time: 2^1=2, 2^2=4, 2^3=8
+        // With jitter=0.5: delay = base*0.5 + base*0.5*0.5 = base*0.75
+        delay1.TotalSeconds.Should().Be(1.5);  // 2 * 0.75
+        delay2.TotalSeconds.Should().Be(3.0);  // 4 * 0.75
+        delay3.TotalSeconds.Should().Be(6.0);  // 8 * 0.75
     }
 
     [Test]
@@ -37,23 +48,34 @@ public class BackoffCalculatorTests
         var maxRetryDelay = TimeSpan.FromSeconds(10);
 
         // errorCount=20 would produce 2^20 = 1,048,576 seconds without cap
-        var delay = BackoffCalculator.CalculateDelay(20, maxRetryDelay, new Random(42));
+        var delay = BackoffCalculator.CalculateDelay(20, maxRetryDelay, new FixedRandom(1.0));
 
-        delay.Should().BeLessThanOrEqualTo(maxRetryDelay);
+        // With max jitter (1.0): delay = base*0.5 + base*0.5*1.0 = base = 10s (capped)
+        delay.TotalSeconds.Should().Be(10.0);
     }
 
     [Test]
-    public void CalculateDelay_WithEqualJitter_ReturnsDelayBetweenHalfAndFullBase()
+    public void CalculateDelay_WithZeroJitter_ReturnsExactlyHalfBase()
     {
         var maxRetryDelay = TimeSpan.FromMinutes(5);
 
-        // With jitter formula: base/2 + random(0, base/2), delay is in [base/2, base]
-        // For errorCount=1, base = 2^1 = 2s, so delay is in [1.0s, 2.0s]
-        var delay = BackoffCalculator.CalculateDelay(1, maxRetryDelay, new Random(42));
+        // jitter=0.0: delay = base*0.5 + base*0.5*0.0 = base/2
+        // For errorCount=1, base = 2^1 = 2s, so delay = 1.0s
+        var delay = BackoffCalculator.CalculateDelay(1, maxRetryDelay, new FixedRandom(0.0));
 
-        // base = 2^1 = 2, minimum = base/2 = 1.0s, maximum = base = 2.0s
-        delay.TotalSeconds.Should().BeGreaterThanOrEqualTo(1.0);
-        delay.TotalSeconds.Should().BeLessThanOrEqualTo(2.0);
+        delay.TotalSeconds.Should().Be(1.0);
+    }
+
+    [Test]
+    public void CalculateDelay_WithMaxJitter_ReturnsExactlyFullBase()
+    {
+        var maxRetryDelay = TimeSpan.FromMinutes(5);
+
+        // jitter=1.0: delay = base*0.5 + base*0.5*1.0 = base
+        // For errorCount=1, base = 2^1 = 2s, so delay = 2.0s
+        var delay = BackoffCalculator.CalculateDelay(1, maxRetryDelay, new FixedRandom(1.0));
+
+        delay.TotalSeconds.Should().Be(2.0);
     }
 
     [Test]
@@ -72,7 +94,7 @@ public class BackoffCalculatorTests
     {
         var negativeMax = TimeSpan.FromSeconds(-5);
 
-        var delay = BackoffCalculator.CalculateDelay(3, negativeMax, new Random(42));
+        var delay = BackoffCalculator.CalculateDelay(3, negativeMax, new FixedRandom(0.5));
 
         delay.Should().BeGreaterThanOrEqualTo(TimeSpan.Zero);
     }
