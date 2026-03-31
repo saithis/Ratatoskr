@@ -67,8 +67,7 @@ internal class InboxCleanupService<TDbContext>(
 
             deleted = await dbContext.Set<InboxMessageEntity>()
                 .Where(m => !dbContext.Set<InboxHandlerStatusEntity>().Any(s => s.MessageId == m.Id))
-                .OrderBy(m => m.ReceivedAt)
-                .ThenBy(m => m.Id)
+                .OrderBy(m => m.Id)
                 .Take(_options.CleanupBatchSize)
                 .ExecuteDeleteAsync(cancellationToken);
 

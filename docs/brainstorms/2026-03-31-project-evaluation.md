@@ -204,7 +204,7 @@ Validation approach:
 - Detail: The orphan cleanup `WHERE NOT EXISTS ...` query uses `Take(CleanupBatchSize)` without an `OrderBy`, leading to non-deterministic batch selection and potential repeated work.
 - Evidence: `src/Ratatoskr.EfCore/Internal/InboxCleanupService.cs` (lines 68–74)
 - Source(s): Claude
-- **Resolution:** Added `.OrderBy(m => m.ReceivedAt)` before `.Take()` in orphan cleanup query. Added integration tests for deterministic ordering.
+- **Resolution:** Added `.OrderBy(m => m.Id)` before `.Take()` in orphan cleanup query. Uses the primary key index for deterministic ordering without requiring an additional index. Added integration tests for deterministic batching.
 
 ### A-LOW-6 · `CloudEvents 'time'` treated as required on outgoing path (stricter than spec)
 
