@@ -300,13 +300,14 @@ Performance-only concerns that do not affect correctness or functional requireme
 - Evidence: `src/Ratatoskr.EfCore/Internal/OutboxMessageProcessor.cs`
 - Source(s): Gemini
 
-### A-PERF-5 · AsyncAPI document regenerated on every HTTP request (no cache)
+### A-PERF-5 · ~~AsyncAPI document regenerated on every HTTP request (no cache)~~ ✅ DONE
 
 - Verdict: `Valid`
 - Severity: Low-Medium (performance)
 - Detail: The endpoint calls `generator.Generate()` on each request with no output caching.
 - Evidence: `src/Ratatoskr/AsyncApi/Extensions/AsyncApiEndpointExtensions.cs`
 - Source(s): Claude
+- **Resolution:** Cached the serialized JSON in a closure variable using `??=`. The document is deterministic at runtime (channels are frozen at startup), so it only needs to be generated once.
 
 ### A-PERF-6 · ~~`GetProperties()` re-deserializes JSON on every call (no caching)~~ ✅ DONE
 
