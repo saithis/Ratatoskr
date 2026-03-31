@@ -321,13 +321,14 @@ Performance-only concerns that do not affect correctness or functional requireme
 - Source(s): Claude
 - **Resolution:** Added `_cachedProperties` field with `??=` pattern to cache deserialization result on first call in both entity classes.
 
-### A-PERF-7 · `PublishDirectAsync` allocates a filtered array on every call
+### A-PERF-7 · ~~`PublishDirectAsync` allocates a filtered array on every call~~ ✅ DONE
 
 - Verdict: `Valid`
 - Severity: Low (performance)
 - Detail: `_senders.Where(sender => ...).ToArray()` allocates on each publish invocation.
 - Evidence: `src/Ratatoskr/Ratatoskr.cs` (line 44)
 - Source(s): Claude
+- **Resolution:** Replaced LINQ `.Where().ToArray()` with a `FrozenDictionary<string, IMessageSender>` lookup built once at construction. Iterates transports directly with `TryGetValue` — zero per-call allocation.
 
 ---
 

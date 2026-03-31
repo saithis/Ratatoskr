@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Ratatoskr.Core;
@@ -12,7 +13,7 @@ public class Ratatoskr(
     IEnumerable<IMessageActivityObserver> observers,
     ILogger<Ratatoskr> logger) : IRatatoskr
 {
-    private readonly IMessageSender[] _senders = senders.ToArray();
+    private readonly FrozenDictionary<string, IMessageSender> _senderMap = senders.ToFrozenDictionary(x => x.TransportName);
     private readonly IMessageActivityObserver[] _observers = observers.ToArray();
     public async Task PublishDirectAsync<TMessage>(
         TMessage message,
@@ -41,15 +42,14 @@ public class Ratatoskr(
             throw new InvalidOperationException($"No transport found for message '{typeof(TMessage)}'");
         }
 
-        var sendersToUse = _senders.Where(sender => props.Transports.Contains(sender.TransportName)).ToArray();
-        if (sendersToUse.Length == 0)
-        {
-            throw new InvalidOperationException($"No transport found for message '{typeof(TMessage)}'");
-        }
-
         List<Exception>? exceptions = null;
-        foreach (var sender in sendersToUse)
+        var matchedAny = false;
+        foreach (var transport in props.Transports)
         {
+            if (!_senderMap.TryGetValue(transport, out var sender))
+                continue;
+
+            matchedAny = true;
             Exception? sendException = null;
             try
             {
@@ -75,6 +75,11 @@ public class Ratatoskr(
                 Exception = sendException,
                 Timestamp = timeProvider.GetUtcNow(),
             }, logger);
+        }
+
+        if (!matchedAny)
+        {
+            throw new InvalidOperationException($"No transport found for message '{typeof(TMessage)}'");
         }
 
         if (exceptions is { Count: > 0 })
