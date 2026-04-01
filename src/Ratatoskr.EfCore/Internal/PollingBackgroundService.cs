@@ -17,6 +17,9 @@ internal abstract class PollingBackgroundService(
     TimeProvider timeProvider,
     ILogger logger) : BackgroundService
 {
+    public DateTimeOffset LastSuccessfulProcessingAt { get; private set; } = timeProvider.GetUtcNow();
+
+
     private readonly Channel<byte> _triggerChannel = Channel.CreateBounded<byte>(
         new BoundedChannelOptions(1)
         {
@@ -79,6 +82,9 @@ internal abstract class PollingBackgroundService(
         {
             logger.LogWarning("Failed to acquire lock for {Processor}, processing will be skipped", ProcessorName);
             RatatoskrDiagnostics.LockAcquisitionFailure.Add(1, new TagList { { "processor", ProcessorName } });
+            
+            // Being a passive node is a valid state, so it's considered successfully healthy
+            LastSuccessfulProcessingAt = timeProvider.GetUtcNow();
             return;
         }
 
@@ -94,6 +100,7 @@ internal abstract class PollingBackgroundService(
         try
         {
             await ProcessBatchesAsync(processingToken);
+            LastSuccessfulProcessingAt = timeProvider.GetUtcNow();
         }
         catch (OperationCanceledException) when (dLock.HandleLostToken.IsCancellationRequested)
         {

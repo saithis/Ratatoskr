@@ -30,6 +30,24 @@ Ratatoskr exposes OpenTelemetry metrics via `System.Diagnostics.Metrics`. See [O
 3. **Growing backlog** — If batch size consistently equals `BatchSize`, the processor cannot keep up
 4. **Receive/process lag trending up** — Throughput is insufficient for message volume
 
+### Health Checks
+
+Ratatoskr exposes ASP.NET Core health checks suitable for Kubernetes liveness and readiness probes.
+
+Register them explicitly per component:
+
+```csharp
+services.AddHealthChecks()
+    .AddRatatoskrRabbitMq()
+    .AddRatatoskrOutbox<AppDbContext>()
+    .AddRatatoskrInbox<AppDbContext>();
+```
+
+**Probes:**
+- **Readiness Probe (`"ready"` tag)**: By default, all Ratatoskr components include the `"ready"` tag. This ensures K8s does not send traffic to your pod if the RabbitMQ consumer is disconnected or if the outbox/inbox processors crash and fail to successfully loop within the `unhealthyThreshold` (default: 2 minutes).
+- **Liveness Probe (`"live"` tag)**: Do not map Ratatoskr health checks to liveness probes. If a downstream service is down causing the processor to backoff, restarting the container will not fix it. Liveness probes should only check fundamental process health.
+
+
 ## Handling Poisoned Messages
 
 ### Investigation

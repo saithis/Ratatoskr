@@ -2,7 +2,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace Ratatoskr.RabbitMq;
 
-internal class RabbitMqConsumerHealthCheck(RabbitMqConsumer consumer) : IHealthCheck
+internal sealed class RabbitMqConsumerHealthCheck(RabbitMqConsumer consumer) : IHealthCheck
 {
     public Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context, 
