@@ -14,14 +14,6 @@ Validation approach:
 
 ## Section A — Functional Requirement Findings (Prioritized, High → Low)
 
-### A-CRIT-1 · Outbox staging queue loses in-memory staged messages on `SaveChangesAsync` failure
-
-- Verdict: `Valid`
-- Severity: Critical / must-fix
-- Detail: `OutboxTriggerInterceptor.SavingChangesAsync` dequeues staged items from the in-memory `Queue<Item>` *before* the DB commit succeeds. If the commit fails, the queue is already drained and the messages are lost on retry. A re-enqueue-on-failure or defer-until-`SavedChangesAsync` pattern is needed.
-- Evidence: `src/Ratatoskr.EfCore/Internal/OutboxTriggerInterceptor.cs` (line 120: `TryDequeue` called unconditionally during `SavingChangesAsync`)
-- Source(s): Claude
-
 ### A-CRIT-2 · Unroutable RabbitMQ publish silently lost (`mandatory: false`)
 
 - Verdict: `Valid`

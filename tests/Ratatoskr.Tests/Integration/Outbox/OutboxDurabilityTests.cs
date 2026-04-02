@@ -11,6 +11,7 @@ using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Tests.Fixtures;
 using Ratatoskr.RabbitMq;
 using TUnit.Core;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Ratatoskr.Tests.Integration.Outbox;
 
@@ -467,6 +468,87 @@ public class OutboxDurabilityTests(RabbitMqContainerFixture rabbitMq, PostgresCo
             entity.ErrorCount.Should().Be(0, "poison on missing sender should not increment the retry counter");
             entity.ProcessedAt.Should().BeNull();
         });
+    }
+
+    [Test]
+    public async Task Outbox_SaveChangesFailure_DoesNotLoseMessages()
+    {
+        var fakeTime = new FakeTimeProvider(new DateTimeOffset(2023, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        var failOnce = new FailOnceSaveChangesInterceptor();
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TimeProvider>(fakeTime);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddEventPublishChannel(ExchangeName, c => c
+                    .WithRabbitMq(r => r.WithTopicExchange())
+                    .Produces<TestEvent>());
+            });
+            services.AddSingleton<OutboxTelemetry>();
+            services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
+            services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
+            services.AddSingleton<OutboxProcessor<TestDbContext>>();
+            services.AddSingleton(new OutboxOptionsHolder<TestDbContext>(new OutboxOptions { MaxRetries = 5 }));
+            services.AddSingleton(failOnce);
+            services.AddDbContext<TestDbContext>((sp, options) =>
+            {
+                options.UseNpgsql(PostgresConnectionString);
+                options.RegisterOutbox<TestDbContext>(sp);
+                options.AddInterceptors(sp.GetRequiredService<FailOnceSaveChangesInterceptor>());
+            });
+        });
+
+        await InitializeDatabase();
+
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            dbContext.OutboxMessages.Add(new TestEvent { Data = "retry-msg" });
+
+            // First attempt fails (interceptor throws before the DB commit)
+            Func<Task> firstAttempt = () => dbContext.SaveChangesAsync();
+            await firstAttempt.Should().ThrowAsync<DbUpdateConcurrencyException>();
+
+            // Staged items must survive the failure so the retry can succeed
+            dbContext.OutboxMessages.Count.Should().Be(1, "staged items must be preserved after SaveChanges failure");
+
+            // Retry succeeds — the interceptor re-processes the staged items
+            await dbContext.SaveChangesAsync();
+        });
+
+        // Process the outbox and verify the message was persisted
+        await InScopeAsync(async ctx =>
+        {
+            await ProcessOutboxAsync<TestDbContext>(ctx.ServiceProvider);
+        });
+
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var entities = await dbContext.Set<OutboxMessageEntity>().ToListAsync();
+            entities.Should().HaveCount(1, "exactly one outbox entity should exist (no duplicates from retry)");
+        });
+    }
+
+    /// <summary>
+    /// Interceptor that throws on the first SaveChanges attempt, then passes through.
+    /// Throws from SavingChangesAsync to simulate a failure before the DB commit.
+    /// </summary>
+    public class FailOnceSaveChangesInterceptor : SaveChangesInterceptor
+    {
+        private bool _hasThrown;
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (!_hasThrown)
+            {
+                _hasThrown = true;
+                throw new DbUpdateConcurrencyException("Simulated failure", (Exception?)null);
+            }
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
     }
 
     /// <summary>

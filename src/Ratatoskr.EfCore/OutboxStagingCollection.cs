@@ -8,7 +8,7 @@ namespace Ratatoskr.EfCore;
 /// </summary>
 public class OutboxStagingCollection
 {
-    internal readonly Queue<Item> Queue = new();
+    internal readonly List<Item> StagedItems = new();
 
     /// <summary>
     /// Stages a message to be sent when SaveChanges is called.
@@ -20,7 +20,7 @@ public class OutboxStagingCollection
     public void Add<TMessage>(TMessage message, MessageProperties? properties = null) 
         where TMessage : notnull
     {
-        Queue.Enqueue(new Item
+        StagedItems.Add(new Item
         {
             Message = message,
             Properties = properties ?? new MessageProperties()
@@ -34,7 +34,7 @@ public class OutboxStagingCollection
     {
         ArgumentNullException.ThrowIfNull(message);
         
-        Queue.Enqueue(new Item
+        StagedItems.Add(new Item
         {
             Message = message,
             Properties = properties ?? new MessageProperties()
@@ -44,7 +44,9 @@ public class OutboxStagingCollection
     /// <summary>
     /// Gets the number of messages currently staged.
     /// </summary>
-    public int Count => Queue.Count;
+    public int Count => StagedItems.Count;
+
+    internal void ClearStaged() => StagedItems.Clear();
 
     internal class Item
     {

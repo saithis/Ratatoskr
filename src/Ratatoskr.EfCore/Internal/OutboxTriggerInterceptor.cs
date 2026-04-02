@@ -52,7 +52,17 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         flags.OutboxEntitiesStaged = false;
         flags.InboxEntitiesStaged = false;
 
-        while (outboxDbContext.OutboxMessages.Queue.TryPeek(out var item))
+        var stagedItems = outboxDbContext.OutboxMessages.StagedItems;
+        if (stagedItems.Count == 0)
+            return result;
+
+        // On retry after a failed SaveChanges, detach entities created by the previous attempt
+        // to prevent duplicates. These types are internal — only this interceptor adds them.
+        DetachAddedEntities<OutboxMessageEntity>(context);
+        DetachAddedEntities<InboxMessageEntity>(context);
+        DetachAddedEntities<InboxHandlerStatusEntity>(context);
+
+        foreach (var item in stagedItems)
         {
             var enrichedProperties = enricher.Enrich(item.Message.GetType(), item.Properties);
             var serializedMessage = messageSerializer.Serialize(item.Message);
@@ -116,8 +126,6 @@ internal class OutboxTriggerInterceptor<TDbContext>(
                 context.Set<OutboxMessageEntity>().Add(outboxMessage);
                 flags.OutboxEntitiesStaged = true;
             }
-
-            outboxDbContext.OutboxMessages.Queue.TryDequeue(out _);
 
             await _observers.NotifyAsync(new MessageActivity
             {
@@ -202,6 +210,10 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         CancellationToken cancellationToken = default
     )
     {
+        // Commit: clear staged items now that the transaction succeeded
+        if (eventData.Context is IOutboxDbContext outboxDbContext)
+            outboxDbContext.OutboxMessages.ClearStaged();
+
         if (eventData.EntitiesSavedCount == 0)
             return result;
 
@@ -221,5 +233,14 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         }
 
         return result;
+    }
+
+    private static void DetachAddedEntities<TEntity>(DbContext context) where TEntity : class
+    {
+        foreach (var entry in context.ChangeTracker.Entries<TEntity>().ToList())
+        {
+            if (entry.State == EntityState.Added)
+                entry.State = EntityState.Detached;
+        }
     }
 }
