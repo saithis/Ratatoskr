@@ -571,7 +571,7 @@ Overall architecture: sound. Core at-least-once guarantee: holds (with the stagi
 4. **A-HIGH-1 / A-HIGH-2** — Inbound and inbox body size limits.
 5. **A-HIGH-3** — Security trust-boundary documentation (TLS, ACLs, trusted publisher assumption) as an explicit documented non-feature or pluggable extension point.
 6. **A-HIGH-4** — At minimum: backlog gauge metric or health check that surfaces pending row counts without DB access.
-7. **A-MED-6** — Expose `RabbitMqConsumerHealthCheck` publicly and register it via the builder.
+7. ~~**A-MED-6** — Expose `RabbitMqConsumerHealthCheck` publicly and register it via the builder.~~ **DONE**
 
 ### Gate B — Should resolve before sustained production use (can be contractually time-boxed)
 
