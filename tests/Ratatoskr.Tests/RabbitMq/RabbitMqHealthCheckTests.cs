@@ -27,12 +27,4 @@ public class RabbitMqHealthCheckTests
         reg.Tags.Should().Contain("ready");
     }
 
-    [Test]
-    public async Task CheckHealthAsync_WhenConsumerHealthy_ReturnsHealthy()
-    {
-        // Arrange
-        // Cannot easily mock RabbitMqConsumer since it might be sealed or require connections.
-        // We will just create an un-started consumer and verify it returns unhealthy?
-        // Wait, IsHealthy defaults to false.
-    }
 }

@@ -14,7 +14,7 @@ namespace Ratatoskr.Tests.EfCore;
 public class ProcessorHealthCheckTests
 {
     [Test]
-    public void AddRatatoskrOutbox_RegistersHealthCheck()
+    public void AddRatatoskrOutbox_DefaultConfiguration_RegistersHealthCheck()
     {
         // Arrange
         var services = new ServiceCollection();
@@ -23,7 +23,7 @@ public class ProcessorHealthCheckTests
         services.AddHealthChecks().AddRatatoskrOutbox<TestDbContext>();
         
         // Assert
-        var provider = services.BuildServiceProvider();
+        using var provider = services.BuildServiceProvider();
         var options = provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value;
         
         options.Registrations.Should().Contain(r => r.Name == "ratatoskr-outbox-TestDbContext");
@@ -32,7 +32,7 @@ public class ProcessorHealthCheckTests
     }
 
     [Test]
-    public void AddRatatoskrInbox_RegistersHealthCheck()
+    public void AddRatatoskrInbox_DefaultConfiguration_RegistersHealthCheck()
     {
         // Arrange
         var services = new ServiceCollection();
@@ -41,7 +41,7 @@ public class ProcessorHealthCheckTests
         services.AddHealthChecks().AddRatatoskrInbox<TestDbContext>();
         
         // Assert
-        var provider = services.BuildServiceProvider();
+        using var provider = services.BuildServiceProvider();
         var options = provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value;
         
         options.Registrations.Should().Contain(r => r.Name == "ratatoskr-inbox-TestDbContext");
