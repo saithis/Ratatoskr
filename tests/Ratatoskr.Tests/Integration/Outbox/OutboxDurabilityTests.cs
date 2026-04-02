@@ -11,6 +11,7 @@ using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Tests.Fixtures;
 using Ratatoskr.RabbitMq;
 using TUnit.Core;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Ratatoskr.Tests.Integration.Outbox;
 
@@ -467,6 +468,86 @@ public class OutboxDurabilityTests(RabbitMqContainerFixture rabbitMq, PostgresCo
             entity.ErrorCount.Should().Be(0, "poison on missing sender should not increment the retry counter");
             entity.ProcessedAt.Should().BeNull();
         });
+    }
+
+    [Test]
+    public async Task Outbox_SaveChangesFailure_DoesNotLoseMessages()
+    {
+        var fakeTime = new FakeTimeProvider(new DateTimeOffset(2023, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        var interceptor = new SaveChangesFailureTestInterceptor();
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TimeProvider>(fakeTime);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddEventPublishChannel(ExchangeName, c => c
+                    .WithRabbitMq(r => r.WithTopicExchange())
+                    .Produces<TestEvent>());
+            });
+            services.AddSingleton<OutboxTelemetry>();
+            services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
+            services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
+            services.AddSingleton<OutboxProcessor<TestDbContext>>();
+            services.AddSingleton(new OutboxOptionsHolder<TestDbContext>(new OutboxOptions { MaxRetries = 5 }));
+            services.AddSingleton<SaveChangesFailureTestInterceptor>(interceptor);
+            services.AddDbContext<TestDbContext>((sp, options) =>
+            {
+                options.UseNpgsql(PostgresConnectionString);
+                options.RegisterOutbox<TestDbContext>(sp);
+                options.AddInterceptors(sp.GetRequiredService<SaveChangesFailureTestInterceptor>());
+            });
+        });
+
+        await InitializeDatabase();
+
+        // Stage a message and save
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            dbContext.OutboxMessages.Add(new TestEvent { Data = "retry-msg" });
+
+            try
+            {
+                await dbContext.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // the execution strategy retries SaveChanges or application code does it.
+                // we will simulate application code retrying.
+                await dbContext.SaveChangesAsync();
+            }
+        });
+
+        // Act
+        await InScopeAsync(async ctx =>
+        {
+            await ProcessOutboxAsync<TestDbContext>(ctx.ServiceProvider);
+        });
+
+        // Assert — message should have been saved and sent properly
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var count = await dbContext.Set<OutboxMessageEntity>().CountAsync();
+            count.Should().Be(1, "message must be saved despite the first SaveChangesAsync failing");
+        });
+    }
+
+    public class SaveChangesFailureTestInterceptor : SaveChangesInterceptor
+    {
+        private bool _hasThrown;
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (!_hasThrown)
+            {
+                _hasThrown = true;
+                throw new DbUpdateConcurrencyException("Simulated failure", (Exception?)null);
+            }
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
     }
 
     /// <summary>

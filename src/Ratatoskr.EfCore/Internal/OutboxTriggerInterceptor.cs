@@ -31,6 +31,8 @@ internal class OutboxTriggerInterceptor<TDbContext>(
     {
         public bool OutboxEntitiesStaged;
         public bool InboxEntitiesStaged;
+        public List<OutboxStagingCollection.Item>? DequeuedItems;
+        public List<object>? AddedEntities;
     }
 
     public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
@@ -51,6 +53,12 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         var flags = _perContextFlags.GetOrCreateValue(context);
         flags.OutboxEntitiesStaged = false;
         flags.InboxEntitiesStaged = false;
+        flags.DequeuedItems ??= new List<OutboxStagingCollection.Item>();
+        flags.AddedEntities ??= new List<object>();
+
+        // Clear in case this is a retry and previous state wasn't cleaned up (e.g. unexpected flow)
+        flags.DequeuedItems.Clear();
+        flags.AddedEntities.Clear();
 
         while (outboxDbContext.OutboxMessages.Queue.TryPeek(out var item))
         {
@@ -114,10 +122,15 @@ internal class OutboxTriggerInterceptor<TDbContext>(
 
                 var outboxMessage = OutboxMessageEntity.Create(serializedMessage, enrichedProperties, timeProvider, transport);
                 context.Set<OutboxMessageEntity>().Add(outboxMessage);
+                flags.AddedEntities.Add(outboxMessage);
                 flags.OutboxEntitiesStaged = true;
             }
 
-            outboxDbContext.OutboxMessages.Queue.TryDequeue(out _);
+            outboxDbContext.OutboxMessages.Queue.TryDequeue(out var dequeuedItem);
+            if (dequeuedItem != null)
+            {
+                flags.DequeuedItems.Add(dequeuedItem);
+            }
 
             await _observers.NotifyAsync(new MessageActivity
             {
@@ -175,17 +188,19 @@ internal class OutboxTriggerInterceptor<TDbContext>(
 
             if (!inboxEntriesCreated)
             {
-                context.Set<InboxMessageEntity>().Add(
-                    InboxMessageEntity.Create(enrichedProperties.Id, EfCoreTransportConstants.TransportName,
-                        serializedMessage, enrichedProperties, timeProvider));
+                var inboxEntity = InboxMessageEntity.Create(enrichedProperties.Id, EfCoreTransportConstants.TransportName,
+                    serializedMessage, enrichedProperties, timeProvider);
+                context.Set<InboxMessageEntity>().Add(inboxEntity);
+                flags.AddedEntities!.Add(inboxEntity);
                 inboxEntriesCreated = true;
                 flags.InboxEntitiesStaged = true;
             }
 
             foreach (var handler in inboxHandlers)
             {
-                context.Set<InboxHandlerStatusEntity>().Add(
-                    InboxHandlerStatusEntity.Create(enrichedProperties.Id, handler.InboxKey!, timeProvider));
+                var statusEntity = InboxHandlerStatusEntity.Create(enrichedProperties.Id, handler.InboxKey!, timeProvider);
+                context.Set<InboxHandlerStatusEntity>().Add(statusEntity);
+                flags.AddedEntities!.Add(statusEntity);
             }
 
             logger.LogDebug(
@@ -221,5 +236,62 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         }
 
         return result;
+    }
+
+    public override void SaveChangesFailed(DbContextErrorEventData eventData)
+    {
+        HandleSaveFailure(eventData.Context);
+        base.SaveChangesFailed(eventData);
+    }
+
+    public override Task SaveChangesFailedAsync(DbContextErrorEventData eventData, CancellationToken cancellationToken = default)
+    {
+        HandleSaveFailure(eventData.Context);
+        return base.SaveChangesFailedAsync(eventData, cancellationToken);
+    }
+
+    public override void SaveChangesCanceled(DbContextEventData eventData)
+    {
+        HandleSaveFailure(eventData.Context);
+        base.SaveChangesCanceled(eventData);
+    }
+
+    public override Task SaveChangesCanceledAsync(DbContextEventData eventData, CancellationToken cancellationToken = default)
+    {
+        HandleSaveFailure(eventData.Context);
+        return base.SaveChangesCanceledAsync(eventData, cancellationToken);
+    }
+
+    private void HandleSaveFailure(DbContext? context)
+    {
+        if (context is not IOutboxDbContext outboxDbContext) return;
+
+        if (_perContextFlags.TryGetValue(context, out var flags))
+        {
+            if (flags.DequeuedItems != null)
+            {
+                foreach (var item in flags.DequeuedItems)
+                {
+                    outboxDbContext.OutboxMessages.Queue.Enqueue(item);
+                }
+                flags.DequeuedItems.Clear();
+            }
+
+            if (flags.AddedEntities != null)
+            {
+                foreach (var entity in flags.AddedEntities)
+                {
+                    var entry = context.Entry(entity);
+                    if (entry.State == EntityState.Added)
+                    {
+                        entry.State = EntityState.Detached;
+                    }
+                }
+                flags.AddedEntities.Clear();
+            }
+
+            flags.OutboxEntitiesStaged = false;
+            flags.InboxEntitiesStaged = false;
+        }
     }
 }
