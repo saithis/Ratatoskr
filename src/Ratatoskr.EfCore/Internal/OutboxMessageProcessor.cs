@@ -107,9 +107,8 @@ internal class OutboxMessageProcessor<TDbContext>(
             {
                 if (!_senderMap.TryGetValue(message.TransportName, out var targetSender))
                 {
-                    sendException = new InvalidOperationException($"No sender found for transport '{message.TransportName}'");
-                    OutboxMessageProcessorLog.NoSenderFound(logger, message.TransportName, message.Id, sendException);
-                    message.MarkAsPoisoned(sendException.Message, timeProvider);
+                    OutboxMessageProcessorLog.NoSenderFound(logger, message.TransportName, message.Id);
+                    message.MarkAsPoisoned($"No sender found for transport '{message.TransportName}'", timeProvider);
                 }
                 else
                 {
@@ -228,7 +227,7 @@ internal static partial class OutboxMessageProcessorLog
     public static partial void DeserializationFailed(ILogger logger, Guid id, Exception ex);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "No sender registered for transport '{Transport}' on message '{Id}' - treating as poison")]
-    public static partial void NoSenderFound(ILogger logger, string transport, Guid id, Exception ex);
+    public static partial void NoSenderFound(ILogger logger, string transport, Guid id);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Processing message '{Id}' for transport '{Transport}'")]
     public static partial void ProcessingMessage(ILogger logger, Guid id, string transport);

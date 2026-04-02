@@ -77,15 +77,6 @@ Validation approach:
 - Evidence: `docs/operations.md` (§ Manual Retry)
 - Source(s): Claude (original claim overstated), Gemini (overstated in the opposite direction)
 
-### A-HIGH-6 · ~~Rolling deployments can permanently poison in-flight messages~~ ✅ DONE
-
-- Verdict: `Valid`
-- Severity: High
-- Detail: When a handler key is renamed between v1 and v2, any `InboxHandlerStatusEntity` written by v1 and picked up by a v2 instance will be immediately and irrecoverably poisoned (no grace period, no fallback). Field renames in message CLR types cause silent data loss; type changes cause `JsonException` leading to eventual poisoning. There is no documented blue-green or drain-first upgrade procedure.
-- Evidence: `src/Ratatoskr.EfCore/Internal/InboxMessageProcessor.cs` (lines 129–149)
-- Source(s): Claude
-- **Resolution:** Documented handler key stability contract, drain-rename-restart migration procedure, two-phase zero-downtime approach, and rolling deployment safety checklist in `docs/inbox.md` and `docs/operations.md`.
-
 ### A-HIGH-7 · Graceful shutdown does not drain in-flight consumer messages
 
 - Verdict: `Valid`
@@ -127,23 +118,6 @@ Validation approach:
 - Source(s): Claude
 - **Resolution:** Documented handler key stability contract and drain-rename-restart migration procedure in `docs/inbox.md`. Added deployment safety checklist to `docs/operations.md`.
 
-### A-MED-5 · Cleanup services do not use distributed locks (redundant DELETEs in multi-instance)
-
-- Verdict: `Valid`
-- Severity: Medium
-- Detail: Unlike outbox/inbox processors, `InboxCleanupService` and `OutboxCleanupService` are plain hosted services with no distributed lock. In horizontally scaled deployments, every instance runs independent cleanup batches, causing redundant DELETE operations.
-- Evidence: `src/Ratatoskr.EfCore/Internal/InboxCleanupService.cs`, `src/Ratatoskr.EfCore/Internal/OutboxCleanupService.cs`
-- Source(s): Claude
-- **Resolution:** Added distributed lock acquisition (`TryAcquireLockAsync` with `TimeSpan.Zero`) to both cleanup services. Only one instance runs cleanup per cycle; others skip. Added `CleanupLockName` option and `WithCleanupLockName()` fluent API. Lock names auto-generated per DbContext: `OutboxCleanup_{DbContext}`, `InboxCleanup_{DbContext}`.
-
-### A-MED-6 · Health check is internal and not registered by the builder
-
-- Verdict: `Valid`
-- Severity: Medium
-- Detail: `RabbitMqConsumerHealthCheck` is `internal` and no `AddHealthChecks()` registration exists in extension methods. No health checks exist for outbox/inbox processor status, database connectivity, distributed lock provider, or poisoned-message thresholds.
-- Evidence: `src/Ratatoskr.RabbitMq/RabbitMqConsumerHealthCheck.cs`, `src/Ratatoskr.RabbitMq/Extensions/RabbitMqRatatoskrBuilderExtensions.cs`
-- Source(s): Claude
-
 ### A-MED-7 · Inbox is opt-in per channel; channels without `UseInbox()` have no deduplication
 
 - Verdict: `Valid`
@@ -152,24 +126,6 @@ Validation approach:
 - Evidence: `src/Ratatoskr.EfCore/` registration paths, `docs/inbox.md`
 - Source(s): Gemini
 
-### A-MED-8 · ~~Strict message ordering is not preserved under horizontal scale-out~~ ✅ DONE
-
-- Verdict: `Valid`
-- Severity: Medium (semantic / correctness risk)
-- Detail: Outbox/inbox processors poll the DB in batches (`Take(BatchSize)`) and process asynchronously. Multiple worker instances grab overlapping batches in parallel, destroying chronological delivery ordering. Business processes that assume `OrderUpdated` always follows `OrderCreated` must implement compensating logic (sequence numbers, sagas, etc.).
-- Evidence: `src/Ratatoskr.EfCore/Internal/OutboxMessageProcessor.cs`, `src/Ratatoskr.EfCore/Internal/InboxMessageProcessor.cs`
-- Source(s): Gemini
-- **Resolution:** Documented ordering guarantees, compensating patterns (sequence numbers, partition keys, sagas), and what the library does guarantee in `docs/architecture.md`.
-
-### A-MED-9 · ~~Configurable `JsonSerializerOptions` not exposed~~ ✅ DONE
-
-- Verdict: `Valid`
-- Severity: Medium
-- Detail: `JsonMessageSerializer` uses default `JsonSerializerOptions` with no way to configure camelCase, custom converters, or reference handling.
-- Evidence: `src/Ratatoskr/Serializers/Json/JsonMessageSerializer.cs`
-- Source(s): Claude
-- **Resolution:** Added `JsonSerializerOptions` constructor parameter to `JsonMessageSerializer`. Changed `AddRatatoskr` to use `TryAddSingleton` so users can pre-register a configured serializer. Updated docs.
-
 ### A-LOW-1 · No per-channel CloudEvents content mode *(priority elevated from Low)*
 
 - Verdict: `Valid`
@@ -177,76 +133,6 @@ Validation approach:
 - Detail: Content mode (Binary vs Structured) is configured globally; you cannot use binary for high-throughput internal channels and structured for external partner channels simultaneously.
 - Evidence: `src/Ratatoskr/CloudEvents/CloudEventsOptions.cs`
 - Source(s): Claude
-
-### A-LOW-2 · ~~No local transport dispatch tracing span~~ *(priority elevated from Low)* ✅ DONE
-
-- Verdict: `Valid`
-- Severity: Medium
-- Detail: `MessageRouter` and `MessageDispatcher` do not start an `Activity` for local-transport dispatch. This is a trace gap: publish → inbox acceptance is traceable, but the local-only path through `MessageDispatcher` is invisible.
-- Evidence: `src/Ratatoskr/Core/MessageDispatcher.cs`, `src/Ratatoskr/Core/MessageRouter.cs`
-- Source(s): Claude
-- **Resolution:** Added a `"dispatch"` Activity span in `MessageDispatcher.DispatchAsync` with `ActivityKind.Consumer` and standard OTEL semantic convention tags. Error status is set on the activity when handler invocation fails.
-
-### A-LOW-3 · ~~No metrics for cleanup operations~~ *(priority elevated from Low)* ✅ DONE
-
-- Verdict: `Valid`
-- Severity: Medium
-- Detail: `InboxCleanupService` and `OutboxCleanupService` do not record any metrics for rows deleted or batch duration.
-- Evidence: `src/Ratatoskr.EfCore/Internal/InboxCleanupService.cs`, `src/Ratatoskr.EfCore/Internal/OutboxCleanupService.cs`
-- Source(s): Claude
-- **Resolution:** Added 5 cleanup metrics to `RatatoskrDiagnostics` (outbox cleanup count/duration, inbox cleanup status count/message count/duration). Instrumented both cleanup services. Updated docs/observability.md.
-
-### A-LOW-4 · ~~No `dataschema` attribute populated on publish path~~ ✅ DONE
-
-- Verdict: `Valid`
-- Severity: Low
-- Detail: The CloudEvents `dataschema` attribute is defined in `CloudEventEnvelope` but never set by the publish path, so consumers cannot discover schema URIs from the wire message.
-- Evidence: `src/Ratatoskr/CloudEvents/CloudEventEnvelope.cs`, `src/Ratatoskr.RabbitMq/CloudEventsAmqpMapper.cs`
-- Source(s): Claude
-- **Resolution:** Added `DataSchema` property to `MessageProperties`. Set as `cloudEvents_dataschema` header in binary mode and `dataschema` field in structured mode on outgoing. Read from headers/envelope on incoming. Round-trip tested in both modes.
-
-### A-LOW-5 · ~~Inbox orphan cleanup `Take` without `OrderBy` (non-deterministic batching)~~ ✅ DONE
-
-- Verdict: `Valid`
-- Severity: Low
-- Detail: The orphan cleanup `WHERE NOT EXISTS ...` query uses `Take(CleanupBatchSize)` without an `OrderBy`, leading to non-deterministic batch selection and potential repeated work.
-- Evidence: `src/Ratatoskr.EfCore/Internal/InboxCleanupService.cs` (lines 68–74)
-- Source(s): Claude
-- **Resolution:** Added `.OrderBy(m => m.Id)` before `.Take()` in orphan cleanup query. Uses the primary key index for deterministic ordering without requiring an additional index. Added integration tests for deterministic batching.
-
-### A-LOW-6 · `CloudEvents 'time'` treated as required on outgoing path (stricter than spec)
-
-- Verdict: `Valid`
-- Severity: Low
-- Detail: The CloudEvents spec marks `time` as OPTIONAL, but `CloudEventsAmqpMapper.MapOutgoing` throws if `props.Time` is null.
-- Evidence: `src/Ratatoskr.RabbitMq/CloudEventsAmqpMapper.cs` (lines 29–32)
-- Source(s): Claude
-
-### A-LOW-7 · No YAML output for AsyncAPI endpoint
-
-- Verdict: `Valid`
-- Severity: Low
-- Detail: The endpoint serializes JSON only; many AsyncAPI toolchains prefer YAML.
-- Evidence: `src/Ratatoskr/AsyncApi/Extensions/AsyncApiEndpointExtensions.cs`
-- Source(s): Claude
-
-### A-LOW-8 · ~~Inconsistent logging patterns across inbox and outbox processors~~ ✅ DONE
-
-- Verdict: `Valid`
-- Severity: Low
-- Detail: Outbox processor uses source-generated `LoggerMessage` (best-practice, zero-allocation). Inbox processor uses direct `logger.LogXxx()` calls. Inconsistency increases maintenance surface and means inbox logging incurs boxing overhead.
-- Evidence: `src/Ratatoskr.EfCore/Internal/OutboxMessageProcessor.cs` (partial class at bottom), `src/Ratatoskr.EfCore/Internal/InboxMessageProcessor.cs`
-- Source(s): Claude
-- **Resolution:** Converted all 9 direct `logger.LogXxx()` calls in `InboxMessageProcessor` to source-generated `[LoggerMessage]` pattern via `InboxMessageProcessorLog` partial class, matching the `OutboxMessageProcessorLog` pattern.
-
-### A-LOW-9 · ~~`BackoffCalculator` uses `Random.Shared` (non-injectable, non-deterministic in tests)~~ ✅ DONE
-
-- Verdict: `Valid`
-- Severity: Low
-- Detail: Static randomness cannot be seeded or controlled in test scenarios.
-- Evidence: `src/Ratatoskr.EfCore/Internal/BackoffCalculator.cs`
-- Source(s): Claude
-- **Resolution:** Added optional `Random? random = null` parameter to `BackoffCalculator.CalculateDelay()`. Defaults to `Random.Shared` for production use. Test callers pass a seeded `Random` for deterministic results.
 
 ### A-LOW-10 · Inbox/outbox code duplication (shared ~80% of logic)
 
@@ -309,33 +195,6 @@ Performance-only concerns that do not affect correctness or functional requireme
 - Detail: The optimistic concurrency loop under high write contention causes CPU pressure on the DB. WAL-tailing approaches (Debezium, etc.) would be needed for true high-throughput scenarios. This is an architectural constraint of any EF Core outbox, not unique to this library.
 - Evidence: `src/Ratatoskr.EfCore/Internal/OutboxMessageProcessor.cs`
 - Source(s): Gemini
-
-### A-PERF-5 · ~~AsyncAPI document regenerated on every HTTP request (no cache)~~ ✅ DONE
-
-- Verdict: `Valid`
-- Severity: Low-Medium (performance)
-- Detail: The endpoint calls `generator.Generate()` on each request with no output caching.
-- Evidence: `src/Ratatoskr/AsyncApi/Extensions/AsyncApiEndpointExtensions.cs`
-- Source(s): Claude
-- **Resolution:** Cached the serialized JSON in a closure variable using `??=`. The document is deterministic at runtime (channels are frozen at startup), so it only needs to be generated once.
-
-### A-PERF-6 · ~~`GetProperties()` re-deserializes JSON on every call (no caching)~~ ✅ DONE
-
-- Verdict: `Valid`
-- Severity: Low (performance)
-- Detail: `OutboxMessageEntity.GetProperties()` and `InboxMessageEntity.GetProperties()` call `JsonSerializer.Deserialize` every time they are accessed. In the outbox processor the entity is accessed multiple times per message.
-- Evidence: `src/Ratatoskr.EfCore/Internal/OutboxMessageEntity.cs`, `src/Ratatoskr.EfCore/Internal/InboxMessageEntity.cs`
-- Source(s): Claude
-- **Resolution:** Added `_cachedProperties` field with `??=` pattern to cache deserialization result on first call in both entity classes.
-
-### A-PERF-7 · ~~`PublishDirectAsync` allocates a filtered array on every call~~ ✅ DONE
-
-- Verdict: `Valid`
-- Severity: Low (performance)
-- Detail: `_senders.Where(sender => ...).ToArray()` allocates on each publish invocation.
-- Evidence: `src/Ratatoskr/Ratatoskr.cs` (line 44)
-- Source(s): Claude
-- **Resolution:** Replaced LINQ `.Where().ToArray()` with a `FrozenDictionary<string, IMessageSender>` lookup built once at construction. Iterates transports directly with `TryGetValue` — zero per-call allocation.
 
 ---
 
@@ -474,74 +333,6 @@ These findings are valid but have been explicitly acknowledged and accepted as-i
 
 ---
 
-## User Responsibility
-
-These findings represent concerns that are correctly outside the library's scope and must be handled by library consumers.
-
-### A-HIGH-8 · Database backup/restore causes duplicate message re-processing
-
-- Verdict: `Valid`
-- Severity: High (for consuming applications)
-- Note: **User responsibility.** DB backup/restore procedures and their interaction with transactional messaging are the responsibility of the application teams using this library. This is an inherent characteristic of any transactional outbox/inbox pattern and not specific to this implementation.
-- Detail: Restoring a DB backup rolls back `ProcessedAt`/`CompletedAt` timestamps to null. The outbox processor re-sends already-sent messages (no outbox-side idempotency). The inbox deduplication constraint `(MessageId, HandlerKey)` cannot help because the rows already exist — only their completion state is gone.
-- Evidence: `src/Ratatoskr.EfCore/Internal/OutboxMessageProcessor.cs`, `src/Ratatoskr.EfCore/Internal/InboxMessageProcessor.cs`
-- Source(s): Claude
-
-### D-NF-4 · Operational recovery ownership and SLA are undefined
-
-- Verdict: `Valid`
-- Severity: N/A (library context)
-- Note: **User responsibility.** This is a library; operational processes, on-call ownership, and recovery SLAs are defined by each team consuming the library, not by the library itself. The library provides the operational runbook in `docs/operations.md` as a starting point.
-- Detail: No on-call ownership assignment for poison message handling and retries. No recovery SLA targets. No dry-run incident exercise procedure.
-- Source(s): Checklist (N4)
-
----
-
-## Not Applicable
-
-These findings do not apply to this library in its current context.
-
-### B-SEC-4 · `OutboxStagingCollection` uses non-thread-safe `Queue<T>`
-
-- Verdict: `Valid` (as a technical observation)
-- Severity: N/A
-- Note: **Not applicable.** `DbContext` is already not thread-safe by design. `OutboxStagingCollection` is scoped to a `DbContext` lifetime and concurrent access is not an intended or supported scenario. Switching to `ConcurrentQueue<T>` would provide false safety without any actual protection.
-- Detail: `OutboxStagingCollection.Queue` is `Queue<T>`, not `ConcurrentQueue<T>`.
-- Evidence: `src/Ratatoskr.EfCore/OutboxStagingCollection.cs`
-- Source(s): Claude
-
-### D-NF-8 · No vendor support contract or defect SLA commitments
-
-- Verdict: `Valid` (as a general observation)
-- Severity: N/A
-- Note: **Not applicable.** This is an open source library with no commercial SLA, warranty, or support contract. This is a standard characteristic of open source software, not a deficiency to remediate.
-- Detail: No severity-based SLA in a contract. No warranty window or defect remediation commitments.
-- Source(s): Checklist (N8)
-
----
-
-## Outdated Findings
-
-These findings were valid at the time of initial evaluation but are no longer accurate due to changed external circumstances.
-
-### A-MED-13 · `RabbitMQ.Client` 7.x is a breaking-change upgrade, incompatible with 6.x dependents
-
-- Verdict: `Valid` (at time of writing)
-- Note: **Outdated.** RabbitMQ.Client 7.x has been available and widely adopted for long enough that new projects should not be targeting 6.x. Library consumers are expected to be on version 7 already, or to not reference `RabbitMQ.Client` directly themselves.
-- Detail: The library targets `RabbitMQ.Client` 7.2.0, a complete async-native rewrite not backward-compatible with the 6.x line. Consumers with other libraries still requiring 6.x will experience NuGet dependency conflicts.
-- Evidence: package references in `Ratatoskr.RabbitMq.csproj`
-- Source(s): Claude
-
-### A-MED-14 · `net10.0` only target (pre-GA, STS lifecycle, dependency conflict risk)
-
-- Verdict: `Invalid`
-- Note: **Outdated.** .NET 10 reached general availability in November 2025 and is the current LTS release (3-year support window). The original concern about targeting a pre-GA, short-term-support framework no longer applies. The `net10.0` target is appropriate.
-- Detail: All projects target `net10.0` via `Directory.Build.props`. At time of initial evaluation, .NET 10 was described as pre-GA STS. It is now the current LTS.
-- Evidence: `Directory.Build.props`
-- Source(s): Claude
-
----
-
 ## Deferred / Future Improvements
 
 These findings are valid concerns but are not required for the initial users of this library. They may be revisited in future iterations.
@@ -555,47 +346,25 @@ These findings are valid concerns but are not required for the initial users of 
 - Evidence: `src/Ratatoskr/Core/MessageProperties.cs`, `src/Ratatoskr.EfCore/Internal/OutboxMessageProcessor.cs`
 - Source(s): Claude
 
+### A-LOW-7 · No YAML output for AsyncAPI endpoint
+
+- Verdict: `Valid`
+- Severity: Low
+- Detail: The endpoint serializes JSON only; many AsyncAPI toolchains prefer YAML.
+- Evidence: `src/Ratatoskr/AsyncApi/Extensions/AsyncApiEndpointExtensions.cs`
+- Source(s): Claude
+
+### A-MED-8 · Strict message ordering is not preserved under horizontal scale-out
+
+- Verdict: `Valid`
+- Severity: Medium (semantic / correctness risk)
+- Detail: Outbox/inbox processors poll the DB in batches (`Take(BatchSize)`) and process asynchronously. Multiple worker instances grab overlapping batches in parallel, destroying chronological delivery ordering. Business processes that assume `OrderUpdated` always follows `OrderCreated` must implement compensating logic (sequence numbers, sagas, etc.).
+- Evidence: `src/Ratatoskr.EfCore/Internal/OutboxMessageProcessor.cs`, `src/Ratatoskr.EfCore/Internal/InboxMessageProcessor.cs`
+- Source(s): Gemini
+
 ---
 
-## Recommended Acceptance Decision
+## Summary
 
 Overall architecture: sound. Core at-least-once guarantee: holds (with the staging bug caveat). Code quality: high (0 critical code quality issues).
 
-**Recommendation: Reject as-is / Accept only after Gate A fixes.**
-
-### Gate A — Must resolve before payment/go-live
-
-1. **A-CRIT-1** — Outbox staging loss on `SaveChangesAsync` failure.
-2. **A-CRIT-2** — Unroutable publish silently discarded (`mandatory: false`).
-3. **A-CRIT-3** — Stable inbound message ID requirement for inbox-dedup channels.
-4. **A-HIGH-1 / A-HIGH-2** — Inbound and inbox body size limits.
-5. **A-HIGH-3** — Security trust-boundary documentation (TLS, ACLs, trusted publisher assumption) as an explicit documented non-feature or pluggable extension point.
-6. **A-HIGH-4** — At minimum: backlog gauge metric or health check that surfaces pending row counts without DB access.
-7. ~~**A-MED-6** — Expose `RabbitMqConsumerHealthCheck` publicly and register it via the builder.~~ **DONE**
-
-### Gate B — Should resolve before sustained production use (can be contractually time-boxed)
-
-8. **A-MED-1** — Per-channel serializer / content-type negotiation (high priority for interop).
-9. **A-HIGH-6** — Document handler key stability guarantees and rolling deployment procedure.
-10. **A-HIGH-7** — Graceful consumer shutdown drain.
-11. ~~**A-MED-5** — Distributed locks for cleanup services.~~ **DONE**
-12. **A-PERF-1** — Channel pool for concurrent RabbitMQ sends (see Section A-PERF).
-13. **A-MED-2** — Startup schema drift detection or documented migration protocol.
-14. **D-NF-6** — Data governance / PII retention position documented.
-15. **D-NF-7** — Upgrade playbook and rollback procedure.
-
-### Nice-to-have (Post-GA backlog)
-
-- `JsonSerializerOptions` surface (A-MED-9).
-- Consumer concurrency option (A-PERF-3).
-- Micro-batch saves in processors (A-PERF-2).
-- AsyncAPI YAML output (A-LOW-7).
-- Per-channel content mode (A-LOW-1).
-- Local transport dispatch tracing span (A-LOW-2).
-- Cleanup metrics (A-LOW-3).
-- Poisoned message TTL auto-cleanup config (operational gap; no dedicated Section A finding ID).
-- All test coverage gaps in Section C.
-- Security hygiene items B-SEC-3, B-SEC-5, B-SEC-6.
-- Logging pattern consistency (A-LOW-8).
-- Handler key rename migration support (A-MED-4).
-- Multi-tenancy support (A-HIGH-9) — architectural investment, see Deferred section.
