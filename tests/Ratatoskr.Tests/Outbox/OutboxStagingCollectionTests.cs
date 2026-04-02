@@ -20,7 +20,7 @@ public class OutboxStagingCollectionTests
 
         // Assert
         collection.Count.Should().Be(1);
-        collection.Queue.Peek().Message.Should().Be(message);
+        collection.StagedItems[0].Message.Should().Be(message);
     }
 
     [Test]
@@ -35,7 +35,7 @@ public class OutboxStagingCollectionTests
 
         // Assert
         collection.Count.Should().Be(1);
-        collection.Queue.Peek().Message.Should().Be(message);
+        collection.StagedItems[0].Message.Should().Be(message);
     }
 
     [Test]
@@ -51,9 +51,8 @@ public class OutboxStagingCollectionTests
 
         // Assert
         collection.Count.Should().Be(1);
-        var item = collection.Queue.Peek();
-        item.Message.Should().Be(message);
-        item.Properties.Type.Should().Be("custom.type");
+        collection.StagedItems[0].Message.Should().Be(message);
+        collection.StagedItems[0].Properties.Type.Should().Be("custom.type");
     }
 
     [Test]
@@ -68,10 +67,9 @@ public class OutboxStagingCollectionTests
 
         // Assert
         collection.Count.Should().Be(1);
-        var item = collection.Queue.Peek();
-        item.Message.Should().Be(message);
-        item.Properties.Should().NotBeNull();
-        item.Properties.Type.Should().BeNull();
+        collection.StagedItems[0].Message.Should().Be(message);
+        collection.StagedItems[0].Properties.Should().NotBeNull();
+        collection.StagedItems[0].Properties.Type.Should().BeNull();
     }
 
     [Test]
@@ -109,9 +107,8 @@ public class OutboxStagingCollectionTests
 
         // Assert
         collection.Count.Should().Be(3);
-        var items = collection.Queue.ToArray();
-        items[0].Message.Should().Be(message1);
-        items[1].Message.Should().Be(message2);
-        items[2].Message.Should().Be(message3);
+        collection.StagedItems[0].Message.Should().Be(message1);
+        collection.StagedItems[1].Message.Should().Be(message2);
+        collection.StagedItems[2].Message.Should().Be(message3);
     }
 }

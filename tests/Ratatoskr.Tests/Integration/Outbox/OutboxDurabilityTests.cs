@@ -474,7 +474,7 @@ public class OutboxDurabilityTests(RabbitMqContainerFixture rabbitMq, PostgresCo
     public async Task Outbox_SaveChangesFailure_DoesNotLoseMessages()
     {
         var fakeTime = new FakeTimeProvider(new DateTimeOffset(2023, 1, 1, 0, 0, 0, TimeSpan.Zero));
-        var interceptor = new SaveChangesFailureTestInterceptor();
+        var failOnce = new FailOnceSaveChangesInterceptor();
 
         await StartTestAsync(services =>
         {
@@ -491,51 +491,52 @@ public class OutboxDurabilityTests(RabbitMqContainerFixture rabbitMq, PostgresCo
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
             services.AddSingleton(new OutboxOptionsHolder<TestDbContext>(new OutboxOptions { MaxRetries = 5 }));
-            services.AddSingleton<SaveChangesFailureTestInterceptor>(interceptor);
+            services.AddSingleton(failOnce);
             services.AddDbContext<TestDbContext>((sp, options) =>
             {
                 options.UseNpgsql(PostgresConnectionString);
                 options.RegisterOutbox<TestDbContext>(sp);
-                options.AddInterceptors(sp.GetRequiredService<SaveChangesFailureTestInterceptor>());
+                options.AddInterceptors(sp.GetRequiredService<FailOnceSaveChangesInterceptor>());
             });
         });
 
         await InitializeDatabase();
 
-        // Stage a message and save
         await InScopeAsync(async ctx =>
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             dbContext.OutboxMessages.Add(new TestEvent { Data = "retry-msg" });
 
-            try
-            {
-                await dbContext.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                // the execution strategy retries SaveChanges or application code does it.
-                // we will simulate application code retrying.
-                await dbContext.SaveChangesAsync();
-            }
+            // First attempt fails (interceptor throws before the DB commit)
+            Func<Task> firstAttempt = () => dbContext.SaveChangesAsync();
+            await firstAttempt.Should().ThrowAsync<DbUpdateConcurrencyException>();
+
+            // Staged items must survive the failure so the retry can succeed
+            dbContext.OutboxMessages.Count.Should().Be(1, "staged items must be preserved after SaveChanges failure");
+
+            // Retry succeeds — the interceptor re-processes the staged items
+            await dbContext.SaveChangesAsync();
         });
 
-        // Act
+        // Process the outbox and verify the message was persisted
         await InScopeAsync(async ctx =>
         {
             await ProcessOutboxAsync<TestDbContext>(ctx.ServiceProvider);
         });
 
-        // Assert — message should have been saved and sent properly
         await InScopeAsync(async ctx =>
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var count = await dbContext.Set<OutboxMessageEntity>().CountAsync();
-            count.Should().Be(1, "message must be saved despite the first SaveChangesAsync failing");
+            var entities = await dbContext.Set<OutboxMessageEntity>().ToListAsync();
+            entities.Should().HaveCount(1, "exactly one outbox entity should exist (no duplicates from retry)");
         });
     }
 
-    public class SaveChangesFailureTestInterceptor : SaveChangesInterceptor
+    /// <summary>
+    /// Interceptor that throws on the first SaveChanges attempt, then passes through.
+    /// Throws from SavingChangesAsync to simulate a failure before the DB commit.
+    /// </summary>
+    public class FailOnceSaveChangesInterceptor : SaveChangesInterceptor
     {
         private bool _hasThrown;
 
