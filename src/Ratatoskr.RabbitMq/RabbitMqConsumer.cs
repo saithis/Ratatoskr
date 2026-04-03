@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Linq;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
@@ -150,18 +151,24 @@ internal class RabbitMqConsumer(
             snapshot = [.._consumers];
         }
 
-        foreach (var (channel, consumerTag) in snapshot)
+        var cancelTasks = snapshot.Select(async entry =>
         {
             try
             {
-                if (channel.IsOpen)
-                    await channel.BasicCancelAsync(consumerTag, noWait: false, cancellationToken);
+                if (entry.Channel.IsOpen)
+                    await entry.Channel.BasicCancelAsync(entry.ConsumerTag, noWait: false, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch (Exception ex)
             {
-                logger.LogDebug(ex, "Error cancelling RabbitMQ consumer {ConsumerTag}", consumerTag);
+                logger.LogDebug(ex, "Error cancelling RabbitMQ consumer {ConsumerTag}", entry.ConsumerTag);
             }
-        }
+        });
+
+        await Task.WhenAll(cancelTasks);
     }
 
     private async Task WaitForInFlightDrainAsync(CancellationToken cancellationToken)
@@ -182,7 +189,17 @@ internal class RabbitMqConsumer(
                 return;
             }
 
-            await Task.Delay(TimeSpan.FromMilliseconds(20), timeProvider, cancellationToken);
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(20), timeProvider, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                logger.LogWarning(
+                    "Shutdown drain interrupted by host cancellation; {InFlight} handler(s) still in flight",
+                    Volatile.Read(ref _inFlightHandlers));
+                return;
+            }
         }
     }
 
@@ -379,11 +396,23 @@ internal class RabbitMqConsumer(
     {
         logger.LogInformation("Stopping RabbitMQ consumer");
 
-        await CancelConsumersAsync(cancellationToken);
-        await WaitForInFlightDrainAsync(cancellationToken);
+        try
+        {
+            try
+            {
+                await CancelConsumersAsync(cancellationToken);
+                await WaitForInFlightDrainAsync(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Host shutdown timeout may cancel mid-drain; still stop background work and close channels.
+            }
 
-        await base.StopAsync(cancellationToken);
-
-        await CleanupChannelsAsync();
+            await base.StopAsync(cancellationToken);
+        }
+        finally
+        {
+            await CleanupChannelsAsync();
+        }
     }
 }
