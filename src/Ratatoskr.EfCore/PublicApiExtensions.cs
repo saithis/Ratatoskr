@@ -77,12 +77,37 @@ public static class PublicApiExtensions
             ratatoskrBuilder.Services.AddSingleton<IEfCoreInboxAcceptor>(sp => sp.GetRequiredService<InboxAcceptor<TDbContext>>());
             ratatoskrBuilder.Services.AddSingleton<IMessageRouteInterceptor, InboxRouteInterceptor<TDbContext>>();
 
+            var policyAggregator = GetOrAddConsumeChannelInboxPolicyAggregator(ratatoskrBuilder.Services);
+            policyAggregator.MergeRequirement(inboxBuilder.Options.ConsumeChannelInboxRequirement);
+            if (policyAggregator.EffectiveRequirement == ConsumeChannelInboxRequirement.Warn)
+            {
+                ratatoskrBuilder.Services.TryAddEnumerable(
+                    ServiceDescriptor.Singleton<IHostedService, ConsumeChannelInboxWarningHostedService>());
+            }
+
             // EF Core transport services (registered once, idempotent)
             ratatoskrBuilder.Services.TryAddSingleton<EfCoreTelemetry>();
             ratatoskrBuilder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IMessageSender, EfCoreMessageSender>());
 
-            ratatoskrBuilder.AddHandlerValidator(InboxConfigurationValidator.Validate);
+            ratatoskrBuilder.AddHandlerValidator((channelRegistry, handlerRegistry) =>
+                InboxConfigurationValidator.Validate(channelRegistry, handlerRegistry, policyAggregator));
             ratatoskrBuilder.AddValidator(EfCoreConfigurationValidator.Validate);
+        }
+
+        private static ConsumeChannelInboxPolicyAggregator GetOrAddConsumeChannelInboxPolicyAggregator(
+            IServiceCollection services)
+        {
+            var existing = services
+                .Where(d => d.ServiceType == typeof(ConsumeChannelInboxPolicyAggregator))
+                .Select(d => d.ImplementationInstance)
+                .OfType<ConsumeChannelInboxPolicyAggregator>()
+                .FirstOrDefault();
+            if (existing != null)
+                return existing;
+
+            var aggregator = new ConsumeChannelInboxPolicyAggregator();
+            services.AddSingleton(aggregator);
+            return aggregator;
         }
 
         private static void RegisterOutboxServices<TDbContext>(

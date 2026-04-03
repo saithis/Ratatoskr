@@ -11,6 +11,16 @@ namespace Ratatoskr.EfCore;
 public static class InboxPublicApiExtensions
 {
     /// <summary>
+    /// Explicitly opts this consume channel out of the optional consume-channel inbox requirement policy.
+    /// This does not bypass transport-specific requirements (for example, EF Core transport still requires inbox).
+    /// </summary>
+    public static ConsumeChannelBuilder AllowConsumeWithoutInbox(this ConsumeChannelBuilder builder)
+    {
+        builder.Channel.SetExtension(new ConsumeChannelInboxRequirementOptOut());
+        return builder;
+    }
+
+    /// <summary>
     /// Enables the inbox pattern on this consume channel.
     /// All handlers registered with a stable key on this channel will be inbox-managed.
     /// Requires <c>AddEfCoreDurability&lt;TDbContext&gt;(d =&gt; d.UseInbox())</c> to be called on the bus builder.

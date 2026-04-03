@@ -13,6 +13,15 @@ public class InboxBuilder<TDbContext> where TDbContext : DbContext
     internal InboxBuilder() { }
 
     /// <summary>
+    /// Requires consume channels to use inbox according to the selected policy.
+    /// </summary>
+    public InboxBuilder<TDbContext> WithConsumeChannelInboxRequirement(ConsumeChannelInboxRequirement requirement)
+    {
+        Options.ConsumeChannelInboxRequirement = requirement;
+        return this;
+    }
+
+    /// <summary>
     /// Sets the polling interval for checking the database for pending handler deliveries.
     /// </summary>
     public InboxBuilder<TDbContext> WithPollingInterval(TimeSpan interval)

@@ -6,6 +6,12 @@ namespace Ratatoskr.EfCore;
 public class InboxOptions
 {
     /// <summary>
+    /// Controls whether consume channels are required to configure <c>UseInbox&lt;TDbContext&gt;()</c>.
+    /// Default: <see cref="ConsumeChannelInboxRequirement.None"/>.
+    /// </summary>
+    public ConsumeChannelInboxRequirement ConsumeChannelInboxRequirement { get; set; } = ConsumeChannelInboxRequirement.None;
+
+    /// <summary>
     /// How often to poll the database for pending handler deliveries.
     /// Default: 30 seconds.
     /// </summary>

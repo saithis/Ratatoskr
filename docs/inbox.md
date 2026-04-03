@@ -45,6 +45,34 @@ The handler key (`"order-handler"`) is persisted in the database. It must be sta
 > [!WARNING]
 > On channels with `UseInbox()`, every handler **must** have a key. Registering a handler without a key throws `InvalidOperationException` at startup. Handler keys must be **globally unique** across all channels and DbContexts.
 
+### 4. Optional Safeguard: Require UseInbox on Consume Channels
+
+If your team standard is "all consume channels should use inbox," enable the policy in `UseInbox(...)`:
+
+```csharp
+bus.AddEfCoreDurability<OrderDbContext>(d => d.UseInbox(inbox =>
+{
+    inbox.WithConsumeChannelInboxRequirement(ConsumeChannelInboxRequirement.Fail);
+}));
+```
+
+Policy values:
+
+- `ConsumeChannelInboxRequirement.None` (default): no extra checks.
+- `ConsumeChannelInboxRequirement.Warn`: logs startup warnings for consume channels without `UseInbox<TDbContext>()`.
+- `ConsumeChannelInboxRequirement.Fail`: throws `InvalidOperationException` at startup.
+
+Per-channel opt-out is explicit:
+
+```csharp
+bus.AddEventConsumeChannel("legacy.fire-and-forget", c => c
+    .AllowConsumeWithoutInbox()
+    .Consumes<OrderPlaced>(m => m.WithHandler<LegacyHandler>()));
+```
+
+> [!NOTE]
+> This opt-out only affects the optional safeguard above. It does not bypass hard validation rules like EF Core transport requirements.
+
 ### Handler Key Renaming (Legacy Keys)
 
 When renaming a handler key, use legacy keys to drain in-flight messages under the old key:
@@ -180,6 +208,7 @@ bus.AddEfCoreDurability<OrderDbContext>(d => d.UseInbox(inbox =>
 | `WithCleanupInterval(TimeSpan)` | `1 hour` | How often the cleanup service runs |
 | `WithCleanupBatchSize(int)` | `10,000` | Messages deleted per cleanup batch |
 | `WithCleanupLockName(string)` | `"InboxCleanup_{DbContext}"` | Cleanup distributed lock name (auto-generated per DbContext) |
+| `WithConsumeChannelInboxRequirement(ConsumeChannelInboxRequirement)` | `None` | Optional safeguard for channels that forget `UseInbox()` |
 
 ## Data Retention
 
