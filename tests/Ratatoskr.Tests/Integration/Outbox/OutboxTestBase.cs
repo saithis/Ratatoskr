@@ -33,7 +33,7 @@ public abstract class OutboxTestBase(RabbitMqContainerFixture rabbitMq, Postgres
         {
             using var scope = serviceProvider.CreateScope();
             var processor = scope.ServiceProvider.GetRequiredService<OutboxMessageProcessor<TDbContext>>();
-            var batchProcessed = await processor.ProcessBatchAsync(includeStuckMessageDetection: false, CancellationToken.None);
+            var batchProcessed = await processor.ProcessBatchAsync(includeStuckMessageDetection: true, CancellationToken.None);
             totalProcessed += batchProcessed;
             if (batchProcessed == 0) break;
         }

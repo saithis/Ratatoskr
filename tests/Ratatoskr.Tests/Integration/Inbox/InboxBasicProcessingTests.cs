@@ -13,6 +13,48 @@ public class InboxBasicProcessingTests(RabbitMqContainerFixture rabbitMq, Postgr
     : InboxTestBase(rabbitMq, postgres)
 {
     [Test]
+    public async Task Inbox_ReceivedAt_UsesInjectedTimeProvider()
+    {
+        var fixedInstant = new DateTimeOffset(2024, 3, 15, 14, 30, 0, TimeSpan.Zero);
+        var fakeTime = new FakeTimeProvider(fixedInstant);
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TimeProvider>(fakeTime);
+            services.AddRatatoskr(bus =>
+            {
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
+                    .UseInbox<TestDbContext>());
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox => inbox.WithoutBackgroundProcessing()));
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await InitializeDatabase();
+
+        await InScopeAsync(async ctx =>
+        {
+            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+            await bus.PublishDirectAsync(
+                new TestEvent { Id = "business-received-at-1" },
+                new MessageProperties { Id = "received-at-1" });
+        });
+
+        await WaitForInboxEntriesAsync(1);
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var message = await db.Set<InboxMessageEntity>().SingleAsync(m => m.Id == "received-at-1");
+            message.ReceivedAt.Should().Be(fixedInstant);
+        });
+    }
+
+    [Test]
     public async Task Inbox_AllHandlersSucceed_AllMarkedAsCompleted()
     {
         // Arrange

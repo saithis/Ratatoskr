@@ -27,7 +27,7 @@ public abstract class InboxTestBase(RabbitMqContainerFixture rabbitMq, PostgresC
 
     protected async Task<int> ProcessInboxAsync(
         IServiceProvider serviceProvider,
-        bool includeStuckDetection = false,
+        bool includeStuckDetection = true,
         CancellationToken cancellationToken = default)
     {
         var total = 0;

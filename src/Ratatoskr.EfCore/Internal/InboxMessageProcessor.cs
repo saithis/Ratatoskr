@@ -49,6 +49,10 @@ internal class InboxMessageProcessor<TDbContext>(
             var stuckThreshold = now - _options.StuckMessageThreshold;
             query = query.Where(s => s.ProcessingStartedAt == null || s.ProcessingStartedAt < stuckThreshold);
         }
+        else
+        {
+            query = query.Where(s => s.ProcessingStartedAt == null);
+        }
 
         var statuses = await query
             .OrderBy(s => s.MessageId)

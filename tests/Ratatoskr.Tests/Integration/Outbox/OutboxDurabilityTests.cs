@@ -532,6 +532,146 @@ public class OutboxDurabilityTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         });
     }
 
+    [Test]
+    public async Task Outbox_MaxMessageSizeExceeded_SaveChangesThrows()
+    {
+        const int maxBytes = 80;
+
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddEventPublishChannel(ExchangeName, c => c
+                    .WithRabbitMq(r => r.WithTopicExchange())
+                    .Produces<TestEvent>());
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox(o => o.WithMaxMessageSize(maxBytes)));
+            });
+            services.AddDbContext<TestDbContext>((sp, options) =>
+            {
+                options.UseNpgsql(PostgresConnectionString);
+                options.RegisterOutbox<TestDbContext>(sp);
+            });
+        });
+
+        await EnsureQueueBoundAsync(QueueName, ExchangeName, DefaultRoutingKey);
+        await InitializeDatabase();
+
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var props = new MessageProperties().SetRoutingKey(DefaultRoutingKey);
+            props.Transports.Add(RabbitMqConstants.TransportName);
+            dbContext.OutboxMessages.Add(
+                new TestEvent { Id = "oversized", Data = new string('x', 500) },
+                props);
+
+            Func<Task> act = () => dbContext.SaveChangesAsync();
+            await act.Should().ThrowAsync<InvalidOperationException>()
+                .WithMessage("*exceeds the configured maximum*");
+        });
+
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            (await dbContext.Set<OutboxMessageEntity>().CountAsync()).Should().Be(0);
+        });
+    }
+
+    [Test]
+    public async Task Outbox_ConcurrentProcessors_ClaimConflictHandled()
+    {
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddEventPublishChannel(ExchangeName, c => c
+                    .WithRabbitMq(r => r.WithTopicExchange())
+                    .Produces<TestEvent>());
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox(o => o.WithoutBackgroundProcessing()));
+            });
+
+            services.AddDbContext<TestDbContext>((sp, options) =>
+            {
+                options.UseNpgsql(PostgresConnectionString);
+                options.RegisterOutbox<TestDbContext>(sp);
+            });
+        });
+
+        await EnsureQueueBoundAsync(QueueName, ExchangeName, DefaultRoutingKey);
+        await InitializeDatabase();
+
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var props = new MessageProperties().SetRoutingKey(DefaultRoutingKey);
+            props.Transports.Add(RabbitMqConstants.TransportName);
+            dbContext.OutboxMessages.Add(new TestEvent { Id = "concurrent-claim", Data = "x" }, props);
+            await dbContext.SaveChangesAsync();
+        });
+
+        var beforeCount = await GetMessageCountAsync(QueueName);
+
+        await Task.WhenAll(
+            InScopeAsync(async ctx => await ProcessOutboxAsync<TestDbContext>(ctx.ServiceProvider)),
+            InScopeAsync(async ctx => await ProcessOutboxAsync<TestDbContext>(ctx.ServiceProvider)));
+
+        await WaitForConditionAsync(
+            async () => await GetMessageCountAsync(QueueName) >= beforeCount + 1,
+            TimeSpan.FromSeconds(15));
+        (await GetMessageCountAsync(QueueName)).Should().Be(beforeCount + 1,
+            "concurrent claim conflict handling should result in exactly one delivery");
+
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var entities = await dbContext.Set<OutboxMessageEntity>().ToListAsync();
+            entities.Should().HaveCount(1);
+            entities[0].ProcessedAt.Should().NotBeNull("exactly one worker should complete the send");
+            entities[0].ErrorCount.Should().Be(0);
+        });
+    }
+
+    [Test]
+    public async Task Outbox_StagingNonGenericAdd_PersistsAndDelivers()
+    {
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddEventPublishChannel(ExchangeName, c => c
+                    .WithRabbitMq(r => r.WithTopicExchange())
+                    .Produces<TestEvent>());
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox());
+            });
+
+            services.AddDbContext<TestDbContext>((sp, options) =>
+            {
+                options.UseNpgsql(PostgresConnectionString);
+                options.RegisterOutbox<TestDbContext>(sp);
+            });
+        });
+
+        await EnsureQueueBoundAsync(QueueName, ExchangeName, DefaultRoutingKey);
+        await InitializeDatabase();
+
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            object message = new TestEvent { Id = "non-generic-add", Data = "via-object" };
+            var props = new MessageProperties().SetRoutingKey(DefaultRoutingKey);
+            props.Transports.Add(RabbitMqConstants.TransportName);
+            dbContext.OutboxMessages.Add(message, props);
+            await dbContext.SaveChangesAsync();
+        });
+
+        var body = await WaitForMessageAsync(QueueName);
+        body.Should().NotBeNull();
+        System.Text.Encoding.UTF8.GetString(body!.Body.ToArray()).Should().Contain("non-generic-add");
+    }
+
     /// <summary>
     /// Interceptor that throws on the first SaveChanges attempt, then passes through.
     /// Throws from SavingChangesAsync to simulate a failure before the DB commit.

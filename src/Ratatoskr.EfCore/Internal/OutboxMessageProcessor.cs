@@ -42,6 +42,12 @@ internal class OutboxMessageProcessor<TDbContext>(
             var stuckThreshold = now - _options.StuckMessageThreshold;
             query = query.Where(x => x.ProcessingStartedAt == null || x.ProcessingStartedAt < stuckThreshold);
         }
+        else
+        {
+            // Without stuck recovery, still exclude rows another worker has already claimed; otherwise two
+            // concurrent processors can both pass MarkAsProcessing/SaveChanges in sequence and duplicate-send.
+            query = query.Where(x => x.ProcessingStartedAt == null);
+        }
 
         var messages = await query
             .OrderBy(x => x.CreatedAt)

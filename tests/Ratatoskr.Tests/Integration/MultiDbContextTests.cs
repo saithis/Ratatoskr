@@ -536,7 +536,7 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         {
             using var scope = serviceProvider.CreateScope();
             var processor = scope.ServiceProvider.GetRequiredService<InboxMessageProcessor<TDbContext>>();
-            var count = await processor.ProcessBatchAsync(false, CancellationToken.None);
+            var count = await processor.ProcessBatchAsync(true, CancellationToken.None);
             total += count;
             if (count == 0) break;
         }
@@ -551,7 +551,7 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         {
             using var scope = serviceProvider.CreateScope();
             var processor = scope.ServiceProvider.GetRequiredService<OutboxMessageProcessor<TDbContext>>();
-            var count = await processor.ProcessBatchAsync(false, CancellationToken.None);
+            var count = await processor.ProcessBatchAsync(true, CancellationToken.None);
             total += count;
             if (count == 0) break;
         }
