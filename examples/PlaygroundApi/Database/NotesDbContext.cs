@@ -13,7 +13,6 @@ public class NotesDbContext(DbContextOptions<NotesDbContext> options) : DbContex
     {
         base.OnModelCreating(modelBuilder);
 
-        modelBuilder.AddOutboxEntities(Database);
-        modelBuilder.AddInboxEntities(Database);
+        modelBuilder.AddRatatoskrEfCoreModel(Database);
     }
 }

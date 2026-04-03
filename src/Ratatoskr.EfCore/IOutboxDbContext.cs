@@ -8,7 +8,12 @@ namespace Ratatoskr.EfCore;
 /// public class MyDbContext : DbContext, IOutboxDbContext
 /// {
 ///     public OutboxStagingCollection OutboxMessages { get; } = new();
-///     
+///
+///     protected override void OnModelCreating(ModelBuilder modelBuilder)
+///     {
+///         modelBuilder.AddRatatoskrEfCoreModel(Database);
+///     }
+///
 ///     // Usage in application code:
 ///     // db.MyEntities.Add(entity);
 ///     // db.OutboxMessages.Add(new MyEvent { ... });

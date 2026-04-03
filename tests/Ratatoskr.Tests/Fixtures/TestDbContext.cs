@@ -27,10 +27,6 @@ public class TestDbContext : DbContext, IOutboxDbContext, IInboxDbContext
             entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
         });
 
-        // Configure outbox entities
-        modelBuilder.AddOutboxEntities(Database);
-
-        // Configure inbox entities
-        modelBuilder.AddInboxEntities(Database);
+        modelBuilder.AddRatatoskrEfCoreModel(Database);
     }
 }

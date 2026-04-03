@@ -111,7 +111,7 @@ A complete, restructured documentation site for Ratatoskr using DocFX. The docs 
 #### 9. Outbox Pattern (`outbox.md`)
 - Problem: dual-write between database and message broker
 - How the outbox solves it (transactional staging → background dispatch)
-- Setup: `AddEfCoreDurability<T>(d => d.UseOutbox())`, `RegisterOutbox<T>(sp)`, `AddOutboxEntities()`
+- Setup: `AddEfCoreDurability<T>(d => d.UseOutbox())`, `RegisterOutbox<T>(sp)`, `AddRatatoskrEfCoreModel(Database)`
 - Using the outbox: `OutboxMessages.Add()` + `SaveChangesAsync()`
 - Configuration options: polling interval, batch size, retry, stuck message threshold, send timeout, max message size
 - Outbox processing lifecycle and error handling
@@ -121,7 +121,7 @@ A complete, restructured documentation site for Ratatoskr using DocFX. The docs 
 #### 10. Inbox Pattern (`inbox.md`)
 - Problem: at-least-once delivery means duplicate processing
 - How the inbox solves it (idempotent, per-handler deduplication)
-- Setup: `AddEfCoreDurability<T>(d => d.UseInbox())`, `UseInbox<T>()` on channels, `AddInboxEntities()`
+- Setup: `AddEfCoreDurability<T>(d => d.UseInbox())`, `UseInbox<T>()` on channels, `AddRatatoskrEfCoreModel(Database)`
 - Per-message opt-in: `.Consumes<T>(m => m.UseInbox())`
 - Handler isolation and independent retry
 - Deduplication via `(MessageId, HandlerKey)` constraint

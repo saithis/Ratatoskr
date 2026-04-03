@@ -24,7 +24,7 @@ builder.Services.AddRatatoskr(bus =>
 
 ### 2. Implement `IOutboxDbContext`
 
-Your `DbContext` must implement `IOutboxDbContext` and register outbox entities:
+Your `DbContext` must implement `IOutboxDbContext` and register Ratatoskr's EF model (inbox and outbox mappings) in `OnModelCreating`:
 
 ```csharp
 public class OrderDbContext(DbContextOptions<OrderDbContext> options)
@@ -34,7 +34,7 @@ public class OrderDbContext(DbContextOptions<OrderDbContext> options)
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.AddOutboxEntities(Database);
+        modelBuilder.AddRatatoskrEfCoreModel(Database);
     }
 }
 ```

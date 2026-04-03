@@ -125,37 +125,4 @@ public static class PublicApiExtensions
         return builder.AddInterceptors(interceptor);
     }
 
-    /// <summary>
-    /// Adds the necessary outbox entities to the DB model.
-    /// Pass <see cref="DbContext.Database"/> so a partial/filtered index can be applied for supported
-    /// providers (PostgreSQL, SQL Server). Omitting it previously caused full-table indexes and severe
-    /// performance issues on large outbox tables.
-    /// </summary>
-    public static void AddOutboxEntities(this ModelBuilder modelBuilder, DatabaseFacade database)
-    {
-        modelBuilder.Entity<OutboxMessageEntity>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-
-            var index = entity.HasIndex(
-                e => new {
-                    e.ProcessedAt,
-                    e.IsPoisoned,
-                    e.NextAttemptAt,
-                    e.ProcessingStartedAt,
-                    e.CreatedAt
-                },
-                "IX_OutboxMessages_Processing");
-
-            var filter = DatabaseProviderHelper.GetOutboxProcessingFilter(database);
-            if (filter != null)
-                index.HasFilter(filter);
-
-            entity.Property(e => e.Error).HasMaxLength(2000);
-            entity.Property(e => e.Content).IsRequired();
-            entity.Property(e => e.SerializedProperties).IsRequired();
-            entity.Property(e => e.TransportName).HasMaxLength(50).IsRequired();
-            entity.Property(e => e.Version).IsConcurrencyToken();
-        });
-    }
 }
