@@ -57,8 +57,17 @@ bus.ConfigureCloudEvents(ce =>
 bus.UseRabbitMq(c =>
 {
     c.ConnectionString = new Uri("amqp://guest:guest@localhost:5672/");
+    c.MaxInboundMessageSize = 1048576; // 1 MB limit
 });
 ```
+
+### Global Options
+
+| Option | Default | Description | Details |
+|--------|---------|-------------|---------|
+| `ConnectionString` | — | RabbitMQ connection URI | [RabbitMQ](rabbitmq.md) |
+| `UsePublisherConfirms` | `true` | Wait for publisher acks | [RabbitMQ](rabbitmq.md) |
+| `MaxInboundMessageSize` | *none* | Max body size in bytes before rejection | [RabbitMQ](rabbitmq.md) |
 
 ### Channel Options
 
