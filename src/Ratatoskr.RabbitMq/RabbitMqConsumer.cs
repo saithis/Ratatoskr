@@ -195,7 +195,10 @@ internal class RabbitMqConsumer(
             // Enforce inbound message size limit
             if (options.MaxInboundMessageSize.HasValue && ea.Body.Length > options.MaxInboundMessageSize.Value)
             {
-                throw new InvalidOperationException($"Inbound message size of {ea.Body.Length} bytes exceeds the configured maximum of {options.MaxInboundMessageSize.Value} bytes.");
+                logger.LogWarning("Rejecting oversized message: {Size} bytes exceeds limit of {Limit}",
+                    ea.Body.Length, options.MaxInboundMessageSize.Value);
+                await channel.BasicNackAsync(ea.DeliveryTag, false, false, cancellationToken); // no requeue
+                return;
             }
 
             // Capture transport-level wire format before envelope mapping
