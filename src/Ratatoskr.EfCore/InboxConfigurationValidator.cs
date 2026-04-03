@@ -1,5 +1,6 @@
 using Ratatoskr.Config;
 using Ratatoskr.Core;
+using Ratatoskr.EfCore.Internal;
 
 namespace Ratatoskr.EfCore;
 
@@ -9,7 +10,10 @@ namespace Ratatoskr.EfCore;
 /// </summary>
 internal static class InboxConfigurationValidator
 {
-    public static void Validate(ChannelRegistry channelRegistry, ChannelHandlerRegistry handlerRegistry)
+    public static void Validate(
+        ChannelRegistry channelRegistry,
+        ChannelHandlerRegistry handlerRegistry,
+        ConsumeChannelInboxPolicyAggregator? policyAggregator = null)
     {
         foreach (var channel in channelRegistry.GetConsumeChannels())
         {
@@ -25,6 +29,9 @@ internal static class InboxConfigurationValidator
                     $"but does not have UseInbox<TDbContext>() configured. " +
                     $"Either add UseInbox<TDbContext>() to the channel or move fire-and-forget handlers to a separate channel without UseInbox.");
             }
+
+            if (inboxConfig == null && inboxHandlers.Count == 0)
+                ValidateChannelInboxRequirement(channel, policyAggregator);
 
             // UseInbox channel must not have fire-and-forget handlers
             if (inboxConfig != null)
@@ -53,6 +60,28 @@ internal static class InboxConfigurationValidator
                     $"Inbox handler for '{handler.HandlerType.Name}' has an empty stable key. " +
                     $"Provide a non-empty key via Consumes<TMsg>(m => m.WithHandler<THandler>(\"key\")).");
         }
+    }
+
+    private static void ValidateChannelInboxRequirement(
+        ChannelRegistration channel,
+        ConsumeChannelInboxPolicyAggregator? policyAggregator)
+    {
+        if (policyAggregator == null ||
+            policyAggregator.EffectiveRequirement == ConsumeChannelInboxRequirement.None)
+            return;
+
+        var isOptedOut = channel.GetExtension<ConsumeChannelInboxRequirementOptOut>() != null;
+        if (isOptedOut)
+            return;
+
+        var message =
+            $"Channel '{channel.ChannelName}' does not have UseInbox<TDbContext>() configured. " +
+            $"Either add UseInbox<TDbContext>() to the channel or explicitly opt out with AllowConsumeWithoutInbox().";
+
+        if (policyAggregator.EffectiveRequirement == ConsumeChannelInboxRequirement.Fail)
+            throw new InvalidOperationException(message);
+
+        policyAggregator.AddWarning(message);
     }
 
     private static IEnumerable<ChannelHandlerRegistration> GetAllHandlersForChannel(

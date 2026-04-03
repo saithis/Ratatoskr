@@ -260,6 +260,7 @@ public class OrderDbContext(DbContextOptions<OrderDbContext> options)
 
 > [!NOTE]
 > The EF Core transport requires `UseInbox()` on all consume channels and a handler key on every handler. See [EF Core Transport](efcore-transport.md) for details.
+> If you use RabbitMQ and still want to enforce the same rule, configure `WithConsumeChannelInboxRequirement(ConsumeChannelInboxRequirement.Fail)` in [Inbox](inbox.md).
 
 ## EF Core Migrations
 

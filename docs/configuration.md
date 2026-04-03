@@ -28,6 +28,7 @@ builder.Services.AddRatatoskr(bus =>
 | `.Consumes<T>(m => ...)` | Register a message type and handlers on a consume channel | [Messages & Handlers](messages-handlers.md) |
 | `.WithHandler<T>()` | Fire-and-forget handler (no persistence) | [Messages & Handlers](messages-handlers.md) |
 | `.WithHandler<T>("key")` | Inbox-managed handler with stable key | [Inbox](inbox.md) |
+| `.AllowConsumeWithoutInbox()` | Explicit opt-out from optional consume-channel inbox requirement policy | [Inbox](inbox.md) |
 
 ### Attributes
 
@@ -147,6 +148,7 @@ bus.AddEfCoreDurability<OrderDbContext>(d =>
 | `WithCleanupInterval(TimeSpan)` | `1h` | Cleanup run interval | [Inbox](inbox.md) |
 | `WithCleanupBatchSize(int)` | `10,000` | Cleanup batch size | [Inbox](inbox.md) |
 | `WithCleanupLockName(string)` | `"InboxCleanup_{DbContext}"` | Cleanup distributed lock name | [Operations](operations.md) |
+| `WithConsumeChannelInboxRequirement(ConsumeChannelInboxRequirement)` | `None` | Optional safeguard: warn/fail when consume channels omit `UseInbox()` | [Inbox](inbox.md) |
 | `WithoutBackgroundProcessing()` | — | Disable background service (testing) | [Testing](testing.md) |
 
 ## AsyncAPI

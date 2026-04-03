@@ -1,8 +1,10 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Ratatoskr.Config;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
+using Ratatoskr.EfCore.Internal;
 using Ratatoskr.Tests.Fixtures;
 using TUnit.Core;
 
@@ -187,6 +189,111 @@ public class InboxConfigurationValidatorTests
         // Act & Assert
         var act = () => InboxConfigurationValidator.Validate(channelRegistry, handlerRegistry);
         act.Should().NotThrow();
+    }
+
+    [Test]
+    public void Validate_ChannelWithoutUseInbox_RequirementFail_Throws()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var builder = new RatatoskrBuilder(services);
+        builder.AddEventConsumeChannel("test-channel", c => c
+            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+
+        var channelRegistry = builder.ChannelRegistry;
+        var handlerRegistry = ChannelHandlerRegistry.Build(channelRegistry);
+        var policyAggregator = new ConsumeChannelInboxPolicyAggregator();
+        policyAggregator.MergeRequirement(ConsumeChannelInboxRequirement.Fail);
+
+        // Act & Assert
+        var act = () => InboxConfigurationValidator.Validate(channelRegistry, handlerRegistry, policyAggregator);
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*AllowConsumeWithoutInbox()*");
+    }
+
+    [Test]
+    public void Validate_ChannelWithoutUseInbox_RequirementFail_WithExplicitOptOut_DoesNotThrow()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var builder = new RatatoskrBuilder(services);
+        builder.AddEventConsumeChannel("test-channel", c => c
+            .AllowConsumeWithoutInbox()
+            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+
+        var channelRegistry = builder.ChannelRegistry;
+        var handlerRegistry = ChannelHandlerRegistry.Build(channelRegistry);
+        var policyAggregator = new ConsumeChannelInboxPolicyAggregator();
+        policyAggregator.MergeRequirement(ConsumeChannelInboxRequirement.Fail);
+
+        // Act & Assert
+        var act = () => InboxConfigurationValidator.Validate(channelRegistry, handlerRegistry, policyAggregator);
+        act.Should().NotThrow();
+    }
+
+    [Test]
+    public void Validate_ChannelWithoutUseInbox_RequirementWarn_AddsWarning()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var builder = new RatatoskrBuilder(services);
+        builder.AddEventConsumeChannel("test-channel", c => c
+            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+
+        var channelRegistry = builder.ChannelRegistry;
+        var handlerRegistry = ChannelHandlerRegistry.Build(channelRegistry);
+        var policyAggregator = new ConsumeChannelInboxPolicyAggregator();
+        policyAggregator.MergeRequirement(ConsumeChannelInboxRequirement.Warn);
+
+        // Act
+        var act = () => InboxConfigurationValidator.Validate(channelRegistry, handlerRegistry, policyAggregator);
+
+        // Assert
+        act.Should().NotThrow();
+        policyAggregator.WarningCount.Should().Be(1);
+        policyAggregator.DrainWarnings().Should().ContainSingle()
+            .Which.Should().Contain("AllowConsumeWithoutInbox()");
+    }
+
+    [Test]
+    public void AddEfCoreDurability_WithConsumeChannelInboxRequirementFail_ThrowsAtStartup()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act & Assert
+        var act = () => services.AddRatatoskr(bus =>
+        {
+            bus.AddEventConsumeChannel("test-channel", c => c
+                .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+            bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox =>
+                inbox.WithConsumeChannelInboxRequirement(ConsumeChannelInboxRequirement.Fail)));
+        });
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*AllowConsumeWithoutInbox()*");
+    }
+
+    [Test]
+    public void AddEfCoreDurability_WithConsumeChannelInboxRequirementWarn_RegistersWarningHostedService()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        var act = () => services.AddRatatoskr(bus =>
+        {
+            bus.AddEventConsumeChannel("test-channel", c => c
+                .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+            bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox =>
+                inbox.WithConsumeChannelInboxRequirement(ConsumeChannelInboxRequirement.Warn)));
+        });
+
+        // Assert
+        act.Should().NotThrow();
+        services.Any(d => d.ServiceType == typeof(IHostedService) &&
+                          d.ImplementationType == typeof(ConsumeChannelInboxWarningHostedService))
+            .Should().BeTrue();
     }
 }
 
