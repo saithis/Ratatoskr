@@ -221,14 +221,14 @@ services.AddRatatoskr(bus =>
     // ... channel configuration ...
 });
 
-// In the test body, trigger processing manually:
+// In the test body, trigger processing manually (use true to match production / recover stuck rows):
 var processor = Services.GetRequiredService<InboxMessageProcessor<OrderDbContext>>();
 await processor.ProcessBatchAsync(
-    includeStuckMessageDetection: false,
+    includeStuckMessageDetection: true,
     CancellationToken.None);
 ```
 
-This gives you full control over when inbox processing runs, so you can inspect database state between acceptance and delivery.
+This gives you full control over when inbox processing runs, so you can inspect database state between acceptance and delivery. With `includeStuckMessageDetection: false`, only rows that have never been claimed (`ProcessingStartedAt == null`) are eligible; this avoids concurrent processors picking the same row while another worker is sending, but it also skips stuck recovery until you pass `true` or advance time.
 
 > [!NOTE]
 > `WithoutBackgroundProcessing()` also disables the cleanup service.
