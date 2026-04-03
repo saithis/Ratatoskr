@@ -13,8 +13,8 @@ public sealed class TestEventPipeMessageSerializer : IMessageSerializer
             throw new InvalidOperationException(
                 $"This serializer supports '{nameof(TestEvent)}' only.");
 
-        var encodedId = Convert.ToBase64String(Encoding.UTF8.GetBytes(testEvent.Id));
-        var encodedData = Convert.ToBase64String(Encoding.UTF8.GetBytes(testEvent.Data));
+        var encodedId = Convert.ToBase64String(Encoding.UTF8.GetBytes(testEvent.Id ?? string.Empty));
+        var encodedData = Convert.ToBase64String(Encoding.UTF8.GetBytes(testEvent.Data ?? string.Empty));
         return Encoding.UTF8.GetBytes($"{encodedId}:{encodedData}");
     }
 

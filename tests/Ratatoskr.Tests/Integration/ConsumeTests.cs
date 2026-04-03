@@ -340,26 +340,13 @@ public class ConsumeTests(
 
     private async Task PublishBinaryCloudEventAsync(string routingKey, TestEvent eventData)
     {
-        var factory = new ConnectionFactory { Uri = new Uri(RabbitMqConnectionString) };
-        await using var connection = await factory.CreateConnectionAsync();
-        await using var channel = await connection.CreateChannelAsync();
-
         var json = System.Text.Json.JsonSerializer.Serialize(eventData);
         var body = Encoding.UTF8.GetBytes(json);
-
-        var props = new BasicProperties
-        {
-            ContentType = "application/json",
-            Headers = new Dictionary<string, object?>
-            {
-                ["cloudEvents_specversion"] = "1.0",
-                ["cloudEvents_type"] = "test.event",
-                ["cloudEvents_source"] = "/test",
-                ["cloudEvents_id"] = Guid.NewGuid().ToString()
-            }
-        };
-        
-        await channel.BasicPublishAsync(exchange: "", routingKey: routingKey, mandatory: false, basicProperties: props, body: body);
+        await PublishBinaryCloudEventRawAsync(
+            routingKey,
+            body,
+            contentType: "application/json",
+            type: "test.event");
     }
 
     private async Task PublishBinaryCloudEventRawAsync(string routingKey, byte[] body, string contentType, string type)
@@ -368,7 +355,14 @@ public class ConsumeTests(
         await using var connection = await factory.CreateConnectionAsync();
         await using var channel = await connection.CreateChannelAsync();
 
-        var props = new BasicProperties
+        var props = CreateBinaryCloudEventProperties(contentType, type);
+
+        await channel.BasicPublishAsync(exchange: "", routingKey: routingKey, mandatory: false, basicProperties: props, body: body);
+    }
+
+    private static BasicProperties CreateBinaryCloudEventProperties(string contentType, string type)
+    {
+        return new BasicProperties
         {
             ContentType = contentType,
             Headers = new Dictionary<string, object?>
@@ -379,8 +373,6 @@ public class ConsumeTests(
                 ["cloudEvents_id"] = Guid.NewGuid().ToString()
             }
         };
-
-        await channel.BasicPublishAsync(exchange: "", routingKey: routingKey, mandatory: false, basicProperties: props, body: body);
     }
 
     private async Task PublishStructuredCloudEventAsync(string routingKey, TestEvent eventData)
