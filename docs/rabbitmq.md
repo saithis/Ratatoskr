@@ -150,6 +150,16 @@ app.MapHealthChecks("/health");
 
 The `RabbitMqConsumer` automatically reconnects with exponential backoff (1 second to 30 seconds with jitter) when the connection to RabbitMQ is lost. No manual intervention is required for transient network issues.
 
+## Graceful shutdown
+
+On application shutdown, `RabbitMqConsumer` stops new deliveries before closing AMQP channels:
+
+1. **Cancel consumers** — `BasicCancel` for each subscription so the broker stops sending new messages.
+2. **Drain in-flight handlers** — waits until running `RouteAsync` / handler work completes (up to `RabbitMqOptions.ShutdownDrainTimeout`, default **30 seconds**).
+3. **Close channels** — after the execute loop stops and handlers have drained.
+
+Set `ShutdownDrainTimeout` if handlers can run longer than the default. Also set the host’s [`HostOptions.ShutdownTimeout`](https://learn.microsoft.com/dotnet/api/microsoft.extensions.hosting.hostoptions.shutdowntimeout) (default 30 seconds) so the process is not torn down while the consumer is still draining.
+
 ## What's Next
 
 - [EF Core Transport](efcore-transport.md) — Database-based message delivery without a broker

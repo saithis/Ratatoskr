@@ -48,11 +48,6 @@ Validation approach:
 
 ### A-HIGH-7 · Graceful shutdown does not drain in-flight consumer messages
 
-- Verdict: `Valid`
-- Severity: Medium-High
-- Detail: `RabbitMqConsumer.StopAsync` calls `base.StopAsync` and then immediately closes channels. It does not stop accepting new deliveries first and wait for in-flight handlers to finish ACKing. Unacknowledged messages are returned to the queue by RabbitMQ (safe but causes re-processing). Inbox messages whose `ProcessingStartedAt` was set will not be retried until the stuck-message threshold (default 5 min) expires.
-- Evidence: `src/Ratatoskr.RabbitMq/RabbitMqConsumer.cs` (lines 297–304)
-- Source(s): Claude
 
 ### A-MED-1 · No per-channel serializer or content-type negotiation *(priority elevated from Medium)*
 
