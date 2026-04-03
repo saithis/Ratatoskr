@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Linq;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
@@ -24,7 +25,8 @@ internal class RabbitMqConsumer(
     : BackgroundService
 {
     private readonly Lock _channelsLock = new();
-    private readonly List<IChannel> _channels = new();
+    private readonly List<(IChannel Channel, string ConsumerTag)> _consumers = new();
+    private int _inFlightHandlers;
     private static readonly TimeSpan InitialReconnectDelay = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan MaxReconnectDelay = TimeSpan.FromSeconds(30);
 
@@ -37,7 +39,7 @@ internal class RabbitMqConsumer(
         {
             lock (_channelsLock)
             {
-                return _channels.Count > 0 && _channels.All(c => c.IsOpen);
+                return _consumers.Count > 0 && _consumers.All(c => c.Channel.IsOpen);
             }
         }
     }
@@ -128,7 +130,7 @@ internal class RabbitMqConsumer(
 
             logger.LogInformation("Starting consuming from queue '{Queue}' for channel '{Channel}'", channelOptions.QueueName, reg.ChannelName);
 
-            await channel.BasicConsumeAsync(
+            var consumerTag = await channel.BasicConsumeAsync(
                 queue: channelOptions.QueueName!,
                 autoAck: channelOptions.AutoAck,
                 consumer: consumer,
@@ -136,7 +138,67 @@ internal class RabbitMqConsumer(
 
             lock (_channelsLock)
             {
-                _channels.Add(channel);
+                _consumers.Add((channel, consumerTag));
+            }
+        }
+    }
+
+    private async Task CancelConsumersAsync(CancellationToken cancellationToken)
+    {
+        List<(IChannel Channel, string ConsumerTag)> snapshot;
+        lock (_channelsLock)
+        {
+            snapshot = [.._consumers];
+        }
+
+        var cancelTasks = snapshot.Select(async entry =>
+        {
+            try
+            {
+                if (entry.Channel.IsOpen)
+                    await entry.Channel.BasicCancelAsync(entry.ConsumerTag, noWait: false, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Error cancelling RabbitMQ consumer {ConsumerTag}", entry.ConsumerTag);
+            }
+        });
+
+        await Task.WhenAll(cancelTasks);
+    }
+
+    private async Task WaitForInFlightDrainAsync(CancellationToken cancellationToken)
+    {
+        var timeout = options.ShutdownDrainTimeout;
+        if (timeout <= TimeSpan.Zero)
+            return;
+
+        var deadline = timeProvider.GetUtcNow() + timeout;
+        while (Volatile.Read(ref _inFlightHandlers) > 0)
+        {
+            if (timeProvider.GetUtcNow() >= deadline)
+            {
+                logger.LogWarning(
+                    "Shutdown drain timed out after {Timeout}; {InFlight} handler(s) still in flight",
+                    timeout,
+                    Volatile.Read(ref _inFlightHandlers));
+                return;
+            }
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(20), timeProvider, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                logger.LogWarning(
+                    "Shutdown drain interrupted by host cancellation; {InFlight} handler(s) still in flight",
+                    Volatile.Read(ref _inFlightHandlers));
+                return;
             }
         }
     }
@@ -146,8 +208,8 @@ internal class RabbitMqConsumer(
         List<IChannel> channelsToCleanup;
         lock (_channelsLock)
         {
-            channelsToCleanup = [.._channels];
-            _channels.Clear();
+            channelsToCleanup = [.._consumers.Select(c => c.Channel)];
+            _consumers.Clear();
         }
 
         foreach (var channel in channelsToCleanup)
@@ -176,6 +238,25 @@ internal class RabbitMqConsumer(
     }
 
     private async Task HandleMessageAsync(
+        IChannel channel,
+        BasicDeliverEventArgs ea,
+        RabbitMqChannelOptions channelOptions,
+        string queueName,
+        string channelName,
+        CancellationToken cancellationToken)
+    {
+        Interlocked.Increment(ref _inFlightHandlers);
+        try
+        {
+            await HandleMessageCoreAsync(channel, ea, channelOptions, queueName, channelName, cancellationToken);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _inFlightHandlers);
+        }
+    }
+
+    private async Task HandleMessageCoreAsync(
         IChannel channel,
         BasicDeliverEventArgs ea,
         RabbitMqChannelOptions channelOptions,
@@ -315,8 +396,23 @@ internal class RabbitMqConsumer(
     {
         logger.LogInformation("Stopping RabbitMQ consumer");
 
-        await base.StopAsync(cancellationToken);
+        try
+        {
+            try
+            {
+                await CancelConsumersAsync(cancellationToken);
+                await WaitForInFlightDrainAsync(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Host shutdown timeout may cancel mid-drain; still stop background work and close channels.
+            }
 
-        await CleanupChannelsAsync();
+            await base.StopAsync(cancellationToken);
+        }
+        finally
+        {
+            await CleanupChannelsAsync();
+        }
     }
 }
