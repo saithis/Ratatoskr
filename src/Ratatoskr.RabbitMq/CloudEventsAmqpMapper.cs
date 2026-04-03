@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using Ratatoskr.CloudEvents;
@@ -13,7 +14,8 @@ namespace Ratatoskr.RabbitMq;
 /// See: https://github.com/cloudevents/spec/blob/main/cloudevents/bindings/amqp-protocol-binding.md
 /// </summary>
 public class CloudEventsAmqpMapper(
-    CloudEventsOptions options) : IRabbitMqEnvelopeMapper
+    CloudEventsOptions options,
+    ILogger<CloudEventsAmqpMapper> logger) : IRabbitMqEnvelopeMapper
 {
     public byte[] MapOutgoing(byte[] serializedData, MessageProperties props, BasicProperties outgoing)
     {
@@ -203,9 +205,16 @@ public class CloudEventsAmqpMapper(
         var incomingHeaders = incoming.BasicProperties.Headers ?? new Dictionary<string, object?>();
         
         // Prefer standard RabbitMQ properties over CloudEvents headers (Wolverine compatibility)
-        var id = incoming.BasicProperties.MessageId 
-                 ?? GetCloudEventHeader(incomingHeaders, CloudEventsAmqpConstants.IdHeader) 
-                 ?? Guid.NewGuid().ToString();
+        var id = incoming.BasicProperties.MessageId
+                 ?? GetCloudEventHeader(incomingHeaders, CloudEventsAmqpConstants.IdHeader);
+        if (id is null)
+        {
+            id = Guid.NewGuid().ToString();
+            logger.LogWarning(
+                "Incoming binary CloudEvent has no id (AMQP message-id and cloudEvents_id are missing). " +
+                "Generated id {GeneratedEventId}. Per CloudEvents spec, id is required; inbox deduplication will not treat replays of this message as duplicates.",
+                id);
+        }
         
         var type = incoming.BasicProperties.Type
                    ?? GetCloudEventHeader(incomingHeaders, CloudEventsAmqpConstants.TypeHeader)

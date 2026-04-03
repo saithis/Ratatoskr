@@ -1,5 +1,6 @@
 using System.Text;
 using AwesomeAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using RabbitMQ.Client;
 using Ratatoskr.CloudEvents;
 using Ratatoskr.Core;
@@ -10,7 +11,7 @@ namespace Ratatoskr.Tests.RabbitMq;
 
 public class CloudEventsAmqpMapperOutgoingTests
 {
-    private readonly CloudEventsAmqpMapper _mapper = new(new CloudEventsOptions());
+    private readonly CloudEventsAmqpMapper _mapper = new(new CloudEventsOptions(), NullLogger<CloudEventsAmqpMapper>.Instance);
 
     [Test]
     public void MapOutgoing_BinaryMode_SetsAllCloudEventHeaders()
@@ -72,7 +73,9 @@ public class CloudEventsAmqpMapperOutgoingTests
     public void MapOutgoing_StructuredMode_BodyContainsCloudEventEnvelope()
     {
         // Arrange
-        var structuredMapper = new CloudEventsAmqpMapper(new CloudEventsOptions { ContentMode = CloudEventsContentMode.Structured });
+        var structuredMapper = new CloudEventsAmqpMapper(
+            new CloudEventsOptions { ContentMode = CloudEventsContentMode.Structured },
+            NullLogger<CloudEventsAmqpMapper>.Instance);
         var now = DateTimeOffset.UtcNow;
         var props = new MessageProperties
         {
@@ -101,7 +104,9 @@ public class CloudEventsAmqpMapperOutgoingTests
     public void MapOutgoing_StructuredMode_ContentTypeIsCloudEventsJson()
     {
         // Arrange
-        var structuredMapper = new CloudEventsAmqpMapper(new CloudEventsOptions { ContentMode = CloudEventsContentMode.Structured });
+        var structuredMapper = new CloudEventsAmqpMapper(
+            new CloudEventsOptions { ContentMode = CloudEventsContentMode.Structured },
+            NullLogger<CloudEventsAmqpMapper>.Instance);
         var props = new MessageProperties
         {
             Id = "evt-123",
@@ -319,7 +324,9 @@ public class CloudEventsAmqpMapperOutgoingTests
     public void MapStructuredMode_ShouldNotIncludeRatatoskrHeaders()
     {
         // Arrange
-        var mapper = new CloudEventsAmqpMapper(new CloudEventsOptions { ContentMode = CloudEventsContentMode.Structured });
+        var mapper = new CloudEventsAmqpMapper(
+            new CloudEventsOptions { ContentMode = CloudEventsContentMode.Structured },
+            NullLogger<CloudEventsAmqpMapper>.Instance);
 
         var props = new MessageProperties
         {
