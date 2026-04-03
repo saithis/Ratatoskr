@@ -28,9 +28,9 @@ public class TestDbContext : DbContext, IOutboxDbContext, IInboxDbContext
         });
 
         // Configure outbox entities
-        modelBuilder.AddOutboxEntities();
+        modelBuilder.AddOutboxEntities(Database);
 
         // Configure inbox entities
-        modelBuilder.AddInboxEntities();
+        modelBuilder.AddInboxEntities(Database);
     }
 }

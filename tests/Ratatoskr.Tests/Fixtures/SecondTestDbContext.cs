@@ -27,7 +27,7 @@ public class SecondTestDbContext : DbContext, IOutboxDbContext, IInboxDbContext
             entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
         });
 
-        modelBuilder.AddOutboxEntities();
-        modelBuilder.AddInboxEntities();
+        modelBuilder.AddOutboxEntities(Database);
+        modelBuilder.AddInboxEntities(Database);
     }
 }

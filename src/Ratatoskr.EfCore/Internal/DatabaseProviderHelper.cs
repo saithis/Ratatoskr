@@ -16,9 +16,9 @@ internal static class DatabaseProviderHelper
     /// Returns a filter expression for the outbox processing index, or null if the provider
     /// does not support filtered indexes (e.g. SQLite, InMemory).
     /// </summary>
-    public static string? GetOutboxProcessingFilter(DatabaseFacade? database)
+    public static string? GetOutboxProcessingFilter(DatabaseFacade database)
     {
-        return database?.ProviderName switch
+        return database.ProviderName switch
         {
             PostgresProvider => "\"ProcessedAt\" IS NULL AND \"IsPoisoned\" = false",
             SqlServerProvider => "[ProcessedAt] IS NULL AND [IsPoisoned] = 0",
@@ -30,9 +30,9 @@ internal static class DatabaseProviderHelper
     /// Returns a filter expression for the inbox handler status processing index, or null if the provider
     /// does not support filtered indexes.
     /// </summary>
-    public static string? GetInboxProcessingFilter(DatabaseFacade? database)
+    public static string? GetInboxProcessingFilter(DatabaseFacade database)
     {
-        return database?.ProviderName switch
+        return database.ProviderName switch
         {
             PostgresProvider => "\"CompletedAt\" IS NULL AND \"IsPoisoned\" = false",
             SqlServerProvider => "[CompletedAt] IS NULL AND [IsPoisoned] = 0",

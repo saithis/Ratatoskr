@@ -127,16 +127,11 @@ public static class PublicApiExtensions
 
     /// <summary>
     /// Adds the necessary outbox entities to the DB model.
+    /// Pass <see cref="DbContext.Database"/> so a partial/filtered index can be applied for supported
+    /// providers (PostgreSQL, SQL Server). Omitting it previously caused full-table indexes and severe
+    /// performance issues on large outbox tables.
     /// </summary>
-    public static void AddOutboxEntities(this ModelBuilder modelBuilder) =>
-        modelBuilder.AddOutboxEntities(database: null);
-
-    /// <summary>
-    /// Adds the necessary outbox entities to the DB model.
-    /// When <paramref name="database"/> is provided, a partial/filtered index is applied
-    /// for supported providers (PostgreSQL, SQL Server) to improve query performance on large tables.
-    /// </summary>
-    public static void AddOutboxEntities(this ModelBuilder modelBuilder, DatabaseFacade? database)
+    public static void AddOutboxEntities(this ModelBuilder modelBuilder, DatabaseFacade database)
     {
         modelBuilder.Entity<OutboxMessageEntity>(entity =>
         {

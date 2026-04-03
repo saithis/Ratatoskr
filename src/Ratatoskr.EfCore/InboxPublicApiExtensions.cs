@@ -39,16 +39,11 @@ public static class InboxPublicApiExtensions
     /// <summary>
     /// Adds the necessary inbox entities to the DB model.
     /// Call this inside <c>OnModelCreating</c> of your DbContext.
+    /// Pass <see cref="DbContext.Database"/> so a partial/filtered index can be applied for supported
+    /// providers (PostgreSQL, SQL Server). Omitting it previously caused full-table indexes and severe
+    /// performance issues on large inbox handler status tables.
     /// </summary>
-    public static void AddInboxEntities(this ModelBuilder modelBuilder) =>
-        modelBuilder.AddInboxEntities(database: null);
-
-    /// <summary>
-    /// Adds the necessary inbox entities to the DB model.
-    /// When <paramref name="database"/> is provided, a partial/filtered index is applied
-    /// for supported providers (PostgreSQL, SQL Server) to improve query performance on large tables.
-    /// </summary>
-    public static void AddInboxEntities(this ModelBuilder modelBuilder, DatabaseFacade? database)
+    public static void AddInboxEntities(this ModelBuilder modelBuilder, DatabaseFacade database)
     {
         modelBuilder.Entity<InboxMessageEntity>(entity =>
         {

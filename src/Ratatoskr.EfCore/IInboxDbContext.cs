@@ -2,7 +2,7 @@ namespace Ratatoskr.EfCore;
 
 /// <summary>
 /// Interface that DbContext classes must implement to support the inbox pattern.
-/// The DbContext must also call <c>modelBuilder.AddInboxEntities()</c> in <c>OnModelCreating</c>.
+/// The DbContext must also call <c>modelBuilder.AddInboxEntities(Database)</c> in <c>OnModelCreating</c>.
 /// </summary>
 /// <example>
 /// <code>
@@ -13,7 +13,7 @@ namespace Ratatoskr.EfCore;
 ///     protected override void OnModelCreating(ModelBuilder modelBuilder)
 ///     {
 ///         base.OnModelCreating(modelBuilder);
-///         modelBuilder.AddInboxEntities();
+///         modelBuilder.AddInboxEntities(Database);
 ///     }
 /// }
 /// </code>
