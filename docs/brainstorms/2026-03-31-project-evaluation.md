@@ -186,23 +186,6 @@ Performance-only concerns that do not affect correctness or functional requireme
 
 ---
 
-## Section C — Test Coverage Gaps
-
-All gaps below were identified by Claude. None have been re-tested as part of this validation pass; they are listed as reported.
-
-| # | Severity | Missing test scenario |
-|---|----------|-----------------------|
-| T1 | Medium | Outbox `MaxMessageSize` validation and transaction rollback |
-| T2 | Medium | Outbox concurrent processor contention (`DbUpdateConcurrencyException` path) |
-| T3 | Low | `PollingBackgroundService` distributed lock loss handling |
-| T4 | Low | Inbox message `ReceivedAt` timestamp correctness |
-| T5 | Low | `OutboxStagingCollection.Add(object)` non-generic overload |
-| T6 | Low | `InboxMessageProcessor` missing message record (deleted between query and lookup) |
-| T7 | Low | Inbox `SerializedProperties` deserialization failure poisoning |
-| T8 | Low | Concurrent deduplication test may not reliably exercise true concurrency |
-
----
-
 ## Section D — Non-Functional Enterprise Risks
 
 These are procurement/adoption risks beyond the functional requirement set. They do not necessarily require code changes but must have documented positions before enterprise sign-off.

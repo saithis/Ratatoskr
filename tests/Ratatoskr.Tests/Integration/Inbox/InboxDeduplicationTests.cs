@@ -1,3 +1,4 @@
+using System.Threading;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -94,23 +95,31 @@ public class InboxDeduplicationTests(RabbitMqContainerFixture rabbitMq, Postgres
 
         const string sharedMessageId = "concurrent-dedup-1";
 
-        // Act: publish the same message ID concurrently from two tasks
+        // Act: rendezvous on the thread pool so Barrier.SignalAndWait does not block the async test context.
+        var barrier = new Barrier(2);
         await Task.WhenAll(
-            InScopeAsync(async ctx =>
+            Task.Run(async () =>
             {
-                var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
-                await bus.PublishDirectAsync(
-                    new TestEvent { Id = "business-concurrent-1" },
-                    new MessageProperties { Id = sharedMessageId });
+                await InScopeAsync(async ctx =>
+                {
+                    var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+                    barrier.SignalAndWait();
+                    await bus.PublishDirectAsync(
+                        new TestEvent { Id = "business-concurrent-1" },
+                        new MessageProperties { Id = sharedMessageId });
+                });
             }),
-            InScopeAsync(async ctx =>
+            Task.Run(async () =>
             {
-                var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
-                await bus.PublishDirectAsync(
-                    new TestEvent { Id = "business-concurrent-2" },
-                    new MessageProperties { Id = sharedMessageId });
-            })
-        );
+                await InScopeAsync(async ctx =>
+                {
+                    var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+                    barrier.SignalAndWait();
+                    await bus.PublishDirectAsync(
+                        new TestEvent { Id = "business-concurrent-2" },
+                        new MessageProperties { Id = sharedMessageId });
+                });
+            }));
 
         // Process inbox deterministically
         await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));

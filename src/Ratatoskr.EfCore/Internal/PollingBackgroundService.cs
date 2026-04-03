@@ -102,7 +102,15 @@ internal abstract class PollingBackgroundService(
             await ProcessBatchesAsync(processingToken);
             LastSuccessfulProcessingAt = timeProvider.GetUtcNow();
         }
-        catch (OperationCanceledException) when (dLock.HandleLostToken.IsCancellationRequested)
+        // processingToken links stoppingToken + HandleLostToken. If work is canceled while the host is
+        // still running, the only source is HandleLostToken (lock loss). Do not rely on
+        // HandleLostToken.IsCancellationRequested in the filter — it can disagree with the token on
+        // OperationCanceledException/TaskCanceledException from Task.Delay in some runtimes.
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            logger.LogInformation("Stopping signal received during {Processor} processing", ProcessorName);
+        }
+        catch (OperationCanceledException) when (dLock.HandleLostToken.CanBeCanceled)
         {
             logger.LogWarning("Distributed lock was lost during {Processor} processing", ProcessorName);
             RatatoskrDiagnostics.LockLost.Add(1, new TagList { { "processor", ProcessorName } });

@@ -505,6 +505,124 @@ public class InboxErrorHandlingTests(RabbitMqContainerFixture rabbitMq, Postgres
         });
     }
 
+    [Test]
+    public async Task Inbox_HandlerStatusWithoutMessage_Poisoned()
+    {
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("orphan-handler"))
+                    .UseInbox<TestDbContext>());
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox => inbox.WithoutBackgroundProcessing()));
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await InitializeDatabase();
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            await DropInboxMessageForeignKeyAsync(db);
+        });
+
+        const string messageId = "orphan-msg-1";
+        await InScopeAsync(async ctx =>
+        {
+            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+            await bus.PublishDirectAsync(
+                new TestEvent { Id = "business-orphan-1" },
+                new MessageProperties { Id = messageId });
+        });
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var msgTable = db.Model.FindEntityType(typeof(InboxMessageEntity))!.GetTableName()!;
+            var deleteSql = $@"DELETE FROM ""{msgTable}"" WHERE ""Id"" = {{0}}";
+            await db.Database.ExecuteSqlRawAsync(deleteSql, messageId);
+        });
+
+        await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var status = await db.Set<InboxHandlerStatusEntity>().SingleAsync(s => s.MessageId == messageId);
+            status.IsPoisoned.Should().BeTrue();
+            status.LastError.Should().Contain("InboxMessage record not found");
+        });
+    }
+
+    [Test]
+    public async Task Inbox_InvalidSerializedProperties_PoisonedHandlerStatus()
+    {
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("bad-props-handler"))
+                    .UseInbox<TestDbContext>());
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox => inbox.WithoutBackgroundProcessing()));
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await InitializeDatabase();
+
+        const string messageId = "bad-props-1";
+        await InScopeAsync(async ctx =>
+        {
+            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+            await bus.PublishDirectAsync(
+                new TestEvent { Id = "business-bad-props-1" },
+                new MessageProperties { Id = messageId });
+        });
+
+        await WaitForInboxEntriesAsync(1);
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var msgTable = db.Model.FindEntityType(typeof(InboxMessageEntity))!.GetTableName()!;
+            var updateSql = $@"UPDATE ""{msgTable}"" SET ""SerializedProperties"" = {{0}} WHERE ""Id"" = {{1}}";
+            await db.Database.ExecuteSqlRawAsync(updateSql, "{not-json", messageId);
+        });
+
+        await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var status = await db.Set<InboxHandlerStatusEntity>().SingleAsync(s => s.MessageId == messageId);
+            status.IsPoisoned.Should().BeTrue();
+            status.LastError.Should().Contain("Properties deserialization failed");
+        });
+    }
+
+    private static async Task DropInboxMessageForeignKeyAsync(TestDbContext db)
+    {
+        var dependent = db.Model.FindEntityType(typeof(InboxHandlerStatusEntity))!;
+        var fk = dependent.GetForeignKeys().Single(f => f.PrincipalEntityType.ClrType == typeof(InboxMessageEntity));
+        var constraintName = fk.GetConstraintName();
+        constraintName.Should().NotBeNullOrEmpty();
+
+        var table = dependent.GetTableName()!;
+        var schema = dependent.GetSchema();
+        var qualifiedTable = string.IsNullOrEmpty(schema) ? $"\"{table}\"" : $"\"{schema}\".\"{table}\"";
+        var alterSql = $@"ALTER TABLE {qualifiedTable} DROP CONSTRAINT ""{constraintName}"";";
+        await db.Database.ExecuteSqlRawAsync(alterSql);
+    }
+
     private class LongErrorHandler : IMessageHandler<TestEvent>
     {
         public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
