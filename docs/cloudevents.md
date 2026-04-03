@@ -131,6 +131,8 @@ When using the RabbitMQ transport, the `CloudEventsAmqpMapper` handles encoding 
 - Maps incoming AMQP headers back to `MessageProperties` on consume
 - Propagates W3C trace context through `traceparent` and `tracestate` headers
 
+If an incoming binary message has neither AMQP `message-id` nor a `cloudEvents_id` header, the mapper still assigns a synthetic id (a new GUID) so processing can continue, but it logs a **warning**: CloudEvents requires `id`, and inbox deduplication will not recognize duplicate deliveries of that message. Publishers should always set a stable event id.
+
 ## Trace Context Propagation
 
 Ratatoskr injects W3C trace context into CloudEvents attributes automatically:

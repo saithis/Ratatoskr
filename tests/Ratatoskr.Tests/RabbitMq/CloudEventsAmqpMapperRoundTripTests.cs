@@ -1,5 +1,6 @@
 using System.Text;
 using AwesomeAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using Ratatoskr.CloudEvents;
@@ -10,7 +11,7 @@ namespace Ratatoskr.Tests.RabbitMq;
 
 public class CloudEventsAmqpMapperRoundTripTests
 {
-    private readonly CloudEventsAmqpMapper _mapper = new(new CloudEventsOptions());
+    private readonly CloudEventsAmqpMapper _mapper = new(new CloudEventsOptions(), NullLogger<CloudEventsAmqpMapper>.Instance);
 
     [Test]
     public void MapOutgoing_BinaryMode_RoundTripsCorrectly()
@@ -50,7 +51,9 @@ public class CloudEventsAmqpMapperRoundTripTests
     public void MapOutgoing_StructuredMode_RoundTripsCorrectly()
     {
         // Arrange
-        var structuredMapper = new CloudEventsAmqpMapper(new CloudEventsOptions { ContentMode = CloudEventsContentMode.Structured });
+        var structuredMapper = new CloudEventsAmqpMapper(
+            new CloudEventsOptions { ContentMode = CloudEventsContentMode.Structured },
+            NullLogger<CloudEventsAmqpMapper>.Instance);
         var now = new DateTimeOffset(2025, 6, 15, 12, 0, 0, TimeSpan.Zero);
         var originalProps = new MessageProperties
         {
@@ -107,7 +110,9 @@ public class CloudEventsAmqpMapperRoundTripTests
     public void MapOutgoing_StructuredMode_DataSchema_RoundTripsCorrectly()
     {
         // Arrange
-        var structuredMapper = new CloudEventsAmqpMapper(new CloudEventsOptions { ContentMode = CloudEventsContentMode.Structured });
+        var structuredMapper = new CloudEventsAmqpMapper(
+            new CloudEventsOptions { ContentMode = CloudEventsContentMode.Structured },
+            NullLogger<CloudEventsAmqpMapper>.Instance);
         var originalProps = new MessageProperties
         {
             Id = "ds-struct-id",

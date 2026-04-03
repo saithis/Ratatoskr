@@ -1,6 +1,8 @@
 using System.Text;
 using System.Text.Json;
 using AwesomeAssertions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using Ratatoskr.CloudEvents;
@@ -11,7 +13,7 @@ namespace Ratatoskr.Tests.RabbitMq;
 
 public class CloudEventsAmqpMapperIncomingTests
 {
-    private readonly CloudEventsAmqpMapper _mapper = new(new CloudEventsOptions());
+    private readonly CloudEventsAmqpMapper _mapper = new(new CloudEventsOptions(), NullLogger<CloudEventsAmqpMapper>.Instance);
 
     [Test]
     public void MapBinaryModeIncoming_ShouldMapTraceContext()
@@ -160,6 +162,49 @@ public class CloudEventsAmqpMapperIncomingTests
         result.props.Should().NotBeNull();
         result.props.Id.Should().NotBeNullOrEmpty();
         result.body.Should().NotBeEmpty();
+    }
+
+    [Test]
+    public void MapIncoming_BinaryMode_MissingId_LogsWarning()
+    {
+        var warnings = new List<string>();
+        using var factory = LoggerFactory.Create(b => b.AddProvider(new WarningCaptureLoggerProvider(warnings)));
+        var mapper = new CloudEventsAmqpMapper(new CloudEventsOptions(), factory.CreateLogger<CloudEventsAmqpMapper>());
+
+        var basicProperties = new BasicProperties { ContentType = "application/json" };
+        var body = Encoding.UTF8.GetBytes("{}");
+        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", basicProperties, body);
+
+        var result = mapper.MapIncoming(incoming);
+
+        result.props.Id.Should().NotBeNullOrEmpty();
+        warnings.Should().ContainSingle();
+        warnings[0].Should().Contain("Incoming binary CloudEvent has no id");
+        warnings[0].Should().Contain("inbox deduplication");
+    }
+
+    private sealed class WarningCaptureLoggerProvider(List<string> sink) : ILoggerProvider
+    {
+        public ILogger CreateLogger(string categoryName) => new WarningCaptureLogger(sink);
+        public void Dispose() { }
+    }
+
+    private sealed class WarningCaptureLogger(List<string> sink) : ILogger
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel == LogLevel.Warning)
+            {
+                sink.Add(formatter(state, exception));
+            }
+        }
     }
 
     [Test]
