@@ -63,6 +63,8 @@ All metrics are emitted on the `"Ratatoskr"` meter.
 | `ratatoskr.outbox.poison.count` | Counter | `{message}` | Outbox messages marked as poisoned |
 | `ratatoskr.outbox.process.duration` | Histogram | `s` | Duration of outbox processing batch |
 | `ratatoskr.outbox.batch.size` | Histogram | `{message}` | Messages picked up per outbox batch |
+| `ratatoskr.outbox.pending.messages` | Observable gauge | `1` | Rows still in the outbox (`ProcessedAt` is null, not poisoned); tagged `db_context` |
+| `ratatoskr.outbox.poisoned.messages` | Observable gauge | `1` | Rows still in the outbox, poisoned and not yet processed; tagged `db_context` |
 
 ### Inbox Metrics
 
@@ -72,6 +74,11 @@ All metrics are emitted on the `"Ratatoskr"` meter.
 | `ratatoskr.inbox.poison.count` | Counter | `{message}` | Inbox handler statuses marked as poisoned |
 | `ratatoskr.inbox.process.duration` | Histogram | `s` | Duration of inbox processing batch |
 | `ratatoskr.inbox.batch.size` | Histogram | `{message}` | Handler statuses picked up per inbox batch |
+| `ratatoskr.inbox.pending.statuses` | Observable gauge | `1` | Handler status rows not completed and not poisoned; tagged `db_context` |
+| `ratatoskr.inbox.poisoned.statuses` | Observable gauge | `1` | Handler status rows poisoned and not completed; tagged `db_context` |
+
+> [!NOTE]
+> **EF Core backlog gauges:** When you register durability with `AddEfCoreDurability`, the four observable gauges above are registered (inbox-only and outbox-only apps still expose all four names; the unused side reads as zero). Their values are refreshed in the background on a configurable interval (default **30 seconds**) using no-tracking `COUNT` queries, each with its own cancellation timeout (default **5 seconds**), so metric scrapes do not hit the database on every collection interval. Override defaults with `WithMetricsPollingInterval` and `WithMetricsQueryTimeout` on the durability builder. The **`db_context`** tag is the `DbContext` type’s **full name** (for example `MyApp.OrderDbContext`). If only the outbox or only the inbox is enabled for that context, the gauges for the disabled side stay at zero.
 
 ### Cleanup Metrics
 
@@ -134,6 +141,14 @@ rate(ratatoskr_lock_acquisition_failure_total[5m])
 
 # P99 message processing duration
 histogram_quantile(0.99, rate(messaging_process_duration_bucket[5m]))
+
+# Outbox backlog depth (gauges; names depend on your Prometheus/OTel mapping)
+ratatoskr_outbox_pending_messages
+ratatoskr_outbox_poisoned_messages
+
+# Inbox backlog depth
+ratatoskr_inbox_pending_statuses
+ratatoskr_inbox_poisoned_statuses
 ```
 
 ## What's Next

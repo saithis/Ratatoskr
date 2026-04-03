@@ -29,6 +29,8 @@ public static class PublicApiExtensions
                     $"AddEfCoreDurability<{typeof(TDbContext).Name}>() was called more than once. Merge UseInbox()/UseOutbox() into a single registration.");
 
             builder.Services.AddSingleton<DurabilityMarker<TDbContext>>();
+            builder.Services.TryAddSingleton<EfCoreMetricsState>();
+            builder.Services.TryAddSingleton<EfCoreBacklogGauges>();
 
             var durabilityBuilder = new DurabilityBuilder<TDbContext>();
             configure(durabilityBuilder);
@@ -42,6 +44,11 @@ public static class PublicApiExtensions
 
             if (durabilityBuilder.OutboxBuilder != null)
                 RegisterOutboxServices<TDbContext>(builder, durabilityBuilder.OutboxBuilder);
+
+            builder.Services.AddSingleton(_ => new EfCoreMetricsSettings<TDbContext>(
+                durabilityBuilder.MetricsPollingInterval,
+                durabilityBuilder.MetricsQueryTimeout));
+            builder.Services.AddHostedService<EfCoreMetricsBackgroundService<TDbContext>>();
 
             return builder;
         }

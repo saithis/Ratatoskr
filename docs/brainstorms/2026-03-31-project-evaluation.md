@@ -39,14 +39,6 @@ Validation approach:
 - Evidence: `src/Ratatoskr.RabbitMq/CloudEventsAmqpMapper.cs`, `src/Ratatoskr/Core/MessageDispatcher.cs`
 - Source(s): Checklist (A3), Claude
 
-### A-HIGH-4 · No backlog-depth gauge metrics (operational blind spot)
-
-- Verdict: `Valid`
-- Severity: High
-- Detail: All instrumentation uses counters and histograms. There is no `ObservableGauge` or `UpDownCounter` for pending outbox rows, pending inbox statuses, or poisoned message counts. Operators cannot monitor queue depth without querying the DB directly.
-- Evidence: `src/Ratatoskr/Core/RatatoskrDiagnostics.cs`
-- Source(s): Claude
-
 ### A-HIGH-5 · Manual retry is SQL-only (no built-in API or UI)
 
 - Verdict: `Partially valid`
@@ -85,15 +77,6 @@ Validation approach:
 - Detail: No `IMessageUpgrader`, schema registry, or version component in `MessageProperties.Type`. The inbox stores raw `byte[]`; if the CLR type's shape changes, deserialization of old messages fails or silently loses data. Only additive, backward-compatible changes are safe. Breaking changes require fully draining in-flight inbox/outbox rows first.
 - Evidence: `src/Ratatoskr/Core/MessageProperties.cs`, `src/Ratatoskr.EfCore/Internal/InboxMessageEntity.cs`
 - Source(s): Claude
-
-### A-MED-4 · ~~Handler key stability is operationally critical and fragile across deployments~~ ✅ DONE
-
-- Verdict: `Valid`
-- Severity: Medium (operational coupling)
-- Detail: Renaming a handler key between deployments immediately poisons all in-flight statuses for that key. Documentation warns about this, but there is no framework-level rename migration or grace period.
-- Evidence: `src/Ratatoskr.EfCore/Internal/InboxMessageProcessor.cs` (lines 129–149), `docs/inbox.md`
-- Source(s): Claude
-- **Resolution:** Documented handler key stability contract and drain-rename-restart migration procedure in `docs/inbox.md`. Added deployment safety checklist to `docs/operations.md`.
 
 ### A-MED-7 · Inbox is opt-in per channel; channels without `UseInbox()` have no deduplication
 

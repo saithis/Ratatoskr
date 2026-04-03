@@ -103,6 +103,13 @@ bus.AddEfCoreDurability<OrderDbContext>(d =>
 });
 ```
 
+### Durability builder (shared)
+
+| Option | Default | Description | Details |
+|--------|---------|-------------|---------|
+| `WithMetricsPollingInterval(TimeSpan)` | `30s` | How often backlog gauge counts are refreshed from the database | [Observability](observability.md) |
+| `WithMetricsQueryTimeout(TimeSpan)` | `5s` | Per-`COUNT` query cancellation timeout for those refreshes | [Observability](observability.md) |
+
 ### Outbox Options
 
 | Option | Default | Description | Details |
