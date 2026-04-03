@@ -80,11 +80,8 @@ public class EfCoreMetricsBackgroundServiceTests
             .OfType<EfCoreMetricsBackgroundService<TestDbContext>>()
             .First();
 
-        var updateMethod = typeof(EfCoreMetricsBackgroundService<TestDbContext>)
-            .GetMethod("UpdateMetricsAsync", BindingFlags.NonPublic | BindingFlags.Instance);
-            
         // Act
-        await (Task)updateMethod!.Invoke(backgroundService, new object[] { CancellationToken.None })!;
+        await backgroundService.UpdateMetricsAsync(CancellationToken.None);
         
         // Assert
         var metrics = state.ContextMetrics[typeof(TestDbContext).FullName!];

@@ -37,7 +37,7 @@ internal class EfCoreMetricsBackgroundService<TDbContext>(
         logger.LogDebug("Stopped EF Core Metrics Polling for {DbContext}", _contextName);
     }
 
-    private async Task UpdateMetricsAsync(CancellationToken stoppingToken)
+    internal async Task UpdateMetricsAsync(CancellationToken stoppingToken)
     {
         using var scope = serviceProvider.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<TDbContext>();
