@@ -121,6 +121,45 @@ public class ConsumeTests(
     }
 
     [Test]
+    public async Task Consume_WithPerMessageSerializer_UsesConfiguredSerializer()
+    {
+        // Arrange
+        var handler = new TestEventHandler();
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TestEventHandler>(handler);
+            services.AddSingleton<TestEventPipeMessageSerializer>();
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddCommandConsumeChannel(QueueName, c =>
+                {
+                    c.WithRabbitMq(o => o.WithQueueName(QueueName).WithAutoAck(false).WithTransientQueue()
+                        .WithQueueType(QueueType.Classic));
+                    c.Consumes<TestEvent>(h => h.WithHandler<TestEventHandler>(),
+                        m => m.WithSerializer<TestEventPipeMessageSerializer>());
+                });
+            });
+        });
+
+        var serializer = new TestEventPipeMessageSerializer();
+        var serializedBody = serializer.Serialize(new TestEvent { Id = "pipe-1", Data = "pipe-data" });
+
+        // Act
+        await PublishBinaryCloudEventRawAsync(
+            QueueName,
+            serializedBody,
+            contentType: serializer.ContentType,
+            type: "test.event");
+
+        // Assert
+        await WaitForConditionAsync(() => handler.HandledMessages.Count > 0, TimeSpan.FromSeconds(2));
+        handler.HandledMessages.Should().HaveCount(1);
+        handler.HandledMessages[0].Id.Should().Be("pipe-1");
+        handler.HandledMessages[0].Data.Should().Be("pipe-data");
+    }
+
+    [Test]
     public async Task Consume_UnknownEventType_HandlerNotInvoked()
     {
         // Arrange
@@ -320,6 +359,27 @@ public class ConsumeTests(
             }
         };
         
+        await channel.BasicPublishAsync(exchange: "", routingKey: routingKey, mandatory: false, basicProperties: props, body: body);
+    }
+
+    private async Task PublishBinaryCloudEventRawAsync(string routingKey, byte[] body, string contentType, string type)
+    {
+        var factory = new ConnectionFactory { Uri = new Uri(RabbitMqConnectionString) };
+        await using var connection = await factory.CreateConnectionAsync();
+        await using var channel = await connection.CreateChannelAsync();
+
+        var props = new BasicProperties
+        {
+            ContentType = contentType,
+            Headers = new Dictionary<string, object?>
+            {
+                ["cloudEvents_specversion"] = "1.0",
+                ["cloudEvents_type"] = type,
+                ["cloudEvents_source"] = "/test",
+                ["cloudEvents_id"] = Guid.NewGuid().ToString()
+            }
+        };
+
         await channel.BasicPublishAsync(exchange: "", routingKey: routingKey, mandatory: false, basicProperties: props, body: body);
     }
 

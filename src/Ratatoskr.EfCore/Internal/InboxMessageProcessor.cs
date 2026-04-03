@@ -18,7 +18,7 @@ internal class InboxMessageProcessor<TDbContext>(
     TimeProvider timeProvider,
     InboxOptionsHolder<TDbContext> optionsHolder,
     IEnumerable<IMessageActivityObserver> observers,
-    IMessageSerializer messageSerializer,
+    IMessageSerializerResolver serializerResolver,
     ILogger<InboxMessageProcessor<TDbContext>> logger)
     where TDbContext : DbContext, IInboxDbContext
 {
@@ -153,7 +153,8 @@ internal class InboxMessageProcessor<TDbContext>(
             {
                 deliverActivity = telemetry.StartDeliverActivity(props, status.HandlerKey);
 
-                var message = messageSerializer.Deserialize(inboxMessage.Content, registration.MessageType)
+                var serializer = serializerResolver.GetSerializer(registration.MessageType);
+                var message = serializer.Deserialize(inboxMessage.Content, registration.MessageType)
                               ?? throw new InvalidOperationException(
                                   $"Deserialized message of type '{registration.MessageType.Name}' was null.");
 

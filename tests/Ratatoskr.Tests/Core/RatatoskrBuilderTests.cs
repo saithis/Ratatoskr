@@ -147,6 +147,23 @@ public class RatatoskrBuilderTests
         msg!.DataSchema.Should().Be("https://override.example.com/v2.json");
     }
 
+    [Test]
+    public void Produces_WithSerializer_SetsSerializerOnRegistration()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var builder = new RatatoskrBuilder(services);
+
+        // Act
+        builder.AddEventPublishChannel("pub-channel", c => c
+            .Produces<TestEvent>(m => m.WithSerializer<TestEventPipeMessageSerializer>()));
+
+        // Assert
+        var channel = builder.ChannelRegistry.GetPublishChannel("pub-channel");
+        var msg = channel!.GetMessage(typeof(TestEvent));
+        msg!.SerializerType.Should().Be(typeof(TestEventPipeMessageSerializer));
+    }
+
     [RatatoskrMessage("event.with.schema", DataSchema = "https://schemas.example.com/event-with-schema/v1.json")]
     private record EventWithSchema;
 }

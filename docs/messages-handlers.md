@@ -130,14 +130,21 @@ For full control, implement `IMessageSerializer` directly:
 ```csharp
 public class CustomSerializer : IMessageSerializer
 {
-    public byte[] Serialize<T>(T message) where T : class
+    public string ContentType => "application/custom";
+
+    public byte[] Serialize(object message)
     {
         // Custom serialization logic
     }
 
-    public object Deserialize(byte[] data, Type type)
+    public object? Deserialize(byte[] data, Type type)
     {
         // Custom deserialization logic
+    }
+
+    public TMessage? Deserialize<TMessage>(byte[] body)
+    {
+        // Custom generic deserialization logic
     }
 }
 ```
@@ -147,6 +154,32 @@ Register it in the DI container **before** calling `AddRatatoskr`:
 ```csharp
 builder.Services.AddSingleton<IMessageSerializer, CustomSerializer>();
 ```
+
+### Per-Message Serializer
+
+You can override the serializer for a specific message type by configuring the message registration:
+
+```csharp
+builder.Services.AddSingleton<ProtobufOrderSerializer>();
+
+builder.Services.AddRatatoskr(bus =>
+{
+    bus.AddEventPublishChannel("orders.events", c => c
+        .Produces<OrderPlaced>(m => m.WithSerializer<ProtobufOrderSerializer>()));
+
+    bus.AddEventConsumeChannel("orders.events", c => c
+        .Consumes<OrderPlaced>(
+            h => h.WithHandler<OrderPlacedHandler>(),
+            m => m.WithSerializer<ProtobufOrderSerializer>()));
+});
+```
+
+Behavior and rules:
+
+- If a message has no `.WithSerializer<TSerializer>()`, Ratatoskr uses the global `IMessageSerializer`.
+- The configured serializer must be registered in DI.
+- A single message type can only use one serializer across channels.
+- `MessageProperties.ContentType` is set from the selected serializer for each message.
 
 ### Schema Evolution
 

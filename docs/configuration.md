@@ -26,6 +26,7 @@ builder.Services.AddRatatoskr(bus =>
 |--------|-------------|---------|
 | `.Produces<T>()` | Register a message type on a publish channel | [Channels & Routing](channels-routing.md) |
 | `.Consumes<T>(m => ...)` | Register a message type and handlers on a consume channel | [Messages & Handlers](messages-handlers.md) |
+| `.WithSerializer<TSerializer>()` | Use a serializer for a specific message type | [Messages & Handlers](messages-handlers.md) |
 | `.WithHandler<T>()` | Fire-and-forget handler (no persistence) | [Messages & Handlers](messages-handlers.md) |
 | `.WithHandler<T>("key")` | Inbox-managed handler with stable key | [Inbox](inbox.md) |
 

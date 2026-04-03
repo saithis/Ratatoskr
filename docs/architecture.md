@@ -131,19 +131,22 @@ sequenceDiagram
     participant App as Application
     participant R as IRatatoskr
     participant E as MessagePropertiesEnricher
+    participant SR as IMessageSerializerResolver
     participant S as IMessageSerializer
     participant Sender as IMessageSender[]
 
     App->>R: PublishDirectAsync<TMessage>(message)
     R->>E: Enrich(props)
     Note over E: Add ID, timestamp, trace context,<br/>resolve target transports
+    R->>SR: GetSerializer(typeof(TMessage))
+    SR-->>R: IMessageSerializer
     R->>S: Serialize(message) → byte[]
     loop For each matching transport
         R->>Sender: SendAsync(bytes, props)
     end
 ```
 
-The application calls `IRatatoskr.PublishDirectAsync<T>()`. Ratatoskr enriches the message properties (CloudEvents ID, timestamp, W3C trace context), serializes the message, then sends it to all `IMessageSender` implementations matching the configured transports.
+The application calls `IRatatoskr.PublishDirectAsync<T>()`. Ratatoskr enriches the message properties (CloudEvents ID, timestamp, W3C trace context), resolves the serializer for the message type, serializes the message, then sends it to all `IMessageSender` implementations matching the configured transports.
 
 ### Transactional Publishing (Outbox)
 

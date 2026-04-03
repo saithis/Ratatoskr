@@ -370,14 +370,18 @@ public class MessageDispatcherTests
 
         var channelHandlerRegistry = ChannelHandlerRegistry.Build(channelRegistry);
         var deserializer = new JsonMessageSerializer();
-
         var provider = services.BuildServiceProvider();
+        var serializerResolver = new MessageSerializerResolver(
+            channelRegistry,
+            deserializer,
+            [deserializer],
+            provider);
         var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
 
         return new MessageDispatcher(
             channelRegistry,
             channelHandlerRegistry,
-            deserializer,
+            serializerResolver,
             new HandlerInvoker(scopeFactory),
             TimeProvider.System,
             [],
