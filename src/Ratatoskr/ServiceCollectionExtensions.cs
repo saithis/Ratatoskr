@@ -45,6 +45,7 @@ public static class ServiceCollectionExtensions
         // Register serializer (TryAdd so users can pre-register a custom IMessageSerializer)
         services.TryAddSingleton<IMessageSerializer>(
             new JsonMessageSerializer(builder.JsonSerializerOptions));
+        services.TryAddSingleton<IMessageSerializerResolver, MessageSerializerResolver>();
 
         services.TryAddSingleton<HandlerInvoker>();
         services.AddSingleton<IRatatoskr, Ratatoskr>();

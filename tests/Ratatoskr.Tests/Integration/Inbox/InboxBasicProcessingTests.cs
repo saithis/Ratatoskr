@@ -13,6 +13,52 @@ public class InboxBasicProcessingTests(RabbitMqContainerFixture rabbitMq, Postgr
     : InboxTestBase(rabbitMq, postgres)
 {
     [Test]
+    public async Task Inbox_WithPerMessageSerializer_ProcessesMessageSuccessfully()
+    {
+        // Arrange
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TestEventPipeMessageSerializer>();
+            services.AddRatatoskr(bus =>
+            {
+                bus.AddEventPublishChannel("inbox-events", c => c
+                    .WithEfCore()
+                    .Produces<TestEvent>(m => m.WithSerializer<TestEventPipeMessageSerializer>()));
+                bus.AddEventConsumeChannel("inbox-events", c => c
+                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"),
+                        msg => msg.WithSerializer<TestEventPipeMessageSerializer>())
+                    .UseInbox<TestDbContext>());
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox());
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+                opts.UseNpgsql(PostgresConnectionString));
+        });
+
+        await InitializeDatabase();
+
+        // Act
+        await InScopeAsync(async ctx =>
+        {
+            var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
+            await bus.PublishDirectAsync(
+                new TestEvent { Id = "business-pipe-inbox-1", Data = "pipe-inbox-data" },
+                new MessageProperties { Id = "pipe-inbox-1" });
+        });
+
+        // Assert
+        await WaitForConditionAsync(
+            async () => await InScopeAsync(async ctx =>
+            {
+                var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                var status = await db.Set<InboxHandlerStatusEntity>()
+                    .SingleAsync(s => s.MessageId == "pipe-inbox-1");
+                return status.CompletedAt != null && !status.IsPoisoned;
+            }),
+            TimeSpan.FromSeconds(15));
+    }
+
+    [Test]
     public async Task Inbox_ReceivedAt_UsesInjectedTimeProvider()
     {
         var fixedInstant = new DateTimeOffset(2024, 3, 15, 14, 30, 0, TimeSpan.Zero);

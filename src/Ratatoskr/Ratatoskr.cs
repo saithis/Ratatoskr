@@ -6,7 +6,7 @@ using Ratatoskr.Core;
 namespace Ratatoskr;
 
 public class Ratatoskr(
-    IMessageSerializer serializer,
+    IMessageSerializerResolver serializerResolver,
     IEnumerable<IMessageSender> senders,
     IMessagePropertiesEnricher enricher,
     TimeProvider timeProvider,
@@ -34,6 +34,7 @@ public class Ratatoskr(
             activity.SetTag(MessagingSemanticConventions.MessageId, props.Id);
         }
 
+        var serializer = serializerResolver.GetSerializer(typeof(TMessage));
         var serializedMessage = serializer.Serialize(message);
         props.ContentType = serializer.ContentType;
 

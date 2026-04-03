@@ -147,6 +147,66 @@ public class RatatoskrBuilderTests
         msg!.DataSchema.Should().Be("https://override.example.com/v2.json");
     }
 
+    [Test]
+    public void Produces_WithSerializer_SetsSerializerOnRegistration()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var builder = new RatatoskrBuilder(services);
+
+        // Act
+        builder.AddEventPublishChannel("pub-channel", c => c
+            .Produces<TestEvent>(m => m.WithSerializer<TestEventPipeMessageSerializer>()));
+
+        // Assert
+        var channel = builder.ChannelRegistry.GetPublishChannel("pub-channel");
+        var msg = channel!.GetMessage(typeof(TestEvent));
+        msg!.SerializerType.Should().Be(typeof(TestEventPipeMessageSerializer));
+    }
+
+    [Test]
+    public void SerializerResolver_WithMixedDefaultAndExplicitSerializer_Throws()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddSingleton<TestEventPipeMessageSerializer>();
+        services.AddRatatoskr(bus =>
+        {
+            bus.AddEventPublishChannel("pub-a", c => c.Produces<TestEvent>());
+            bus.AddEventConsumeChannel("con-a", c => c
+                .Consumes<TestEvent>(h => h.WithHandler<TestEventHandler>(),
+                    m => m.WithSerializer<TestEventPipeMessageSerializer>()));
+        });
+        using var provider = services.BuildServiceProvider();
+
+        // Act
+        var act = () => provider.GetRequiredService<IMessageSerializerResolver>();
+
+        // Assert
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*mixes default and explicit serializer registrations*");
+    }
+
+    [Test]
+    public void SerializerResolver_WithUnregisteredConcreteSerializer_ThrowsHelpfulMessage()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddRatatoskr(bus =>
+        {
+            bus.AddEventPublishChannel("pub-a", c => c
+                .Produces<TestEvent>(m => m.WithSerializer<TestEventPipeMessageSerializer>()));
+        });
+        using var provider = services.BuildServiceProvider();
+
+        // Act
+        var act = () => provider.GetRequiredService<IMessageSerializerResolver>();
+
+        // Assert
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Register it as its concrete type*");
+    }
+
     [RatatoskrMessage("event.with.schema", DataSchema = "https://schemas.example.com/event-with-schema/v1.json")]
     private record EventWithSchema;
 }

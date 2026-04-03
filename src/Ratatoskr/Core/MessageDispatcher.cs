@@ -11,7 +11,7 @@ namespace Ratatoskr.Core;
 public class MessageDispatcher(
     ChannelRegistry channelRegistry,
     ChannelHandlerRegistry channelHandlerRegistry,
-    IMessageSerializer deserializer,
+    IMessageSerializerResolver serializerResolver,
     HandlerInvoker handlerInvoker,
     TimeProvider timeProvider,
     IEnumerable<IMessageActivityObserver> observers,
@@ -71,7 +71,8 @@ public class MessageDispatcher(
         object? message;
         try
         {
-            message = deserializer.Deserialize(body, messageType);
+            var serializer = serializerResolver.GetSerializer(messageType);
+            message = serializer.Deserialize(body, messageType);
         }
         catch (Exception ex)
         {

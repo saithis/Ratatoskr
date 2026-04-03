@@ -18,6 +18,53 @@ public class OutboxProcessingTests(RabbitMqContainerFixture rabbitMq, PostgresCo
     : OutboxTestBase(rabbitMq, postgres)
 {
     [Test]
+    public async Task Outbox_UsesPerMessageSerializer_ForStagedMessage()
+    {
+        // Arrange
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TestEventPipeMessageSerializer>();
+            services.AddRatatoskr(bus =>
+            {
+                bus.AddEventPublishChannel(ExchangeName, c => c
+                    .WithEfCore()
+                    .Produces<TestEvent>(m => m.WithSerializer<TestEventPipeMessageSerializer>()));
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox(outbox => outbox.WithoutBackgroundProcessing()));
+            });
+
+            services.AddDbContext<TestDbContext>((sp, options) =>
+            {
+                options.UseNpgsql(PostgresConnectionString);
+                options.RegisterOutbox<TestDbContext>(sp);
+            });
+        });
+
+        await InitializeDatabase();
+
+        // Act
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            dbContext.OutboxMessages.Add(new TestEvent { Id = "outbox-pipe-1", Data = "custom-body" });
+            await dbContext.SaveChangesAsync();
+        });
+
+        // Assert
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var entity = await dbContext.Set<OutboxMessageEntity>().SingleAsync();
+            var serializer = new TestEventPipeMessageSerializer();
+            var deserialized = serializer.Deserialize<TestEvent>(entity.Content);
+
+            deserialized.Should().NotBeNull();
+            deserialized!.Id.Should().Be("outbox-pipe-1");
+            deserialized.Data.Should().Be("custom-body");
+            entity.GetProperties().ContentType.Should().Be(serializer.ContentType);
+        });
+    }
+
+    [Test]
     public async Task ProcessAllAsync_SendsAllPendingMessages()
     {
         // Arrange

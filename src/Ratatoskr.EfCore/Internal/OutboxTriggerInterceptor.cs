@@ -8,7 +8,7 @@ namespace Ratatoskr.EfCore.Internal;
 
 internal class OutboxTriggerInterceptor<TDbContext>(
     OutboxProcessor<TDbContext> outboxProcessor,
-    IMessageSerializer messageSerializer,
+    IMessageSerializerResolver serializerResolver,
     IMessagePropertiesEnricher enricher,
     ChannelRegistry channelRegistry,
     ChannelHandlerRegistry channelHandlerRegistry,
@@ -65,8 +65,9 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         foreach (var item in stagedItems)
         {
             var enrichedProperties = enricher.Enrich(item.Message.GetType(), item.Properties);
-            var serializedMessage = messageSerializer.Serialize(item.Message);
-            enrichedProperties.ContentType = messageSerializer.ContentType;
+            var serializer = serializerResolver.GetSerializer(item.Message.GetType());
+            var serializedMessage = serializer.Serialize(item.Message);
+            enrichedProperties.ContentType = serializer.ContentType;
 
             if (_options.MaxMessageSize.HasValue && serializedMessage.Length > _options.MaxMessageSize.Value)
             {

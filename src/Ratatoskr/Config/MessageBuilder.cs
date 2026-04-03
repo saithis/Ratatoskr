@@ -17,4 +17,10 @@ public class MessageBuilder(MessageRegistration message)
         message.DataSchema = dataSchema;
         return this;
     }
+
+    public MessageBuilder WithSerializer<TSerializer>() where TSerializer : class, IMessageSerializer
+    {
+        message.SerializerType = typeof(TSerializer);
+        return this;
+    }
 }
