@@ -37,6 +37,12 @@ public class RabbitMqChannelOptions
     public ushort PrefetchCount { get; private set; } = 10;
 
     /// <summary>
+    /// Maximum number of message handlers that may run concurrently for this consumer.
+    /// Must be greater than zero. Default: 1.
+    /// </summary>
+    public ushort ConcurrencyLimit { get; private set; } = 1;
+
+    /// <summary>
     /// Whether the broker should auto-acknowledge messages on delivery.
     /// When true, messages cannot be retried on failure. Default: false.
     /// </summary>
@@ -133,6 +139,18 @@ public class RabbitMqChannelOptions
     public RabbitMqChannelOptions WithPrefetch(ushort count)
     {
         PrefetchCount = count;
+        return this;
+    }
+
+    /// <summary>Sets the maximum number of handlers that can run concurrently.</summary>
+    public RabbitMqChannelOptions WithConcurrencyLimit(ushort concurrencyLimit)
+    {
+        if (concurrencyLimit == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(concurrencyLimit), "Concurrency limit must be greater than zero.");
+        }
+
+        ConcurrencyLimit = concurrencyLimit;
         return this;
     }
 

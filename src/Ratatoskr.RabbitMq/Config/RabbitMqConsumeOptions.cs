@@ -68,6 +68,13 @@ public class RabbitMqConsumeOptions(RabbitMqChannelOptions inner)
         return this;
     }
 
+    /// <summary>Sets the maximum number of handlers that can run concurrently.</summary>
+    public RabbitMqConsumeOptions WithConcurrencyLimit(ushort concurrencyLimit)
+    {
+        inner.WithConcurrencyLimit(concurrencyLimit);
+        return this;
+    }
+
     /// <summary>Enables or disables auto-acknowledgement of messages.</summary>
     public RabbitMqConsumeOptions WithAutoAck(bool autoAck = true)
     {

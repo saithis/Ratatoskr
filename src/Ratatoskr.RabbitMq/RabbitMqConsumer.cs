@@ -25,7 +25,7 @@ internal class RabbitMqConsumer(
     : BackgroundService
 {
     private readonly Lock _channelsLock = new();
-    private readonly List<(IChannel Channel, string ConsumerTag)> _consumers = new();
+    private readonly List<(IChannel Channel, string ConsumerTag, SemaphoreSlim ConcurrencyGate)> _consumers = new();
     private int _inFlightHandlers;
     private static readonly TimeSpan InitialReconnectDelay = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan MaxReconnectDelay = TimeSpan.FromSeconds(30);
@@ -111,8 +111,11 @@ internal class RabbitMqConsumer(
                 continue;
             }
 
+            ValidateChannelConcurrency(reg.ChannelName, channelOptions);
+
             var channel = await connectionManager.CreateChannelAsync(false, stoppingToken);
             await channel.BasicQosAsync(0, channelOptions.PrefetchCount, false, stoppingToken);
+            var concurrencyGate = new SemaphoreSlim(channelOptions.ConcurrencyLimit, channelOptions.ConcurrencyLimit);
 
             // Register channel close handler to trigger reconnection
             channel.ChannelShutdownAsync += (_, args) =>
@@ -125,7 +128,16 @@ internal class RabbitMqConsumer(
             var consumer = new AsyncEventingBasicConsumer(channel);
             consumer.ReceivedAsync += async (_, ea) =>
             {
-                await HandleMessageAsync(channel, ea, channelOptions, channelOptions.QueueName!, reg.ChannelName, stoppingToken);
+                var delivery = CloneDelivery(ea);
+                _ = DispatchWithConcurrencyAsync(
+                    channel,
+                    delivery,
+                    channelOptions,
+                    channelOptions.QueueName!,
+                    reg.ChannelName,
+                    concurrencyGate,
+                    stoppingToken);
+                await Task.CompletedTask;
             };
 
             logger.LogInformation("Starting consuming from queue '{Queue}' for channel '{Channel}'", channelOptions.QueueName, reg.ChannelName);
@@ -138,14 +150,14 @@ internal class RabbitMqConsumer(
 
             lock (_channelsLock)
             {
-                _consumers.Add((channel, consumerTag));
+                _consumers.Add((channel, consumerTag, concurrencyGate));
             }
         }
     }
 
     private async Task CancelConsumersAsync(CancellationToken cancellationToken)
     {
-        List<(IChannel Channel, string ConsumerTag)> snapshot;
+        List<(IChannel Channel, string ConsumerTag, SemaphoreSlim ConcurrencyGate)> snapshot;
         lock (_channelsLock)
         {
             snapshot = [.._consumers];
@@ -205,20 +217,21 @@ internal class RabbitMqConsumer(
 
     private async Task CleanupChannelsAsync()
     {
-        List<IChannel> channelsToCleanup;
+        List<(IChannel Channel, SemaphoreSlim ConcurrencyGate)> channelsToCleanup;
         lock (_channelsLock)
         {
-            channelsToCleanup = [.._consumers.Select(c => c.Channel)];
+            channelsToCleanup = [.._consumers.Select(c => (c.Channel, c.ConcurrencyGate))];
             _consumers.Clear();
         }
 
-        foreach (var channel in channelsToCleanup)
+        foreach (var (channel, concurrencyGate) in channelsToCleanup)
         {
             try
             {
                 if (channel.IsOpen)
                     await channel.CloseAsync();
                 channel.Dispose();
+                concurrencyGate.Dispose();
             }
             catch (Exception ex)
             {
@@ -237,22 +250,55 @@ internal class RabbitMqConsumer(
         return TimeSpan.FromSeconds(delaySeconds);
     }
 
-    private async Task HandleMessageAsync(
+    private static BasicDeliverEventArgs CloneDelivery(BasicDeliverEventArgs ea)
+    {
+        return new BasicDeliverEventArgs(
+            ea.ConsumerTag,
+            ea.DeliveryTag,
+            ea.Redelivered,
+            ea.Exchange,
+            ea.RoutingKey,
+            ea.BasicProperties,
+            ea.Body.ToArray());
+    }
+
+    private async Task DispatchWithConcurrencyAsync(
         IChannel channel,
         BasicDeliverEventArgs ea,
         RabbitMqChannelOptions channelOptions,
         string queueName,
         string channelName,
+        SemaphoreSlim concurrencyGate,
         CancellationToken cancellationToken)
     {
         Interlocked.Increment(ref _inFlightHandlers);
+        var gateAcquired = false;
         try
         {
+            await concurrencyGate.WaitAsync(cancellationToken);
+            gateAcquired = true;
             await HandleMessageCoreAsync(channel, ea, channelOptions, queueName, channelName, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Service is stopping. Any unstarted messages will be re-delivered by RabbitMQ.
         }
         finally
         {
+            if (gateAcquired)
+                concurrencyGate.Release();
             Interlocked.Decrement(ref _inFlightHandlers);
+        }
+    }
+
+    private static void ValidateChannelConcurrency(string channelName, RabbitMqChannelOptions channelOptions)
+    {
+        if (channelOptions.PrefetchCount != 0 && channelOptions.ConcurrencyLimit > channelOptions.PrefetchCount)
+        {
+            throw new InvalidOperationException(
+                $"Invalid RabbitMQ channel configuration for '{channelName}': " +
+                $"ConcurrencyLimit ({channelOptions.ConcurrencyLimit}) must be less than or equal to " +
+                $"PrefetchCount ({channelOptions.PrefetchCount}).");
         }
     }
 

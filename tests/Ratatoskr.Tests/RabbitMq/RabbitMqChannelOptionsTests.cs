@@ -60,4 +60,25 @@ public class RabbitMqChannelOptionsTests
         options.ExchangeDurable.Should().BeFalse();
         options.ExchangeAutoDelete.Should().BeTrue();
     }
+
+    [Test]
+    public void WithConcurrencyLimit_SetsValue()
+    {
+        var options = new RabbitMqChannelOptions();
+
+        var result = options.WithConcurrencyLimit(4);
+
+        result.ConcurrencyLimit.Should().Be(4);
+        result.Should().BeSameAs(options);
+    }
+
+    [Test]
+    public void WithConcurrencyLimit_Zero_Throws()
+    {
+        var options = new RabbitMqChannelOptions();
+
+        Action act = () => options.WithConcurrencyLimit(0);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
 }
