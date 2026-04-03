@@ -153,7 +153,7 @@ Write the 2 durability pattern pages.
 
 **Tasks:**
 
-- [x] Write `docs/outbox.md` — Problem (dual-write), solution (transactional staging), setup (`AddEfCoreDurability<T>(d => d.UseOutbox())`, `RegisterOutbox<T>(sp)`, `AddOutboxEntities()`), usage (`OutboxMessages.Add()` + `SaveChangesAsync()`), configuration options table, processing lifecycle, error handling, poisoned messages, concurrency tokens, retention config (link to Operations for manual SQL)
+- [x] Write `docs/outbox.md` — Problem (dual-write), solution (transactional staging), setup (`AddEfCoreDurability<T>(d => d.UseOutbox())`, `RegisterOutbox<T>(sp)`, `AddRatatoskrEfCoreModel(Database)`), usage (`OutboxMessages.Add()` + `SaveChangesAsync()`), configuration options table, processing lifecycle, error handling, poisoned messages, concurrency tokens, retention config (link to Operations for manual SQL)
 - [x] Write `docs/inbox.md` — Problem (duplicate processing), solution (per-handler deduplication), setup, per-message opt-in, handler isolation, deduplication constraint, distributed locking, configuration options table, processing flow Mermaid diagram (reuse from existing), poisoned messages, RabbitMQ integration, multi-DbContext, retention config (link to Operations for manual SQL)
 
 **Success criteria:** Outbox and Inbox are standalone pages with complete setup-to-production coverage. No duplication between them beyond shared concepts.

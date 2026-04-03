@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using PlaygroundApi.Database.Entities;
 using Ratatoskr.EfCore;
 
@@ -13,7 +13,6 @@ public class NotesDbContext(DbContextOptions<NotesDbContext> options) : DbContex
     {
         base.OnModelCreating(modelBuilder);
 
-        modelBuilder.AddOutboxEntities();
-        modelBuilder.AddInboxEntities();
+        modelBuilder.AddRatatoskrEfCoreModel(Database);
     }
 }

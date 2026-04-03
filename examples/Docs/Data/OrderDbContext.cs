@@ -11,8 +11,7 @@ public class OrderDbContext(DbContextOptions<OrderDbContext> options)
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.AddOutboxEntities(Database);
-        modelBuilder.AddInboxEntities(Database);
+        modelBuilder.AddRatatoskrEfCoreModel(Database);
     }
 }
 #endregion
