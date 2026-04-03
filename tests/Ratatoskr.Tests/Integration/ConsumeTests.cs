@@ -147,6 +147,47 @@ public class ConsumeTests(
     }
 
     [Test]
+    public async Task Consume_MessageExceedsSizeLimit_MessageRejectedAndSentToDlq()
+    {
+        // Arrange
+        var handler = new TestEventHandler();
+        var dlqName = $"{QueueName}.dlq";
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TestEventHandler>(handler);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o =>
+                {
+                    o.ConnectionString = new Uri(RabbitMqConnectionString);
+                    o.MaxInboundMessageSize = 10; // Very small limit
+                });
+
+                bus.AddCommandConsumeChannel(QueueName, c =>
+                {
+                    c.WithRabbitMq(o => o
+                        .WithQueueName(QueueName)
+                        .WithAutoAck(false)
+                        .WithRetry(r => r.WithMaxRetries(1).WithDelay(TimeSpan.FromMilliseconds(50)))
+                        .WithTransientQueue()
+                        .WithQueueType(QueueType.Classic));
+                    c.Consumes<TestEvent>(h => h.WithHandler<TestEventHandler>());
+                });
+            });
+        });
+
+        // Act - Send a message with size > 10 bytes
+        await PublishToRabbitMqAsync(exchange: "", routingKey: QueueName,
+            new TestEvent { Id = "large", Data = "this is a large message" });
+
+        // Assert - Handler should not be invoked, message goes to DLQ
+        await WaitForConditionAsync(async () => await GetMessageCountAsync(dlqName) > 0,
+            TimeSpan.FromSeconds(5), "Oversized message did not move to DLQ");
+        handler.HandledMessages.Should().BeEmpty();
+    }
+
+    [Test]
     public async Task Consume_HandlerThrows_MessageNotAcked()
     {
         // Arrange

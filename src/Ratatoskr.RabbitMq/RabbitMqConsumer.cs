@@ -192,6 +192,23 @@ internal class RabbitMqConsumer(
 
         try
         {
+            // Enforce inbound message size limit
+            if (options.MaxInboundMessageSize.HasValue && ea.Body.Length > options.MaxInboundMessageSize.Value)
+            {
+                logger.LogWarning(
+                    "Inbound message size of {Size} bytes exceeds the configured maximum of {Max} bytes for message '{MessageId}'. Rejecting to DLQ.", 
+                    ea.Body.Length, options.MaxInboundMessageSize.Value, messageId);
+                if (channelOptions.AutoAck)
+                {
+                    logger.LogError(
+                        "MaxInboundMessageSize is configured, but channel '{Channel}' uses auto-ack; oversized message cannot be nacked to DLQ.",
+                        channelName);
+                    return;
+                }
+                await retryHandler.HandleFailureAsync(channel, ea, channelOptions, queueName, DispatchResult.PermanentError, cancellationToken);
+                return;
+            }
+
             // Capture transport-level wire format before envelope mapping
             var transportMessage = RabbitMqTransportMessageSnapshotFactory.FromDeliverEventArgs(ea);
 

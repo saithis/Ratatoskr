@@ -30,21 +30,6 @@ Validation approach:
 - Evidence: `src/Ratatoskr.RabbitMq/CloudEventsAmqpMapper.cs` (line 200–202)
 - Source(s): Checklist (A1), Claude
 
-### A-HIGH-1 · No inbound message body size limit (DoS / resource exhaustion vector)
-
-- Verdict: `Valid`
-- Severity: High
-- Detail: `RabbitMqConsumer` passes `ea.Body.ToArray()` directly into routing and inbox acceptance without any size check. The outbox path has a configurable `MaxMessageSize`; the inbound path has no equivalent.
-- Evidence: `src/Ratatoskr.RabbitMq/RabbitMqConsumer.cs`, `src/Ratatoskr.RabbitMq/RabbitMqTransportMessageSnapshotFactory.cs`
-- Source(s): Claude
-
-### A-HIGH-2 · No inbox persistence body size limit
-
-- Verdict: `Valid`
-- Severity: High
-- Detail: `InboxAcceptor` persists raw `byte[] body` to the database without a size cap. An oversized payload can cause DB write failures or table bloat.
-- Evidence: `src/Ratatoskr.EfCore/Internal/InboxAcceptor.cs` (line 62), `src/Ratatoskr.EfCore/OutboxOptions.cs` (`MaxMessageSize` exists for outbox only)
-- Source(s): Claude
 
 ### A-HIGH-3 · Wire metadata controls dispatch with no authenticity verification
 
