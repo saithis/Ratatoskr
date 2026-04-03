@@ -96,7 +96,7 @@ public class InboxDeduplicationTests(RabbitMqContainerFixture rabbitMq, Postgres
         const string sharedMessageId = "concurrent-dedup-1";
 
         // Act: rendezvous on the thread pool so Barrier.SignalAndWait does not block the async test context.
-        var barrier = new Barrier(2);
+        using var barrier = new Barrier(2);
         await Task.WhenAll(
             Task.Run(async () =>
             {

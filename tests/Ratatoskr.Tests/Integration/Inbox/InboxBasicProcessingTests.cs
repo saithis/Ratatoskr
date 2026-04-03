@@ -44,6 +44,8 @@ public class InboxBasicProcessingTests(RabbitMqContainerFixture rabbitMq, Postgr
                 new MessageProperties { Id = "received-at-1" });
         });
 
+        await WaitForInboxEntriesAsync(1);
+
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();

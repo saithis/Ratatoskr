@@ -540,6 +540,8 @@ public class InboxErrorHandlingTests(RabbitMqContainerFixture rabbitMq, Postgres
                 new MessageProperties { Id = messageId });
         });
 
+        await WaitForInboxEntriesAsync(1);
+
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();

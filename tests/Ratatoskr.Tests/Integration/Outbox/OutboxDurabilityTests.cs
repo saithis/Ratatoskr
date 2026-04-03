@@ -611,13 +611,17 @@ public class OutboxDurabilityTests(RabbitMqContainerFixture rabbitMq, PostgresCo
             await dbContext.SaveChangesAsync();
         });
 
+        var beforeCount = await GetMessageCountAsync(QueueName);
+
         await Task.WhenAll(
             InScopeAsync(async ctx => await ProcessOutboxAsync<TestDbContext>(ctx.ServiceProvider)),
             InScopeAsync(async ctx => await ProcessOutboxAsync<TestDbContext>(ctx.ServiceProvider)));
 
         await WaitForConditionAsync(
-            async () => await GetMessageCountAsync(QueueName) >= 1,
+            async () => await GetMessageCountAsync(QueueName) >= beforeCount + 1,
             TimeSpan.FromSeconds(15));
+        (await GetMessageCountAsync(QueueName)).Should().Be(beforeCount + 1,
+            "concurrent claim conflict handling should result in exactly one delivery");
 
         await InScopeAsync(async ctx =>
         {
