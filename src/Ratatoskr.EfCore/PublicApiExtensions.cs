@@ -29,6 +29,8 @@ public static class PublicApiExtensions
                     $"AddEfCoreDurability<{typeof(TDbContext).Name}>() was called more than once. Merge UseInbox()/UseOutbox() into a single registration.");
 
             builder.Services.AddSingleton<DurabilityMarker<TDbContext>>();
+            builder.Services.TryAddSingleton<EfCoreMetricsState>();
+            builder.Services.AddHostedService<EfCoreMetricsBackgroundService<TDbContext>>();
 
             var durabilityBuilder = new DurabilityBuilder<TDbContext>();
             configure(durabilityBuilder);

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Linq;
 using Ratatoskr.Core;
 
 namespace Ratatoskr.EfCore.Internal;
@@ -8,6 +9,19 @@ namespace Ratatoskr.EfCore.Internal;
 /// </summary>
 internal class InboxTelemetry
 {
+    public InboxTelemetry(EfCoreMetricsState state)
+    {
+        RatatoskrDiagnostics.Meter.CreateObservableGauge(
+            "ratatoskr.inbox.pending.statuses",
+            () => state.ContextMetrics.Select(kv => new System.Diagnostics.Metrics.Measurement<long>(kv.Value.PendingInboxCount, new TagList { { "db_context", kv.Key } })),
+            description: "Number of pending inbox handler statuses.");
+
+        RatatoskrDiagnostics.Meter.CreateObservableGauge(
+            "ratatoskr.inbox.poisoned.statuses",
+            () => state.ContextMetrics.Select(kv => new System.Diagnostics.Metrics.Measurement<long>(kv.Value.PoisonedInboxCount, new TagList { { "db_context", kv.Key } })),
+            description: "Number of inbox handler statuses marked as poisoned.");
+    }
+
     /// <summary>
     /// Starts a "deliver inbox" activity, restoring trace context from the message properties.
     /// </summary>
