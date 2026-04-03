@@ -31,6 +31,9 @@ public class EfCoreMetricsBackgroundServiceTests
         services.AddSingleton(new OutboxOptionsHolder<TestDbContext>(new OutboxOptions()));
         services.AddSingleton(new InboxOptionsHolder<TestDbContext>(new InboxOptions()));
         services.AddSingleton(state);
+        services.AddSingleton(new EfCoreMetricsSettings<TestDbContext>(
+            TimeSpan.FromSeconds(30),
+            TimeSpan.FromSeconds(5)));
         services.AddSingleton<TimeProvider>(timeProvider);
         services.AddSingleton<ILogger<EfCoreMetricsBackgroundService<TestDbContext>>>(NullLogger<EfCoreMetricsBackgroundService<TestDbContext>>.Instance);
         services.AddHostedService<EfCoreMetricsBackgroundService<TestDbContext>>();
@@ -84,7 +87,7 @@ public class EfCoreMetricsBackgroundServiceTests
         await (Task)updateMethod!.Invoke(backgroundService, new object[] { CancellationToken.None })!;
         
         // Assert
-        var metrics = state.ContextMetrics["TestDbContext"];
+        var metrics = state.ContextMetrics[typeof(TestDbContext).FullName!];
         metrics.Should().NotBeNull();
         
         metrics.PendingOutboxCount.Should().Be(2);

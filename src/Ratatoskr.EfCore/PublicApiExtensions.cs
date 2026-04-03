@@ -30,7 +30,7 @@ public static class PublicApiExtensions
 
             builder.Services.AddSingleton<DurabilityMarker<TDbContext>>();
             builder.Services.TryAddSingleton<EfCoreMetricsState>();
-            builder.Services.AddHostedService<EfCoreMetricsBackgroundService<TDbContext>>();
+            builder.Services.TryAddSingleton<EfCoreBacklogGauges>();
 
             var durabilityBuilder = new DurabilityBuilder<TDbContext>();
             configure(durabilityBuilder);
@@ -44,6 +44,11 @@ public static class PublicApiExtensions
 
             if (durabilityBuilder.OutboxBuilder != null)
                 RegisterOutboxServices<TDbContext>(builder, durabilityBuilder.OutboxBuilder);
+
+            builder.Services.AddSingleton(_ => new EfCoreMetricsSettings<TDbContext>(
+                durabilityBuilder.MetricsPollingInterval,
+                durabilityBuilder.MetricsQueryTimeout));
+            builder.Services.AddHostedService<EfCoreMetricsBackgroundService<TDbContext>>();
 
             return builder;
         }

@@ -78,7 +78,7 @@ All metrics are emitted on the `"Ratatoskr"` meter.
 | `ratatoskr.inbox.poisoned.statuses` | Observable gauge | `1` | Handler status rows poisoned and not completed; tagged `db_context` |
 
 > [!NOTE]
-> **EF Core backlog gauges:** When you register durability with `AddEfCoreDurability`, the four observable gauges above are registered. Their values are refreshed in the background about every **30 seconds** using no-tracking `COUNT` queries with a **5 second** per-query timeout, so metric scrapes do not hit the database on every collection interval. The **`db_context`** tag is the registered `DbContext` type name (for example `MyAppDbContext`). If only the outbox or only the inbox is enabled for that context, the gauges for the disabled side stay at zero.
+> **EF Core backlog gauges:** When you register durability with `AddEfCoreDurability`, the four observable gauges above are registered (inbox-only and outbox-only apps still expose all four names; the unused side reads as zero). Their values are refreshed in the background on a configurable interval (default **30 seconds**) using no-tracking `COUNT` queries, each with its own cancellation timeout (default **5 seconds**), so metric scrapes do not hit the database on every collection interval. Override defaults with `WithMetricsPollingInterval` and `WithMetricsQueryTimeout` on the durability builder. The **`db_context`** tag is the `DbContext` type’s **full name** (for example `MyApp.OrderDbContext`). If only the outbox or only the inbox is enabled for that context, the gauges for the disabled side stay at zero.
 
 ### Cleanup Metrics
 

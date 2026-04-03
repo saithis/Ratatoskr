@@ -9,15 +9,16 @@ internal class EfCoreMetricsBackgroundService<TDbContext>(
     IServiceProvider serviceProvider,
     TimeProvider timeProvider,
     EfCoreMetricsState state,
+    EfCoreMetricsSettings<TDbContext> settings,
     ILogger<EfCoreMetricsBackgroundService<TDbContext>> logger) : BackgroundService
     where TDbContext : DbContext, IInboxDbContext, IOutboxDbContext
 {
-    private readonly string _contextName = typeof(TDbContext).Name;
+    private readonly string _contextName = typeof(TDbContext).FullName ?? typeof(TDbContext).Name;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogDebug("Starting EF Core Metrics Polling for {DbContext}", _contextName);
-        
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -29,11 +30,10 @@ internal class EfCoreMetricsBackgroundService<TDbContext>(
                 if (stoppingToken.IsCancellationRequested) break;
                 logger.LogError(ex, "Error updating EF Core metrics for {DbContext}", _contextName);
             }
-            
-            // Hardcoded 30 seconds interval for metrics polling
-            await Task.Delay(TimeSpan.FromSeconds(30), timeProvider, stoppingToken);
+
+            await Task.Delay(settings.PollingInterval, timeProvider, stoppingToken);
         }
-        
+
         logger.LogDebug("Stopped EF Core Metrics Polling for {DbContext}", _contextName);
     }
 
@@ -41,33 +41,74 @@ internal class EfCoreMetricsBackgroundService<TDbContext>(
     {
         using var scope = serviceProvider.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<TDbContext>();
-        
-        // Safety timeout to prevent locking up or waiting too long on DB loads
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-        cts.CancelAfter(TimeSpan.FromSeconds(5));
-        
+
         dbContext.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
-        
-        var metrics = state.ContextMetrics.GetOrAdd(_contextName, _ => new DbContextMetrics());
 
         var hasOutbox = scope.ServiceProvider.GetService<OutboxOptionsHolder<TDbContext>>() != null;
+        var hasInbox = scope.ServiceProvider.GetService<InboxOptionsHolder<TDbContext>>() != null;
+
+        long pendingOutbox = 0;
+        long poisonedOutbox = 0;
+        long pendingInbox = 0;
+        long poisonedInbox = 0;
+
         if (hasOutbox)
         {
-            metrics.PendingOutboxCount = await dbContext.Set<OutboxMessageEntity>()
-                .CountAsync(x => x.ProcessedAt == null && !x.IsPoisoned, cts.Token);
-                
-            metrics.PoisonedOutboxCount = await dbContext.Set<OutboxMessageEntity>()
-                .CountAsync(x => x.ProcessedAt == null && x.IsPoisoned, cts.Token);
+            pendingOutbox = await CountAsync(
+                dbContext,
+                stoppingToken,
+                async (db, ct) =>
+                {
+                    var n = await db.Set<OutboxMessageEntity>()
+                        .CountAsync(x => x.ProcessedAt == null && !x.IsPoisoned, ct);
+                    return (long)n;
+                });
+
+            poisonedOutbox = await CountAsync(
+                dbContext,
+                stoppingToken,
+                async (db, ct) =>
+                {
+                    var n = await db.Set<OutboxMessageEntity>()
+                        .CountAsync(x => x.ProcessedAt == null && x.IsPoisoned, ct);
+                    return (long)n;
+                });
         }
-        
-        var hasInbox = scope.ServiceProvider.GetService<InboxOptionsHolder<TDbContext>>() != null;
+
         if (hasInbox)
         {
-            metrics.PendingInboxCount = await dbContext.Set<InboxHandlerStatusEntity>()
-                .CountAsync(x => x.CompletedAt == null && !x.IsPoisoned, cts.Token);
-                
-            metrics.PoisonedInboxCount = await dbContext.Set<InboxHandlerStatusEntity>()
-                .CountAsync(x => x.CompletedAt == null && x.IsPoisoned, cts.Token);
+            pendingInbox = await CountAsync(
+                dbContext,
+                stoppingToken,
+                async (db, ct) =>
+                {
+                    var n = await db.Set<InboxHandlerStatusEntity>()
+                        .CountAsync(x => x.CompletedAt == null && !x.IsPoisoned, ct);
+                    return (long)n;
+                });
+
+            poisonedInbox = await CountAsync(
+                dbContext,
+                stoppingToken,
+                async (db, ct) =>
+                {
+                    var n = await db.Set<InboxHandlerStatusEntity>()
+                        .CountAsync(x => x.CompletedAt == null && x.IsPoisoned, ct);
+                    return (long)n;
+                });
         }
+
+        var snapshot = new DbContextMetrics(pendingOutbox, poisonedOutbox, pendingInbox, poisonedInbox);
+        state.ContextMetrics.AddOrUpdate(_contextName, snapshot, (_, _) => snapshot);
+    }
+
+    private async Task<long> CountAsync(
+        TDbContext dbContext,
+        CancellationToken stoppingToken,
+        Func<TDbContext, CancellationToken, Task<long>> count)
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        cts.CancelAfter(settings.QueryTimeout);
+        return await count(dbContext, cts.Token);
     }
 }

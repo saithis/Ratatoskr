@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Linq;
 using Ratatoskr.Core;
 
 namespace Ratatoskr.EfCore.Internal;
@@ -9,19 +8,6 @@ namespace Ratatoskr.EfCore.Internal;
 /// </summary>
 internal class OutboxTelemetry
 {
-    public OutboxTelemetry(EfCoreMetricsState state)
-    {
-        RatatoskrDiagnostics.Meter.CreateObservableGauge(
-            "ratatoskr.outbox.pending.messages",
-            () => state.ContextMetrics.Select(kv => new System.Diagnostics.Metrics.Measurement<long>(kv.Value.PendingOutboxCount, new TagList { { "db_context", kv.Key } })),
-            description: "Number of pending outbox messages.");
-
-        RatatoskrDiagnostics.Meter.CreateObservableGauge(
-            "ratatoskr.outbox.poisoned.messages",
-            () => state.ContextMetrics.Select(kv => new System.Diagnostics.Metrics.Measurement<long>(kv.Value.PoisonedOutboxCount, new TagList { { "db_context", kv.Key } })),
-            description: "Number of outbox messages marked as poisoned.");
-    }
-
     /// <summary>
     /// Starts a "create outbox" activity, restoring trace context from the message properties.
     /// </summary>

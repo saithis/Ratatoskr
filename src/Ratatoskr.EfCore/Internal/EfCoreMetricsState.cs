@@ -3,21 +3,18 @@ using System.Collections.Concurrent;
 namespace Ratatoskr.EfCore.Internal;
 
 /// <summary>
-/// Holds metrics gathered periodically from the database.
-/// This prevents measuring queries from heavily impacting the DB on rapid gauge pulls.
+/// Immutable snapshot of backlog counts for one DbContext (one scrape reads a consistent tuple).
 /// </summary>
-internal class DbContextMetrics
-{
-    public long PendingOutboxCount { get; set; }
-    public long PoisonedOutboxCount { get; set; }
-    public long PendingInboxCount { get; set; }
-    public long PoisonedInboxCount { get; set; }
-}
+internal readonly record struct DbContextMetrics(
+    long PendingOutboxCount,
+    long PoisonedOutboxCount,
+    long PendingInboxCount,
+    long PoisonedInboxCount);
 
 internal class EfCoreMetricsState
 {
     /// <summary>
-    /// Tracks metric state per DbContext type name.
+    /// Tracks metric state per DbContext type full name (see <see cref="System.Type.FullName"/>).
     /// </summary>
     public ConcurrentDictionary<string, DbContextMetrics> ContextMetrics { get; } = new();
 }
