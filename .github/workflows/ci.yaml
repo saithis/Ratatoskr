@@ -15,6 +15,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      html-report-url: ${{ steps.upload-html.outputs.artifact-url }}
 
     steps:
     - name: Checkout Code
@@ -43,7 +45,7 @@ jobs:
 
     - name: Test
       # Runs all tests in the solution
-      run: dotnet test --no-build --configuration Release --results-directory ./TestResults -- --coverage --coverage-output-format cobertura --report-trx --github-reporter-style collapsible
+      run: dotnet test --no-build --configuration Release --results-directory ./TestResults -- --coverage --coverage-output-format cobertura --coverage-output coverage.cobertura.xml --report-trx --github-reporter-style collapsible
 
     - name: Verify Packaging
       # "Dry Run" - Ensures nuget packing works (e.g. checks for missing icons/licenses)
@@ -62,9 +64,10 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: coverage
-        path: ./TestResults/**/*.cobertura.xml
+        path: ./TestResults/**/coverage.cobertura.xml
 
     - name: Upload HTML report
+      id: upload-html
       if: always()
       uses: actions/upload-artifact@v4
       with:
@@ -98,24 +101,20 @@ jobs:
         files: ./TestResults/**/*.trx
         comment_mode: "off"
 
-    - name: Code Coverage Report
-      id: coverage
-      uses: irongut/CodeCoverageSummary@v1.3.0
+    - name: Generate Coverage Report
+      uses: danielpalme/ReportGenerator-GitHub-Action@5
       continue-on-error: true
       with:
-        filename: CoverageResults/**/*.cobertura.xml
-        badge: true
-        format: markdown
-        hide_branch_rate: false
-        hide_complexity: true
-        indicators: true
-        output: both
+        reports: CoverageResults/**/coverage.cobertura.xml
+        targetdir: CoverageReport
+        reporttypes: MarkdownSummaryGithub
 
     - name: Build Combined PR Comment
       if: always() && github.event_name == 'pull_request'
       env:
         TEST_RESULTS_JSON: ${{ steps.test-results.outputs.json }}
         RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        HTML_REPORT_URL: ${{ needs.build.outputs.html-report-url }}
       run: |
         echo "## Test Results & Code Coverage" > combined-pr-comment.md
         echo "" >> combined-pr-comment.md
@@ -132,21 +131,24 @@ jobs:
           if [ -n "$CHECK_URL" ]; then
             LINKS="[Detailed Results](${CHECK_URL})"
           fi
-          LINKS="${LINKS:+$LINKS | }[HTML Report & Artifacts](${RUN_URL}#artifacts)"
+          if [ -n "$HTML_REPORT_URL" ]; then
+            LINKS="${LINKS:+$LINKS | }[HTML Report](${HTML_REPORT_URL})"
+          fi
+          LINKS="${LINKS:+$LINKS | }[Workflow Run](${RUN_URL})"
           echo "$LINKS" >> combined-pr-comment.md
         else
           echo "> :warning: No test results available. [View workflow run](${RUN_URL})" >> combined-pr-comment.md
         fi
 
         # Code coverage (collapsible)
-        if [ -f code-coverage-results.md ]; then
+        if [ -f CoverageReport/SummaryGithub.md ]; then
           echo "" >> combined-pr-comment.md
           echo "---" >> combined-pr-comment.md
           echo "" >> combined-pr-comment.md
           echo "<details>" >> combined-pr-comment.md
           echo "<summary><strong>Code Coverage</strong></summary>" >> combined-pr-comment.md
           echo "" >> combined-pr-comment.md
-          cat code-coverage-results.md >> combined-pr-comment.md
+          cat CoverageReport/SummaryGithub.md >> combined-pr-comment.md
           echo "" >> combined-pr-comment.md
           echo "</details>" >> combined-pr-comment.md
         fi
