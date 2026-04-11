@@ -46,6 +46,63 @@ public class CloudEventsAmqpMapperIncomingTests
     }
 
     [Test]
+    public void MapBinaryModeIncoming_ShouldFallbackToCloudEventsTraceHeader_WhenBareHeaderMissing()
+    {
+        // Backward compatibility: older Ratatoskr versions set cloudEvents_traceparent
+        // but not the bare traceparent header.
+        var headers = new Dictionary<string, object?>
+        {
+            { "cloudEvents_traceparent", "00-legacy-trace-id-01" },
+            { "cloudEvents_tracestate", "legacy=true" },
+            { "cloudEvents_id", "123" },
+            { "cloudEvents_source", "/unit-test" },
+            { "cloudEvents_type", "test.event" }
+        };
+
+        var basicProperties = new BasicProperties
+        {
+            Headers = headers,
+            ContentType = "application/json"
+        };
+
+        var body = Encoding.UTF8.GetBytes("{}");
+        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", basicProperties, body);
+
+        var result = _mapper.MapIncoming(incoming);
+
+        result.props.TraceParent.Should().Be("00-legacy-trace-id-01");
+        result.props.TraceState.Should().Be("legacy=true");
+    }
+
+    [Test]
+    public void MapBinaryModeIncoming_ShouldPreferBareTraceparent_WhenBothHeadersExist()
+    {
+        // When both headers exist, the standard W3C traceparent takes priority
+        // (set by RabbitMQ.Client 7.x during BasicPublishAsync).
+        var headers = new Dictionary<string, object?>
+        {
+            { "traceparent", "00-rmq-client-trace-01" },
+            { "cloudEvents_traceparent", "00-ratatoskr-send-trace-01" },
+            { "cloudEvents_id", "123" },
+            { "cloudEvents_source", "/unit-test" },
+            { "cloudEvents_type", "test.event" }
+        };
+
+        var basicProperties = new BasicProperties
+        {
+            Headers = headers,
+            ContentType = "application/json"
+        };
+
+        var body = Encoding.UTF8.GetBytes("{}");
+        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", basicProperties, body);
+
+        var result = _mapper.MapIncoming(incoming);
+
+        result.props.TraceParent.Should().Be("00-rmq-client-trace-01");
+    }
+
+    [Test]
     public void MapStructuredModeIncoming_ShouldMapTraceContext()
     {
         // Arrange

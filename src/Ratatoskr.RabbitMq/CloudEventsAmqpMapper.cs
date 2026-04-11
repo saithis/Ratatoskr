@@ -116,19 +116,10 @@ public class CloudEventsAmqpMapper(
             }
         }
         
-        // Handle trace propagation
-        if (!string.IsNullOrEmpty(props.TraceParent))
-        {
-            outgoing.Headers[CloudEventsAmqpConstants.TraceParentHeader] = props.TraceParent;
-            SetCloudEventHeader(outgoing.Headers, "traceparent", props.TraceParent);
-        }
-        
-        if (!string.IsNullOrEmpty(props.TraceState))
-        {
-            outgoing.Headers[CloudEventsAmqpConstants.TraceStateHeader] = props.TraceState;
-            SetCloudEventHeader(outgoing.Headers, "tracestate", props.TraceState);
-        }
-        
+        // Trace propagation: RabbitMQ.Client 7.x sets the W3C traceparent/tracestate
+        // AMQP headers automatically from Activity.Current during BasicPublishAsync.
+        // Setting them here would be overwritten by the client, so we delegate entirely.
+
         return serializedData;
     }
     
@@ -184,19 +175,10 @@ public class CloudEventsAmqpMapper(
             }
         }
         
-        // Handle trace propagation for structured mode too (as AMQP headers)
-        if (!string.IsNullOrEmpty(props.TraceParent))
-        {
-            outgoing.Headers ??= new Dictionary<string, object?>();
-            outgoing.Headers[CloudEventsAmqpConstants.TraceParentHeader] = props.TraceParent;
-        }
-        
-        if (!string.IsNullOrEmpty(props.TraceState))
-        {
-            outgoing.Headers ??= new Dictionary<string, object?>();
-            outgoing.Headers[CloudEventsAmqpConstants.TraceStateHeader] = props.TraceState;
-        }
-        
+        // Trace propagation: RabbitMQ.Client 7.x sets the W3C traceparent/tracestate
+        // AMQP headers automatically from Activity.Current during BasicPublishAsync.
+        // Setting them here would be overwritten by the client, so we delegate entirely.
+
         return envelopeBytes;
     }
     
@@ -242,11 +224,14 @@ public class CloudEventsAmqpMapper(
         var subject = GetCloudEventHeader(incomingHeaders, CloudEventsAmqpConstants.SubjectHeader);
         var dataSchema = GetCloudEventHeader(incomingHeaders, CloudEventsAmqpConstants.DataSchemaHeader);
 
-        // Extract trace context (prefer standard W3C headers, fallback to CloudEvents attributes)
-        var traceParent = incomingHeaders.TryGetValue("traceparent", out var tp) 
-            ? ConvertToString(tp) 
+        // Extract trace context from the standard W3C traceparent AMQP header.
+        // RabbitMQ.Client 7.x sets this during BasicPublishAsync with a child span of our
+        // send activity. Fall back to cloudEvents_traceparent for backward compatibility
+        // with messages published by older versions that set the CloudEvents header manually.
+        var traceParent = incomingHeaders.TryGetValue("traceparent", out var tp)
+            ? ConvertToString(tp)
             : GetCloudEventHeader(incomingHeaders, CloudEventsAmqpConstants.TraceParentHeader);
-            
+
         var traceState = incomingHeaders.TryGetValue("tracestate", out var ts)
             ? ConvertToString(ts)
             : GetCloudEventHeader(incomingHeaders, CloudEventsAmqpConstants.TraceStateHeader);
@@ -295,16 +280,21 @@ public class CloudEventsAmqpMapper(
             dataBytes = Array.Empty<byte>();
         }
         
+        // Extract trace context from the standard W3C traceparent AMQP header (set by
+        // RabbitMQ.Client 7.x during BasicPublishAsync). Fall back to CloudEvent extensions
+        // for backward compatibility with messages that embedded trace context in the envelope.
         var incomingHeaders = incoming.BasicProperties.Headers ?? new Dictionary<string, object?>();
-        if (!cloudEvent.TryGetExtension<string>(CloudEventsAmqpConstants.TraceParentHeader, out string? traceParent))
+        var traceParent = incomingHeaders.TryGetValue("traceparent", out var tp)
+            ? ConvertToString(tp) : null;
+        if (traceParent == null)
         {
-            traceParent = incomingHeaders.TryGetValue("traceparent", out var tp) 
-                ? ConvertToString(tp) : null;
+            cloudEvent.TryGetExtension<string>(CloudEventsAmqpConstants.TraceParentHeader, out traceParent);
         }
-        if (!cloudEvent.TryGetExtension<string>(CloudEventsAmqpConstants.TraceStateHeader, out string? traceState))
+        var traceState = incomingHeaders.TryGetValue("tracestate", out var ts)
+            ? ConvertToString(ts) : null;
+        if (traceState == null)
         {
-            traceState = incomingHeaders.TryGetValue("tracestate", out var ts) 
-                ? ConvertToString(ts) : null;
+            cloudEvent.TryGetExtension<string>(CloudEventsAmqpConstants.TraceStateHeader, out traceState);
         }
 
         var props = new MessageProperties

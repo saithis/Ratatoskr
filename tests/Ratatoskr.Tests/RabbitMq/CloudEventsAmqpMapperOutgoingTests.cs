@@ -209,9 +209,11 @@ public class CloudEventsAmqpMapperOutgoingTests
     }
 
     [Test]
-    public void MapOutgoing_BinaryMode_TraceContextIncludedInHeaders()
+    public void MapOutgoing_BinaryMode_DoesNotSetTraceContextHeaders()
     {
-        // Arrange
+        // RabbitMQ.Client 7.x sets traceparent/tracestate AMQP headers automatically
+        // from Activity.Current during BasicPublishAsync — the mapper must not set them
+        // to avoid being overwritten and creating inconsistencies.
         var props = new MessageProperties
         {
             Id = "123",
@@ -228,10 +230,10 @@ public class CloudEventsAmqpMapperOutgoingTests
         _mapper.MapOutgoing(body, props, outgoing);
 
         // Assert
-        outgoing.Headers.Should().ContainKey("traceparent");
-        outgoing.Headers["traceparent"].Should().Be("00-traceid-spanid-01");
-        outgoing.Headers.Should().ContainKey("tracestate");
-        outgoing.Headers["tracestate"].Should().Be("vendor=value");
+        outgoing.Headers.Should().NotContainKey("traceparent");
+        outgoing.Headers.Should().NotContainKey("tracestate");
+        outgoing.Headers.Should().NotContainKey("cloudEvents_traceparent");
+        outgoing.Headers.Should().NotContainKey("cloudEvents_tracestate");
     }
 
     [Test]

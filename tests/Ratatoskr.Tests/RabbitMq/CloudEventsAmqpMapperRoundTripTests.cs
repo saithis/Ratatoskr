@@ -38,12 +38,13 @@ public class CloudEventsAmqpMapperRoundTripTests
         var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", outgoing, mappedBody);
         var result = _mapper.MapIncoming(incoming);
 
-        // Assert — round-trip preserves key properties
+        // Assert — round-trip preserves key properties.
+        // TraceParent is NOT asserted here: in production, RabbitMQ.Client 7.x sets the
+        // traceparent AMQP header during BasicPublishAsync, which the mapper does not replicate.
         result.props.Id.Should().Be("roundtrip-id");
         result.props.Source.Should().Be("/roundtrip-source");
         result.props.Type.Should().Be("roundtrip.type");
         result.props.Subject.Should().Be("roundtrip-subject");
-        result.props.TraceParent.Should().Be("00-roundtrip-trace-01");
         result.body.Should().BeEquivalentTo(originalBody);
     }
 
@@ -74,12 +75,11 @@ public class CloudEventsAmqpMapperRoundTripTests
         var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", outgoing, mappedBody);
         var result = structuredMapper.MapIncoming(incoming);
 
-        // Assert
+        // Assert — TraceParent/TraceState are NOT asserted here: in production,
+        // RabbitMQ.Client 7.x sets them during BasicPublishAsync.
         result.props.Id.Should().Be("struct-roundtrip-id");
         result.props.Source.Should().Be("/struct-roundtrip");
         result.props.Type.Should().Be("struct.roundtrip");
-        result.props.TraceParent.Should().Be("00-struct-trace-01");
-        result.props.TraceState.Should().Be("struct=true");
     }
 
     [Test]

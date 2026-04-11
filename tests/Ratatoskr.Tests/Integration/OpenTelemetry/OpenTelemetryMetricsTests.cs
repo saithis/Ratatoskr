@@ -142,7 +142,8 @@ public class OpenTelemetryMetricsTests(RabbitMqContainerFixture rabbitMq, Postgr
         var relevantActivities = GetRelevantActivities(activities, eventId);
         var consumerActivities = relevantActivities
             .Where(a => a.Kind == ActivityKind.Consumer
-                && a.TagObjects.Any(t => t.Key == "messaging.system" && (string?)t.Value == "rabbitmq"))
+                && a.TagObjects.Any(t => t.Key == "messaging.system" && (string?)t.Value == "rabbitmq")
+                && a.TagObjects.Any(t => t.Key == "messaging.message.id" && (string?)t.Value == eventId))
             .OrderBy(a => a.StartTimeUtc)
             .ToList();
 
@@ -224,7 +225,8 @@ public class OpenTelemetryMetricsTests(RabbitMqContainerFixture rabbitMq, Postgr
         var relevantActivities = GetRelevantActivities(activities, eventId);
         var consumerActivities = relevantActivities
             .Where(a => a.Kind == ActivityKind.Consumer
-                && a.TagObjects.Any(t => t.Key == "messaging.system" && (string?)t.Value == "rabbitmq"))
+                && a.TagObjects.Any(t => t.Key == "messaging.system" && (string?)t.Value == "rabbitmq")
+                && a.TagObjects.Any(t => t.Key == "messaging.message.id" && (string?)t.Value == eventId))
             .OrderBy(a => a.StartTimeUtc)
             .ToList();
 
