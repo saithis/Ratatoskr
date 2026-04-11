@@ -44,8 +44,6 @@ jobs:
     - name: Test
       # Runs all tests in the solution
       run: dotnet test --no-build --configuration Release --results-directory ./TestResults -- --coverage --coverage-output-format cobertura --report-trx --github-reporter-style collapsible
-      env:
-        TUNIT_GITHUB_REPORTER_STYLE: collapsible
 
     - name: Verify Packaging
       # "Dry Run" - Ensures nuget packing works (e.g. checks for missing icons/licenses)
@@ -53,11 +51,11 @@ jobs:
       run: dotnet pack --no-build --configuration Release --output ./nupkgs
 
     - name: Upload test results
-      if: always()  # Run even if tests fail
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: test-results
-        path: ./TestResults/*.trx
+        path: ./TestResults/**/*.trx
 
     - name: Upload coverage
       if: always()
@@ -66,43 +64,46 @@ jobs:
         name: coverage
         path: ./TestResults/**/*.cobertura.xml
 
-  publish-test-results:
-    name: Publish Test Results
+    - name: Upload HTML report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: html-report
+        path: ./TestResults/**/*-report.html
+
+  publish-results:
+    name: Publish Results
     needs: build
     runs-on: ubuntu-latest
     if: always()
 
     steps:
-    - name: Download all test results
+    - name: Download test results
       uses: actions/download-artifact@v4
       with:
         name: test-results
         path: ./TestResults
 
-    - name: Comment PR with results
-      uses: EnricoMi/publish-unit-test-result-action@v2
-      with:
-        files: ./TestResults/**/*.trx
-        comment_mode: always
-
-
-  publish-coverage-results:
-    name: Publish Coverage Results
-    needs: build
-    runs-on: ubuntu-latest
-    if: always()
-
-    steps:
-    - name: Download coverage results
+    - name: Download coverage
       uses: actions/download-artifact@v4
       with:
         name: coverage
-        path: ./TestResults
+        path: ./CoverageResults
+      continue-on-error: true
+
+    - name: Publish Test Results
+      id: test-results
+      uses: EnricoMi/publish-unit-test-result-action@v2
+      with:
+        files: ./TestResults/**/*.trx
+        comment_mode: "off"
 
     - name: Code Coverage Report
+      id: coverage
       uses: irongut/CodeCoverageSummary@v1.3.0
+      continue-on-error: true
       with:
-        filename: TestResults/**/*.cobertura.xml
+        filename: CoverageResults/**/*.cobertura.xml
         badge: true
         format: markdown
         hide_branch_rate: false
@@ -110,10 +111,49 @@ jobs:
         indicators: true
         output: both
 
-    - name: Add Coverage PR Comment
+    - name: Build Combined PR Comment
+      if: always() && github.event_name == 'pull_request'
+      env:
+        TEST_RESULTS_JSON: ${{ steps.test-results.outputs.json }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        echo "## Test Results & Code Coverage" > combined-pr-comment.md
+        echo "" >> combined-pr-comment.md
+
+        # Test results summary
+        if [ -n "$TEST_RESULTS_JSON" ]; then
+          SUMMARY=$(echo "$TEST_RESULTS_JSON" | jq -r '.summary')
+          CHECK_URL=$(echo "$TEST_RESULTS_JSON" | jq -r '.check_url // empty')
+
+          printf '%s\n' "$SUMMARY" >> combined-pr-comment.md
+          echo "" >> combined-pr-comment.md
+
+          LINKS=""
+          if [ -n "$CHECK_URL" ]; then
+            LINKS="[Detailed Results](${CHECK_URL})"
+          fi
+          LINKS="${LINKS:+$LINKS | }[HTML Report & Artifacts](${RUN_URL}#artifacts)"
+          echo "$LINKS" >> combined-pr-comment.md
+        else
+          echo "> :warning: No test results available. [View workflow run](${RUN_URL})" >> combined-pr-comment.md
+        fi
+
+        # Code coverage (collapsible)
+        if [ -f code-coverage-results.md ]; then
+          echo "" >> combined-pr-comment.md
+          echo "---" >> combined-pr-comment.md
+          echo "" >> combined-pr-comment.md
+          echo "<details>" >> combined-pr-comment.md
+          echo "<summary><strong>Code Coverage</strong></summary>" >> combined-pr-comment.md
+          echo "" >> combined-pr-comment.md
+          cat code-coverage-results.md >> combined-pr-comment.md
+          echo "" >> combined-pr-comment.md
+          echo "</details>" >> combined-pr-comment.md
+        fi
+
+    - name: Add PR Comment
       uses: marocchino/sticky-pull-request-comment@v2
-      if: github.event_name == 'pull_request'
+      if: always() && github.event_name == 'pull_request'
       with:
-        header: code-coverage
-        recreate: true
-        path: code-coverage-results.md
+        header: test-results
+        path: combined-pr-comment.md
