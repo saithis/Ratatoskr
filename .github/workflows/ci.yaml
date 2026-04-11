@@ -43,7 +43,7 @@ jobs:
 
     - name: Test
       # Runs all tests in the solution
-      run: dotnet test --no-build --configuration Release --results-directory ./TestResults -- --coverage --report-trx --github-reporter-style collapsible
+      run: dotnet test --no-build --configuration Release --results-directory ./TestResults -- --coverage --coverage-output-format cobertura --report-trx --github-reporter-style collapsible
       env:
         TUNIT_GITHUB_REPORTER_STYLE: collapsible
 
@@ -64,7 +64,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: coverage
-        path: ./TestResults/*.coverage
+        path: ./TestResults/**/*.cobertura.xml
 
   publish-test-results:
     name: Publish Test Results
@@ -76,13 +76,13 @@ jobs:
     - name: Download all test results
       uses: actions/download-artifact@v4
       with:
-        pattern: test-results
+        name: test-results
         path: ./TestResults
 
     - name: Comment PR with results
       uses: EnricoMi/publish-unit-test-result-action@v2
       with:
-        files: ./TestResults/*.trx
+        files: ./TestResults/**/*.trx
         comment_mode: always
 
 
@@ -93,19 +93,27 @@ jobs:
     if: always()
 
     steps:
-    - name: Download all test results
+    - name: Download coverage results
       uses: actions/download-artifact@v4
       with:
-        pattern: coverage
+        name: coverage
         path: ./TestResults
 
     - name: Code Coverage Report
       uses: irongut/CodeCoverageSummary@v1.3.0
       with:
-        filename: TestResults/*.coverage
+        filename: TestResults/**/*.cobertura.xml
         badge: true
         format: markdown
         hide_branch_rate: false
         hide_complexity: true
         indicators: true
         output: both
+
+    - name: Add Coverage PR Comment
+      uses: marocchino/sticky-pull-request-comment@v2
+      if: github.event_name == 'pull_request'
+      with:
+        header: code-coverage
+        recreate: true
+        path: code-coverage-results.md
