@@ -43,7 +43,9 @@ jobs:
 
     - name: Test
       # Runs all tests in the solution
-      run: dotnet test --no-build --configuration Release --results-directory ./TestResults -- --coverage --report-trx
+      run: dotnet test --no-build --configuration Release --results-directory ./TestResults -- --coverage --report-trx --github-reporter-style collapsible
+      env:
+        TUNIT_GITHUB_REPORTER_STYLE: collapsible
 
     - name: Verify Packaging
       # "Dry Run" - Ensures nuget packing works (e.g. checks for missing icons/licenses)
