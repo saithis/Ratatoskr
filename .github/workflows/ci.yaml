@@ -15,8 +15,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    outputs:
-      html-report-url: ${{ steps.upload-html.outputs.artifact-url }}
 
     steps:
     - name: Checkout Code
@@ -45,7 +43,7 @@ jobs:
 
     - name: Test
       # Runs all tests in the solution
-      run: dotnet test --no-build --configuration Release --results-directory ./TestResults -- --coverage --coverage-output-format cobertura --coverage-output coverage.cobertura.xml --report-trx --github-reporter-style collapsible
+      run: dotnet test --no-build --configuration Release --results-directory ./TestResults -- --coverage --coverage-output-format cobertura --coverage-output coverage.cobertura.xml --coverage-settings ./tests/coverage.config --report-trx --github-reporter-style collapsible
 
     - name: Verify Packaging
       # "Dry Run" - Ensures nuget packing works (e.g. checks for missing icons/licenses)
@@ -65,14 +63,6 @@ jobs:
       with:
         name: coverage
         path: ./TestResults/**/coverage.cobertura.xml
-
-    - name: Upload HTML report
-      id: upload-html
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: html-report
-        path: ./TestResults/**/*-report.html
 
   publish-results:
     name: Publish Results
@@ -114,7 +104,6 @@ jobs:
       env:
         TEST_RESULTS_JSON: ${{ steps.test-results.outputs.json }}
         RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        HTML_REPORT_URL: ${{ needs.build.outputs.html-report-url }}
       run: |
         echo "## Test Results & Code Coverage" > combined-pr-comment.md
         echo "" >> combined-pr-comment.md
@@ -122,20 +111,10 @@ jobs:
         # Test results summary
         if [ -n "$TEST_RESULTS_JSON" ]; then
           SUMMARY=$(echo "$TEST_RESULTS_JSON" | jq -r '.summary')
-          CHECK_URL=$(echo "$TEST_RESULTS_JSON" | jq -r '.check_url // empty')
 
           printf '%s\n' "$SUMMARY" >> combined-pr-comment.md
           echo "" >> combined-pr-comment.md
-
-          LINKS=""
-          if [ -n "$CHECK_URL" ]; then
-            LINKS="[Detailed Results](${CHECK_URL})"
-          fi
-          if [ -n "$HTML_REPORT_URL" ]; then
-            LINKS="${LINKS:+$LINKS | }[HTML Report](${HTML_REPORT_URL})"
-          fi
-          LINKS="${LINKS:+$LINKS | }[Workflow Run](${RUN_URL})"
-          echo "$LINKS" >> combined-pr-comment.md
+          echo "[HTML Report & Artifacts](${RUN_URL})" >> combined-pr-comment.md
         else
           echo "> :warning: No test results available. [View workflow run](${RUN_URL})" >> combined-pr-comment.md
         fi
