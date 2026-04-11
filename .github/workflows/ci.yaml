@@ -9,8 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  checks: write
-  pull-requests: write
+  contents: read
 
 jobs:
   build:
@@ -41,6 +40,9 @@ jobs:
       # builds with the Release configuration for better optimization
       run: dotnet build --no-restore --configuration Release
 
+    - name: Install dotnet-coverage
+      run: dotnet tool install --global dotnet-coverage
+
     - name: Test
       # Runs all tests in the solution
       run: dotnet test --no-build --configuration Release --results-directory ./TestResults -- --coverage --coverage-output-format cobertura --coverage-output coverage.cobertura.xml --coverage-settings ./tests/coverage.config --report-trx --github-reporter-style collapsible
@@ -69,6 +71,9 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     if: always()
+    permissions:
+      checks: write
+      pull-requests: write
 
     steps:
     - name: Download test results
