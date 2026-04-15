@@ -33,6 +33,7 @@ internal static class RatatoskrEntityModelConfiguration
             entity.Property(e => e.SerializedProperties).IsRequired();
             entity.Property(e => e.TransportName).HasMaxLength(50).IsRequired();
             entity.Property(e => e.Version).IsConcurrencyToken();
+            entity.Property(e => e.RequeuedCount).HasDefaultValue(0);
         });
     }
 
@@ -67,6 +68,7 @@ internal static class RatatoskrEntityModelConfiguration
             entity.Property(e => e.LastError).HasMaxLength(2000);
             entity.Property(e => e.CreatedAt).IsRequired();
             entity.Property(e => e.Version).IsConcurrencyToken();
+            entity.Property(e => e.RequeuedCount).HasDefaultValue(0);
 
             entity.HasOne<InboxMessageEntity>()
                 .WithMany()

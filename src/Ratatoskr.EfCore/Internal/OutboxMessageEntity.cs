@@ -54,6 +54,11 @@ internal class OutboxMessageEntity
     /// </summary>
     public uint Version { get; private set; }
 
+    /// <summary>
+    /// Counts how many times this message has been requeued via the management API.
+    /// </summary>
+    public int RequeuedCount { get; private set; }
+
     private MessageProperties? _cachedProperties;
 
     public MessageProperties GetProperties() =>
@@ -108,6 +113,21 @@ internal class OutboxMessageEntity
         }
     }
     
+    /// <summary>
+    /// Clears the poisoned state so the outbox processor will retry the message.
+    /// Increments <see cref="RequeuedCount"/> and resets the error counters.
+    /// </summary>
+    public void Requeue()
+    {
+        IsPoisoned = false;
+        ErrorCount = 0;
+        Error = string.Empty;
+        NextAttemptAt = null;
+        ProcessingStartedAt = null;
+        RequeuedCount++;
+        Version++;
+    }
+
     public void MarkAsPoisoned(string reason, TimeProvider timeProvider)
     {
         IsPoisoned = true;

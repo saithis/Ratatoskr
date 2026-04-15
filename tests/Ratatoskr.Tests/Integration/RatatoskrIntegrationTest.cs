@@ -87,6 +87,16 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
         services.AddSingleton<IDistributedLockProvider>(_ => new FileDistributedSynchronizationProvider(lockFileDirectory));
     }
 
+    /// <summary>
+    /// Creates an HTTP client that can make requests to the test server.
+    /// Requires <see cref="StartTestAsync"/> to have been called first.
+    /// </summary>
+    protected HttpClient CreateHttpClient()
+    {
+        if (_factory is null) throw new InvalidOperationException("StartTestAsync has not been called yet.");
+        return _factory.CreateClient();
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_factory != null)
