@@ -1,10 +1,8 @@
 using System.Text;
 using System.Text.Json;
-using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.EfCore.Internal;
-using Ratatoskr.EfCore.Management.Dto;
 
 namespace Ratatoskr.EfCore.Management;
 
@@ -36,7 +34,7 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
 
     // ─── Outbox ───────────────────────────────────────────────────────────────
 
-    public async Task<(List<OutboxPoisonedListItemDto> Items, long TotalCount)> GetPoisonedOutboxAsync(
+    public async Task<(List<OutboxPoisonedListItem> Items, long TotalCount)> ListPoisonedOutboxAsync(
         int pageSize, string? cursor, DateTimeOffset? from, DateTimeOffset? to, string? type, CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
@@ -47,7 +45,6 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
         if (from.HasValue) query = query.Where(x => x.CreatedAt >= from.Value);
         if (to.HasValue) query = query.Where(x => x.CreatedAt <= to.Value);
 
-        // Cursor: base64url-encoded last-seen Id
         if (cursor is not null)
         {
             var lastId = CursorHelper.DecodeCursor(cursor);
@@ -69,18 +66,18 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
                 var msgType = ExtractType(x.SerializedProperties);
                 if (type is not null && !msgType.Contains(type, StringComparison.OrdinalIgnoreCase))
                     return null;
-                return new OutboxPoisonedListItemDto(
+                return new OutboxPoisonedListItem(
                     x.Id, msgType, x.CreatedAt, x.ErrorCount, x.RequeuedCount,
                     string.IsNullOrEmpty(x.Error) ? null : x.Error, DbContextName);
             })
             .Where(x => x is not null)
-            .Cast<OutboxPoisonedListItemDto>()
+            .Cast<OutboxPoisonedListItem>()
             .ToList();
 
         return (dtos, totalCount);
     }
 
-    public async Task<OutboxPoisonedDetailDto?> GetPoisonedOutboxDetailAsync(Guid id, CancellationToken ct)
+    public async Task<OutboxPoisonedDetail?> GetPoisonedOutboxDetailAsync(Guid id, CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<TDbContext>();
@@ -96,20 +93,20 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
         var msgType = ExtractType(entity.SerializedProperties);
         var (jsonPayload, base64) = DecodeContent(entity.Content);
 
-        return new OutboxPoisonedDetailDto(
+        return new OutboxPoisonedDetail(
             entity.Id, msgType, entity.CreatedAt, entity.ErrorCount, entity.RequeuedCount,
             string.IsNullOrEmpty(entity.Error) ? null : entity.Error,
             entity.FailedAt, props, jsonPayload, base64, DbContextName);
     }
 
-    public async Task<IResult> RequeueOutboxAsync(Guid id, CancellationToken ct)
+    public async Task<SingleRequeueOutcome> RequeueOutboxAsync(Guid id, CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<TDbContext>();
         return await RequeueHelper.RequeueOutboxAsync(db, id, ct);
     }
 
-    public async Task<IResult> DeleteOutboxAsync(Guid id, CancellationToken ct)
+    public async Task<SingleDeleteOutcome> DeleteOutboxAsync(Guid id, CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<TDbContext>();
@@ -117,22 +114,22 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
         var entity = await db.Set<OutboxMessageEntity>()
             .SingleOrDefaultAsync(x => x.Id == id, ct);
 
-        if (entity is null) return Results.NotFound();
-        if (!entity.IsPoisoned) return Results.BadRequest("Message is not poisoned.");
+        if (entity is null) return SingleDeleteOutcome.NotFound;
+        if (!entity.IsPoisoned) return SingleDeleteOutcome.NotPoisoned;
 
         db.Set<OutboxMessageEntity>().Remove(entity);
         try
         {
             await db.SaveChangesAsync(ct);
-            return Results.Ok();
+            return SingleDeleteOutcome.Success;
         }
         catch (DbUpdateConcurrencyException)
         {
-            return Results.Conflict("Message was modified concurrently. Refresh and retry.");
+            return SingleDeleteOutcome.Conflict;
         }
     }
 
-    public async Task<BulkActionResult> BulkRequeueOutboxAsync(List<Guid>? ids, bool all, CancellationToken ct)
+    public async Task<BulkRequeueOutboxResponse> BulkRequeueOutboxAsync(List<Guid>? ids, bool all, CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<TDbContext>();
@@ -149,26 +146,26 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
                     .SetProperty(x => x.ProcessingStartedAt, (DateTimeOffset?)null)
                     .SetProperty(x => x.RequeuedCount, x => x.RequeuedCount + 1)
                     .SetProperty(x => x.Version, x => x.Version + 1), ct);
-            return new BulkActionResult([], []);
+            return new BulkRequeueOutboxResponse([], []);
         }
 
         if (ids is null or { Count: 0 })
-            return new BulkActionResult([], []);
+            return new BulkRequeueOutboxResponse([], []);
 
         var succeeded = new List<Guid>();
-        var failed = new List<BulkFailure>();
+        var failed = new List<BulkRequeueOutboxFailure>();
         foreach (var id in ids)
         {
-            var result = await RequeueHelper.RequeueOutboxAsync(db, id, ct);
-            if (result is { } r && IsSuccessResult(r))
+            var outcome = await RequeueHelper.RequeueOutboxAsync(db, id, ct);
+            if (outcome == SingleRequeueOutcome.Success)
                 succeeded.Add(id);
             else
-                failed.Add(new BulkFailure(id, "Not found, not poisoned, or concurrent modification."));
+                failed.Add(new BulkRequeueOutboxFailure(id, "Not found, not poisoned, or concurrent modification."));
         }
-        return new BulkActionResult(succeeded, failed);
+        return new BulkRequeueOutboxResponse(succeeded, failed);
     }
 
-    public async Task<IResult> BulkDeleteOutboxAsync(List<Guid>? ids, bool all, CancellationToken ct)
+    public async Task BulkDeleteOutboxAsync(List<Guid>? ids, bool all, CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<TDbContext>();
@@ -178,20 +175,19 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
             await db.Set<OutboxMessageEntity>()
                 .Where(x => x.IsPoisoned)
                 .ExecuteDeleteAsync(ct);
-            return Results.Ok();
+            return;
         }
 
-        if (ids is null or { Count: 0 }) return Results.Ok();
+        if (ids is null or { Count: 0 }) return;
 
         await db.Set<OutboxMessageEntity>()
             .Where(x => ids.Contains(x.Id) && x.IsPoisoned)
             .ExecuteDeleteAsync(ct);
-        return Results.Ok();
     }
 
     // ─── Inbox ────────────────────────────────────────────────────────────────
 
-    public async Task<(List<InboxPoisonedListItemDto> Items, long TotalCount)> GetPoisonedInboxAsync(
+    public async Task<(List<InboxPoisonedListItem> Items, long TotalCount)> ListPoisonedInboxAsync(
         int pageSize, string? cursor, DateTimeOffset? from, DateTimeOffset? to, string? type, CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
@@ -233,19 +229,19 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
                 var msgType = ExtractType(x.SerializedProperties);
                 if (type is not null && !msgType.Contains(type, StringComparison.OrdinalIgnoreCase))
                     return null;
-                return new InboxPoisonedListItemDto(
+                return new InboxPoisonedListItem(
                     x.Id, x.MessageId, msgType, x.HandlerKey, x.ReceivedAt,
                     x.ErrorCount, x.RequeuedCount,
                     string.IsNullOrEmpty(x.LastError) ? null : x.LastError, DbContextName);
             })
             .Where(x => x is not null)
-            .Cast<InboxPoisonedListItemDto>()
+            .Cast<InboxPoisonedListItem>()
             .ToList();
 
         return (dtos, totalCount);
     }
 
-    public async Task<InboxPoisonedDetailDto?> GetPoisonedInboxDetailAsync(Guid handlerStatusId, CancellationToken ct)
+    public async Task<InboxHandlerDetail?> GetPoisonedInboxDetailAsync(Guid handlerStatusId, CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<TDbContext>();
@@ -264,14 +260,14 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
         var msgType = ExtractType(result.msg.SerializedProperties);
         var (jsonPayload, base64) = DecodeContent(result.msg.Content);
 
-        return new InboxPoisonedDetailDto(
+        return new InboxHandlerDetail(
             result.hs.Id, result.hs.MessageId, msgType, result.hs.HandlerKey, result.msg.ReceivedAt,
             result.hs.ErrorCount, result.hs.RequeuedCount,
             string.IsNullOrEmpty(result.hs.LastError) ? null : result.hs.LastError,
             props, jsonPayload, base64, DbContextName);
     }
 
-    public async Task<InboxMessageHandlersDto?> GetInboxHandlersForMessageAsync(string messageId, CancellationToken ct)
+    public async Task<InboxMessageHandlers?> GetInboxHandlersForMessageAsync(string messageId, CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<TDbContext>();
@@ -286,22 +282,22 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
             .ToListAsync(ct);
 
         var msgType = ExtractType(msg.SerializedProperties);
-        var summaries = handlers.Select(h => new InboxHandlerStatusSummaryDto(
+        var summaries = handlers.Select(h => new InboxHandlerStatusSummary(
             h.Id, h.HandlerKey, h.ErrorCount, h.RequeuedCount,
             string.IsNullOrEmpty(h.LastError) ? null : h.LastError,
             h.IsPoisoned, h.CompletedAt.HasValue, DbContextName)).ToList();
 
-        return new InboxMessageHandlersDto(messageId, msgType, msg.ReceivedAt, summaries);
+        return new InboxMessageHandlers(messageId, msgType, msg.ReceivedAt, summaries);
     }
 
-    public async Task<IResult> RequeueInboxHandlerAsync(Guid handlerStatusId, CancellationToken ct)
+    public async Task<SingleRequeueOutcome> RequeueInboxHandlerAsync(Guid handlerStatusId, CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<TDbContext>();
         return await RequeueHelper.RequeueInboxHandlerAsync(db, handlerStatusId, ct);
     }
 
-    public async Task<IResult> RequeueAllInboxHandlersForMessageAsync(string messageId, CancellationToken ct)
+    public async Task<RequeueMessageOutcome> RequeueAllInboxHandlersForMessageAsync(string messageId, CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<TDbContext>();
@@ -311,7 +307,7 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
             .ToListAsync(ct);
 
         if (handlers.Count == 0)
-            return Results.NotFound($"No poisoned handlers found for message '{messageId}'.");
+            return new RequeueMessageOutcome(Found: false, Conflict: false, RequeuedIds: []);
 
         foreach (var h in handlers)
             h.Requeue();
@@ -319,15 +315,15 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
         try
         {
             await db.SaveChangesAsync(ct);
-            return Results.Ok(handlers.Select(h => h.Id).ToList());
+            return new RequeueMessageOutcome(Found: true, Conflict: false, RequeuedIds: handlers.Select(h => h.Id).ToList());
         }
         catch (DbUpdateConcurrencyException)
         {
-            return Results.Conflict("One or more handler statuses were modified concurrently. Refresh and retry.");
+            return new RequeueMessageOutcome(Found: true, Conflict: true, RequeuedIds: []);
         }
     }
 
-    public async Task<IResult> DeleteInboxHandlerStatusAsync(Guid handlerStatusId, CancellationToken ct)
+    public async Task<SingleDeleteOutcome> DeleteInboxHandlerStatusAsync(Guid handlerStatusId, CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<TDbContext>();
@@ -335,8 +331,8 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
         var entity = await db.Set<InboxHandlerStatusEntity>()
             .SingleOrDefaultAsync(x => x.Id == handlerStatusId, ct);
 
-        if (entity is null) return Results.NotFound();
-        if (!entity.IsPoisoned) return Results.BadRequest("Handler status is not poisoned.");
+        if (entity is null) return SingleDeleteOutcome.NotFound;
+        if (!entity.IsPoisoned) return SingleDeleteOutcome.NotPoisoned;
 
         var messageId = entity.MessageId;
         db.Set<InboxHandlerStatusEntity>().Remove(entity);
@@ -357,10 +353,10 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
             }
         }
 
-        return Results.Ok();
+        return SingleDeleteOutcome.Success;
     }
 
-    public async Task<BulkActionResult> BulkRequeueInboxAsync(List<Guid>? ids, bool all, CancellationToken ct)
+    public async Task<BulkRequeueInboxResponse> BulkRequeueInboxAsync(List<Guid>? ids, bool all, CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<TDbContext>();
@@ -377,26 +373,26 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
                     .SetProperty(x => x.ProcessingStartedAt, (DateTimeOffset?)null)
                     .SetProperty(x => x.RequeuedCount, x => x.RequeuedCount + 1)
                     .SetProperty(x => x.Version, x => x.Version + 1), ct);
-            return new BulkActionResult([], []);
+            return new BulkRequeueInboxResponse([], []);
         }
 
         if (ids is null or { Count: 0 })
-            return new BulkActionResult([], []);
+            return new BulkRequeueInboxResponse([], []);
 
         var succeeded = new List<Guid>();
-        var failed = new List<BulkFailure>();
+        var failed = new List<BulkRequeueInboxFailure>();
         foreach (var id in ids)
         {
-            var result = await RequeueHelper.RequeueInboxHandlerAsync(db, id, ct);
-            if (IsSuccessResult(result))
+            var outcome = await RequeueHelper.RequeueInboxHandlerAsync(db, id, ct);
+            if (outcome == SingleRequeueOutcome.Success)
                 succeeded.Add(id);
             else
-                failed.Add(new BulkFailure(id, "Not found, not poisoned, or concurrent modification."));
+                failed.Add(new BulkRequeueInboxFailure(id, "Not found, not poisoned, or concurrent modification."));
         }
-        return new BulkActionResult(succeeded, failed);
+        return new BulkRequeueInboxResponse(succeeded, failed);
     }
 
-    public async Task<IResult> BulkDeleteInboxAsync(List<Guid>? ids, bool all, CancellationToken ct)
+    public async Task BulkDeleteInboxAsync(List<Guid>? ids, bool all, CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<TDbContext>();
@@ -406,24 +402,23 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
             await db.Set<InboxHandlerStatusEntity>()
                 .Where(x => x.IsPoisoned)
                 .ExecuteDeleteAsync(ct);
-            return Results.Ok();
+            return;
         }
 
-        if (ids is null or { Count: 0 }) return Results.Ok();
+        if (ids is null or { Count: 0 }) return;
 
         await db.Set<InboxHandlerStatusEntity>()
             .Where(x => ids.Contains(x.Id) && x.IsPoisoned)
             .ExecuteDeleteAsync(ct);
-        return Results.Ok();
     }
 
     // ─── Health ───────────────────────────────────────────────────────────────
 
-    public Task<DbContextHealthDto> GetHealthAsync(CancellationToken ct)
+    public Task<ContextHealthResponse> GetHealthAsync(CancellationToken ct)
     {
         _metricsState.ContextMetrics.TryGetValue(_contextKey, out var metrics);
 
-        return Task.FromResult(new DbContextHealthDto(
+        return Task.FromResult(new ContextHealthResponse(
             DbContextName,
             metrics.PoisonedOutboxCount,
             metrics.PoisonedInboxCount,
@@ -472,13 +467,5 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
         {
             return (null, base64);
         }
-    }
-
-    private static bool IsSuccessResult(IResult result)
-    {
-        // Results.Ok() has StatusCode 200; check via interface
-        if (result is IStatusCodeHttpResult sc)
-            return sc.StatusCode is null or (>= 200 and < 300);
-        return true;
     }
 }

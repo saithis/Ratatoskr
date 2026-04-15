@@ -12,6 +12,8 @@ namespace Ratatoskr.Tests.Integration.Management;
 public class InboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
     : ManagementTestBase(rabbitMq, postgres)
 {
+    private const string BaseUrl = "/ratatoskr/api/v1/contexts/TestDbContext/inbox";
+
     [Test]
     public async Task InboxManagement_PoisonedList_ReturnsPaginatedResults()
     {
@@ -19,7 +21,7 @@ public class InboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCon
         await SeedPoisonedInboxAsync();
         await SeedPoisonedInboxAsync();
 
-        var response = await HttpClient.GetAsync("/ratatoskr/api/v1/inbox/poisoned");
+        var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -33,8 +35,7 @@ public class InboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCon
         await StartManagementTestAsync();
         var (_, handlerStatusId) = await SeedPoisonedInboxAsync();
 
-        var response = await HttpClient.PostAsync(
-            $"/ratatoskr/api/v1/inbox/poisoned/{handlerStatusId}/requeue", null);
+        var response = await HttpClient.PostAsync($"{BaseUrl}/poisoned/{handlerStatusId}/requeue", null);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         await InScopeAsync(async ctx =>
@@ -63,8 +64,7 @@ public class InboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCon
             await db.SaveChangesAsync();
         });
 
-        var response = await HttpClient.PostAsync(
-            $"/ratatoskr/api/v1/inbox/messages/{messageId}/requeue", null);
+        var response = await HttpClient.PostAsync($"{BaseUrl}/messages/{messageId}/requeue", null);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         await InScopeAsync(async ctx =>
@@ -96,7 +96,7 @@ public class InboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCon
             await db.SaveChangesAsync();
         });
 
-        var response = await HttpClient.GetAsync($"/ratatoskr/api/v1/inbox/messages/{messageId}/handlers");
+        var response = await HttpClient.GetAsync($"{BaseUrl}/messages/{messageId}/handlers");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -111,8 +111,7 @@ public class InboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCon
         var (messageId, handlerStatusId) = await SeedPoisonedInboxAsync();
 
         // Delete the only handler status
-        var response = await HttpClient.DeleteAsync(
-            $"/ratatoskr/api/v1/inbox/poisoned/{handlerStatusId}");
+        var response = await HttpClient.DeleteAsync($"{BaseUrl}/poisoned/{handlerStatusId}");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         await InScopeAsync(async ctx =>
@@ -143,7 +142,7 @@ public class InboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCon
             await db.SaveChangesAsync();
         });
 
-        await HttpClient.DeleteAsync($"/ratatoskr/api/v1/inbox/poisoned/{handlerStatusId}");
+        await HttpClient.DeleteAsync($"{BaseUrl}/poisoned/{handlerStatusId}");
 
         await InScopeAsync(async ctx =>
         {

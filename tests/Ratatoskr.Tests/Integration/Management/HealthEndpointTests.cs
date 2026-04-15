@@ -15,15 +15,11 @@ public class HealthEndpointTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         await StartManagementTestAsync();
         await SeedPoisonedOutboxAsync();
 
-        var response = await HttpClient.GetAsync("/ratatoskr/api/v1/health");
+        var response = await HttpClient.GetAsync("/ratatoskr/api/v1/contexts/TestDbContext/health");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        body.TryGetProperty("dbContexts", out var dbContexts).Should().BeTrue();
-        dbContexts.GetArrayLength().Should().BeGreaterThan(0);
-
-        var first = dbContexts.EnumerateArray().First();
-        first.GetProperty("dbContextName").GetString().Should().Be("TestDbContext");
+        body.GetProperty("dbContextName").GetString().Should().Be("TestDbContext");
     }
 
     [Test]
@@ -31,14 +27,38 @@ public class HealthEndpointTests(RabbitMqContainerFixture rabbitMq, PostgresCont
     {
         await StartManagementTestAsync();
 
-        var response = await HttpClient.GetAsync("/ratatoskr/api/v1/health");
+        var response = await HttpClient.GetAsync("/ratatoskr/api/v1/contexts/TestDbContext/health");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        var first = body.GetProperty("dbContexts").EnumerateArray().First();
+        body.TryGetProperty("lastOutboxProcessedAt", out _).Should().BeTrue();
+        body.TryGetProperty("lastInboxProcessedAt", out _).Should().BeTrue();
+    }
 
-        // LastOutboxProcessedAt and LastInboxProcessedAt should be present (may be null if processor not running)
-        first.TryGetProperty("lastOutboxProcessedAt", out _).Should().BeTrue();
-        first.TryGetProperty("lastInboxProcessedAt", out _).Should().BeTrue();
+    [Test]
+    public async Task Contexts_ReturnsListOfRegisteredDbContexts()
+    {
+        await StartManagementTestAsync();
+
+        var response = await HttpClient.GetAsync("/ratatoskr/api/v1/contexts");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.TryGetProperty("contexts", out var contexts).Should().BeTrue();
+        contexts.GetArrayLength().Should().BeGreaterThan(0);
+
+        var first = contexts.EnumerateArray().First();
+        first.GetProperty("name").GetString().Should().Be("TestDbContext");
+        first.TryGetProperty("hasOutbox", out _).Should().BeTrue();
+        first.TryGetProperty("hasInbox", out _).Should().BeTrue();
+    }
+
+    [Test]
+    public async Task Health_UnknownContext_Returns404()
+    {
+        await StartManagementTestAsync();
+
+        var response = await HttpClient.GetAsync("/ratatoskr/api/v1/contexts/NonExistentContext/health");
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 }

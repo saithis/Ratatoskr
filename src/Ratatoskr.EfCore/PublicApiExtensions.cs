@@ -55,6 +55,7 @@ public static class PublicApiExtensions
             // Management API
             builder.Services.AddSingleton<IEfCoreManagementDbContextProvider,
                 EfCoreManagementDbContextProvider<TDbContext>>();
+            builder.Services.TryAddSingleton<EfCoreManagementProviderLookup>();
             builder.Services.TryAddSingleton<IRatatoskrEndpointConfigurator, EfCoreEndpointConfigurator>();
 
             return builder;

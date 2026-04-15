@@ -13,6 +13,8 @@ namespace Ratatoskr.Tests.Integration.Management;
 public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
     : ManagementTestBase(rabbitMq, postgres)
 {
+    private const string BaseUrl = "/ratatoskr/api/v1/contexts/TestDbContext/outbox";
+
     [Test]
     public async Task OutboxManagement_PoisonedList_ReturnsPaginatedResults()
     {
@@ -20,7 +22,7 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         await SeedPoisonedOutboxAsync();
         await SeedPoisonedOutboxAsync();
 
-        var response = await HttpClient.GetAsync("/ratatoskr/api/v1/outbox/poisoned");
+        var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -45,7 +47,7 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
             await db.SaveChangesAsync();
         });
 
-        var response = await HttpClient.GetAsync("/ratatoskr/api/v1/outbox/poisoned");
+        var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned");
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
 
         var items = body.GetProperty("items").EnumerateArray().ToList();
@@ -60,7 +62,7 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         await SeedPoisonedOutboxAsync();
 
         var future = Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(1).ToString("O"));
-        var response = await HttpClient.GetAsync($"/ratatoskr/api/v1/outbox/poisoned?to={future}");
+        var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned?to={future}");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -73,7 +75,7 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         await StartManagementTestAsync();
         var id = await SeedPoisonedOutboxAsync("detail.event");
 
-        var response = await HttpClient.GetAsync($"/ratatoskr/api/v1/outbox/poisoned/{id}");
+        var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned/{id}");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -90,8 +92,7 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         await StartManagementTestAsync();
         var id = await SeedPoisonedOutboxAsync();
 
-        var response = await HttpClient.PostAsync(
-            $"/ratatoskr/api/v1/outbox/poisoned/{id}/requeue", null);
+        var response = await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", null);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         await InScopeAsync(async ctx =>
@@ -109,7 +110,7 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         await StartManagementTestAsync();
         var id = await SeedPoisonedOutboxAsync();
 
-        await HttpClient.PostAsync($"/ratatoskr/api/v1/outbox/poisoned/{id}/requeue", null);
+        await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", null);
 
         await InScopeAsync(async ctx =>
         {
@@ -125,7 +126,7 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         await StartManagementTestAsync();
         var id = await SeedPoisonedOutboxAsync();
 
-        await HttpClient.PostAsync($"/ratatoskr/api/v1/outbox/poisoned/{id}/requeue", null);
+        await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", null);
 
         await InScopeAsync(async ctx =>
         {
@@ -153,8 +154,7 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
             id = entity.Id;
         });
 
-        var response = await HttpClient.PostAsync(
-            $"/ratatoskr/api/v1/outbox/poisoned/{id}/requeue", null);
+        var response = await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", null);
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
@@ -164,7 +164,7 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         await StartManagementTestAsync();
         var id = await SeedPoisonedOutboxAsync();
 
-        var response = await HttpClient.DeleteAsync($"/ratatoskr/api/v1/outbox/poisoned/{id}");
+        var response = await HttpClient.DeleteAsync($"{BaseUrl}/poisoned/{id}");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         await InScopeAsync(async ctx =>
@@ -182,7 +182,7 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         var id1 = await SeedPoisonedOutboxAsync();
         var id2 = await SeedPoisonedOutboxAsync();
 
-        var req = new HttpRequestMessage(HttpMethod.Post, "/ratatoskr/api/v1/outbox/poisoned/requeue");
+        var req = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/poisoned/requeue");
         req.Content = JsonContent.Create(new { ids = new[] { id1, id2 } });
         var response = await HttpClient.SendAsync(req);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -203,7 +203,7 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         await SeedPoisonedOutboxAsync();
         await SeedPoisonedOutboxAsync();
 
-        var req = new HttpRequestMessage(HttpMethod.Post, "/ratatoskr/api/v1/outbox/poisoned/requeue");
+        var req = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/poisoned/requeue");
         req.Content = JsonContent.Create(new { all = true });
         var response = await HttpClient.SendAsync(req);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -223,7 +223,7 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         var id1 = await SeedPoisonedOutboxAsync();
         var id2 = await SeedPoisonedOutboxAsync();
 
-        var req = new HttpRequestMessage(HttpMethod.Delete, "/ratatoskr/api/v1/outbox/poisoned");
+        var req = new HttpRequestMessage(HttpMethod.Delete, $"{BaseUrl}/poisoned");
         req.Content = JsonContent.Create(new { ids = new[] { id1, id2 } });
         var response = await HttpClient.SendAsync(req);
         response.StatusCode.Should().Be(HttpStatusCode.OK);

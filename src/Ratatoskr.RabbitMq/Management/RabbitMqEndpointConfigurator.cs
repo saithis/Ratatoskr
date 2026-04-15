@@ -12,7 +12,7 @@ internal sealed class RabbitMqEndpointConfigurator : IRatatoskrEndpointConfigura
         endpoints.MapGet(
             "/ratatoskr/api/v1/rabbitmq/health",
             (RabbitMqConnectionManager conn, RabbitMqConsumer consumer) =>
-                Results.Ok(new RabbitMqHealthDto(conn.IsConnected, consumer.IsHealthy, null)))
+                TypedResults.Ok(new RabbitMqHealthDto(conn.IsConnected, consumer.IsHealthy, null)))
             .RequireAuthorization(policyName)
             .DisableAntiforgery();
     }

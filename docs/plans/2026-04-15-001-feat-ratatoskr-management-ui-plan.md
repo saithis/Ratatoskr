@@ -408,7 +408,7 @@ internal sealed class EfCoreEndpointConfigurator<TDbContext> : IRatatoskrEndpoin
 
 #### Outbox endpoints implementation notes
 
-`GET /ratatoskr/api/v1/outbox/poisoned`
+`GET /ratatoskr/api/v1/contexts/{contextName}/outbox/poisoned`
 - Query: `WHERE IsPoisoned = true`
 - Cursor: URL-safe base64 of last seen `Id` (UUIDv7, monotonic)
 - Filtering: `type` query param applied in-memory after projection (poisoned sets are small)
@@ -416,49 +416,50 @@ internal sealed class EfCoreEndpointConfigurator<TDbContext> : IRatatoskrEndpoin
 - Include `TotalCount` from `COUNT(*)` (separate query, no tracking)
 - Deserialize `SerializedProperties` → extract message type
 
-`POST /ratatoskr/api/v1/outbox/poisoned/{id}/requeue`
+`POST /ratatoskr/api/v1/contexts/{contextName}/outbox/poisoned/{id}/requeue`
 - Delegates to `RequeueHelper.RequeueOutboxAsync`
 - Returns 200/400/404/409
 
-`DELETE /ratatoskr/api/v1/outbox/poisoned/{id}`
+`DELETE /ratatoskr/api/v1/contexts/{contextName}/outbox/poisoned/{id}`
 - Load entity, verify `IsPoisoned = true`, delete
 - Returns 200/404
 - If processor concurrently deletes → `DbUpdateConcurrencyException` → 409
 
-`POST /ratatoskr/api/v1/outbox/poisoned/requeue` (bulk)
+`POST /ratatoskr/api/v1/contexts/{contextName}/outbox/poisoned/requeue` (bulk)
 - Body: `BulkActionRequest`
 - If `All = true`: `UPDATE ... SET IsPoisoned=false, ErrorCount=0, ... WHERE IsPoisoned=true`
   (executed as a single `ExecuteUpdateAsync` for efficiency)
 - If `Ids` list: loop + `RequeueHelper.RequeueOutboxAsync` per ID, collect successes/failures
 - Returns `BulkActionResult`
 
-`DELETE /ratatoskr/api/v1/outbox/poisoned` (bulk)
+`DELETE /ratatoskr/api/v1/contexts/{contextName}/outbox/poisoned` (bulk)
 - Body: `BulkActionRequest`
 - If `All = true`: `ExecuteDeleteAsync` WHERE IsPoisoned=true
 - If `Ids` list: `ExecuteDeleteAsync` WHERE Id IN (ids) AND IsPoisoned=true
 
 #### Inbox endpoints implementation notes
 
-`GET /ratatoskr/api/v1/inbox/poisoned`
+`GET /ratatoskr/api/v1/contexts/{contextName}/inbox/poisoned`
 - Join `InboxHandlerStatusEntity` ← `InboxMessageEntity` for `ReceivedAt` + `SerializedProperties`
 - Same cursor/filter/count pattern as outbox
 
-`GET /ratatoskr/api/v1/inbox/messages/{messageId}/handlers`
+`GET /ratatoskr/api/v1/contexts/{contextName}/inbox/messages/{messageId}/handlers`
 - Returns ALL handler statuses for the message (not only poisoned)
 - Used by the Angular expandable row to show sibling handlers
 
-`POST /ratatoskr/api/v1/inbox/messages/{messageId}/requeue`
+`POST /ratatoskr/api/v1/contexts/{contextName}/inbox/messages/{messageId}/requeue`
 - Requeues all POISONED handler statuses for the message (skips completed/pending)
 - Returns list of requeued handler IDs
 
-`DELETE /ratatoskr/api/v1/inbox/poisoned/{handlerStatusId}`
+`DELETE /ratatoskr/api/v1/contexts/{contextName}/inbox/poisoned/{handlerStatusId}`
 - Delete the `InboxHandlerStatusEntity`
 - **Cascade orphan cleanup**: if no remaining `InboxHandlerStatusEntity` rows for the
   parent `InboxMessageEntity`, delete the parent too to avoid accumulating orphans.
 
 #### Health endpoint
 
-`GET /ratatoskr/api/v1/health`
+`GET /ratatoskr/api/v1/contexts/{contextName}/health`
+`GET /ratatoskr/api/v1/contexts`
 - Reads `EfCoreMetricsState` singleton for cached counts (PoisonedOutboxCount,
   PoisonedInboxCount, PendingOutboxCount, PendingInboxCount)
 - Resolves `OutboxProcessor<TDbContext>` and `InboxProcessor<TDbContext>` from DI to

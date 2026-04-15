@@ -10,6 +10,8 @@ namespace Ratatoskr.Tests.Integration.Management;
 public class RequeuedCountTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
     : ManagementTestBase(rabbitMq, postgres)
 {
+    private const string BaseUrl = "/ratatoskr/api/v1/contexts/TestDbContext/outbox";
+
     [Test]
     public async Task RequeuedCount_IncrementsOnEachRequeue()
     {
@@ -17,7 +19,7 @@ public class RequeuedCountTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         var id = await SeedPoisonedOutboxAsync();
 
         // First requeue
-        await HttpClient.PostAsync($"/ratatoskr/api/v1/outbox/poisoned/{id}/requeue", null);
+        await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", null);
 
         // Re-poison the entity so we can requeue again
         await InScopeAsync(async ctx =>
@@ -29,7 +31,7 @@ public class RequeuedCountTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         });
 
         // Second requeue
-        await HttpClient.PostAsync($"/ratatoskr/api/v1/outbox/poisoned/{id}/requeue", null);
+        await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", null);
 
         await InScopeAsync(async ctx =>
         {
@@ -45,7 +47,7 @@ public class RequeuedCountTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         await StartManagementTestAsync();
         var id = await SeedPoisonedOutboxAsync();
 
-        await HttpClient.PostAsync($"/ratatoskr/api/v1/outbox/poisoned/{id}/requeue", null);
+        await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", null);
 
         await InScopeAsync(async ctx =>
         {
