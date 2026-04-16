@@ -16,7 +16,7 @@ internal static class BulkDeleteInboxEndpoint
         inboxGroup.MapDelete("/poisoned", Handle);
     }
 
-    private static async Task<Results<Ok, NotFound>> Handle(
+    private static async Task<Results<Ok, NotFound, BadRequest<string>>> Handle(
         string contextName,
         [FromBody] BulkDeleteInboxRequest req,
         EfCoreManagementProviderLookup lookup,
@@ -25,6 +25,9 @@ internal static class BulkDeleteInboxEndpoint
     {
         var provider = lookup.Find(contextName);
         if (provider is null || !provider.HasInbox) return TypedResults.NotFound();
+
+        if (!BulkRequestValidator.TryValidate(req.Ids, req.All, out var error))
+            return TypedResults.BadRequest(error!);
 
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);
@@ -36,8 +39,6 @@ internal static class BulkDeleteInboxEndpoint
 
         if (req.All is true)
         {
-            // Collect all message IDs that have at least one poisoned handler before deleting,
-            // so we can clean up orphaned parent messages afterwards.
             var affectedMessageIds = await db.Set<InboxHandlerStatusEntity>()
                 .Where(x => x.IsPoisoned)
                 .Select(x => x.MessageId)
@@ -50,17 +51,16 @@ internal static class BulkDeleteInboxEndpoint
 
             await DeleteOrphanedMessagesAsync(db, affectedMessageIds, ct);
         }
-        else if (req.Ids is not null and { Count: > 0 })
+        else
         {
-            // Collect the message IDs that are affected by the handler deletions.
             var messageIds = await db.Set<InboxHandlerStatusEntity>()
-                .Where(x => req.Ids.Contains(x.Id) && x.IsPoisoned)
+                .Where(x => req.Ids!.Contains(x.Id) && x.IsPoisoned)
                 .Select(x => x.MessageId)
                 .Distinct()
                 .ToListAsync(ct);
 
             await db.Set<InboxHandlerStatusEntity>()
-                .Where(x => req.Ids.Contains(x.Id) && x.IsPoisoned)
+                .Where(x => req.Ids!.Contains(x.Id) && x.IsPoisoned)
                 .ExecuteDeleteAsync(ct);
 
             await DeleteOrphanedMessagesAsync(db, messageIds, ct);

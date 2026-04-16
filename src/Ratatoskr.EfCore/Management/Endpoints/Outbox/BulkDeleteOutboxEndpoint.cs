@@ -16,7 +16,7 @@ internal static class BulkDeleteOutboxEndpoint
         outboxGroup.MapDelete("/poisoned", Handle);
     }
 
-    private static async Task<Results<Ok, NotFound>> Handle(
+    private static async Task<Results<Ok, NotFound, BadRequest<string>>> Handle(
         string contextName,
         [FromBody] BulkDeleteOutboxRequest req,
         EfCoreManagementProviderLookup lookup,
@@ -26,6 +26,9 @@ internal static class BulkDeleteOutboxEndpoint
         var provider = lookup.Find(contextName);
         if (provider is null || !provider.HasOutbox) return TypedResults.NotFound();
 
+        if (!BulkRequestValidator.TryValidate(req.Ids, req.All, out var error))
+            return TypedResults.BadRequest(error!);
+
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);
 
@@ -34,13 +37,11 @@ internal static class BulkDeleteOutboxEndpoint
             await db.Set<OutboxMessageEntity>()
                 .Where(x => x.IsPoisoned)
                 .ExecuteDeleteAsync(ct);
-            return TypedResults.Ok();
         }
-
-        if (req.Ids is not null and { Count: > 0 })
+        else
         {
             await db.Set<OutboxMessageEntity>()
-                .Where(x => req.Ids.Contains(x.Id) && x.IsPoisoned)
+                .Where(x => req.Ids!.Contains(x.Id) && x.IsPoisoned)
                 .ExecuteDeleteAsync(ct);
         }
 

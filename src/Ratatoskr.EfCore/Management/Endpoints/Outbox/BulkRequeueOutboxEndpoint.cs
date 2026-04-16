@@ -15,7 +15,7 @@ internal static class BulkRequeueOutboxEndpoint
         outboxGroup.MapPost("/poisoned/requeue", Handle);
     }
 
-    private static async Task<Results<Ok<BulkRequeueOutboxResponse>, NotFound>> Handle(
+    private static async Task<Results<Ok<BulkRequeueOutboxResponse>, NotFound, BadRequest<string>>> Handle(
         string contextName,
         BulkRequeueOutboxRequest req,
         EfCoreManagementProviderLookup lookup,
@@ -24,6 +24,9 @@ internal static class BulkRequeueOutboxEndpoint
     {
         var provider = lookup.Find(contextName);
         if (provider is null || !provider.HasOutbox) return TypedResults.NotFound();
+
+        if (!BulkRequestValidator.TryValidate(req.Ids, req.All, out var error))
+            return TypedResults.BadRequest(error!);
 
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);
@@ -55,16 +58,13 @@ internal static class BulkRequeueOutboxEndpoint
             return TypedResults.Ok(new BulkRequeueOutboxResponse(succeeded, failed));
         }
 
-        if (req.Ids is null or { Count: 0 })
-            return TypedResults.Ok(new BulkRequeueOutboxResponse(succeeded, failed));
-
-        // Fetch all matching poisoned entities in a single query instead of N individual lookups.
+        // Validator guarantees req.Ids is non-null and non-empty at this point.
         var entities = await db.Set<OutboxMessageEntity>()
-            .Where(x => req.Ids.Contains(x.Id) && x.IsPoisoned)
+            .Where(x => req.Ids!.Contains(x.Id) && x.IsPoisoned)
             .ToListAsync(ct);
 
         var foundIds = entities.Select(e => e.Id).ToHashSet();
-        failed.AddRange(req.Ids
+        failed.AddRange(req.Ids!
             .Where(id => !foundIds.Contains(id))
             .Select(id => new BulkRequeueOutboxFailure(id, "Not found, not poisoned, or concurrent modification.")));
 
