@@ -46,7 +46,11 @@ internal static class ListPoisonedOutboxEndpoint
         var filtered = db.Set<OutboxMessageEntity>().Where(x => x.IsPoisoned);
         if (from.HasValue) filtered = filtered.Where(x => x.CreatedAt >= from.Value);
         if (to.HasValue) filtered = filtered.Where(x => x.CreatedAt <= to.Value);
-        if (type is not null) filtered = filtered.Where(x => EF.Functions.Like(x.SerializedProperties, $"%{type}%"));
+        if (type is not null)
+        {
+            var pattern = ManagementHelpers.BuildMessageTypeLikePattern(type);
+            filtered = filtered.Where(x => EF.Functions.Like(x.SerializedProperties, pattern));
+        }
 
         var paged = filtered;
         if (decodedCursor is { } k)
@@ -75,6 +79,11 @@ internal static class ListPoisonedOutboxEndpoint
                 string.IsNullOrEmpty(x.Error) ? null : x.Error,
                 provider.DbContextName))
             .ToList();
+
+        // Belt-and-braces exact match — the DB-side LIKE is a coarse prefilter and
+        // may over-match on providers that do not honour the '\' LIKE escape char.
+        if (type is not null)
+            dtos = dtos.Where(x => x.MessageType == type).ToList();
 
         var nextCursor = hasNext
             ? CursorHelper.Encode(items[^1].CreatedAt, items[^1].Id)

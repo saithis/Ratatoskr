@@ -51,7 +51,11 @@ internal static class ListPoisonedInboxEndpoint
 
         if (from.HasValue) filtered = filtered.Where(x => x.msg.ReceivedAt >= from.Value);
         if (to.HasValue) filtered = filtered.Where(x => x.msg.ReceivedAt <= to.Value);
-        if (type is not null) filtered = filtered.Where(x => EF.Functions.Like(x.msg.SerializedProperties, $"%{type}%"));
+        if (type is not null)
+        {
+            var pattern = ManagementHelpers.BuildMessageTypeLikePattern(type);
+            filtered = filtered.Where(x => EF.Functions.Like(x.msg.SerializedProperties, pattern));
+        }
 
         var paged = filtered;
         if (decodedCursor is { } k)
@@ -83,6 +87,10 @@ internal static class ListPoisonedInboxEndpoint
                 string.IsNullOrEmpty(x.LastError) ? null : x.LastError,
                 provider.DbContextName))
             .ToList();
+
+        // Belt-and-braces exact match — see note in ListPoisonedOutboxEndpoint.
+        if (type is not null)
+            dtos = dtos.Where(x => x.MessageType == type).ToList();
 
         var nextCursor = hasNext
             ? CursorHelper.Encode(rows[^1].ReceivedAt, rows[^1].Id)
