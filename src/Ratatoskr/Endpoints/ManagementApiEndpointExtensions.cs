@@ -20,6 +20,14 @@ public static class ManagementApiEndpointExtensions
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(policyName);
 
+        var configurators = endpoints.ServiceProvider
+            .GetServices<IRatatoskrEndpointConfigurator>()
+            .ToList();
+
+        // No transport registered any management endpoints — nothing to map.
+        // Safe for hosts that conditionally include Ratatoskr durability.
+        if (configurators.Count == 0) return endpoints;
+
         // Validate the policy exists at startup rather than at first request.
         var authOptions = endpoints.ServiceProvider
             .GetRequiredService<IOptions<AuthorizationOptions>>().Value;
@@ -27,9 +35,6 @@ public static class ManagementApiEndpointExtensions
             throw new InvalidOperationException(
                 $"Authorization policy '{policyName}' is not registered. " +
                 "Call services.AddAuthorization() and define the policy before calling MapRatatoskrManagementApi.");
-
-        var configurators = endpoints.ServiceProvider
-            .GetServices<IRatatoskrEndpointConfigurator>();
 
         foreach (var configurator in configurators)
             configurator.MapEndpoints(endpoints, policyName);

@@ -1,17 +1,18 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Authorization;
 using Ratatoskr.Endpoints;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddLogging();
 var app = builder.Build();
 
-// Map the Ratatoskr management API when tests configure it.
-// The policy check prevents the startup-validation throw for tests that don't need management endpoints.
-var configurators = app.Services.GetServices<IRatatoskrEndpointConfigurator>().ToList();
+// Wire the management API when the host registers the expected policy.
+// MapRatatoskrManagementApi is itself a no-op when no transport registered
+// configurators, so the only gate here is the authorization policy check.
 var authOptions = app.Services.GetService<IOptions<AuthorizationOptions>>()?.Value;
-if (configurators.Count > 0 && authOptions?.GetPolicy("RatatoskrAdmin") is not null)
+if (authOptions?.GetPolicy("RatatoskrAdmin") is not null)
 {
+    app.UseAuthentication();
     app.UseAuthorization();
     app.MapRatatoskrManagementApi("RatatoskrAdmin");
 }
