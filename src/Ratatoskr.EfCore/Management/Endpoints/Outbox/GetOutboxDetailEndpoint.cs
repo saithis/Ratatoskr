@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Ratatoskr.EfCore.Internal;
 
 namespace Ratatoskr.EfCore.Management;
@@ -21,8 +22,10 @@ internal static class GetOutboxDetailEndpoint
         Guid id,
         EfCoreManagementProviderLookup lookup,
         IServiceScopeFactory scopeFactory,
+        ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
+        var logger = loggerFactory.CreateLogger(typeof(GetOutboxDetailEndpoint).FullName!);
         var provider = lookup.Find(contextName);
         if (provider is null || !provider.HasOutbox)
             return ManagementResults.NotFound($"No outbox is registered for DbContext '{contextName}'.");
@@ -38,9 +41,9 @@ internal static class GetOutboxDetailEndpoint
         if (entity is null)
             return ManagementResults.NotFound($"Poisoned outbox message '{id}' was not found.");
 
-        var props = ManagementHelpers.SafeDeserializeToJsonElement(entity.SerializedProperties);
-        var msgType = ManagementHelpers.ExtractType(entity.SerializedProperties);
-        var (jsonPayload, base64) = ManagementHelpers.DecodeContent(entity.Content);
+        var props = ManagementHelpers.SafeDeserializeToJsonElement(entity.SerializedProperties, logger);
+        var msgType = ManagementHelpers.ExtractType(entity.SerializedProperties, logger);
+        var (jsonPayload, base64) = ManagementHelpers.DecodeContent(entity.Content, logger);
 
         return TypedResults.Ok(new OutboxPoisonedDetail(
             entity.Id, msgType, entity.CreatedAt, entity.ErrorCount, entity.RequeuedCount,

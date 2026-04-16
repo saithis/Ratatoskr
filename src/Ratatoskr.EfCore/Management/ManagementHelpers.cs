@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 
 namespace Ratatoskr.EfCore.Management;
 
@@ -39,7 +40,7 @@ internal static class ManagementHelpers
         return builder.ToString();
     }
 
-    internal static string ExtractType(string serializedProperties)
+    internal static string ExtractType(string serializedProperties, ILogger? logger = null)
     {
         try
         {
@@ -47,28 +48,31 @@ internal static class ManagementHelpers
             if (doc.RootElement.TryGetProperty("Type", out var t) && t.ValueKind == JsonValueKind.String)
                 return t.GetString() ?? "(unknown)";
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
-            // Corrupt serialized properties — return a sentinel so the UI can surface it.
+            // Corrupt serialized properties — surface to the operator while still
+            // returning a sentinel so the UI can render the row.
+            logger?.LogWarning(ex, "Failed to parse serialized message properties; returning '(unknown)' type.");
         }
         return "(unknown)";
     }
 
-    internal static JsonElement SafeDeserializeToJsonElement(string json)
+    internal static JsonElement SafeDeserializeToJsonElement(string json, ILogger? logger = null)
     {
         try
         {
             using var doc = JsonDocument.Parse(json);
             return doc.RootElement.Clone();
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
+            logger?.LogWarning(ex, "Failed to parse JSON for management detail view; returning empty object.");
             using var empty = JsonDocument.Parse("{}");
             return empty.RootElement.Clone();
         }
     }
 
-    internal static (string? JsonPayload, string PayloadBase64) DecodeContent(byte[] content)
+    internal static (string? JsonPayload, string PayloadBase64) DecodeContent(byte[] content, ILogger? logger = null)
     {
         var base64 = Convert.ToBase64String(content);
         try
@@ -77,12 +81,15 @@ internal static class ManagementHelpers
             using var doc = JsonDocument.Parse(text);
             return (text, base64);
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
+            // Binary or non-JSON payload — base64 is still returned so the UI can offer a download.
+            logger?.LogDebug(ex, "Message payload is not valid JSON; only base64 will be surfaced.");
             return (null, base64);
         }
-        catch (DecoderFallbackException)
+        catch (DecoderFallbackException ex)
         {
+            logger?.LogDebug(ex, "Message payload is not valid UTF-8; only base64 will be surfaced.");
             return (null, base64);
         }
     }

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Ratatoskr.EfCore.Internal;
 
 namespace Ratatoskr.EfCore.Management;
@@ -19,6 +20,7 @@ internal static class ListPoisonedInboxEndpoint
         string contextName,
         EfCoreManagementProviderLookup lookup,
         IServiceScopeFactory scopeFactory,
+        ILoggerFactory loggerFactory,
         int pageSize = PaginationOptions.DefaultPageSize,
         string? cursor = null,
         DateTimeOffset? from = null,
@@ -26,6 +28,7 @@ internal static class ListPoisonedInboxEndpoint
         string? type = null,
         CancellationToken ct = default)
     {
+        var logger = loggerFactory.CreateLogger(typeof(ListPoisonedInboxEndpoint).FullName!);
         var provider = lookup.Find(contextName);
         if (provider is null || !provider.HasInbox)
             return ManagementResults.NotFound($"No inbox is registered for DbContext '{contextName}'.");
@@ -36,7 +39,10 @@ internal static class ListPoisonedInboxEndpoint
         if (cursor is not null)
         {
             if (!CursorHelper.TryDecode(cursor, out var c))
+            {
+                logger.LogInformation("Rejecting management list request with malformed cursor (context {ContextName}).", contextName);
                 return ManagementResults.BadRequest("Invalid pagination cursor.");
+            }
             decodedCursor = c;
         }
 
@@ -83,7 +89,7 @@ internal static class ListPoisonedInboxEndpoint
         var dtos = rows
             .Select(x => new InboxPoisonedListItem(
                 x.Id, x.MessageId,
-                ManagementHelpers.ExtractType(x.SerializedProperties),
+                ManagementHelpers.ExtractType(x.SerializedProperties, logger),
                 x.HandlerKey, x.ReceivedAt, x.ErrorCount, x.RequeuedCount,
                 string.IsNullOrEmpty(x.LastError) ? null : x.LastError,
                 provider.DbContextName))

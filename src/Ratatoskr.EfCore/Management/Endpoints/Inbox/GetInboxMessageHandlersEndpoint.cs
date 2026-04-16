@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Ratatoskr.EfCore.Internal;
 
 namespace Ratatoskr.EfCore.Management;
@@ -20,8 +21,10 @@ internal static class GetInboxMessageHandlersEndpoint
         string messageId,
         EfCoreManagementProviderLookup lookup,
         IServiceScopeFactory scopeFactory,
+        ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
+        var logger = loggerFactory.CreateLogger(typeof(GetInboxMessageHandlersEndpoint).FullName!);
         var provider = lookup.Find(contextName);
         if (provider is null || !provider.HasInbox)
             return ManagementResults.NotFound($"No inbox is registered for DbContext '{contextName}'.");
@@ -39,7 +42,7 @@ internal static class GetInboxMessageHandlersEndpoint
             .Where(x => x.MessageId == messageId)
             .ToListAsync(ct);
 
-        var msgType = ManagementHelpers.ExtractType(msg.SerializedProperties);
+        var msgType = ManagementHelpers.ExtractType(msg.SerializedProperties, logger);
         var summaries = handlers.Select(h => new InboxHandlerStatusSummary(
             h.Id, h.HandlerKey, h.ErrorCount, h.RequeuedCount,
             string.IsNullOrEmpty(h.LastError) ? null : h.LastError,

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Ratatoskr.EfCore.Internal;
 
 namespace Ratatoskr.EfCore.Management;
@@ -19,6 +20,7 @@ internal static class ListPoisonedOutboxEndpoint
         string contextName,
         EfCoreManagementProviderLookup lookup,
         IServiceScopeFactory scopeFactory,
+        ILoggerFactory loggerFactory,
         int pageSize = PaginationOptions.DefaultPageSize,
         string? cursor = null,
         DateTimeOffset? from = null,
@@ -26,6 +28,7 @@ internal static class ListPoisonedOutboxEndpoint
         string? type = null,
         CancellationToken ct = default)
     {
+        var logger = loggerFactory.CreateLogger(typeof(ListPoisonedOutboxEndpoint).FullName!);
         var provider = lookup.Find(contextName);
         if (provider is null || !provider.HasOutbox)
             return ManagementResults.NotFound($"No outbox is registered for DbContext '{contextName}'.");
@@ -36,7 +39,12 @@ internal static class ListPoisonedOutboxEndpoint
         if (cursor is not null)
         {
             if (!CursorHelper.TryDecode(cursor, out var c))
+            {
+                // Info, not warning: likely a malformed/stale cursor copied from an older
+                // client. Surface it once so an operator can correlate 400s to their UI.
+                logger.LogInformation("Rejecting management list request with malformed cursor (context {ContextName}).", contextName);
                 return ManagementResults.BadRequest("Invalid pagination cursor.");
+            }
             decodedCursor = c;
         }
 
@@ -75,7 +83,7 @@ internal static class ListPoisonedOutboxEndpoint
         var dtos = items
             .Select(x => new OutboxPoisonedListItem(
                 x.Id,
-                ManagementHelpers.ExtractType(x.SerializedProperties),
+                ManagementHelpers.ExtractType(x.SerializedProperties, logger),
                 x.CreatedAt, x.ErrorCount, x.RequeuedCount,
                 string.IsNullOrEmpty(x.Error) ? null : x.Error,
                 provider.DbContextName))

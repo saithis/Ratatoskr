@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Ratatoskr.EfCore.Internal;
 
 namespace Ratatoskr.EfCore.Management;
@@ -21,8 +22,10 @@ internal static class GetInboxHandlerDetailEndpoint
         Guid handlerStatusId,
         EfCoreManagementProviderLookup lookup,
         IServiceScopeFactory scopeFactory,
+        ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
+        var logger = loggerFactory.CreateLogger(typeof(GetInboxHandlerDetailEndpoint).FullName!);
         var provider = lookup.Find(contextName);
         if (provider is null || !provider.HasInbox)
             return ManagementResults.NotFound($"No inbox is registered for DbContext '{contextName}'.");
@@ -41,9 +44,9 @@ internal static class GetInboxHandlerDetailEndpoint
         if (result is null)
             return ManagementResults.NotFound($"Poisoned handler status '{handlerStatusId}' was not found.");
 
-        var props = ManagementHelpers.SafeDeserializeToJsonElement(result.msg.SerializedProperties);
-        var msgType = ManagementHelpers.ExtractType(result.msg.SerializedProperties);
-        var (jsonPayload, base64) = ManagementHelpers.DecodeContent(result.msg.Content);
+        var props = ManagementHelpers.SafeDeserializeToJsonElement(result.msg.SerializedProperties, logger);
+        var msgType = ManagementHelpers.ExtractType(result.msg.SerializedProperties, logger);
+        var (jsonPayload, base64) = ManagementHelpers.DecodeContent(result.msg.Content, logger);
 
         return TypedResults.Ok(new InboxHandlerDetail(
             result.hs.Id, result.hs.MessageId, msgType, result.hs.HandlerKey, result.msg.ReceivedAt,
