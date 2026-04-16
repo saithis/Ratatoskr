@@ -16,7 +16,7 @@ internal static class BulkDeleteInboxEndpoint
         inboxGroup.MapDelete("/poisoned", Handle);
     }
 
-    private static async Task<Results<Ok, NotFound, BadRequest<string>>> Handle(
+    private static async Task<Results<Ok, ProblemHttpResult>> Handle(
         string contextName,
         [FromBody] BulkDeleteInboxRequest req,
         EfCoreManagementProviderLookup lookup,
@@ -24,10 +24,11 @@ internal static class BulkDeleteInboxEndpoint
         CancellationToken ct)
     {
         var provider = lookup.Find(contextName);
-        if (provider is null || !provider.HasInbox) return TypedResults.NotFound();
+        if (provider is null || !provider.HasInbox)
+            return ManagementResults.NotFound($"No inbox is registered for DbContext '{contextName}'.");
 
         if (!BulkRequestValidator.TryValidate(req.Ids, req.All, out var error))
-            return TypedResults.BadRequest(error!);
+            return ManagementResults.BadRequest(error!);
 
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);

@@ -15,7 +15,7 @@ internal static class DeleteInboxHandlerEndpoint
         inboxGroup.MapDelete("/poisoned/{handlerStatusId:guid}", Handle);
     }
 
-    private static async Task<Results<Ok, NotFound, BadRequest<string>, Conflict>> Handle(
+    private static async Task<Results<Ok, ProblemHttpResult>> Handle(
         string contextName,
         Guid handlerStatusId,
         EfCoreManagementProviderLookup lookup,
@@ -23,7 +23,8 @@ internal static class DeleteInboxHandlerEndpoint
         CancellationToken ct)
     {
         var provider = lookup.Find(contextName);
-        if (provider is null || !provider.HasInbox) return TypedResults.NotFound();
+        if (provider is null || !provider.HasInbox)
+            return ManagementResults.NotFound($"No inbox is registered for DbContext '{contextName}'.");
 
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);
@@ -31,8 +32,10 @@ internal static class DeleteInboxHandlerEndpoint
         var entity = await db.Set<InboxHandlerStatusEntity>()
             .SingleOrDefaultAsync(x => x.Id == handlerStatusId, ct);
 
-        if (entity is null) return TypedResults.NotFound();
-        if (!entity.IsPoisoned) return TypedResults.BadRequest("Handler status is not poisoned.");
+        if (entity is null)
+            return ManagementResults.NotFound($"Inbox handler status '{handlerStatusId}' was not found.");
+        if (!entity.IsPoisoned)
+            return ManagementResults.BadRequest("Handler status is not poisoned.");
 
         var messageId = entity.MessageId;
         db.Set<InboxHandlerStatusEntity>().Remove(entity);
@@ -47,7 +50,7 @@ internal static class DeleteInboxHandlerEndpoint
         catch (DbUpdateConcurrencyException)
         {
             await tx.RollbackAsync(ct);
-            return TypedResults.Conflict();
+            return ManagementResults.Conflict("Handler status was modified by another operation; retry.");
         }
 
         // Orphan-cleanup is expressed as a single SQL statement with a NOT EXISTS guard so the

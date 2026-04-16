@@ -15,7 +15,7 @@ internal static class ListPoisonedOutboxEndpoint
         outboxGroup.MapGet("/poisoned", Handle);
     }
 
-    private static async Task<Results<Ok<OutboxPoisonedListResponse>, NotFound, BadRequest<string>>> Handle(
+    private static async Task<Results<Ok<OutboxPoisonedListResponse>, ProblemHttpResult>> Handle(
         string contextName,
         EfCoreManagementProviderLookup lookup,
         IServiceScopeFactory scopeFactory,
@@ -27,7 +27,8 @@ internal static class ListPoisonedOutboxEndpoint
         CancellationToken ct = default)
     {
         var provider = lookup.Find(contextName);
-        if (provider is null || !provider.HasOutbox) return TypedResults.NotFound();
+        if (provider is null || !provider.HasOutbox)
+            return ManagementResults.NotFound($"No outbox is registered for DbContext '{contextName}'.");
 
         pageSize = PaginationOptions.ClampPageSize(pageSize);
 
@@ -35,7 +36,7 @@ internal static class ListPoisonedOutboxEndpoint
         if (cursor is not null)
         {
             if (!CursorHelper.TryDecode(cursor, out var c))
-                return TypedResults.BadRequest("Invalid cursor.");
+                return ManagementResults.BadRequest("Invalid pagination cursor.");
             decodedCursor = c;
         }
 

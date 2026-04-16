@@ -16,7 +16,7 @@ internal static class BulkDeleteOutboxEndpoint
         outboxGroup.MapDelete("/poisoned", Handle);
     }
 
-    private static async Task<Results<Ok, NotFound, BadRequest<string>>> Handle(
+    private static async Task<Results<Ok, ProblemHttpResult>> Handle(
         string contextName,
         [FromBody] BulkDeleteOutboxRequest req,
         EfCoreManagementProviderLookup lookup,
@@ -24,10 +24,11 @@ internal static class BulkDeleteOutboxEndpoint
         CancellationToken ct)
     {
         var provider = lookup.Find(contextName);
-        if (provider is null || !provider.HasOutbox) return TypedResults.NotFound();
+        if (provider is null || !provider.HasOutbox)
+            return ManagementResults.NotFound($"No outbox is registered for DbContext '{contextName}'.");
 
         if (!BulkRequestValidator.TryValidate(req.Ids, req.All, out var error))
-            return TypedResults.BadRequest(error!);
+            return ManagementResults.BadRequest(error!);
 
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);

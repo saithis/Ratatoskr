@@ -12,12 +12,13 @@ internal static class ContextHealthEndpoint
         contextGroup.MapGet("/health", Handle);
     }
 
-    private static Results<Ok<ContextHealthResponse>, NotFound> Handle(
+    private static Results<Ok<ContextHealthResponse>, ProblemHttpResult> Handle(
         string contextName,
         EfCoreManagementProviderLookup lookup)
     {
         var provider = lookup.Find(contextName);
-        if (provider is null) return TypedResults.NotFound();
+        if (provider is null)
+            return ManagementResults.NotFound($"No DbContext is registered under name '{contextName}'.");
 
         provider.MetricsState.ContextMetrics.TryGetValue(provider.MetricsContextKey, out var metrics);
 

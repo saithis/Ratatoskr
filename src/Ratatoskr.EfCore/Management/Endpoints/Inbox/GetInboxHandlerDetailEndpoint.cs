@@ -16,7 +16,7 @@ internal static class GetInboxHandlerDetailEndpoint
         inboxGroup.MapGet("/poisoned/{handlerStatusId:guid}", Handle);
     }
 
-    private static async Task<Results<Ok<InboxHandlerDetail>, NotFound>> Handle(
+    private static async Task<Results<Ok<InboxHandlerDetail>, ProblemHttpResult>> Handle(
         string contextName,
         Guid handlerStatusId,
         EfCoreManagementProviderLookup lookup,
@@ -24,7 +24,8 @@ internal static class GetInboxHandlerDetailEndpoint
         CancellationToken ct)
     {
         var provider = lookup.Find(contextName);
-        if (provider is null || !provider.HasInbox) return TypedResults.NotFound();
+        if (provider is null || !provider.HasInbox)
+            return ManagementResults.NotFound($"No inbox is registered for DbContext '{contextName}'.");
 
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);
@@ -37,7 +38,8 @@ internal static class GetInboxHandlerDetailEndpoint
             select new { hs, msg }
         ).FirstOrDefaultAsync(ct);
 
-        if (result is null) return TypedResults.NotFound();
+        if (result is null)
+            return ManagementResults.NotFound($"Poisoned handler status '{handlerStatusId}' was not found.");
 
         var props = ManagementHelpers.SafeDeserializeToJsonElement(result.msg.SerializedProperties);
         var msgType = ManagementHelpers.ExtractType(result.msg.SerializedProperties);

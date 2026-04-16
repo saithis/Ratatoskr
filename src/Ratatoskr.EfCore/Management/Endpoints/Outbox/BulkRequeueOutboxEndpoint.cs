@@ -15,7 +15,7 @@ internal static class BulkRequeueOutboxEndpoint
         outboxGroup.MapPost("/poisoned/requeue", Handle);
     }
 
-    private static async Task<Results<Ok<BulkRequeueOutboxResponse>, NotFound, BadRequest<string>>> Handle(
+    private static async Task<Results<Ok<BulkRequeueOutboxResponse>, ProblemHttpResult>> Handle(
         string contextName,
         BulkRequeueOutboxRequest req,
         EfCoreManagementProviderLookup lookup,
@@ -23,10 +23,11 @@ internal static class BulkRequeueOutboxEndpoint
         CancellationToken ct)
     {
         var provider = lookup.Find(contextName);
-        if (provider is null || !provider.HasOutbox) return TypedResults.NotFound();
+        if (provider is null || !provider.HasOutbox)
+            return ManagementResults.NotFound($"No outbox is registered for DbContext '{contextName}'.");
 
         if (!BulkRequestValidator.TryValidate(req.Ids, req.All, out var error))
-            return TypedResults.BadRequest(error!);
+            return ManagementResults.BadRequest(error!);
 
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);

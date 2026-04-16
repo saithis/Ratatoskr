@@ -15,7 +15,7 @@ internal static class ListPoisonedInboxEndpoint
         inboxGroup.MapGet("/poisoned", Handle);
     }
 
-    private static async Task<Results<Ok<InboxPoisonedListResponse>, NotFound, BadRequest<string>>> Handle(
+    private static async Task<Results<Ok<InboxPoisonedListResponse>, ProblemHttpResult>> Handle(
         string contextName,
         EfCoreManagementProviderLookup lookup,
         IServiceScopeFactory scopeFactory,
@@ -27,7 +27,8 @@ internal static class ListPoisonedInboxEndpoint
         CancellationToken ct = default)
     {
         var provider = lookup.Find(contextName);
-        if (provider is null || !provider.HasInbox) return TypedResults.NotFound();
+        if (provider is null || !provider.HasInbox)
+            return ManagementResults.NotFound($"No inbox is registered for DbContext '{contextName}'.");
 
         pageSize = PaginationOptions.ClampPageSize(pageSize);
 
@@ -35,7 +36,7 @@ internal static class ListPoisonedInboxEndpoint
         if (cursor is not null)
         {
             if (!CursorHelper.TryDecode(cursor, out var c))
-                return TypedResults.BadRequest("Invalid cursor.");
+                return ManagementResults.BadRequest("Invalid pagination cursor.");
             decodedCursor = c;
         }
 

@@ -13,7 +13,7 @@ internal static class RequeueInboxHandlerEndpoint
         inboxGroup.MapPost("/poisoned/{handlerStatusId:guid}/requeue", Handle);
     }
 
-    private static async Task<Results<Ok, NotFound, BadRequest<string>, Conflict>> Handle(
+    private static async Task<Results<Ok, ProblemHttpResult>> Handle(
         string contextName,
         Guid handlerStatusId,
         EfCoreManagementProviderLookup lookup,
@@ -21,15 +21,19 @@ internal static class RequeueInboxHandlerEndpoint
         CancellationToken ct)
     {
         var provider = lookup.Find(contextName);
-        if (provider is null || !provider.HasInbox) return TypedResults.NotFound();
+        if (provider is null || !provider.HasInbox)
+            return ManagementResults.NotFound($"No inbox is registered for DbContext '{contextName}'.");
 
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);
 
         var outcome = await RequeueHelper.RequeueInboxHandlerAsync(db, handlerStatusId, ct);
-        if (outcome == SingleRequeueOutcome.Success) return TypedResults.Ok();
-        if (outcome == SingleRequeueOutcome.NotFound) return TypedResults.NotFound();
-        if (outcome == SingleRequeueOutcome.NotPoisoned) return TypedResults.BadRequest("Handler status is not poisoned.");
-        return TypedResults.Conflict();
+        return outcome switch
+        {
+            SingleRequeueOutcome.Success => TypedResults.Ok(),
+            SingleRequeueOutcome.NotFound => ManagementResults.NotFound($"Inbox handler status '{handlerStatusId}' was not found."),
+            SingleRequeueOutcome.NotPoisoned => ManagementResults.BadRequest("Handler status is not poisoned."),
+            _ => ManagementResults.Conflict("Handler status was modified by another operation; retry."),
+        };
     }
 }

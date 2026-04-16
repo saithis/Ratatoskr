@@ -15,7 +15,7 @@ internal static class RequeueInboxMessageEndpoint
         inboxGroup.MapPost("/messages/{messageId}/requeue", Handle);
     }
 
-    private static async Task<Results<Ok<RequeueInboxMessageResponse>, NotFound, Conflict>> Handle(
+    private static async Task<Results<Ok<RequeueInboxMessageResponse>, ProblemHttpResult>> Handle(
         string contextName,
         string messageId,
         EfCoreManagementProviderLookup lookup,
@@ -23,7 +23,8 @@ internal static class RequeueInboxMessageEndpoint
         CancellationToken ct)
     {
         var provider = lookup.Find(contextName);
-        if (provider is null || !provider.HasInbox) return TypedResults.NotFound();
+        if (provider is null || !provider.HasInbox)
+            return ManagementResults.NotFound($"No inbox is registered for DbContext '{contextName}'.");
 
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);
@@ -32,7 +33,8 @@ internal static class RequeueInboxMessageEndpoint
             .Where(x => x.MessageId == messageId && x.IsPoisoned)
             .ToListAsync(ct);
 
-        if (handlers.Count == 0) return TypedResults.NotFound();
+        if (handlers.Count == 0)
+            return ManagementResults.NotFound($"No poisoned handlers found for inbox message '{messageId}'.");
 
         foreach (var h in handlers)
             h.Requeue();
@@ -44,7 +46,7 @@ internal static class RequeueInboxMessageEndpoint
         }
         catch (DbUpdateConcurrencyException)
         {
-            return TypedResults.Conflict();
+            return ManagementResults.Conflict("One or more handlers were modified concurrently; retry.");
         }
     }
 

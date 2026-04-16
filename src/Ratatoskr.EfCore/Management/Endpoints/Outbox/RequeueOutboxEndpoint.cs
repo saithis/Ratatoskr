@@ -13,7 +13,7 @@ internal static class RequeueOutboxEndpoint
         outboxGroup.MapPost("/poisoned/{id:guid}/requeue", Handle);
     }
 
-    private static async Task<Results<Ok, NotFound, BadRequest<string>, Conflict>> Handle(
+    private static async Task<Results<Ok, ProblemHttpResult>> Handle(
         string contextName,
         Guid id,
         EfCoreManagementProviderLookup lookup,
@@ -21,15 +21,19 @@ internal static class RequeueOutboxEndpoint
         CancellationToken ct)
     {
         var provider = lookup.Find(contextName);
-        if (provider is null || !provider.HasOutbox) return TypedResults.NotFound();
+        if (provider is null || !provider.HasOutbox)
+            return ManagementResults.NotFound($"No outbox is registered for DbContext '{contextName}'.");
 
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);
 
         var outcome = await RequeueHelper.RequeueOutboxAsync(db, id, ct);
-        if (outcome == SingleRequeueOutcome.Success) return TypedResults.Ok();
-        if (outcome == SingleRequeueOutcome.NotFound) return TypedResults.NotFound();
-        if (outcome == SingleRequeueOutcome.NotPoisoned) return TypedResults.BadRequest("Message is not poisoned.");
-        return TypedResults.Conflict();
+        return outcome switch
+        {
+            SingleRequeueOutcome.Success => TypedResults.Ok(),
+            SingleRequeueOutcome.NotFound => ManagementResults.NotFound($"Outbox message '{id}' was not found."),
+            SingleRequeueOutcome.NotPoisoned => ManagementResults.BadRequest("Outbox message is not poisoned."),
+            _ => ManagementResults.Conflict("Outbox message was modified by another operation; retry."),
+        };
     }
 }

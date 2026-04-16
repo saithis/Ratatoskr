@@ -15,7 +15,7 @@ internal static class DeleteOutboxEndpoint
         outboxGroup.MapDelete("/poisoned/{id:guid}", Handle);
     }
 
-    private static async Task<Results<Ok, NotFound, BadRequest<string>, Conflict>> Handle(
+    private static async Task<Results<Ok, ProblemHttpResult>> Handle(
         string contextName,
         Guid id,
         EfCoreManagementProviderLookup lookup,
@@ -23,7 +23,8 @@ internal static class DeleteOutboxEndpoint
         CancellationToken ct)
     {
         var provider = lookup.Find(contextName);
-        if (provider is null || !provider.HasOutbox) return TypedResults.NotFound();
+        if (provider is null || !provider.HasOutbox)
+            return ManagementResults.NotFound($"No outbox is registered for DbContext '{contextName}'.");
 
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);
@@ -31,8 +32,8 @@ internal static class DeleteOutboxEndpoint
         var entity = await db.Set<OutboxMessageEntity>()
             .SingleOrDefaultAsync(x => x.Id == id, ct);
 
-        if (entity is null) return TypedResults.NotFound();
-        if (!entity.IsPoisoned) return TypedResults.BadRequest("Message is not poisoned.");
+        if (entity is null) return ManagementResults.NotFound($"Outbox message '{id}' was not found.");
+        if (!entity.IsPoisoned) return ManagementResults.BadRequest("Outbox message is not poisoned.");
 
         db.Set<OutboxMessageEntity>().Remove(entity);
         try
@@ -42,7 +43,7 @@ internal static class DeleteOutboxEndpoint
         }
         catch (DbUpdateConcurrencyException)
         {
-            return TypedResults.Conflict();
+            return ManagementResults.Conflict("Outbox message was modified by another operation; retry.");
         }
     }
 }

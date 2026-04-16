@@ -16,7 +16,7 @@ internal static class GetOutboxDetailEndpoint
         outboxGroup.MapGet("/poisoned/{id:guid}", Handle);
     }
 
-    private static async Task<Results<Ok<OutboxPoisonedDetail>, NotFound>> Handle(
+    private static async Task<Results<Ok<OutboxPoisonedDetail>, ProblemHttpResult>> Handle(
         string contextName,
         Guid id,
         EfCoreManagementProviderLookup lookup,
@@ -24,7 +24,8 @@ internal static class GetOutboxDetailEndpoint
         CancellationToken ct)
     {
         var provider = lookup.Find(contextName);
-        if (provider is null || !provider.HasOutbox) return TypedResults.NotFound();
+        if (provider is null || !provider.HasOutbox)
+            return ManagementResults.NotFound($"No outbox is registered for DbContext '{contextName}'.");
 
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);
@@ -34,7 +35,8 @@ internal static class GetOutboxDetailEndpoint
             .Where(x => x.Id == id && x.IsPoisoned)
             .FirstOrDefaultAsync(ct);
 
-        if (entity is null) return TypedResults.NotFound();
+        if (entity is null)
+            return ManagementResults.NotFound($"Poisoned outbox message '{id}' was not found.");
 
         var props = ManagementHelpers.SafeDeserializeToJsonElement(entity.SerializedProperties);
         var msgType = ManagementHelpers.ExtractType(entity.SerializedProperties);

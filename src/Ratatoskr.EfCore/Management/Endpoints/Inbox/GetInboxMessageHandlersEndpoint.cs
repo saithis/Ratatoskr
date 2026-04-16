@@ -15,7 +15,7 @@ internal static class GetInboxMessageHandlersEndpoint
         inboxGroup.MapGet("/messages/{messageId}/handlers", Handle);
     }
 
-    private static async Task<Results<Ok<InboxMessageHandlers>, NotFound>> Handle(
+    private static async Task<Results<Ok<InboxMessageHandlers>, ProblemHttpResult>> Handle(
         string contextName,
         string messageId,
         EfCoreManagementProviderLookup lookup,
@@ -23,7 +23,8 @@ internal static class GetInboxMessageHandlersEndpoint
         CancellationToken ct)
     {
         var provider = lookup.Find(contextName);
-        if (provider is null || !provider.HasInbox) return TypedResults.NotFound();
+        if (provider is null || !provider.HasInbox)
+            return ManagementResults.NotFound($"No inbox is registered for DbContext '{contextName}'.");
 
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);
@@ -31,7 +32,8 @@ internal static class GetInboxMessageHandlersEndpoint
 
         var msg = await db.Set<InboxMessageEntity>()
             .FirstOrDefaultAsync(x => x.Id == messageId, ct);
-        if (msg is null) return TypedResults.NotFound();
+        if (msg is null)
+            return ManagementResults.NotFound($"Inbox message '{messageId}' was not found.");
 
         var handlers = await db.Set<InboxHandlerStatusEntity>()
             .Where(x => x.MessageId == messageId)
