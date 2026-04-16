@@ -1,19 +1,16 @@
-using System.Text;
-
 namespace Ratatoskr.EfCore.Management;
 
 internal static class CursorHelper
 {
     internal static string EncodeCursor(Guid id) =>
-        Base64UrlEncode(Encoding.UTF8.GetBytes(id.ToString()));
+        Base64UrlEncode(id.ToByteArray());
 
     internal static Guid? DecodeCursor(string cursor)
     {
         try
         {
             var bytes = Base64UrlDecode(cursor);
-            var str = Encoding.UTF8.GetString(bytes);
-            return Guid.TryParse(str, out var id) ? id : null;
+            return bytes.Length == 16 ? new Guid(bytes) : null;
         }
         catch { return null; }
     }

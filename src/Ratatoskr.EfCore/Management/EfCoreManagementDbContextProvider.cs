@@ -44,6 +44,7 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
         var query = db.Set<OutboxMessageEntity>().Where(x => x.IsPoisoned);
         if (from.HasValue) query = query.Where(x => x.CreatedAt >= from.Value);
         if (to.HasValue) query = query.Where(x => x.CreatedAt <= to.Value);
+        if (type is not null) query = query.Where(x => EF.Functions.Like(x.SerializedProperties, $"%{type}%"));
 
         if (cursor is not null)
         {
@@ -64,14 +65,10 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
             .Select(x =>
             {
                 var msgType = ExtractType(x.SerializedProperties);
-                if (type is not null && !msgType.Contains(type, StringComparison.OrdinalIgnoreCase))
-                    return null;
                 return new OutboxPoisonedListItem(
                     x.Id, msgType, x.CreatedAt, x.ErrorCount, x.RequeuedCount,
                     string.IsNullOrEmpty(x.Error) ? null : x.Error, DbContextName);
             })
-            .Where(x => x is not null)
-            .Cast<OutboxPoisonedListItem>()
             .ToList();
 
         return (dtos, totalCount);
@@ -152,16 +149,38 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
         if (ids is null or { Count: 0 })
             return new BulkRequeueOutboxResponse([], []);
 
+        // Fetch all matching poisoned entities in a single query instead of N individual lookups.
+        var entities = await db.Set<OutboxMessageEntity>()
+            .Where(x => ids.Contains(x.Id) && x.IsPoisoned)
+            .ToListAsync(ct);
+
+        var foundIds = entities.Select(e => e.Id).ToHashSet();
+        var notFoundOrNotPoisoned = ids.Where(id => !foundIds.Contains(id)).ToList();
+
+        foreach (var entity in entities)
+            entity.Requeue();
+
         var succeeded = new List<Guid>();
-        var failed = new List<BulkRequeueOutboxFailure>();
-        foreach (var id in ids)
+        var failed = new List<BulkRequeueOutboxFailure>(
+            notFoundOrNotPoisoned.Select(id =>
+                new BulkRequeueOutboxFailure(id, "Not found, not poisoned, or concurrent modification.")));
+
+        try
         {
-            var outcome = await RequeueHelper.RequeueOutboxAsync(db, id, ct);
-            if (outcome == SingleRequeueOutcome.Success)
-                succeeded.Add(id);
-            else
-                failed.Add(new BulkRequeueOutboxFailure(id, "Not found, not poisoned, or concurrent modification."));
+            await db.SaveChangesAsync(ct);
+            succeeded.AddRange(entities.Select(e => e.Id));
         }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            // On optimistic concurrency failure report the conflicting entries as failed.
+            var conflictedIds = ex.Entries
+                .Select(e => ((OutboxMessageEntity)e.Entity).Id)
+                .ToHashSet();
+            succeeded.AddRange(entities.Select(e => e.Id).Where(id => !conflictedIds.Contains(id)));
+            failed.AddRange(conflictedIds.Select(id =>
+                new BulkRequeueOutboxFailure(id, "Not found, not poisoned, or concurrent modification.")));
+        }
+
         return new BulkRequeueOutboxResponse(succeeded, failed);
     }
 
@@ -202,6 +221,7 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
 
         if (from.HasValue) query = query.Where(x => x.msg.ReceivedAt >= from.Value);
         if (to.HasValue) query = query.Where(x => x.msg.ReceivedAt <= to.Value);
+        if (type is not null) query = query.Where(x => EF.Functions.Like(x.msg.SerializedProperties, $"%{type}%"));
 
         if (cursor is not null)
         {
@@ -227,15 +247,11 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
             .Select(x =>
             {
                 var msgType = ExtractType(x.SerializedProperties);
-                if (type is not null && !msgType.Contains(type, StringComparison.OrdinalIgnoreCase))
-                    return null;
                 return new InboxPoisonedListItem(
                     x.Id, x.MessageId, msgType, x.HandlerKey, x.ReceivedAt,
                     x.ErrorCount, x.RequeuedCount,
                     string.IsNullOrEmpty(x.LastError) ? null : x.LastError, DbContextName);
             })
-            .Where(x => x is not null)
-            .Cast<InboxPoisonedListItem>()
             .ToList();
 
         return (dtos, totalCount);
@@ -336,24 +352,29 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
 
         var messageId = entity.MessageId;
         db.Set<InboxHandlerStatusEntity>().Remove(entity);
-        await db.SaveChangesAsync(ct);
 
-        // Cascade orphan cleanup: delete parent InboxMessageEntity if no handlers remain
-        var remainingHandlers = await db.Set<InboxHandlerStatusEntity>()
-            .AnyAsync(x => x.MessageId == messageId, ct);
+        // Atomically check whether this is the only remaining handler and delete the orphaned
+        // parent message in the same SaveChanges call to avoid a TOCTOU window.
+        var otherHandlerCount = await db.Set<InboxHandlerStatusEntity>()
+            .CountAsync(x => x.MessageId == messageId && x.Id != handlerStatusId, ct);
 
-        if (!remainingHandlers)
+        if (otherHandlerCount == 0)
         {
             var parent = await db.Set<InboxMessageEntity>()
                 .FindAsync([messageId], ct);
             if (parent is not null)
-            {
                 db.Set<InboxMessageEntity>().Remove(parent);
-                await db.SaveChangesAsync(ct);
-            }
         }
 
-        return SingleDeleteOutcome.Success;
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return SingleDeleteOutcome.Success;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return SingleDeleteOutcome.Conflict;
+        }
     }
 
     public async Task<BulkRequeueInboxResponse> BulkRequeueInboxAsync(List<Guid>? ids, bool all, CancellationToken ct)
@@ -379,16 +400,38 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
         if (ids is null or { Count: 0 })
             return new BulkRequeueInboxResponse([], []);
 
+        // Fetch all matching poisoned entities in a single query instead of N individual lookups.
+        var entities = await db.Set<InboxHandlerStatusEntity>()
+            .Where(x => ids.Contains(x.Id) && x.IsPoisoned)
+            .ToListAsync(ct);
+
+        var foundIds = entities.Select(e => e.Id).ToHashSet();
+        var notFoundOrNotPoisoned = ids.Where(id => !foundIds.Contains(id)).ToList();
+
+        foreach (var entity in entities)
+            entity.Requeue();
+
         var succeeded = new List<Guid>();
-        var failed = new List<BulkRequeueInboxFailure>();
-        foreach (var id in ids)
+        var failed = new List<BulkRequeueInboxFailure>(
+            notFoundOrNotPoisoned.Select(id =>
+                new BulkRequeueInboxFailure(id, "Not found, not poisoned, or concurrent modification.")));
+
+        try
         {
-            var outcome = await RequeueHelper.RequeueInboxHandlerAsync(db, id, ct);
-            if (outcome == SingleRequeueOutcome.Success)
-                succeeded.Add(id);
-            else
-                failed.Add(new BulkRequeueInboxFailure(id, "Not found, not poisoned, or concurrent modification."));
+            await db.SaveChangesAsync(ct);
+            succeeded.AddRange(entities.Select(e => e.Id));
         }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            // On optimistic concurrency failure report the conflicting entries as failed.
+            var conflictedIds = ex.Entries
+                .Select(e => ((InboxHandlerStatusEntity)e.Entity).Id)
+                .ToHashSet();
+            succeeded.AddRange(entities.Select(e => e.Id).Where(id => !conflictedIds.Contains(id)));
+            failed.AddRange(conflictedIds.Select(id =>
+                new BulkRequeueInboxFailure(id, "Not found, not poisoned, or concurrent modification.")));
+        }
+
         return new BulkRequeueInboxResponse(succeeded, failed);
     }
 
@@ -399,16 +442,52 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
 
         if (all)
         {
+            // Collect all message IDs that have at least one poisoned handler before deleting,
+            // so we can clean up orphaned parent messages afterwards.
+            var affectedMessageIds = await db.Set<InboxHandlerStatusEntity>()
+                .Where(x => x.IsPoisoned)
+                .Select(x => x.MessageId)
+                .Distinct()
+                .ToListAsync(ct);
+
             await db.Set<InboxHandlerStatusEntity>()
                 .Where(x => x.IsPoisoned)
                 .ExecuteDeleteAsync(ct);
+
+            await DeleteOrphanedMessagesAsync(db, affectedMessageIds, ct);
             return;
         }
 
         if (ids is null or { Count: 0 }) return;
 
+        // Collect the message IDs that are affected by the handler deletions.
+        var messageIds = await db.Set<InboxHandlerStatusEntity>()
+            .Where(x => ids.Contains(x.Id) && x.IsPoisoned)
+            .Select(x => x.MessageId)
+            .Distinct()
+            .ToListAsync(ct);
+
         await db.Set<InboxHandlerStatusEntity>()
             .Where(x => ids.Contains(x.Id) && x.IsPoisoned)
+            .ExecuteDeleteAsync(ct);
+
+        await DeleteOrphanedMessagesAsync(db, messageIds, ct);
+    }
+
+    /// <summary>
+    /// Deletes <see cref="InboxMessageEntity"/> rows whose message IDs are in
+    /// <paramref name="messageIds"/> and that no longer have any handler status rows.
+    /// </summary>
+    private static async Task DeleteOrphanedMessagesAsync(
+        DbContext db, List<string> messageIds, CancellationToken ct)
+    {
+        if (messageIds.Count == 0) return;
+
+        // Delete in one shot: parent messages whose ID is in the affected set and
+        // that have no remaining handler status rows.
+        await db.Set<InboxMessageEntity>()
+            .Where(msg => messageIds.Contains(msg.Id) &&
+                          !db.Set<InboxHandlerStatusEntity>().Any(hs => hs.MessageId == msg.Id))
             .ExecuteDeleteAsync(ct);
     }
 
@@ -446,11 +525,13 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
     {
         try
         {
-            return JsonDocument.Parse(json).RootElement.Clone();
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.Clone();
         }
         catch
         {
-            return JsonDocument.Parse("{}").RootElement.Clone();
+            using var empty = JsonDocument.Parse("{}");
+            return empty.RootElement.Clone();
         }
     }
 
@@ -460,7 +541,7 @@ internal sealed class EfCoreManagementDbContextProvider<TDbContext> : IEfCoreMan
         try
         {
             var text = Encoding.UTF8.GetString(content);
-            JsonDocument.Parse(text);
+            using var doc = JsonDocument.Parse(text);
             return (text, base64);
         }
         catch

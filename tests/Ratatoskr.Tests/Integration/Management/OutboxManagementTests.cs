@@ -236,4 +236,50 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
             count.Should().Be(0);
         });
     }
+
+    [Test]
+    public async Task OutboxManagement_PoisonedList_FilterByType_ExcludesNonMatchingMessages()
+    {
+        await StartManagementTestAsync();
+        await SeedPoisonedOutboxAsync("order.created");
+        await SeedPoisonedOutboxAsync("payment.processed");
+
+        var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned?type=order.created");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var items = body.GetProperty("items").EnumerateArray().ToList();
+        items.Should().NotBeEmpty();
+        items.Should().AllSatisfy(item =>
+            item.GetProperty("messageType").GetString().Should().Be("order.created"));
+
+        // TotalCount must reflect the filtered result
+        body.GetProperty("totalCount").GetInt64().Should().Be(items.Count);
+    }
+
+    [Test]
+    public async Task OutboxManagement_BulkRequeue_SpecificIds_SingleRoundtrip_RequeuesAll()
+    {
+        await StartManagementTestAsync();
+        var id1 = await SeedPoisonedOutboxAsync();
+        var id2 = await SeedPoisonedOutboxAsync();
+        var id3 = await SeedPoisonedOutboxAsync();
+
+        var req = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/poisoned/requeue");
+        req.Content = JsonContent.Create(new { ids = new[] { id1, id2, id3 } });
+        var response = await HttpClient.SendAsync(req);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var poisonedCount = await db.Set<OutboxMessageEntity>()
+                .CountAsync(x => (x.Id == id1 || x.Id == id2 || x.Id == id3) && x.IsPoisoned);
+            poisonedCount.Should().Be(0);
+
+            var requeuedCount = await db.Set<OutboxMessageEntity>()
+                .CountAsync(x => (x.Id == id1 || x.Id == id2 || x.Id == id3) && x.RequeuedCount == 1);
+            requeuedCount.Should().Be(3);
+        });
+    }
 }
