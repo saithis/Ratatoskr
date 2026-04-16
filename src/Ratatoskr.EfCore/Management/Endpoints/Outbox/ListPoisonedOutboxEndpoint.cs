@@ -15,11 +15,11 @@ internal static class ListPoisonedOutboxEndpoint
         outboxGroup.MapGet("/poisoned", Handle);
     }
 
-    private static async Task<Results<Ok<OutboxPoisonedListResponse>, NotFound>> Handle(
+    private static async Task<Results<Ok<OutboxPoisonedListResponse>, NotFound, BadRequest<string>>> Handle(
         string contextName,
         EfCoreManagementProviderLookup lookup,
         IServiceScopeFactory scopeFactory,
-        int pageSize = 50,
+        int pageSize = PaginationOptions.DefaultPageSize,
         string? cursor = null,
         DateTimeOffset? from = null,
         DateTimeOffset? to = null,
@@ -29,29 +29,43 @@ internal static class ListPoisonedOutboxEndpoint
         var provider = lookup.Find(contextName);
         if (provider is null || !provider.HasOutbox) return TypedResults.NotFound();
 
+        pageSize = PaginationOptions.ClampPageSize(pageSize);
+
+        CursorHelper.Cursor? decodedCursor = null;
+        if (cursor is not null)
+        {
+            if (!CursorHelper.TryDecode(cursor, out var c))
+                return TypedResults.BadRequest("Invalid cursor.");
+            decodedCursor = c;
+        }
+
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);
         db.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
 
-        var query = db.Set<OutboxMessageEntity>().Where(x => x.IsPoisoned);
-        if (from.HasValue) query = query.Where(x => x.CreatedAt >= from.Value);
-        if (to.HasValue) query = query.Where(x => x.CreatedAt <= to.Value);
-        if (type is not null) query = query.Where(x => EF.Functions.Like(x.SerializedProperties, $"%{type}%"));
+        var filtered = db.Set<OutboxMessageEntity>().Where(x => x.IsPoisoned);
+        if (from.HasValue) filtered = filtered.Where(x => x.CreatedAt >= from.Value);
+        if (to.HasValue) filtered = filtered.Where(x => x.CreatedAt <= to.Value);
+        if (type is not null) filtered = filtered.Where(x => EF.Functions.Like(x.SerializedProperties, $"%{type}%"));
 
-        if (cursor is not null)
+        var paged = filtered;
+        if (decodedCursor is { } k)
         {
-            var lastId = CursorHelper.DecodeCursor(cursor);
-            if (lastId.HasValue)
-                query = query.Where(x => x.Id.CompareTo(lastId.Value) > 0);
+            // Tuple comparison: (CreatedAt, Id) > (cursor.Time, cursor.Id).
+            // Expressed as OR-form so EF translates cleanly on both Postgres and SQL Server.
+            paged = paged.Where(x => x.CreatedAt > k.Time || (x.CreatedAt == k.Time && x.Id.CompareTo(k.Id) > 0));
         }
 
-        var totalCount = await query.LongCountAsync(ct);
-
-        var items = await query
+        // Deliberately fetch pageSize + 1 so we can determine whether another page exists
+        // without a separate round-trip.
+        var items = await paged
             .OrderBy(x => x.CreatedAt).ThenBy(x => x.Id)
-            .Take(pageSize)
+            .Take(pageSize + 1)
             .Select(x => new { x.Id, x.SerializedProperties, x.CreatedAt, x.ErrorCount, x.RequeuedCount, x.Error })
             .ToListAsync(ct);
+
+        var hasNext = items.Count > pageSize;
+        if (hasNext) items.RemoveAt(items.Count - 1);
 
         var dtos = items
             .Select(x => new OutboxPoisonedListItem(
@@ -62,7 +76,13 @@ internal static class ListPoisonedOutboxEndpoint
                 provider.DbContextName))
             .ToList();
 
-        var nextCursor = dtos.Count == pageSize ? CursorHelper.EncodeCursor(dtos[^1].Id) : null;
+        var nextCursor = hasNext
+            ? CursorHelper.Encode(items[^1].CreatedAt, items[^1].Id)
+            : null;
+
+        // Total reflects the full filtered set, not the remainder-after-cursor, so the UI can
+        // display progress consistently across pages.
+        var totalCount = await filtered.LongCountAsync(ct);
         return TypedResults.Ok(new OutboxPoisonedListResponse(dtos, totalCount, nextCursor));
     }
 

@@ -15,11 +15,11 @@ internal static class ListPoisonedInboxEndpoint
         inboxGroup.MapGet("/poisoned", Handle);
     }
 
-    private static async Task<Results<Ok<InboxPoisonedListResponse>, NotFound>> Handle(
+    private static async Task<Results<Ok<InboxPoisonedListResponse>, NotFound, BadRequest<string>>> Handle(
         string contextName,
         EfCoreManagementProviderLookup lookup,
         IServiceScopeFactory scopeFactory,
-        int pageSize = 50,
+        int pageSize = PaginationOptions.DefaultPageSize,
         string? cursor = null,
         DateTimeOffset? from = null,
         DateTimeOffset? to = null,
@@ -29,32 +29,41 @@ internal static class ListPoisonedInboxEndpoint
         var provider = lookup.Find(contextName);
         if (provider is null || !provider.HasInbox) return TypedResults.NotFound();
 
+        pageSize = PaginationOptions.ClampPageSize(pageSize);
+
+        CursorHelper.Cursor? decodedCursor = null;
+        if (cursor is not null)
+        {
+            if (!CursorHelper.TryDecode(cursor, out var c))
+                return TypedResults.BadRequest("Invalid cursor.");
+            decodedCursor = c;
+        }
+
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);
         db.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
 
-        var query =
+        var filtered =
             from hs in db.Set<InboxHandlerStatusEntity>()
             join msg in db.Set<InboxMessageEntity>() on hs.MessageId equals msg.Id
             where hs.IsPoisoned
             select new { hs, msg };
 
-        if (from.HasValue) query = query.Where(x => x.msg.ReceivedAt >= from.Value);
-        if (to.HasValue) query = query.Where(x => x.msg.ReceivedAt <= to.Value);
-        if (type is not null) query = query.Where(x => EF.Functions.Like(x.msg.SerializedProperties, $"%{type}%"));
+        if (from.HasValue) filtered = filtered.Where(x => x.msg.ReceivedAt >= from.Value);
+        if (to.HasValue) filtered = filtered.Where(x => x.msg.ReceivedAt <= to.Value);
+        if (type is not null) filtered = filtered.Where(x => EF.Functions.Like(x.msg.SerializedProperties, $"%{type}%"));
 
-        if (cursor is not null)
+        var paged = filtered;
+        if (decodedCursor is { } k)
         {
-            var lastId = CursorHelper.DecodeCursor(cursor);
-            if (lastId.HasValue)
-                query = query.Where(x => x.hs.Id.CompareTo(lastId.Value) > 0);
+            // Tuple comparison keyed on (ReceivedAt, HandlerStatusId) which matches the ORDER BY.
+            paged = paged.Where(x => x.msg.ReceivedAt > k.Time
+                                     || (x.msg.ReceivedAt == k.Time && x.hs.Id.CompareTo(k.Id) > 0));
         }
 
-        var totalCount = await query.LongCountAsync(ct);
-
-        var items = await query
+        var rows = await paged
             .OrderBy(x => x.msg.ReceivedAt).ThenBy(x => x.hs.Id)
-            .Take(pageSize)
+            .Take(pageSize + 1)
             .Select(x => new
             {
                 x.hs.Id, x.hs.MessageId, x.hs.HandlerKey,
@@ -63,7 +72,10 @@ internal static class ListPoisonedInboxEndpoint
             })
             .ToListAsync(ct);
 
-        var dtos = items
+        var hasNext = rows.Count > pageSize;
+        if (hasNext) rows.RemoveAt(rows.Count - 1);
+
+        var dtos = rows
             .Select(x => new InboxPoisonedListItem(
                 x.Id, x.MessageId,
                 ManagementHelpers.ExtractType(x.SerializedProperties),
@@ -72,7 +84,11 @@ internal static class ListPoisonedInboxEndpoint
                 provider.DbContextName))
             .ToList();
 
-        var nextCursor = dtos.Count == pageSize ? CursorHelper.EncodeCursor(dtos[^1].HandlerStatusId) : null;
+        var nextCursor = hasNext
+            ? CursorHelper.Encode(rows[^1].ReceivedAt, rows[^1].Id)
+            : null;
+
+        var totalCount = await filtered.LongCountAsync(ct);
         return TypedResults.Ok(new InboxPoisonedListResponse(dtos, totalCount, nextCursor));
     }
 

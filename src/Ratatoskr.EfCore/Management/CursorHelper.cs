@@ -1,31 +1,83 @@
+using System.Buffers.Binary;
+
 namespace Ratatoskr.EfCore.Management;
 
+/// <summary>
+/// Encodes/decodes a keyset-pagination cursor as Base64-URL over a fixed 26-byte
+/// layout of <c>(timestamp-ticks (8 bytes, little-endian), offset-minutes (2 bytes, little-endian), guid (16 bytes))</c>.
+///
+/// Both the timestamp and the Id are required so that paging remains stable when
+/// multiple rows share the same timestamp: callers must <c>ORDER BY time, id</c>
+/// and compare with <c>(time, id) &gt; (cursor.Time, cursor.Id)</c>.
+/// </summary>
 internal static class CursorHelper
 {
-    internal static string EncodeCursor(Guid id) =>
-        Base64UrlEncode(id.ToByteArray());
+    private const int CursorByteLength = 26;
 
-    internal static Guid? DecodeCursor(string cursor)
+    internal readonly record struct Cursor(DateTimeOffset Time, Guid Id);
+
+    internal static string Encode(DateTimeOffset time, Guid id)
     {
-        try
-        {
-            var bytes = Base64UrlDecode(cursor);
-            return bytes.Length == 16 ? new Guid(bytes) : null;
-        }
-        catch { return null; }
+        Span<byte> bytes = stackalloc byte[CursorByteLength];
+        BinaryPrimitives.WriteInt64LittleEndian(bytes[..8], time.UtcTicks);
+        BinaryPrimitives.WriteInt16LittleEndian(bytes.Slice(8, 2), (short)time.Offset.TotalMinutes);
+        if (!id.TryWriteBytes(bytes.Slice(10, 16)))
+            throw new InvalidOperationException("Unexpected failure encoding Guid for cursor.");
+        return Base64UrlEncode(bytes);
     }
 
-    private static string Base64UrlEncode(byte[] bytes) =>
+    /// <summary>
+    /// Attempts to decode a cursor produced by <see cref="Encode"/>. Returns false
+    /// for any malformed input; callers should surface a 400 rather than silently
+    /// restarting pagination.
+    /// </summary>
+    internal static bool TryDecode(string cursor, out Cursor value)
+    {
+        value = default;
+        if (string.IsNullOrEmpty(cursor)) return false;
+
+        Span<byte> bytes = stackalloc byte[CursorByteLength];
+        if (!TryBase64UrlDecode(cursor, bytes, out var written) || written != CursorByteLength)
+            return false;
+
+        var ticks = BinaryPrimitives.ReadInt64LittleEndian(bytes[..8]);
+        var offsetMinutes = BinaryPrimitives.ReadInt16LittleEndian(bytes.Slice(8, 2));
+
+        try
+        {
+            var time = new DateTimeOffset(ticks, TimeSpan.FromMinutes(offsetMinutes));
+            var id = new Guid(bytes.Slice(10, 16));
+            value = new Cursor(time, id);
+            return true;
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return false;
+        }
+    }
+
+    private static string Base64UrlEncode(ReadOnlySpan<byte> bytes) =>
         Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
-    private static byte[] Base64UrlDecode(string s)
+    private static bool TryBase64UrlDecode(string s, Span<byte> destination, out int bytesWritten)
     {
-        s = s.Replace('-', '+').Replace('_', '/');
-        switch (s.Length % 4)
+        bytesWritten = 0;
+        var normalized = s.Replace('-', '+').Replace('_', '/');
+        normalized = (normalized.Length % 4) switch
         {
-            case 2: s += "=="; break;
-            case 3: s += "="; break;
-        }
-        return Convert.FromBase64String(s);
+            2 => normalized + "==",
+            3 => normalized + "=",
+            0 => normalized,
+            _ => normalized,
+        };
+
+        Span<byte> decoded = stackalloc byte[CursorByteLength + 4];
+        if (!Convert.TryFromBase64String(normalized, decoded, out var written))
+            return false;
+
+        if (written > destination.Length) return false;
+        decoded[..written].CopyTo(destination);
+        bytesWritten = written;
+        return true;
     }
 }
