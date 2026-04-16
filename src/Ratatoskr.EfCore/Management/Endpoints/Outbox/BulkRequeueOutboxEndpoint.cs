@@ -28,23 +28,35 @@ internal static class BulkRequeueOutboxEndpoint
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);
 
+        var succeeded = new List<Guid>();
+        var failed = new List<BulkRequeueOutboxFailure>();
+
         if (req.All is true)
         {
-            await db.Set<OutboxMessageEntity>()
-                .Where(x => x.IsPoisoned)
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(x => x.IsPoisoned, false)
-                    .SetProperty(x => x.ErrorCount, 0)
-                    .SetProperty(x => x.Error, string.Empty)
-                    .SetProperty(x => x.NextAttemptAt, (DateTimeOffset?)null)
-                    .SetProperty(x => x.ProcessingStartedAt, (DateTimeOffset?)null)
-                    .SetProperty(x => x.RequeuedCount, x => x.RequeuedCount + 1)
-                    .SetProperty(x => x.Version, x => x.Version + 1), ct);
-            return TypedResults.Ok(new BulkRequeueOutboxResponse([], []));
+            // Process in batches so "requeue all" with tens of thousands of poisoned messages
+            // does not build a single massive transaction. Each batch reuses the domain
+            // Requeue() method so invariants (Version increment, counter reset, etc.)
+            // stay in sync with the rest of the processor.
+            while (!ct.IsCancellationRequested)
+            {
+                var batch = await db.Set<OutboxMessageEntity>()
+                    .Where(x => x.IsPoisoned)
+                    .OrderBy(x => x.CreatedAt).ThenBy(x => x.Id)
+                    .Take(BatchSize)
+                    .ToListAsync(ct);
+
+                if (batch.Count == 0) break;
+
+                foreach (var entity in batch) entity.Requeue();
+                await SaveBatchAsync(db, batch, succeeded, failed, ct);
+                db.ChangeTracker.Clear();
+            }
+
+            return TypedResults.Ok(new BulkRequeueOutboxResponse(succeeded, failed));
         }
 
         if (req.Ids is null or { Count: 0 })
-            return TypedResults.Ok(new BulkRequeueOutboxResponse([], []));
+            return TypedResults.Ok(new BulkRequeueOutboxResponse(succeeded, failed));
 
         // Fetch all matching poisoned entities in a single query instead of N individual lookups.
         var entities = await db.Set<OutboxMessageEntity>()
@@ -52,33 +64,39 @@ internal static class BulkRequeueOutboxEndpoint
             .ToListAsync(ct);
 
         var foundIds = entities.Select(e => e.Id).ToHashSet();
-        var notFoundOrNotPoisoned = req.Ids.Where(id => !foundIds.Contains(id)).ToList();
+        failed.AddRange(req.Ids
+            .Where(id => !foundIds.Contains(id))
+            .Select(id => new BulkRequeueOutboxFailure(id, "Not found, not poisoned, or concurrent modification.")));
 
-        foreach (var entity in entities)
-            entity.Requeue();
+        foreach (var entity in entities) entity.Requeue();
+        await SaveBatchAsync(db, entities, succeeded, failed, ct);
 
-        var succeeded = new List<Guid>();
-        var failed = new List<BulkRequeueOutboxFailure>(
-            notFoundOrNotPoisoned.Select(id =>
-                new BulkRequeueOutboxFailure(id, "Not found, not poisoned, or concurrent modification.")));
+        return TypedResults.Ok(new BulkRequeueOutboxResponse(succeeded, failed));
+    }
 
+    private const int BatchSize = 500;
+
+    private static async Task SaveBatchAsync(
+        Microsoft.EntityFrameworkCore.DbContext db,
+        List<OutboxMessageEntity> entities,
+        List<Guid> succeeded,
+        List<BulkRequeueOutboxFailure> failed,
+        CancellationToken ct)
+    {
         try
         {
             await db.SaveChangesAsync(ct);
             succeeded.AddRange(entities.Select(e => e.Id));
         }
-        catch (DbUpdateConcurrencyException ex)
+        catch (DbUpdateConcurrencyException)
         {
-            // On optimistic concurrency failure report the conflicting entries as failed.
-            var conflictedIds = ex.Entries
-                .Select(e => ((OutboxMessageEntity)e.Entity).Id)
-                .ToHashSet();
-            succeeded.AddRange(entities.Select(e => e.Id).Where(id => !conflictedIds.Contains(id)));
-            failed.AddRange(conflictedIds.Select(id =>
-                new BulkRequeueOutboxFailure(id, "Not found, not poisoned, or concurrent modification.")));
+            // SaveChanges wraps the batch in a transaction that is rolled back on any
+            // concurrency conflict, so no row in this batch was persisted. Report all
+            // of them as failed rather than partially claiming success for rows that
+            // were actually rolled back.
+            failed.AddRange(entities.Select(e =>
+                new BulkRequeueOutboxFailure(e.Id, "Concurrent modification; no rows in this batch were persisted. Retry the failed ids.")));
         }
-
-        return TypedResults.Ok(new BulkRequeueOutboxResponse(succeeded, failed));
     }
 
     internal record BulkRequeueOutboxRequest(List<Guid>? Ids, bool? All);
