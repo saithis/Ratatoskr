@@ -29,9 +29,8 @@ internal static class ListPoisonedInboxEndpoint
         CancellationToken ct = default)
     {
         var logger = loggerFactory.CreateLogger(typeof(ListPoisonedInboxEndpoint).FullName!);
-        var provider = lookup.Find(contextName);
-        if (provider is null || !provider.HasInbox)
-            return ManagementResults.NotFound($"No inbox is registered for DbContext '{contextName}'.");
+        if (ManagementProviderResolver.EnsureInbox(lookup, contextName, out var provider) is { } resolveError)
+            return resolveError;
 
         pageSize = PaginationOptions.ClampPageSize(pageSize);
 

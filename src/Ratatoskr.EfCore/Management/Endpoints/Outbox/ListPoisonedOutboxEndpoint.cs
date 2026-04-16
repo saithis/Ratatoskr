@@ -29,9 +29,8 @@ internal static class ListPoisonedOutboxEndpoint
         CancellationToken ct = default)
     {
         var logger = loggerFactory.CreateLogger(typeof(ListPoisonedOutboxEndpoint).FullName!);
-        var provider = lookup.Find(contextName);
-        if (provider is null || !provider.HasOutbox)
-            return ManagementResults.NotFound($"No outbox is registered for DbContext '{contextName}'.");
+        if (ManagementProviderResolver.EnsureOutbox(lookup, contextName, out var provider) is { } resolveError)
+            return resolveError;
 
         pageSize = PaginationOptions.ClampPageSize(pageSize);
 

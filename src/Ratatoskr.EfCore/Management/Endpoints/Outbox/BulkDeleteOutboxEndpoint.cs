@@ -28,9 +28,8 @@ internal static class BulkDeleteOutboxEndpoint
         IServiceScopeFactory scopeFactory,
         CancellationToken ct)
     {
-        var provider = lookup.Find(contextName);
-        if (provider is null || !provider.HasOutbox)
-            return ManagementResults.NotFound($"No outbox is registered for DbContext '{contextName}'.");
+        if (ManagementProviderResolver.EnsureOutbox(lookup, contextName, out var provider) is { } resolveError)
+            return resolveError;
 
         if (!BulkRequestValidator.TryValidateIds(req.Ids, out var error))
             return ManagementResults.BadRequest(error!);
@@ -51,9 +50,8 @@ internal static class BulkDeleteOutboxEndpoint
         IServiceScopeFactory scopeFactory,
         CancellationToken ct)
     {
-        var provider = lookup.Find(contextName);
-        if (provider is null || !provider.HasOutbox)
-            return ManagementResults.NotFound($"No outbox is registered for DbContext '{contextName}'.");
+        if (ManagementProviderResolver.EnsureOutbox(lookup, contextName, out var provider) is { } resolveError)
+            return resolveError;
 
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);

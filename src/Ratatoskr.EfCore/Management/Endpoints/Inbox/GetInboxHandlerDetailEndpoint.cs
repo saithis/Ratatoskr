@@ -26,9 +26,8 @@ internal static class GetInboxHandlerDetailEndpoint
         CancellationToken ct)
     {
         var logger = loggerFactory.CreateLogger(typeof(GetInboxHandlerDetailEndpoint).FullName!);
-        var provider = lookup.Find(contextName);
-        if (provider is null || !provider.HasInbox)
-            return ManagementResults.NotFound($"No inbox is registered for DbContext '{contextName}'.");
+        if (ManagementProviderResolver.EnsureInbox(lookup, contextName, out var provider) is { } resolveError)
+            return resolveError;
 
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);

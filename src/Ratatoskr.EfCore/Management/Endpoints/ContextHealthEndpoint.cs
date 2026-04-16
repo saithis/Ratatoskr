@@ -16,9 +16,8 @@ internal static class ContextHealthEndpoint
         string contextName,
         EfCoreManagementProviderLookup lookup)
     {
-        var provider = lookup.Find(contextName);
-        if (provider is null)
-            return ManagementResults.NotFound($"No DbContext is registered under name '{contextName}'.");
+        if (ManagementProviderResolver.EnsureContext(lookup, contextName, out var provider) is { } resolveError)
+            return resolveError;
 
         provider.MetricsState.ContextMetrics.TryGetValue(provider.MetricsContextKey, out var metrics);
 

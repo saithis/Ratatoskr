@@ -26,9 +26,8 @@ internal static class GetOutboxDetailEndpoint
         CancellationToken ct)
     {
         var logger = loggerFactory.CreateLogger(typeof(GetOutboxDetailEndpoint).FullName!);
-        var provider = lookup.Find(contextName);
-        if (provider is null || !provider.HasOutbox)
-            return ManagementResults.NotFound($"No outbox is registered for DbContext '{contextName}'.");
+        if (ManagementProviderResolver.EnsureOutbox(lookup, contextName, out var provider) is { } resolveError)
+            return resolveError;
 
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);
