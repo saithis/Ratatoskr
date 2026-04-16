@@ -10,7 +10,7 @@ internal sealed class RabbitMqEndpointConfigurator : IRatatoskrEndpointConfigura
     public void MapEndpoints(IEndpointRouteBuilder endpoints, string policyName)
     {
         endpoints.MapGet(
-            "/ratatoskr/api/v1/rabbitmq/health",
+            $"{ManagementApiEndpointExtensions.BasePath}/rabbitmq/health",
             (RabbitMqConnectionManager conn, RabbitMqConsumer consumer) =>
                 TypedResults.Ok(new RabbitMqHealthDto(conn.IsConnected, consumer.IsHealthy, null)))
             .RequireAuthorization(policyName)

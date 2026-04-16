@@ -7,6 +7,13 @@ namespace Ratatoskr.Endpoints;
 
 public static class ManagementApiEndpointExtensions
 {
+    /// <summary>
+    /// Base path prefix under which all Ratatoskr management endpoints are mounted.
+    /// Used by the in-process authorization bypass to scope the bypass to only
+    /// management routes.
+    /// </summary>
+    internal const string BasePath = "/ratatoskr/api/v1";
+
     public static IEndpointRouteBuilder MapRatatoskrManagementApi(
         this IEndpointRouteBuilder endpoints,
         string policyName)

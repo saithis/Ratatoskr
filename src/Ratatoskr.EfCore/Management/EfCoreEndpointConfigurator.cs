@@ -15,7 +15,7 @@ internal sealed class EfCoreEndpointConfigurator : IRatatoskrEndpointConfigurato
     public void MapEndpoints(IEndpointRouteBuilder endpoints, string policyName)
     {
         var group = endpoints
-            .MapGroup("/ratatoskr/api/v1")
+            .MapGroup(ManagementApiEndpointExtensions.BasePath)
             .RequireAuthorization(policyName)
             .DisableAntiforgery();
 
