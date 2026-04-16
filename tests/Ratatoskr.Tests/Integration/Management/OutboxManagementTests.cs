@@ -203,9 +203,7 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         await SeedPoisonedOutboxAsync();
         await SeedPoisonedOutboxAsync();
 
-        var req = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/poisoned/requeue");
-        req.Content = JsonContent.Create(new { all = true });
-        var response = await HttpClient.SendAsync(req);
+        var response = await HttpClient.PostAsync($"{BaseUrl}/poisoned/requeue/all", content: null);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         await InScopeAsync(async ctx =>

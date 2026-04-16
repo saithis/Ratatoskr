@@ -13,10 +13,11 @@ internal static class BulkDeleteInboxEndpoint
 {
     internal static void Map(RouteGroupBuilder inboxGroup)
     {
-        inboxGroup.MapDelete("/poisoned", Handle);
+        inboxGroup.MapDelete("/poisoned", HandleByIds);
+        inboxGroup.MapDelete("/poisoned/all", HandleAll);
     }
 
-    private static async Task<Results<Ok, ProblemHttpResult>> Handle(
+    private static async Task<Results<Ok, ProblemHttpResult>> HandleByIds(
         string contextName,
         [FromBody] BulkDeleteInboxRequest req,
         EfCoreManagementProviderLookup lookup,
@@ -27,7 +28,7 @@ internal static class BulkDeleteInboxEndpoint
         if (provider is null || !provider.HasInbox)
             return ManagementResults.NotFound($"No inbox is registered for DbContext '{contextName}'.");
 
-        if (!BulkRequestValidator.TryValidate(req.Ids, req.All, out var error))
+        if (!BulkRequestValidator.TryValidateIds(req.Ids, out var error))
             return ManagementResults.BadRequest(error!);
 
         using var scope = scopeFactory.CreateScope();
@@ -38,34 +39,48 @@ internal static class BulkDeleteInboxEndpoint
         // place so the operator can retry.
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
-        if (req.All is true)
-        {
-            var affectedMessageIds = await db.Set<InboxHandlerStatusEntity>()
-                .Where(x => x.IsPoisoned)
-                .Select(x => x.MessageId)
-                .Distinct()
-                .ToListAsync(ct);
+        var messageIds = await db.Set<InboxHandlerStatusEntity>()
+            .Where(x => req.Ids!.Contains(x.Id) && x.IsPoisoned)
+            .Select(x => x.MessageId)
+            .Distinct()
+            .ToListAsync(ct);
 
-            await db.Set<InboxHandlerStatusEntity>()
-                .Where(x => x.IsPoisoned)
-                .ExecuteDeleteAsync(ct);
+        await db.Set<InboxHandlerStatusEntity>()
+            .Where(x => req.Ids!.Contains(x.Id) && x.IsPoisoned)
+            .ExecuteDeleteAsync(ct);
 
-            await DeleteOrphanedMessagesAsync(db, affectedMessageIds, ct);
-        }
-        else
-        {
-            var messageIds = await db.Set<InboxHandlerStatusEntity>()
-                .Where(x => req.Ids!.Contains(x.Id) && x.IsPoisoned)
-                .Select(x => x.MessageId)
-                .Distinct()
-                .ToListAsync(ct);
+        await DeleteOrphanedMessagesAsync(db, messageIds, ct);
 
-            await db.Set<InboxHandlerStatusEntity>()
-                .Where(x => req.Ids!.Contains(x.Id) && x.IsPoisoned)
-                .ExecuteDeleteAsync(ct);
+        await tx.CommitAsync(ct);
+        return TypedResults.Ok();
+    }
 
-            await DeleteOrphanedMessagesAsync(db, messageIds, ct);
-        }
+    private static async Task<Results<Ok, ProblemHttpResult>> HandleAll(
+        string contextName,
+        EfCoreManagementProviderLookup lookup,
+        IServiceScopeFactory scopeFactory,
+        CancellationToken ct)
+    {
+        var provider = lookup.Find(contextName);
+        if (provider is null || !provider.HasInbox)
+            return ManagementResults.NotFound($"No inbox is registered for DbContext '{contextName}'.");
+
+        using var scope = scopeFactory.CreateScope();
+        var db = provider.GetDbContext(scope.ServiceProvider);
+
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+        var affectedMessageIds = await db.Set<InboxHandlerStatusEntity>()
+            .Where(x => x.IsPoisoned)
+            .Select(x => x.MessageId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        await db.Set<InboxHandlerStatusEntity>()
+            .Where(x => x.IsPoisoned)
+            .ExecuteDeleteAsync(ct);
+
+        await DeleteOrphanedMessagesAsync(db, affectedMessageIds, ct);
 
         await tx.CommitAsync(ct);
         return TypedResults.Ok();
@@ -80,13 +95,11 @@ internal static class BulkDeleteInboxEndpoint
     {
         if (messageIds.Count == 0) return;
 
-        // Delete in one shot: parent messages whose ID is in the affected set and
-        // that have no remaining handler status rows.
         await db.Set<InboxMessageEntity>()
             .Where(msg => messageIds.Contains(msg.Id) &&
                           !db.Set<InboxHandlerStatusEntity>().Any(hs => hs.MessageId == msg.Id))
             .ExecuteDeleteAsync(ct);
     }
 
-    internal record BulkDeleteInboxRequest(List<Guid>? Ids, bool? All);
+    internal record BulkDeleteInboxRequest(List<Guid>? Ids);
 }

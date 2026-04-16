@@ -13,10 +13,15 @@ internal static class BulkDeleteOutboxEndpoint
 {
     internal static void Map(RouteGroupBuilder outboxGroup)
     {
-        outboxGroup.MapDelete("/poisoned", Handle);
+        // Two distinct URLs so that "delete all" cannot be requested by accident when a
+        // client forgets to attach a body. Some HTTP intermediaries also strip request
+        // bodies on DELETE, which would silently convert "delete these 5 ids" into
+        // "delete everything" if the two operations shared a route.
+        outboxGroup.MapDelete("/poisoned", HandleByIds);
+        outboxGroup.MapDelete("/poisoned/all", HandleAll);
     }
 
-    private static async Task<Results<Ok, ProblemHttpResult>> Handle(
+    private static async Task<Results<Ok, ProblemHttpResult>> HandleByIds(
         string contextName,
         [FromBody] BulkDeleteOutboxRequest req,
         EfCoreManagementProviderLookup lookup,
@@ -27,27 +32,38 @@ internal static class BulkDeleteOutboxEndpoint
         if (provider is null || !provider.HasOutbox)
             return ManagementResults.NotFound($"No outbox is registered for DbContext '{contextName}'.");
 
-        if (!BulkRequestValidator.TryValidate(req.Ids, req.All, out var error))
+        if (!BulkRequestValidator.TryValidateIds(req.Ids, out var error))
             return ManagementResults.BadRequest(error!);
 
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);
 
-        if (req.All is true)
-        {
-            await db.Set<OutboxMessageEntity>()
-                .Where(x => x.IsPoisoned)
-                .ExecuteDeleteAsync(ct);
-        }
-        else
-        {
-            await db.Set<OutboxMessageEntity>()
-                .Where(x => req.Ids!.Contains(x.Id) && x.IsPoisoned)
-                .ExecuteDeleteAsync(ct);
-        }
+        await db.Set<OutboxMessageEntity>()
+            .Where(x => req.Ids!.Contains(x.Id) && x.IsPoisoned)
+            .ExecuteDeleteAsync(ct);
 
         return TypedResults.Ok();
     }
 
-    internal record BulkDeleteOutboxRequest(List<Guid>? Ids, bool? All);
+    private static async Task<Results<Ok, ProblemHttpResult>> HandleAll(
+        string contextName,
+        EfCoreManagementProviderLookup lookup,
+        IServiceScopeFactory scopeFactory,
+        CancellationToken ct)
+    {
+        var provider = lookup.Find(contextName);
+        if (provider is null || !provider.HasOutbox)
+            return ManagementResults.NotFound($"No outbox is registered for DbContext '{contextName}'.");
+
+        using var scope = scopeFactory.CreateScope();
+        var db = provider.GetDbContext(scope.ServiceProvider);
+
+        await db.Set<OutboxMessageEntity>()
+            .Where(x => x.IsPoisoned)
+            .ExecuteDeleteAsync(ct);
+
+        return TypedResults.Ok();
+    }
+
+    internal record BulkDeleteOutboxRequest(List<Guid>? Ids);
 }

@@ -1,9 +1,9 @@
 namespace Ratatoskr.EfCore.Management;
 
 /// <summary>
-/// Validates the shape of a bulk management request (either <c>Ids</c> or the
-/// <c>All</c> flag, never both or neither, and never an oversized <c>Ids</c> list).
-/// Centralised so the two Outbox/Inbox bulk endpoint pairs stay in lockstep.
+/// Validates the shape of a bulk management request. The "all" and "by ids" cases live on
+/// separate routes, so this validator only has to sanity-check the id list — centralised
+/// so every bulk endpoint applies the same bounds.
 /// </summary>
 internal static class BulkRequestValidator
 {
@@ -14,24 +14,11 @@ internal static class BulkRequestValidator
     /// </summary>
     internal const int MaxIds = 1000;
 
-    internal static bool TryValidate(IReadOnlyList<Guid>? ids, bool? all, out string? error)
+    internal static bool TryValidateIds(IReadOnlyList<Guid>? ids, out string? error)
     {
-        // Ambiguous: caller mixed the two exclusive modes.
-        if (all is true && ids is { Count: > 0 })
-        {
-            error = $"'{nameof(all)}' and '{nameof(ids)}' are mutually exclusive — send exactly one.";
-            return false;
-        }
-
-        if (all is true)
-        {
-            error = null;
-            return true;
-        }
-
         if (ids is null || ids.Count == 0)
         {
-            error = $"Provide a non-empty '{nameof(ids)}' list or set '{nameof(all)}' to true.";
+            error = $"Provide a non-empty '{nameof(ids)}' list, or use the '/all' variant of this endpoint.";
             return false;
         }
 

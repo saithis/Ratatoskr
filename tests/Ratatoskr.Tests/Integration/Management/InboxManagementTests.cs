@@ -160,9 +160,7 @@ public class InboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCon
         var (messageId1, _) = await SeedPoisonedInboxAsync();
         var (messageId2, _) = await SeedPoisonedInboxAsync();
 
-        var req = new HttpRequestMessage(HttpMethod.Delete, $"{BaseUrl}/poisoned");
-        req.Content = JsonContent.Create(new { all = true });
-        var response = await HttpClient.SendAsync(req);
+        var response = await HttpClient.DeleteAsync($"{BaseUrl}/poisoned/all");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         await InScopeAsync(async ctx =>
