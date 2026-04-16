@@ -29,6 +29,11 @@ internal static class BulkDeleteInboxEndpoint
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);
 
+        // Whole operation must be atomic: if orphaned-parent cleanup fails after the
+        // handler rows are deleted, rolling back keeps the poisoned handler rows in
+        // place so the operator can retry.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+
         if (req.All is true)
         {
             // Collect all message IDs that have at least one poisoned handler before deleting,
@@ -44,10 +49,8 @@ internal static class BulkDeleteInboxEndpoint
                 .ExecuteDeleteAsync(ct);
 
             await DeleteOrphanedMessagesAsync(db, affectedMessageIds, ct);
-            return TypedResults.Ok();
         }
-
-        if (req.Ids is not null and { Count: > 0 })
+        else if (req.Ids is not null and { Count: > 0 })
         {
             // Collect the message IDs that are affected by the handler deletions.
             var messageIds = await db.Set<InboxHandlerStatusEntity>()
@@ -63,6 +66,7 @@ internal static class BulkDeleteInboxEndpoint
             await DeleteOrphanedMessagesAsync(db, messageIds, ct);
         }
 
+        await tx.CommitAsync(ct);
         return TypedResults.Ok();
     }
 

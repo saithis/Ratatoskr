@@ -37,27 +37,28 @@ internal static class DeleteInboxHandlerEndpoint
         var messageId = entity.MessageId;
         db.Set<InboxHandlerStatusEntity>().Remove(entity);
 
-        // Atomically check whether this is the only remaining handler and delete the orphaned
-        // parent message in the same SaveChanges call to avoid a TOCTOU window.
-        var otherHandlerCount = await db.Set<InboxHandlerStatusEntity>()
-            .CountAsync(x => x.MessageId == messageId && x.Id != handlerStatusId, ct);
-
-        if (otherHandlerCount == 0)
-        {
-            var parent = await db.Set<InboxMessageEntity>()
-                .FindAsync([messageId], ct);
-            if (parent is not null)
-                db.Set<InboxMessageEntity>().Remove(parent);
-        }
+        // Handler removal + orphan check + parent removal must all succeed or all fail together.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
 
         try
         {
             await db.SaveChangesAsync(ct);
-            return TypedResults.Ok();
         }
         catch (DbUpdateConcurrencyException)
         {
+            await tx.RollbackAsync(ct);
             return TypedResults.Conflict();
         }
+
+        // Orphan-cleanup is expressed as a single SQL statement with a NOT EXISTS guard so the
+        // parent is only deleted when no other handler rows reference it at delete time —
+        // tighter than a separate COUNT + remove which had a TOCTOU hole for concurrent inserts.
+        await db.Set<InboxMessageEntity>()
+            .Where(m => m.Id == messageId
+                        && !db.Set<InboxHandlerStatusEntity>().Any(h => h.MessageId == m.Id))
+            .ExecuteDeleteAsync(ct);
+
+        await tx.CommitAsync(ct);
+        return TypedResults.Ok();
     }
 }
