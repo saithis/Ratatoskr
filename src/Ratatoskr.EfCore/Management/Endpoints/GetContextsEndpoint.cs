@@ -5,10 +5,6 @@ using Microsoft.AspNetCore.Routing;
 
 namespace Ratatoskr.EfCore.Management;
 
-internal record ContextListItem(string Name, bool HasOutbox, bool HasInbox);
-
-internal record ContextListResponse(List<ContextListItem> Contexts);
-
 internal static class GetContextsEndpoint
 {
     internal static void Map(RouteGroupBuilder group)
@@ -23,4 +19,8 @@ internal static class GetContextsEndpoint
             .ToList();
         return TypedResults.Ok(new ContextListResponse(contexts));
     }
+
+    internal record ContextListItem(string Name, bool HasOutbox, bool HasInbox);
+
+    internal record ContextListResponse(List<ContextListItem> Contexts);
 }

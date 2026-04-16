@@ -2,10 +2,11 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Ratatoskr.EfCore.Internal;
 
 namespace Ratatoskr.EfCore.Management;
-
-internal record RequeueInboxMessageResponse(List<Guid> RequeuedHandlerStatusIds);
 
 internal static class RequeueInboxMessageEndpoint
 {
@@ -18,14 +19,34 @@ internal static class RequeueInboxMessageEndpoint
         string contextName,
         string messageId,
         EfCoreManagementProviderLookup lookup,
+        IServiceScopeFactory scopeFactory,
         CancellationToken ct)
     {
         var provider = lookup.Find(contextName);
         if (provider is null || !provider.HasInbox) return TypedResults.NotFound();
 
-        var outcome = await provider.RequeueAllInboxHandlersForMessageAsync(messageId, ct);
-        if (!outcome.Found) return TypedResults.NotFound();
-        if (outcome.Conflict) return TypedResults.Conflict();
-        return TypedResults.Ok(new RequeueInboxMessageResponse(outcome.RequeuedIds.ToList()));
+        using var scope = scopeFactory.CreateScope();
+        var db = provider.GetDbContext(scope.ServiceProvider);
+
+        var handlers = await db.Set<InboxHandlerStatusEntity>()
+            .Where(x => x.MessageId == messageId && x.IsPoisoned)
+            .ToListAsync(ct);
+
+        if (handlers.Count == 0) return TypedResults.NotFound();
+
+        foreach (var h in handlers)
+            h.Requeue();
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return TypedResults.Ok(new RequeueInboxMessageResponse(handlers.Select(h => h.Id).ToList()));
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return TypedResults.Conflict();
+        }
     }
+
+    internal record RequeueInboxMessageResponse(List<Guid> RequeuedHandlerStatusIds);
 }

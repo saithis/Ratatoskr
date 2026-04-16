@@ -1,7 +1,10 @@
+using Microsoft.EntityFrameworkCore;
+using Ratatoskr.EfCore.Internal;
+
 namespace Ratatoskr.EfCore.Management;
 
 /// <summary>
-/// Abstraction over one registered DbContext for management API queries.
+/// Thin accessor over one registered DbContext for management API queries.
 /// One implementation is registered per <c>AddEfCoreDurability&lt;TDbContext&gt;</c> call.
 /// The <see cref="EfCoreManagementProviderLookup"/> resolves the correct provider by context name.
 /// </summary>
@@ -11,41 +14,13 @@ internal interface IEfCoreManagementDbContextProvider
     bool HasOutbox { get; }
     bool HasInbox { get; }
 
-    // ── Outbox ──────────────────────────────────────────────────────────────
+    /// <summary>Returns the typed DbContext from the given service provider scope.</summary>
+    DbContext GetDbContext(IServiceProvider serviceProvider);
 
-    Task<(List<OutboxPoisonedListItem> Items, long TotalCount)> ListPoisonedOutboxAsync(
-        int pageSize, string? cursor, DateTimeOffset? from, DateTimeOffset? to, string? type, CancellationToken ct);
+    // ── Health data (read-only properties, no DB access) ─────────────────────
 
-    Task<OutboxPoisonedDetail?> GetPoisonedOutboxDetailAsync(Guid id, CancellationToken ct);
-
-    Task<SingleRequeueOutcome> RequeueOutboxAsync(Guid id, CancellationToken ct);
-
-    Task<SingleDeleteOutcome> DeleteOutboxAsync(Guid id, CancellationToken ct);
-
-    Task<BulkRequeueOutboxResponse> BulkRequeueOutboxAsync(List<Guid>? ids, bool all, CancellationToken ct);
-
-    Task BulkDeleteOutboxAsync(List<Guid>? ids, bool all, CancellationToken ct);
-
-    // ── Inbox ────────────────────────────────────────────────────────────────
-
-    Task<(List<InboxPoisonedListItem> Items, long TotalCount)> ListPoisonedInboxAsync(
-        int pageSize, string? cursor, DateTimeOffset? from, DateTimeOffset? to, string? type, CancellationToken ct);
-
-    Task<InboxHandlerDetail?> GetPoisonedInboxDetailAsync(Guid handlerStatusId, CancellationToken ct);
-
-    Task<InboxMessageHandlers?> GetInboxHandlersForMessageAsync(string messageId, CancellationToken ct);
-
-    Task<SingleRequeueOutcome> RequeueInboxHandlerAsync(Guid handlerStatusId, CancellationToken ct);
-
-    Task<RequeueMessageOutcome> RequeueAllInboxHandlersForMessageAsync(string messageId, CancellationToken ct);
-
-    Task<SingleDeleteOutcome> DeleteInboxHandlerStatusAsync(Guid handlerStatusId, CancellationToken ct);
-
-    Task<BulkRequeueInboxResponse> BulkRequeueInboxAsync(List<Guid>? ids, bool all, CancellationToken ct);
-
-    Task BulkDeleteInboxAsync(List<Guid>? ids, bool all, CancellationToken ct);
-
-    // ── Health ───────────────────────────────────────────────────────────────
-
-    Task<ContextHealthResponse> GetHealthAsync(CancellationToken ct);
+    EfCoreMetricsState MetricsState { get; }
+    string MetricsContextKey { get; }
+    DateTimeOffset? LastOutboxProcessingAt { get; }
+    DateTimeOffset? LastInboxProcessingAt { get; }
 }

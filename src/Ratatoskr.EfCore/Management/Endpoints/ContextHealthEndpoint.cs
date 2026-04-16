@@ -5,15 +5,6 @@ using Microsoft.AspNetCore.Routing;
 
 namespace Ratatoskr.EfCore.Management;
 
-internal record ContextHealthResponse(
-    string DbContextName,
-    long PoisonedOutboxCount,
-    long PoisonedInboxCount,
-    long PendingOutboxCount,
-    long PendingInboxCount,
-    DateTimeOffset? LastOutboxProcessedAt,
-    DateTimeOffset? LastInboxProcessedAt);
-
 internal static class ContextHealthEndpoint
 {
     internal static void Map(RouteGroupBuilder contextGroup)
@@ -21,15 +12,31 @@ internal static class ContextHealthEndpoint
         contextGroup.MapGet("/health", Handle);
     }
 
-    private static async Task<Results<Ok<ContextHealthResponse>, NotFound>> Handle(
+    private static Results<Ok<ContextHealthResponse>, NotFound> Handle(
         string contextName,
-        EfCoreManagementProviderLookup lookup,
-        CancellationToken ct)
+        EfCoreManagementProviderLookup lookup)
     {
         var provider = lookup.Find(contextName);
         if (provider is null) return TypedResults.NotFound();
 
-        var health = await provider.GetHealthAsync(ct);
-        return TypedResults.Ok(health);
+        provider.MetricsState.ContextMetrics.TryGetValue(provider.MetricsContextKey, out var metrics);
+
+        return TypedResults.Ok(new ContextHealthResponse(
+            provider.DbContextName,
+            metrics.PoisonedOutboxCount,
+            metrics.PoisonedInboxCount,
+            metrics.PendingOutboxCount,
+            metrics.PendingInboxCount,
+            provider.LastOutboxProcessingAt,
+            provider.LastInboxProcessingAt));
     }
+
+    internal record ContextHealthResponse(
+        string DbContextName,
+        long PoisonedOutboxCount,
+        long PoisonedInboxCount,
+        long PendingOutboxCount,
+        long PendingInboxCount,
+        DateTimeOffset? LastOutboxProcessedAt,
+        DateTimeOffset? LastInboxProcessedAt);
 }

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Ratatoskr.EfCore.Management;
 
@@ -16,12 +17,16 @@ internal static class RequeueOutboxEndpoint
         string contextName,
         Guid id,
         EfCoreManagementProviderLookup lookup,
+        IServiceScopeFactory scopeFactory,
         CancellationToken ct)
     {
         var provider = lookup.Find(contextName);
         if (provider is null || !provider.HasOutbox) return TypedResults.NotFound();
 
-        var outcome = await provider.RequeueOutboxAsync(id, ct);
+        using var scope = scopeFactory.CreateScope();
+        var db = provider.GetDbContext(scope.ServiceProvider);
+
+        var outcome = await RequeueHelper.RequeueOutboxAsync(db, id, ct);
         if (outcome == SingleRequeueOutcome.Success) return TypedResults.Ok();
         if (outcome == SingleRequeueOutcome.NotFound) return TypedResults.NotFound();
         if (outcome == SingleRequeueOutcome.NotPoisoned) return TypedResults.BadRequest("Message is not poisoned.");

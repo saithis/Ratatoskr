@@ -3,10 +3,11 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Ratatoskr.EfCore.Internal;
 
 namespace Ratatoskr.EfCore.Management;
-
-internal record BulkDeleteInboxRequest(List<Guid>? Ids, bool? All);
 
 internal static class BulkDeleteInboxEndpoint
 {
@@ -19,12 +20,68 @@ internal static class BulkDeleteInboxEndpoint
         string contextName,
         [FromBody] BulkDeleteInboxRequest req,
         EfCoreManagementProviderLookup lookup,
+        IServiceScopeFactory scopeFactory,
         CancellationToken ct)
     {
         var provider = lookup.Find(contextName);
         if (provider is null || !provider.HasInbox) return TypedResults.NotFound();
 
-        await provider.BulkDeleteInboxAsync(req.Ids, req.All is true, ct);
+        using var scope = scopeFactory.CreateScope();
+        var db = provider.GetDbContext(scope.ServiceProvider);
+
+        if (req.All is true)
+        {
+            // Collect all message IDs that have at least one poisoned handler before deleting,
+            // so we can clean up orphaned parent messages afterwards.
+            var affectedMessageIds = await db.Set<InboxHandlerStatusEntity>()
+                .Where(x => x.IsPoisoned)
+                .Select(x => x.MessageId)
+                .Distinct()
+                .ToListAsync(ct);
+
+            await db.Set<InboxHandlerStatusEntity>()
+                .Where(x => x.IsPoisoned)
+                .ExecuteDeleteAsync(ct);
+
+            await DeleteOrphanedMessagesAsync(db, affectedMessageIds, ct);
+            return TypedResults.Ok();
+        }
+
+        if (req.Ids is not null and { Count: > 0 })
+        {
+            // Collect the message IDs that are affected by the handler deletions.
+            var messageIds = await db.Set<InboxHandlerStatusEntity>()
+                .Where(x => req.Ids.Contains(x.Id) && x.IsPoisoned)
+                .Select(x => x.MessageId)
+                .Distinct()
+                .ToListAsync(ct);
+
+            await db.Set<InboxHandlerStatusEntity>()
+                .Where(x => req.Ids.Contains(x.Id) && x.IsPoisoned)
+                .ExecuteDeleteAsync(ct);
+
+            await DeleteOrphanedMessagesAsync(db, messageIds, ct);
+        }
+
         return TypedResults.Ok();
     }
+
+    /// <summary>
+    /// Deletes <see cref="InboxMessageEntity"/> rows whose message IDs are in
+    /// <paramref name="messageIds"/> and that no longer have any handler status rows.
+    /// </summary>
+    private static async Task DeleteOrphanedMessagesAsync(
+        Microsoft.EntityFrameworkCore.DbContext db, List<string> messageIds, CancellationToken ct)
+    {
+        if (messageIds.Count == 0) return;
+
+        // Delete in one shot: parent messages whose ID is in the affected set and
+        // that have no remaining handler status rows.
+        await db.Set<InboxMessageEntity>()
+            .Where(msg => messageIds.Contains(msg.Id) &&
+                          !db.Set<InboxHandlerStatusEntity>().Any(hs => hs.MessageId == msg.Id))
+            .ExecuteDeleteAsync(ct);
+    }
+
+    internal record BulkDeleteInboxRequest(List<Guid>? Ids, bool? All);
 }
