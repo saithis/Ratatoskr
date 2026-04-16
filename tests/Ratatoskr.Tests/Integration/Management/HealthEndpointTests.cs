@@ -2,6 +2,9 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using AwesomeAssertions;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Ratatoskr.EfCore.Internal;
 using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Management;
@@ -14,16 +17,24 @@ public class HealthEndpointTests(RabbitMqContainerFixture rabbitMq, PostgresCont
     {
         await StartManagementTestAsync();
         await SeedPoisonedOutboxAsync();
+        await SeedPoisonedInboxAsync();
+        await RefreshMetricsAsync();
 
         var response = await HttpClient.GetAsync("/ratatoskr/api/v1/contexts/TestDbContext/health");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("dbContextName").GetString().Should().Be("TestDbContext");
+        body.GetProperty("poisonedOutboxCount").GetInt64().Should().Be(1,
+            "the seeded outbox entity is poisoned and the metrics scrape has just run");
+        body.GetProperty("poisonedInboxCount").GetInt64().Should().Be(1,
+            "the seeded inbox handler is poisoned and the metrics scrape has just run");
+        body.GetProperty("pendingOutboxCount").GetInt64().Should().Be(0);
+        body.GetProperty("pendingInboxCount").GetInt64().Should().Be(0);
     }
 
     [Test]
-    public async Task Health_LastProcessedAt_ReflectsProcessorState()
+    public async Task Health_LastProcessedAt_IsPopulatedOnceProcessorsRun()
     {
         await StartManagementTestAsync();
 
@@ -31,8 +42,13 @@ public class HealthEndpointTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        body.TryGetProperty("lastOutboxProcessedAt", out _).Should().BeTrue();
-        body.TryGetProperty("lastInboxProcessedAt", out _).Should().BeTrue();
+        // Processors initialise `LastSuccessfulProcessingAt` from TimeProvider at construction, so
+        // the field is always populated once hosted services have started. This is what the UI
+        // actually renders — asserting the shape is populated is what keeps the contract honest.
+        body.GetProperty("lastOutboxProcessedAt").ValueKind.Should().Be(JsonValueKind.String,
+            "the outbox processor has started and stamped LastSuccessfulProcessingAt");
+        body.GetProperty("lastInboxProcessedAt").ValueKind.Should().Be(JsonValueKind.String,
+            "the inbox processor has started and stamped LastSuccessfulProcessingAt");
     }
 
     [Test]
@@ -49,8 +65,8 @@ public class HealthEndpointTests(RabbitMqContainerFixture rabbitMq, PostgresCont
 
         var first = contexts.EnumerateArray().First();
         first.GetProperty("name").GetString().Should().Be("TestDbContext");
-        first.TryGetProperty("hasOutbox", out _).Should().BeTrue();
-        first.TryGetProperty("hasInbox", out _).Should().BeTrue();
+        first.GetProperty("hasOutbox").GetBoolean().Should().BeTrue();
+        first.GetProperty("hasInbox").GetBoolean().Should().BeTrue();
     }
 
     [Test]
@@ -60,5 +76,22 @@ public class HealthEndpointTests(RabbitMqContainerFixture rabbitMq, PostgresCont
 
         var response = await HttpClient.GetAsync("/ratatoskr/api/v1/contexts/NonExistentContext/health");
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    /// <summary>
+    /// The backlog metrics are scraped by a background service on a 30s cadence, which is far too
+    /// slow for tests. Rather than waiting or hacking the interval down, we synchronously drive one
+    /// scrape of the same code path by resolving the hosted service and calling
+    /// <see cref="EfCoreMetricsBackgroundService{TDbContext}.UpdateMetricsAsync"/> directly —
+    /// exactly what the timer loop would do.
+    /// </summary>
+    private async Task RefreshMetricsAsync()
+    {
+        // The BGS is only registered under the IHostedService contract (see AddHostedService<T>),
+        // so we fish it out by type from the enumerable.
+        var bg = Services.GetServices<IHostedService>()
+            .OfType<EfCoreMetricsBackgroundService<TestDbContext>>()
+            .Single();
+        await bg.UpdateMetricsAsync(CancellationToken.None);
     }
 }

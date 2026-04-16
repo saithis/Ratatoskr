@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore.Internal;
+using Ratatoskr.EfCore.Management;
 using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Management;
@@ -40,9 +41,10 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
             var props = new MessageProperties { Type = "normal.event" };
             var content = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new { });
-            var entity = OutboxMessageEntity.Create(content, props, TimeProvider.System, "efcore");
+            var entity = OutboxMessageEntity.Create(content, props, time, "efcore");
             db.Set<OutboxMessageEntity>().Add(entity);
             await db.SaveChangesAsync();
         });
@@ -61,7 +63,8 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         await StartManagementTestAsync();
         await SeedPoisonedOutboxAsync();
 
-        var future = Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(1).ToString("O"));
+        var time = Services.GetRequiredService<TimeProvider>();
+        var future = Uri.EscapeDataString(time.GetUtcNow().AddDays(1).ToString("O"));
         var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned?to={future}");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -146,9 +149,10 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
             var props = new MessageProperties { Type = "normal.event" };
             var content = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new { });
-            var entity = OutboxMessageEntity.Create(content, props, TimeProvider.System, "efcore");
+            var entity = OutboxMessageEntity.Create(content, props, time, "efcore");
             db.Set<OutboxMessageEntity>().Add(entity);
             await db.SaveChangesAsync();
             id = entity.Id;
@@ -182,8 +186,10 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         var id1 = await SeedPoisonedOutboxAsync();
         var id2 = await SeedPoisonedOutboxAsync();
 
-        var req = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/poisoned/requeue");
-        req.Content = JsonContent.Create(new { ids = new[] { id1, id2 } });
+        var req = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/poisoned/requeue")
+        {
+            Content = JsonContent.Create(new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest([id1, id2]))
+        };
         var response = await HttpClient.SendAsync(req);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -221,8 +227,10 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         var id1 = await SeedPoisonedOutboxAsync();
         var id2 = await SeedPoisonedOutboxAsync();
 
-        var req = new HttpRequestMessage(HttpMethod.Delete, $"{BaseUrl}/poisoned");
-        req.Content = JsonContent.Create(new { ids = new[] { id1, id2 } });
+        var req = new HttpRequestMessage(HttpMethod.Delete, $"{BaseUrl}/poisoned")
+        {
+            Content = JsonContent.Create(new BulkDeleteOutboxEndpoint.BulkDeleteOutboxRequest([id1, id2]))
+        };
         var response = await HttpClient.SendAsync(req);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -263,8 +271,10 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         var id2 = await SeedPoisonedOutboxAsync();
         var id3 = await SeedPoisonedOutboxAsync();
 
-        var req = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/poisoned/requeue");
-        req.Content = JsonContent.Create(new { ids = new[] { id1, id2, id3 } });
+        var req = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/poisoned/requeue")
+        {
+            Content = JsonContent.Create(new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest([id1, id2, id3]))
+        };
         var response = await HttpClient.SendAsync(req);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 

@@ -1,6 +1,11 @@
+using System.Security.Claims;
+using System.Text.Encodings.Web;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.EfCore.Internal;
@@ -21,7 +26,14 @@ public abstract class ManagementTestBase(RabbitMqContainerFixture rabbitMq, Post
     {
         await StartTestAsync(services =>
         {
-            // "Always allow" policy — no real auth needed in tests
+            // The test host pipeline calls app.UseAuthentication() before UseAuthorization(),
+            // so we need *some* scheme registered or the middleware pipeline fails to build.
+            // A permissive scheme that always authenticates as "test" lets the "RequireAssertion(true)"
+            // policy below pass without real credentials.
+            services.AddAuthentication(AllowAnonymousAuthenticationHandler.SchemeName)
+                .AddScheme<AuthenticationSchemeOptions, AllowAnonymousAuthenticationHandler>(
+                    AllowAnonymousAuthenticationHandler.SchemeName, _ => { });
+
             services.AddAuthorization(o =>
                 o.AddPolicy("RatatoskrAdmin", p => p.RequireAssertion(_ => true)));
 
@@ -47,12 +59,13 @@ public abstract class ManagementTestBase(RabbitMqContainerFixture rabbitMq, Post
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
             var props = new MessageProperties { Type = messageType ?? "test.event", Id = Guid.NewGuid().ToString() };
             var content = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new { Data = "payload" });
-            var entity = OutboxMessageEntity.Create(content, props, TimeProvider.System, "efcore");
+            var entity = OutboxMessageEntity.Create(content, props, time, "efcore");
             // Poison it by exceeding max retries
             for (var i = 0; i < 4; i++)
-                entity.PublishFailed("simulated error", TimeProvider.System, 3, TimeSpan.FromSeconds(1));
+                entity.PublishFailed("simulated error", time, 3, TimeSpan.FromSeconds(1));
             db.Set<OutboxMessageEntity>().Add(entity);
             await db.SaveChangesAsync();
             id = entity.Id;
@@ -69,15 +82,16 @@ public abstract class ManagementTestBase(RabbitMqContainerFixture rabbitMq, Post
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
             var props = new MessageProperties { Type = messageType ?? "test.event" };
             var content = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new { Data = "inbox-payload" });
             var msg = InboxMessageEntity.Create(
-                Guid.NewGuid().ToString(), "efcore", content, props, TimeProvider.System);
+                Guid.NewGuid().ToString(), "efcore", content, props, time);
             db.Set<InboxMessageEntity>().Add(msg);
 
-            var handler = InboxHandlerStatusEntity.Create(msg.Id, "handler-a", TimeProvider.System);
+            var handler = InboxHandlerStatusEntity.Create(msg.Id, "handler-a", time);
             for (var i = 0; i < 4; i++)
-                handler.MarkAsFailed("simulated inbox error", TimeProvider.System, 3, TimeSpan.FromSeconds(1));
+                handler.MarkAsFailed("simulated inbox error", time, 3, TimeSpan.FromSeconds(1));
             db.Set<InboxHandlerStatusEntity>().Add(handler);
 
             await db.SaveChangesAsync();
@@ -85,5 +99,26 @@ public abstract class ManagementTestBase(RabbitMqContainerFixture rabbitMq, Post
             handlerStatusId = handler.Id;
         });
         return (messageId, handlerStatusId);
+    }
+
+    /// <summary>
+    /// Authenticates every request as a fixed "test" user. We need this because the test host's
+    /// middleware pipeline unconditionally calls <c>UseAuthentication</c>, which blows up at build
+    /// time if no scheme is registered. Real auth is covered in <c>ManagementAuthorizationTests</c>.
+    /// </summary>
+    private sealed class AllowAnonymousAuthenticationHandler(
+        IOptionsMonitor<AuthenticationSchemeOptions> options,
+        ILoggerFactory loggerFactory,
+        UrlEncoder encoder)
+        : AuthenticationHandler<AuthenticationSchemeOptions>(options, loggerFactory, encoder)
+    {
+        internal const string SchemeName = "AllowAnonymousTest";
+
+        protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+        {
+            var identity = new ClaimsIdentity([new Claim(ClaimTypes.Name, "test")], SchemeName);
+            var ticket = new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName);
+            return Task.FromResult(AuthenticateResult.Success(ticket));
+        }
     }
 }

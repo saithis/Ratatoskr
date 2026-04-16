@@ -25,8 +25,9 @@ public class RequeuedCountTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
             var e = await db.Set<OutboxMessageEntity>().FindAsync(id);
-            e!.PublishFailed("error again", TimeProvider.System, 1, TimeSpan.FromSeconds(1));
+            e!.PublishFailed("error again", time, 1, TimeSpan.FromSeconds(1));
             await db.SaveChangesAsync();
         });
 
@@ -70,7 +71,8 @@ public class RequeuedCountTests(RabbitMqContainerFixture rabbitMq, PostgresConta
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var cutoff = DateTimeOffset.UtcNow.AddDays(1);
+            var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
+            var cutoff = time.GetUtcNow().AddDays(1);
             var wouldBeDeleted = await db.Set<OutboxMessageEntity>()
                 .AnyAsync(x => x.Id == id && x.ProcessedAt != null && x.ProcessedAt < cutoff && !x.IsPoisoned);
             wouldBeDeleted.Should().BeFalse("poisoned messages must not match the cleanup predicate");

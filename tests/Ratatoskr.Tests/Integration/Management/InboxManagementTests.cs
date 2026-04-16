@@ -5,6 +5,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.EfCore.Internal;
+using Ratatoskr.EfCore.Management;
 using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Management;
@@ -58,8 +59,9 @@ public class InboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCon
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var completed = InboxHandlerStatusEntity.Create(messageId, "handler-b", TimeProvider.System);
-            completed.MarkAsCompleted(TimeProvider.System);
+            var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
+            var completed = InboxHandlerStatusEntity.Create(messageId, "handler-b", time);
+            completed.MarkAsCompleted(time);
             db.Set<InboxHandlerStatusEntity>().Add(completed);
             await db.SaveChangesAsync();
         });
@@ -90,8 +92,9 @@ public class InboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCon
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var second = InboxHandlerStatusEntity.Create(messageId, "handler-b", TimeProvider.System);
-            second.MarkAsCompleted(TimeProvider.System);
+            var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
+            var second = InboxHandlerStatusEntity.Create(messageId, "handler-b", time);
+            second.MarkAsCompleted(time);
             db.Set<InboxHandlerStatusEntity>().Add(second);
             await db.SaveChangesAsync();
         });
@@ -136,8 +139,9 @@ public class InboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCon
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var second = InboxHandlerStatusEntity.Create(messageId, "handler-b", TimeProvider.System);
-            second.MarkAsCompleted(TimeProvider.System);
+            var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
+            var second = InboxHandlerStatusEntity.Create(messageId, "handler-b", time);
+            second.MarkAsCompleted(time);
             db.Set<InboxHandlerStatusEntity>().Add(second);
             await db.SaveChangesAsync();
         });
@@ -186,8 +190,10 @@ public class InboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCon
         await StartManagementTestAsync();
         var (messageId, handlerStatusId) = await SeedPoisonedInboxAsync();
 
-        var req = new HttpRequestMessage(HttpMethod.Delete, $"{BaseUrl}/poisoned");
-        req.Content = JsonContent.Create(new { ids = new[] { handlerStatusId } });
+        var req = new HttpRequestMessage(HttpMethod.Delete, $"{BaseUrl}/poisoned")
+        {
+            Content = JsonContent.Create(new BulkDeleteInboxEndpoint.BulkDeleteInboxRequest([handlerStatusId]))
+        };
         var response = await HttpClient.SendAsync(req);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -216,16 +222,19 @@ public class InboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCon
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var second = InboxHandlerStatusEntity.Create(messageId, "handler-b", TimeProvider.System);
-            second.MarkAsCompleted(TimeProvider.System);
+            var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
+            var second = InboxHandlerStatusEntity.Create(messageId, "handler-b", time);
+            second.MarkAsCompleted(time);
             db.Set<InboxHandlerStatusEntity>().Add(second);
             await db.SaveChangesAsync();
             secondHandlerId = second.Id;
         });
 
         // Delete only the poisoned handler
-        var req = new HttpRequestMessage(HttpMethod.Delete, $"{BaseUrl}/poisoned");
-        req.Content = JsonContent.Create(new { ids = new[] { poisonedHandlerStatusId } });
+        var req = new HttpRequestMessage(HttpMethod.Delete, $"{BaseUrl}/poisoned")
+        {
+            Content = JsonContent.Create(new BulkDeleteInboxEndpoint.BulkDeleteInboxRequest([poisonedHandlerStatusId]))
+        };
         await HttpClient.SendAsync(req);
 
         await InScopeAsync(async ctx =>
