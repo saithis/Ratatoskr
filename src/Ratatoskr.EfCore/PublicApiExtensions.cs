@@ -53,9 +53,9 @@ public static class PublicApiExtensions
             builder.Services.AddHostedService<EfCoreMetricsBackgroundService<TDbContext>>();
 
             // Management API
-            builder.Services.AddSingleton<IEfCoreManagementDbContextProvider,
-                EfCoreManagementDbContextProvider<TDbContext>>();
-            builder.Services.TryAddSingleton<EfCoreManagementProviderLookup>();
+            builder.Services.AddSingleton<IEfCoreManagementDbContextDescriptor,
+                EfCoreManagementDbContextDescriptor<TDbContext>>();
+            builder.Services.TryAddScoped<EfCoreManagementDbContextLookup>();
             builder.Services.TryAddSingleton<IRatatoskrEndpointConfigurator, EfCoreEndpointConfigurator>();
 
             return builder;

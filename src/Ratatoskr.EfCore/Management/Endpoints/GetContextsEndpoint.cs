@@ -12,7 +12,7 @@ internal static class GetContextsEndpoint
         group.MapGet("/contexts", Handle);
     }
 
-    private static Ok<ContextListResponse> Handle(EfCoreManagementProviderLookup lookup)
+    private static Ok<ContextListResponse> Handle(EfCoreManagementDbContextLookup lookup)
     {
         // Order is deterministic so the UI doesn't reshuffle tabs between refreshes just
         // because DI happened to resolve providers in a different order.

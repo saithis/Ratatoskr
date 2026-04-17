@@ -2,7 +2,9 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Ratatoskr.EfCore.Internal;
 using Ratatoskr.Management;
 
 namespace Ratatoskr.EfCore.Management.Endpoints.Inbox;
@@ -17,23 +19,28 @@ internal static class RequeueInboxHandlerEndpoint
     private static async Task<Results<Ok, ProblemHttpResult>> Handle(
         string contextName,
         Guid handlerStatusId,
-        EfCoreManagementProviderLookup lookup,
-        IServiceScopeFactory scopeFactory,
+        EfCoreManagementDbContextLookup lookup,
         CancellationToken ct)
     {
-        if (ManagementProviderResolver.EnsureInbox(lookup, contextName, out var provider) is { } resolveError)
+        if (ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is { } resolveError)
             return resolveError;
 
-        using var scope = scopeFactory.CreateScope();
-        var db = provider.GetDbContext(scope.ServiceProvider);
+        var entity = await db.Set<InboxHandlerStatusEntity>()
+            .SingleOrDefaultAsync(x => x.Id == handlerStatusId, ct);
 
-        var outcome = await RequeueHelper.RequeueInboxHandlerAsync(db, handlerStatusId, ct);
-        return outcome switch
+        if (entity is null) return ManagementResults.NotFound($"Inbox handler status '{handlerStatusId}' was not found.");
+        if (!entity.IsPoisoned) return ManagementResults.BadRequest("Handler status is not poisoned.");
+
+        entity.Requeue();
+
+        try
         {
-            SingleRequeueOutcome.Success => TypedResults.Ok(),
-            SingleRequeueOutcome.NotFound => ManagementResults.NotFound($"Inbox handler status '{handlerStatusId}' was not found."),
-            SingleRequeueOutcome.NotPoisoned => ManagementResults.BadRequest("Handler status is not poisoned."),
-            _ => ManagementResults.Conflict("Handler status was modified by another operation; retry."),
-        };
+            await db.SaveChangesAsync(ct);
+            return TypedResults.Ok();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return ManagementResults.Conflict("Handler status was modified by another operation; retry.");
+        }
     }
 }

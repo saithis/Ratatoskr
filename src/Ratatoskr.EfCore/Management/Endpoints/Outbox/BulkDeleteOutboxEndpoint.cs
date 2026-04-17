@@ -25,18 +25,14 @@ internal static class BulkDeleteOutboxEndpoint
     private static async Task<Results<Ok<BulkDeleteOutboxResponse>, ProblemHttpResult>> HandleByIds(
         string contextName,
         [FromBody] BulkDeleteOutboxRequest req,
-        EfCoreManagementProviderLookup lookup,
-        IServiceScopeFactory scopeFactory,
+        EfCoreManagementDbContextLookup lookup,
         CancellationToken ct)
     {
-        if (ManagementProviderResolver.EnsureOutbox(lookup, contextName, out var provider) is { } resolveError)
+        if (ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is { } resolveError)
             return resolveError;
 
         if (!BulkRequestValidator.TryValidateIds(req.Ids, out var error))
             return ManagementResults.BadRequest(error!);
-
-        using var scope = scopeFactory.CreateScope();
-        var db = provider.GetDbContext(scope.ServiceProvider);
 
         var deletedCount = await db.Set<OutboxMessageEntity>()
             .Where(x => req.Ids!.Contains(x.Id) && x.IsPoisoned)
@@ -47,15 +43,11 @@ internal static class BulkDeleteOutboxEndpoint
 
     private static async Task<Results<Ok, ProblemHttpResult>> HandleAll(
         string contextName,
-        EfCoreManagementProviderLookup lookup,
-        IServiceScopeFactory scopeFactory,
+        EfCoreManagementDbContextLookup lookup,
         CancellationToken ct)
     {
-        if (ManagementProviderResolver.EnsureOutbox(lookup, contextName, out var provider) is { } resolveError)
+        if (ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is { } resolveError)
             return resolveError;
-
-        using var scope = scopeFactory.CreateScope();
-        var db = provider.GetDbContext(scope.ServiceProvider);
 
         await db.Set<OutboxMessageEntity>()
             .Where(x => x.IsPoisoned)

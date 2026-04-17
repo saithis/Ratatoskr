@@ -22,18 +22,14 @@ internal static class BulkRequeueInboxEndpoint
     private static async Task<Results<Ok<BulkRequeueInboxResponse>, ProblemHttpResult>> HandleByIds(
         string contextName,
         BulkRequeueInboxRequest req,
-        EfCoreManagementProviderLookup lookup,
-        IServiceScopeFactory scopeFactory,
+        EfCoreManagementDbContextLookup lookup,
         CancellationToken ct)
     {
-        if (ManagementProviderResolver.EnsureInbox(lookup, contextName, out var provider) is { } resolveError)
+        if (ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is { } resolveError)
             return resolveError;
 
         if (!BulkRequestValidator.TryValidateIds(req.Ids, out var error))
             return ManagementResults.BadRequest(error!);
-
-        using var scope = scopeFactory.CreateScope();
-        var db = provider.GetDbContext(scope.ServiceProvider);
 
         var succeeded = new List<Guid>();
         var failed = new List<BulkRequeueInboxFailure>();
@@ -55,15 +51,11 @@ internal static class BulkRequeueInboxEndpoint
 
     private static async Task<Results<Ok<BulkRequeueInboxResponse>, ProblemHttpResult>> HandleAll(
         string contextName,
-        EfCoreManagementProviderLookup lookup,
-        IServiceScopeFactory scopeFactory,
+        EfCoreManagementDbContextLookup lookup,
         CancellationToken ct)
     {
-        if (ManagementProviderResolver.EnsureInbox(lookup, contextName, out var provider) is { } resolveError)
+        if (ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is { } resolveError)
             return resolveError;
-
-        using var scope = scopeFactory.CreateScope();
-        var db = provider.GetDbContext(scope.ServiceProvider);
 
         var succeeded = new List<Guid>();
         var failed = new List<BulkRequeueInboxFailure>();
@@ -87,7 +79,7 @@ internal static class BulkRequeueInboxEndpoint
     }
 
     private static async Task SaveBatchAsync(
-        Microsoft.EntityFrameworkCore.DbContext db,
+        DbContext db,
         List<InboxHandlerStatusEntity> entities,
         List<Guid> succeeded,
         List<BulkRequeueInboxFailure> failed,

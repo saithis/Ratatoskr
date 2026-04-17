@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
+using Ratatoskr.EfCore.Internal;
 
 namespace Ratatoskr.EfCore.Management.Endpoints;
 
@@ -14,21 +15,23 @@ internal static class ContextHealthEndpoint
 
     private static Results<Ok<ContextHealthResponse>, ProblemHttpResult> Handle(
         string contextName,
-        EfCoreManagementProviderLookup lookup)
+        EfCoreManagementDbContextLookup lookup,
+        EfCoreMetricsState metricsState)
     {
-        if (ManagementProviderResolver.EnsureContext(lookup, contextName, out var provider) is { } resolveError)
+        if (ManagementDbContextResolver.EnsureContext(lookup, contextName, out var dbContext) is { } resolveError)
             return resolveError;
 
-        provider.MetricsState.ContextMetrics.TryGetValue(provider.MetricsContextKey, out var metrics);
+        var descriptor = lookup.Find(contextName)!;
+        metricsState.TryGetValue(dbContext.GetType(), out var metrics);
 
         return TypedResults.Ok(new ContextHealthResponse(
-            provider.DbContextName,
+            descriptor.DbContextName,
             metrics.PoisonedOutboxCount,
             metrics.PoisonedInboxCount,
             metrics.PendingOutboxCount,
             metrics.PendingInboxCount,
-            provider.LastOutboxProcessingAt,
-            provider.LastInboxProcessingAt));
+            descriptor.LastOutboxProcessingAt,
+            descriptor.LastInboxProcessingAt));
     }
 
     internal record ContextHealthResponse(

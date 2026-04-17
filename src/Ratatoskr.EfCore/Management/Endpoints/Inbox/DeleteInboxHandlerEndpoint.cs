@@ -19,15 +19,11 @@ internal static class DeleteInboxHandlerEndpoint
     private static async Task<Results<Ok, ProblemHttpResult>> Handle(
         string contextName,
         Guid handlerStatusId,
-        EfCoreManagementProviderLookup lookup,
-        IServiceScopeFactory scopeFactory,
+        EfCoreManagementDbContextLookup lookup,
         CancellationToken ct)
     {
-        if (ManagementProviderResolver.EnsureInbox(lookup, contextName, out var provider) is { } resolveError)
+        if (ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is { } resolveError)
             return resolveError;
-
-        using var scope = scopeFactory.CreateScope();
-        var db = provider.GetDbContext(scope.ServiceProvider);
 
         var entity = await db.Set<InboxHandlerStatusEntity>()
             .SingleOrDefaultAsync(x => x.Id == handlerStatusId, ct);

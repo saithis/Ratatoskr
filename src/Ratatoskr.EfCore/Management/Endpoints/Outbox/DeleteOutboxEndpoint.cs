@@ -19,15 +19,11 @@ internal static class DeleteOutboxEndpoint
     private static async Task<Results<Ok, ProblemHttpResult>> Handle(
         string contextName,
         Guid id,
-        EfCoreManagementProviderLookup lookup,
-        IServiceScopeFactory scopeFactory,
+        EfCoreManagementDbContextLookup lookup,
         CancellationToken ct)
     {
-        if (ManagementProviderResolver.EnsureOutbox(lookup, contextName, out var provider) is { } resolveError)
+        if (ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is { } resolveError)
             return resolveError;
-
-        using var scope = scopeFactory.CreateScope();
-        var db = provider.GetDbContext(scope.ServiceProvider);
 
         var entity = await db.Set<OutboxMessageEntity>()
             .SingleOrDefaultAsync(x => x.Id == id, ct);

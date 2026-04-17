@@ -2,7 +2,9 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Ratatoskr.EfCore.Internal;
 using Ratatoskr.Management;
 
 namespace Ratatoskr.EfCore.Management.Endpoints.Outbox;
@@ -17,23 +19,28 @@ internal static class RequeueOutboxEndpoint
     private static async Task<Results<Ok, ProblemHttpResult>> Handle(
         string contextName,
         Guid id,
-        EfCoreManagementProviderLookup lookup,
-        IServiceScopeFactory scopeFactory,
+        EfCoreManagementDbContextLookup lookup,
         CancellationToken ct)
     {
-        if (ManagementProviderResolver.EnsureOutbox(lookup, contextName, out var provider) is { } resolveError)
+        if (ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is { } resolveError)
             return resolveError;
+        
+        var entity = await db.Set<OutboxMessageEntity>()
+            .SingleOrDefaultAsync(x => x.Id == id, ct);
 
-        using var scope = scopeFactory.CreateScope();
-        var db = provider.GetDbContext(scope.ServiceProvider);
+        if (entity is null) return ManagementResults.NotFound($"Outbox message '{id}' was not found.");
+        if (!entity.IsPoisoned) return ManagementResults.BadRequest("Outbox message is not poisoned.");
 
-        var outcome = await RequeueHelper.RequeueOutboxAsync(db, id, ct);
-        return outcome switch
+        entity.Requeue();
+
+        try
         {
-            SingleRequeueOutcome.Success => TypedResults.Ok(),
-            SingleRequeueOutcome.NotFound => ManagementResults.NotFound($"Outbox message '{id}' was not found."),
-            SingleRequeueOutcome.NotPoisoned => ManagementResults.BadRequest("Outbox message is not poisoned."),
-            _ => ManagementResults.Conflict("Outbox message was modified by another operation; retry."),
-        };
+            await db.SaveChangesAsync(ct);
+            return TypedResults.Ok();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return ManagementResults.Conflict("Outbox message was modified by another operation; retry.");
+        }
     }
 }

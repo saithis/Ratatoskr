@@ -21,17 +21,13 @@ internal static class GetInboxHandlerDetailEndpoint
     private static async Task<Results<Ok<InboxHandlerDetail>, ProblemHttpResult>> Handle(
         string contextName,
         Guid handlerStatusId,
-        EfCoreManagementProviderLookup lookup,
-        IServiceScopeFactory scopeFactory,
+        EfCoreManagementDbContextLookup lookup,
         ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
         var logger = loggerFactory.CreateLogger(typeof(GetInboxHandlerDetailEndpoint).FullName!);
-        if (ManagementProviderResolver.EnsureInbox(lookup, contextName, out var provider) is { } resolveError)
+        if (ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is { } resolveError)
             return resolveError;
-
-        using var scope = scopeFactory.CreateScope();
-        var db = provider.GetDbContext(scope.ServiceProvider);
 
         var result = await (
             from hs in db.Set<InboxHandlerStatusEntity>().AsNoTracking()
@@ -53,7 +49,7 @@ internal static class GetInboxHandlerDetailEndpoint
             result.hs.Id, result.hs.MessageId, props.Type ?? "(unknown)", result.hs.HandlerKey, result.msg.ReceivedAt,
             result.hs.ErrorCount, result.hs.RequeuedCount,
             string.IsNullOrEmpty(result.hs.LastError) ? null : result.hs.LastError,
-            props, jsonPayload, base64, provider.DbContextName));
+            props, jsonPayload, base64, contextName));
     }
 
     internal record InboxHandlerDetail(

@@ -19,15 +19,11 @@ internal static class RequeueInboxMessageEndpoint
     private static async Task<Results<Ok<RequeueInboxMessageResponse>, ProblemHttpResult>> Handle(
         string contextName,
         string messageId,
-        EfCoreManagementProviderLookup lookup,
-        IServiceScopeFactory scopeFactory,
+        EfCoreManagementDbContextLookup lookup,
         CancellationToken ct)
     {
-        if (ManagementProviderResolver.EnsureInbox(lookup, contextName, out var provider) is { } resolveError)
+        if (ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is { } resolveError)
             return resolveError;
-
-        using var scope = scopeFactory.CreateScope();
-        var db = provider.GetDbContext(scope.ServiceProvider);
 
         var handlers = await db.Set<InboxHandlerStatusEntity>()
             .Where(x => x.MessageId == messageId && x.IsPoisoned)

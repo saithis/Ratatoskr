@@ -19,8 +19,7 @@ internal static class ListPoisonedOutboxEndpoint
 
     private static async Task<Results<Ok<OutboxPoisonedListResponse>, ProblemHttpResult>> Handle(
         string contextName,
-        EfCoreManagementProviderLookup lookup,
-        IServiceScopeFactory scopeFactory,
+        EfCoreManagementDbContextLookup lookup,
         ILoggerFactory loggerFactory,
         int pageSize = PaginationOptions.DefaultPageSize,
         string? cursor = null,
@@ -30,7 +29,7 @@ internal static class ListPoisonedOutboxEndpoint
         CancellationToken ct = default)
     {
         var logger = loggerFactory.CreateLogger(typeof(ListPoisonedOutboxEndpoint).FullName!);
-        if (ManagementProviderResolver.EnsureOutbox(lookup, contextName, out var provider) is { } resolveError)
+        if (ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is { } resolveError)
             return resolveError;
 
         pageSize = PaginationOptions.ClampPageSize(pageSize);
@@ -47,9 +46,6 @@ internal static class ListPoisonedOutboxEndpoint
             }
             decodedCursor = c;
         }
-
-        using var scope = scopeFactory.CreateScope();
-        var db = provider.GetDbContext(scope.ServiceProvider);
 
         var filtered = db.Set<OutboxMessageEntity>().AsNoTracking().Where(x => x.IsPoisoned);
         if (from.HasValue) filtered = filtered.Where(x => x.CreatedAt >= from.Value);
@@ -85,7 +81,7 @@ internal static class ListPoisonedOutboxEndpoint
                 ManagementHelpers.ExtractType(x.SerializedProperties, logger),
                 x.CreatedAt, x.ErrorCount, x.RequeuedCount,
                 string.IsNullOrEmpty(x.Error) ? null : x.Error,
-                provider.DbContextName))
+                contextName))
             .ToList();
 
         var nextCursor = hasNext

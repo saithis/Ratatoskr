@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.EntityFrameworkCore;
 using Ratatoskr.Management;
 
 namespace Ratatoskr.EfCore.Management;
@@ -14,47 +15,47 @@ namespace Ratatoskr.EfCore.Management;
 /// <c>if (Resolver.EnsureOutbox(...) is { } error) return error;</c> keeps handler
 /// methods short and stops diverging error copy from creeping back in.
 /// </remarks>
-internal static class ManagementProviderResolver
+internal static class ManagementDbContextResolver
 {
     internal static ProblemHttpResult? EnsureContext(
-        EfCoreManagementProviderLookup lookup,
+        EfCoreManagementDbContextLookup lookup,
         string contextName,
-        out IEfCoreManagementDbContextProvider provider)
+        out DbContext dbContext)
     {
-        var found = lookup.Find(contextName);
+        var found = lookup.GetDbContext(contextName);
         if (found is null)
         {
-            provider = null!;
+            dbContext = null!;
             return ManagementResults.NotFound($"No DbContext is registered under name '{contextName}'.");
         }
 
-        provider = found;
+        dbContext = found;
         return null;
     }
 
     internal static ProblemHttpResult? EnsureOutbox(
-        EfCoreManagementProviderLookup lookup,
+        EfCoreManagementDbContextLookup lookup,
         string contextName,
-        out IEfCoreManagementDbContextProvider provider)
+        out DbContext dbContext)
     {
-        if (EnsureContext(lookup, contextName, out provider) is { } error) return error;
-        if (!provider.HasOutbox)
+        if (EnsureContext(lookup, contextName, out dbContext) is { } error) return error;
+        if (!dbContext.GetType().IsAssignableTo(typeof(IOutboxDbContext)))
         {
-            provider = null!;
+            dbContext = null!;
             return ManagementResults.NotFound($"No outbox is registered for DbContext '{contextName}'.");
         }
         return null;
     }
 
     internal static ProblemHttpResult? EnsureInbox(
-        EfCoreManagementProviderLookup lookup,
+        EfCoreManagementDbContextLookup lookup,
         string contextName,
-        out IEfCoreManagementDbContextProvider provider)
+        out DbContext dbContext)
     {
-        if (EnsureContext(lookup, contextName, out provider) is { } error) return error;
-        if (!provider.HasInbox)
+        if (EnsureContext(lookup, contextName, out dbContext) is { } error) return error;
+        if (!dbContext.GetType().IsAssignableTo(typeof(IInboxDbContext)))
         {
-            provider = null!;
+            dbContext = null!;
             return ManagementResults.NotFound($"No inbox is registered for DbContext '{contextName}'.");
         }
         return null;

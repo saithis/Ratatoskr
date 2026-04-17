@@ -19,8 +19,7 @@ internal static class ListPoisonedInboxEndpoint
 
     private static async Task<Results<Ok<InboxPoisonedListResponse>, ProblemHttpResult>> Handle(
         string contextName,
-        EfCoreManagementProviderLookup lookup,
-        IServiceScopeFactory scopeFactory,
+        EfCoreManagementDbContextLookup lookup,
         ILoggerFactory loggerFactory,
         int pageSize = PaginationOptions.DefaultPageSize,
         string? cursor = null,
@@ -30,7 +29,7 @@ internal static class ListPoisonedInboxEndpoint
         CancellationToken ct = default)
     {
         var logger = loggerFactory.CreateLogger(typeof(ListPoisonedInboxEndpoint).FullName!);
-        if (ManagementProviderResolver.EnsureInbox(lookup, contextName, out var provider) is { } resolveError)
+        if (ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is { } resolveError)
             return resolveError;
 
         pageSize = PaginationOptions.ClampPageSize(pageSize);
@@ -45,9 +44,6 @@ internal static class ListPoisonedInboxEndpoint
             }
             decodedCursor = c;
         }
-
-        using var scope = scopeFactory.CreateScope();
-        var db = provider.GetDbContext(scope.ServiceProvider);
 
         var filtered =
             from hs in db.Set<InboxHandlerStatusEntity>().AsNoTracking()
@@ -91,7 +87,7 @@ internal static class ListPoisonedInboxEndpoint
                 ManagementHelpers.ExtractType(x.SerializedProperties, logger),
                 x.HandlerKey, x.ReceivedAt, x.ErrorCount, x.RequeuedCount,
                 string.IsNullOrEmpty(x.LastError) ? null : x.LastError,
-                provider.DbContextName))
+                contextName))
             .ToList();
 
         var nextCursor = hasNext

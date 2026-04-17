@@ -21,17 +21,13 @@ internal static class GetOutboxDetailEndpoint
     private static async Task<Results<Ok<OutboxPoisonedDetail>, ProblemHttpResult>> Handle(
         string contextName,
         Guid id,
-        EfCoreManagementProviderLookup lookup,
-        IServiceScopeFactory scopeFactory,
+        EfCoreManagementDbContextLookup lookup,
         ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
         var logger = loggerFactory.CreateLogger(typeof(GetOutboxDetailEndpoint).FullName!);
-        if (ManagementProviderResolver.EnsureOutbox(lookup, contextName, out var provider) is { } resolveError)
+        if (ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is { } resolveError)
             return resolveError;
-
-        using var scope = scopeFactory.CreateScope();
-        var db = provider.GetDbContext(scope.ServiceProvider);
 
         var entity = await db.Set<OutboxMessageEntity>()
             .AsNoTracking()
@@ -47,7 +43,7 @@ internal static class GetOutboxDetailEndpoint
         return TypedResults.Ok(new OutboxPoisonedDetail(
             entity.Id, props.Type ?? "(unknown)", entity.CreatedAt, entity.ErrorCount, entity.RequeuedCount,
             string.IsNullOrEmpty(entity.Error) ? null : entity.Error,
-            entity.FailedAt, props, jsonPayload, base64, provider.DbContextName));
+            entity.FailedAt, props, jsonPayload, base64, contextName));
     }
 
     internal record OutboxPoisonedDetail(

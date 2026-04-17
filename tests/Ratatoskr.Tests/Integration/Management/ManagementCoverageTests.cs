@@ -229,13 +229,13 @@ public class ManagementCompositionTests
         // Two providers that report the same short "TestDbContext" but different full names
         // would silently collapse into one dictionary entry without the TryAdd guard — which
         // in turn would route every request to whichever provider was registered last.
-        IEnumerable<IEfCoreManagementDbContextProvider> providers =
+        IEnumerable<IEfCoreManagementDbContextDescriptor> providers =
         [
-            new StubProvider("TestDbContext", "App.Alpha.TestDbContext"),
-            new StubProvider("TestDbContext", "App.Beta.TestDbContext"),
+            new StubDescriptor("TestDbContext", "App.Alpha.TestDbContext"),
+            new StubDescriptor("TestDbContext", "App.Beta.TestDbContext"),
         ];
 
-        var act = () => new EfCoreManagementProviderLookup(providers);
+        var act = () => new EfCoreManagementDbContextLookup(providers, null);
 
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*TestDbContext*App.Alpha*App.Beta*");
@@ -260,13 +260,13 @@ public class ManagementCompositionTests
         routes.DataSources.Should().BeEmpty("no configurators were registered, so no endpoints should exist");
     }
 
-    private sealed class StubProvider(string shortName, string fullName) : IEfCoreManagementDbContextProvider
+    private sealed class StubDescriptor(string shortName, string fullName) : IEfCoreManagementDbContextDescriptor
     {
+        public Type DbContextType { get; }
         public string DbContextName => shortName;
-        public string MetricsContextKey => fullName;
+        public string DbContextFullName => fullName;
         public bool HasOutbox => false;
         public bool HasInbox => false;
-        public EfCoreMetricsState MetricsState { get; } = new();
         public DateTimeOffset? LastOutboxProcessingAt => null;
         public DateTimeOffset? LastInboxProcessingAt => null;
         public DbContext GetDbContext(IServiceProvider _) => throw new NotSupportedException();
