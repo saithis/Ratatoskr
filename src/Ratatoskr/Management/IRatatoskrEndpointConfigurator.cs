@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Routing;
 
-namespace Ratatoskr.Management.Endpoints;
+namespace Ratatoskr.Management;
 
 /// <summary>
 /// Ratatoskr-internal extension point implemented by transport packages

@@ -6,8 +6,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.EfCore.Management;
+using Ratatoskr.EfCore.Management.Endpoints.Inbox;
+using Ratatoskr.EfCore.Management.Endpoints.Outbox;
 using Ratatoskr.Management;
-using Ratatoskr.Management.Endpoints;
 using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Management;
@@ -23,8 +24,8 @@ namespace Ratatoskr.Tests.Integration.Management;
 public class ManagementCoverageTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
     : ManagementTestBase(rabbitMq, postgres)
 {
-    private const string OutboxBaseUrl = "/ratatoskr/api/v1/contexts/TestDbContext/outbox";
-    private const string InboxBaseUrl = "/ratatoskr/api/v1/contexts/TestDbContext/inbox";
+    private const string OutboxBaseUrl = "/ratatoskr/api/v1/efcore/contexts/TestDbContext/outbox";
+    private const string InboxBaseUrl = "/ratatoskr/api/v1/efcore/contexts/TestDbContext/inbox";
 
     [Test]
     public async Task Pagination_WalksEveryRowExactlyOnce_AcrossCursors()
@@ -203,7 +204,7 @@ public class ManagementCoverageTests(RabbitMqContainerFixture rabbitMq, Postgres
     {
         await StartManagementTestAsync();
 
-        var response = await HttpClient.GetAsync("/ratatoskr/api/v1/contexts/DoesNotExist/outbox/poisoned");
+        var response = await HttpClient.GetAsync("/ratatoskr/api/v1/efcore/contexts/DoesNotExist/outbox/poisoned");
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");

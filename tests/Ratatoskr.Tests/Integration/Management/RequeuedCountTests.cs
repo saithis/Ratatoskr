@@ -10,7 +10,7 @@ namespace Ratatoskr.Tests.Integration.Management;
 public class RequeuedCountTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
     : ManagementTestBase(rabbitMq, postgres)
 {
-    private const string BaseUrl = "/ratatoskr/api/v1/contexts/TestDbContext/outbox";
+    private const string BaseUrl = "/ratatoskr/api/v1/efcore/contexts/TestDbContext/outbox";
 
     [Test]
     public async Task RequeuedCount_IncrementsOnEachRequeue()

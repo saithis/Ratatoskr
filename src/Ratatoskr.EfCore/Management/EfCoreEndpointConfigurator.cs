@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
-using Ratatoskr.Management.Endpoints;
+using Ratatoskr.EfCore.Management.Endpoints;
+using Ratatoskr.EfCore.Management.Endpoints.Inbox;
+using Ratatoskr.EfCore.Management.Endpoints.Outbox;
+using Ratatoskr.Management;
 
 namespace Ratatoskr.EfCore.Management;
 
@@ -14,9 +17,11 @@ internal sealed class EfCoreEndpointConfigurator : IRatatoskrEndpointConfigurato
 {
     public void MapEndpoints(IEndpointRouteBuilder group)
     {
-        GetContextsEndpoint.Map(group);
+        var efcoreGroup = group.MapGroup("/efcore");
+        
+        GetContextsEndpoint.Map(efcoreGroup);
 
-        var contextGroup = group.MapGroup("/contexts/{contextName}");
+        var contextGroup = efcoreGroup.MapGroup("/contexts/{contextName}");
         ContextHealthEndpoint.Map(contextGroup);
 
         var outboxGroup = contextGroup.MapGroup("/outbox");

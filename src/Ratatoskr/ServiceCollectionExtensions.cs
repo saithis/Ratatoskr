@@ -4,7 +4,6 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Ratatoskr.AsyncApi.Generation;
 using Ratatoskr.AsyncApi.Model;
 using Ratatoskr.Core;
-using Ratatoskr.Management.Endpoints;
 using Ratatoskr.Serializers.Json;
 
 namespace Ratatoskr;
@@ -30,9 +29,6 @@ public static class ServiceCollectionExtensions
         builder.Validate();
 
         services.AddSingleton(builder.CloudEventsOptions);
-
-        // Register authorization bypass handler for in-process proxy dispatch
-        services.AddSingleton<IAuthorizationHandler, LocalRatatoskrBypassAuthorizationHandler>();
 
         // Register TimeProvider if not already registered (allows test overrides)
         services.TryAddSingleton(TimeProvider.System);

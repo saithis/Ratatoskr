@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 
-namespace Ratatoskr.EfCore.Management;
+namespace Ratatoskr.EfCore.Management.Endpoints;
 
 internal static class GetContextsEndpoint
 {

@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.EfCore.Management;
+using Ratatoskr.EfCore.Management.Endpoints.Outbox;
 using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Management;
@@ -14,7 +15,7 @@ namespace Ratatoskr.Tests.Integration.Management;
 public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
     : ManagementTestBase(rabbitMq, postgres)
 {
-    private const string BaseUrl = "/ratatoskr/api/v1/contexts/TestDbContext/outbox";
+    private const string BaseUrl = "/ratatoskr/api/v1/efcore/contexts/TestDbContext/outbox";
 
     [Test]
     public async Task OutboxManagement_PoisonedList_ReturnsPaginatedResults()

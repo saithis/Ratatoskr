@@ -20,7 +20,7 @@ public class HealthEndpointTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         await SeedPoisonedInboxAsync();
         await RefreshMetricsAsync();
 
-        var response = await HttpClient.GetAsync("/ratatoskr/api/v1/contexts/TestDbContext/health");
+        var response = await HttpClient.GetAsync("/ratatoskr/api/v1/efcore/contexts/TestDbContext/health");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -38,7 +38,7 @@ public class HealthEndpointTests(RabbitMqContainerFixture rabbitMq, PostgresCont
     {
         await StartManagementTestAsync();
 
-        var response = await HttpClient.GetAsync("/ratatoskr/api/v1/contexts/TestDbContext/health");
+        var response = await HttpClient.GetAsync("/ratatoskr/api/v1/efcore/contexts/TestDbContext/health");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -56,7 +56,7 @@ public class HealthEndpointTests(RabbitMqContainerFixture rabbitMq, PostgresCont
     {
         await StartManagementTestAsync();
 
-        var response = await HttpClient.GetAsync("/ratatoskr/api/v1/contexts");
+        var response = await HttpClient.GetAsync("/ratatoskr/api/v1/efcore/contexts");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -74,7 +74,7 @@ public class HealthEndpointTests(RabbitMqContainerFixture rabbitMq, PostgresCont
     {
         await StartManagementTestAsync();
 
-        var response = await HttpClient.GetAsync("/ratatoskr/api/v1/contexts/NonExistentContext/health");
+        var response = await HttpClient.GetAsync("/ratatoskr/api/v1/efcore/contexts/NonExistentContext/health");
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 

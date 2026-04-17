@@ -10,7 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Ratatoskr.EfCore;
-using Ratatoskr.Management.Endpoints;
+using Ratatoskr.Management;
 using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Management;
@@ -43,7 +43,7 @@ public class ManagementAuthorizationTests(RabbitMqContainerFixture rabbitMq, Pos
         var client = CreateHttpClient();
 
         // No authentication → 401
-        var response = await client.GetAsync("/ratatoskr/api/v1/contexts/TestDbContext/outbox/poisoned");
+        var response = await client.GetAsync("/ratatoskr/api/v1/efcore/contexts/TestDbContext/outbox/poisoned");
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 

@@ -42,15 +42,9 @@ internal static class ManagementHelpers
             using var doc = JsonDocument.Parse(text);
             return (text, base64);
         }
-        catch (JsonException ex)
+        catch (Exception ex)
         {
-            // Binary or non-JSON payload — base64 is still returned so the UI can offer a download.
-            logger?.LogDebug(ex, "Message payload is not valid JSON; only base64 will be surfaced.");
-            return (null, base64);
-        }
-        catch (DecoderFallbackException ex)
-        {
-            logger?.LogDebug(ex, "Message payload is not valid UTF-8; only base64 will be surfaced.");
+            logger?.LogDebug(ex, "Message payload is not JSON; only base64 will be surfaced.");
             return (null, base64);
         }
     }

@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Authorization;
-using Ratatoskr.Management.Endpoints;
+using Ratatoskr.Management;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddLogging();

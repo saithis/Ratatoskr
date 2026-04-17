@@ -4,11 +4,10 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.Management;
 
-namespace Ratatoskr.EfCore.Management;
+namespace Ratatoskr.EfCore.Management.Endpoints.Inbox;
 
 internal static class BulkDeleteInboxEndpoint
 {
@@ -22,7 +21,7 @@ internal static class BulkDeleteInboxEndpoint
         string contextName,
         [FromBody] BulkDeleteInboxRequest req,
         EfCoreManagementProviderLookup lookup,
-        IServiceScopeFactory scopeFactory,
+        IServiceProvider serviceProvider,
         CancellationToken ct)
     {
         if (ManagementProviderResolver.EnsureInbox(lookup, contextName, out var provider) is { } resolveError)
@@ -31,8 +30,7 @@ internal static class BulkDeleteInboxEndpoint
         if (!BulkRequestValidator.TryValidateIds(req.Ids, out var error))
             return ManagementResults.BadRequest(error!);
 
-        using var scope = scopeFactory.CreateScope();
-        var db = provider.GetDbContext(scope.ServiceProvider);
+        var db = provider.GetDbContext(serviceProvider);
 
         // Whole operation must be atomic: if orphaned-parent cleanup fails after the
         // handler rows are deleted, rolling back keeps the poisoned handler rows in
@@ -58,14 +56,13 @@ internal static class BulkDeleteInboxEndpoint
     private static async Task<Results<Ok, ProblemHttpResult>> HandleAll(
         string contextName,
         EfCoreManagementProviderLookup lookup,
-        IServiceScopeFactory scopeFactory,
+        IServiceProvider serviceProvider,
         CancellationToken ct)
     {
         if (ManagementProviderResolver.EnsureInbox(lookup, contextName, out var provider) is { } resolveError)
             return resolveError;
 
-        using var scope = scopeFactory.CreateScope();
-        var db = provider.GetDbContext(scope.ServiceProvider);
+        var db = provider.GetDbContext(serviceProvider);
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
@@ -90,7 +87,7 @@ internal static class BulkDeleteInboxEndpoint
     /// <paramref name="messageIds"/> and that no longer have any handler status rows.
     /// </summary>
     private static async Task DeleteOrphanedMessagesAsync(
-        Microsoft.EntityFrameworkCore.DbContext db, List<string> messageIds, CancellationToken ct)
+        DbContext db, List<string> messageIds, CancellationToken ct)
     {
         if (messageIds.Count == 0) return;
 

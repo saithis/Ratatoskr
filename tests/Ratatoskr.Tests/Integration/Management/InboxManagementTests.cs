@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.EfCore.Management;
+using Ratatoskr.EfCore.Management.Endpoints.Inbox;
 using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Management;
@@ -13,7 +14,7 @@ namespace Ratatoskr.Tests.Integration.Management;
 public class InboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
     : ManagementTestBase(rabbitMq, postgres)
 {
-    private const string BaseUrl = "/ratatoskr/api/v1/contexts/TestDbContext/inbox";
+    private const string BaseUrl = "/ratatoskr/api/v1/efcore/contexts/TestDbContext/inbox";
 
     [Test]
     public async Task InboxManagement_PoisonedList_ReturnsPaginatedResults()

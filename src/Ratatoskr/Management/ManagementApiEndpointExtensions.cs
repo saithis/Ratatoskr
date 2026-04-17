@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
-namespace Ratatoskr.Management.Endpoints;
+namespace Ratatoskr.Management;
 
 public static class ManagementApiEndpointExtensions
 {
@@ -45,8 +45,7 @@ public static class ManagementApiEndpointExtensions
         var group = endpoints
             .MapGroup(basePath)
             .RequireAuthorization(policyName)
-            .DisableAntiforgery()
-            .WithMetadata(new RatatoskrManagementApiMetadata());
+            .DisableAntiforgery();
 
         foreach (var configurator in configurators)
             configurator.MapEndpoints(group);

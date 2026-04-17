@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.Management;
 
-namespace Ratatoskr.EfCore.Management;
+namespace Ratatoskr.EfCore.Management.Endpoints.Inbox;
 
 internal static class RequeueInboxHandlerEndpoint
 {

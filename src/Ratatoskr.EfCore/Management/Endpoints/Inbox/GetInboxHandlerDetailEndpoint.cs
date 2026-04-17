@@ -9,7 +9,7 @@ using Ratatoskr.Core;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.Management;
 
-namespace Ratatoskr.EfCore.Management;
+namespace Ratatoskr.EfCore.Management.Endpoints.Inbox;
 
 internal static class GetInboxHandlerDetailEndpoint
 {
