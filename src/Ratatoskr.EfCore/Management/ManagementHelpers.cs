@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Ratatoskr.Core;
+using Ratatoskr.EfCore.Internal;
 
 namespace Ratatoskr.EfCore.Management;
 
@@ -21,10 +21,10 @@ internal static class ManagementHelpers
     {
         try
         {
-            var properties = JsonSerializer.Deserialize<MessageProperties>(serializedProperties);
-            return properties?.Type ?? "(unknown)";
+            var properties = BaseMessageEntity.DeserializeMessageProperties(serializedProperties);
+            return properties.Type ?? "(unknown)";
         }
-        catch (JsonException ex)
+        catch (MessagePropertiesDeserializationException ex)
         {
             // Corrupt serialized properties — surface to the operator while still
             // returning a sentinel so the UI can render the row.

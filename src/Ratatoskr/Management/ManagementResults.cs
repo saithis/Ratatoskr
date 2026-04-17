@@ -5,7 +5,7 @@ namespace Ratatoskr.Management;
 
 internal static class ManagementResults
 {
-    internal const string ProblemTypeBase = "https://ratatoskr.dev/errors/management/";
+    internal const string ProblemTypeBase = "https://saithis.github.io/Ratatoskr/problems/";
 
     internal static ProblemHttpResult NotFound(string detail) =>
         TypedResults.Problem(

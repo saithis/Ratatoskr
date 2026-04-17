@@ -1,4 +1,4 @@
-namespace Ratatoskr.Endpoints;
+namespace Ratatoskr.Management.Endpoints;
 
 /// <summary>
 /// Marker metadata added to the management API endpoint group by

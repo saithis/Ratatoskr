@@ -6,7 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.EfCore.Management;
-using Ratatoskr.Endpoints;
+using Ratatoskr.Management.Endpoints;
 
 namespace Ratatoskr.EfCore;
 

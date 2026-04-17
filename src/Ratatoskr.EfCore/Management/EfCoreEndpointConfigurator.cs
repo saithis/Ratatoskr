@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
-using Ratatoskr.Endpoints;
+using Ratatoskr.Management.Endpoints;
 
 namespace Ratatoskr.EfCore.Management;
 

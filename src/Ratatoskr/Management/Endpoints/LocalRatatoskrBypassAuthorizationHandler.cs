@@ -1,7 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
+using Ratatoskr.Endpoints;
 
-namespace Ratatoskr.Endpoints;
+namespace Ratatoskr.Management.Endpoints;
 
 /// <summary>
 /// Succeeds any authorization requirement when the request was dispatched

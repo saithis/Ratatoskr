@@ -2,7 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Ratatoskr.AsyncApi.Generation;
 using Ratatoskr.Core;
-using Ratatoskr.Endpoints;
+using Ratatoskr.Management.Endpoints;
 using Ratatoskr.RabbitMq.AsyncApi;
 using Ratatoskr.RabbitMq.Management;
 

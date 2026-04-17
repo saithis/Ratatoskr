@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Ratatoskr.Endpoints;
+using Ratatoskr.Management.Endpoints;
 
 namespace Ratatoskr.RabbitMq.Management;
 

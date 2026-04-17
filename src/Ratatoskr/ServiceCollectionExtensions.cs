@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Ratatoskr.AsyncApi.Generation;
 using Ratatoskr.AsyncApi.Model;
 using Ratatoskr.Core;
-using Ratatoskr.Endpoints;
+using Ratatoskr.Management.Endpoints;
 using Ratatoskr.Serializers.Json;
 
 namespace Ratatoskr;

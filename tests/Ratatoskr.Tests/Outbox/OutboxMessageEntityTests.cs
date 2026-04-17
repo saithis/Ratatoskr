@@ -269,7 +269,7 @@ public class OutboxMessageEntityTests
         var act = () => entity.GetProperties();
 
         // Assert
-        act.Should().Throw<OutboxMessageSerializationException>();
+        act.Should().Throw<MessagePropertiesDeserializationException>();
     }
 
     [Test]

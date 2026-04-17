@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
-namespace Ratatoskr.Endpoints;
+namespace Ratatoskr.Management.Endpoints;
 
 public static class ManagementApiEndpointExtensions
 {
@@ -12,7 +12,7 @@ public static class ManagementApiEndpointExtensions
     /// Default base path under which all Ratatoskr management endpoints are mounted.
     /// Pass a custom <c>basePath</c> to <see cref="MapRatatoskrManagementApi"/> to override.
     /// </summary>
-    public const string DefaultBasePath = "/ratatoskr/api/v1";
+    private const string DefaultBasePath = "/ratatoskr/api/v1";
 
     /// <summary>
     /// Maps all registered Ratatoskr management endpoints under <paramref name="basePath"/>,
