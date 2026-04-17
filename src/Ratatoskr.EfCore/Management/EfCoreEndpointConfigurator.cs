@@ -7,18 +7,13 @@ namespace Ratatoskr.EfCore.Management;
 /// <summary>
 /// Registers Ratatoskr EF Core management API endpoints.
 /// Each endpoint targets a single DbContext identified by the <c>{contextName}</c> route segment.
-/// The frontend first calls <c>GET /ratatoskr/api/v1/contexts</c> to discover available contexts,
+/// The frontend first calls <c>GET /contexts</c> to discover available contexts,
 /// then calls per-context endpoints as needed.
 /// </summary>
 internal sealed class EfCoreEndpointConfigurator : IRatatoskrEndpointConfigurator
 {
-    public void MapEndpoints(IEndpointRouteBuilder endpoints, string policyName)
+    public void MapEndpoints(IEndpointRouteBuilder group)
     {
-        var group = endpoints
-            .MapGroup(ManagementApiEndpointExtensions.BasePath)
-            .RequireAuthorization(policyName)
-            .DisableAntiforgery();
-
         GetContextsEndpoint.Map(group);
 
         var contextGroup = group.MapGroup("/contexts/{contextName}");

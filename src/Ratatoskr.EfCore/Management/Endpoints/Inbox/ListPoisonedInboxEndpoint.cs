@@ -6,12 +6,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Ratatoskr.EfCore.Internal;
+using Ratatoskr.Management;
 
 namespace Ratatoskr.EfCore.Management;
 
 internal static class ListPoisonedInboxEndpoint
 {
-    internal static void Map(RouteGroupBuilder inboxGroup)
+    internal static void Map(IEndpointRouteBuilder inboxGroup)
     {
         inboxGroup.MapGet("/poisoned", Handle);
     }
@@ -25,7 +26,7 @@ internal static class ListPoisonedInboxEndpoint
         string? cursor = null,
         DateTimeOffset? from = null,
         DateTimeOffset? to = null,
-        string? type = null,
+        string? search = null,
         CancellationToken ct = default)
     {
         var logger = loggerFactory.CreateLogger(typeof(ListPoisonedInboxEndpoint).FullName!);
@@ -56,10 +57,10 @@ internal static class ListPoisonedInboxEndpoint
 
         if (from.HasValue) filtered = filtered.Where(x => x.msg.ReceivedAt >= from.Value);
         if (to.HasValue) filtered = filtered.Where(x => x.msg.ReceivedAt <= to.Value);
-        if (type is not null)
+        if (search is not null)
         {
-            var pattern = ManagementHelpers.BuildMessageTypeLikePattern(type);
-            filtered = filtered.Where(x => EF.Functions.Like(x.msg.SerializedProperties, pattern));
+            var pattern = ManagementHelpers.BuildSearchPattern(search);
+            filtered = filtered.Where(x => EF.Functions.Like(x.msg.SerializedProperties, pattern, @"\"));
         }
 
         var paged = filtered;

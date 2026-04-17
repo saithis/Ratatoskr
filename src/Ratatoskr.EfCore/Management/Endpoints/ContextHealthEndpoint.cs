@@ -7,7 +7,7 @@ namespace Ratatoskr.EfCore.Management;
 
 internal static class ContextHealthEndpoint
 {
-    internal static void Map(RouteGroupBuilder contextGroup)
+    internal static void Map(IEndpointRouteBuilder contextGroup)
     {
         contextGroup.MapGet("/health", Handle);
     }

@@ -147,7 +147,7 @@ public class InboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCon
         });
 
         var response = await HttpClient.DeleteAsync($"{BaseUrl}/poisoned/{handlerStatusId}");
-        response.StatusCode.Should().Be(HttpStatusCode.OK)
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         await InScopeAsync(async ctx =>
         {
@@ -253,13 +253,13 @@ public class InboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCon
     }
 
     [Test]
-    public async Task InboxManagement_PoisonedList_FilterByType_ExcludesNonMatchingMessages()
+    public async Task InboxManagement_PoisonedList_SearchFilter_ExcludesNonMatchingMessages()
     {
         await StartManagementTestAsync();
         await SeedPoisonedInboxAsync("order.placed");
         await SeedPoisonedInboxAsync("payment.captured");
 
-        var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned?type=order.placed");
+        var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned?search=order.placed");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();

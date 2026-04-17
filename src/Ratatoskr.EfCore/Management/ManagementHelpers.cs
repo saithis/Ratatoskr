@@ -1,52 +1,28 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Ratatoskr.Core;
 
 namespace Ratatoskr.EfCore.Management;
 
 internal static class ManagementHelpers
 {
     /// <summary>
-    /// Builds a SQL LIKE pattern that matches the JSON fragment
-    /// <c>"Type":"&lt;value&gt;"</c> inside a serialized <see cref="Core.MessageProperties"/> blob.
-    /// <para>
-    /// The value is JSON-encoded (matching how the properties are stored) and LIKE
-    /// metacharacters (<c>%</c>, <c>_</c>, <c>\</c>) are escaped so that user input
-    /// cannot inject wildcards. The pattern is anchored with the surrounding
-    /// <c>"Type":"..."</c> fragment so it cannot accidentally match characters
-    /// from other fields.
-    /// </para>
-    /// <para>
-    /// Callers must pair this pattern with an in-memory exact-match check on
-    /// <see cref="ExtractType"/> — LIKE-escape semantics vary between providers
-    /// (PostgreSQL defaults to <c>\</c>, SQL Server has no default escape) so this
-    /// DB-side filter is only guaranteed to be a <em>superset</em> of matches.
-    /// </para>
+    /// Builds a SQL LIKE pattern for a general substring search against a serialized
+    /// <see cref="Core.MessageProperties"/> blob (or any JSON string).
+    /// LIKE metacharacters (<c>%</c>, <c>_</c>, <c>\</c>) in the user-supplied value are
+    /// escaped with <c>\</c>, so callers must pass <c>@"\"</c> as the escape character to
+    /// <c>EF.Functions.Like</c>.
     /// </summary>
-    internal static string BuildMessageTypeLikePattern(string type)
-    {
-        // JSON-encode the user input so it matches the stored JSON value form exactly.
-        var jsonEncoded = JsonEncodedText.Encode(type).Value;
-
-        var builder = new StringBuilder(jsonEncoded.Length + 16);
-        builder.Append(@"%""Type"":""");
-        foreach (var ch in jsonEncoded)
-        {
-            if (ch is '\\' or '%' or '_')
-                builder.Append('\\');
-            builder.Append(ch);
-        }
-        builder.Append(@"""%");
-        return builder.ToString();
-    }
+    internal static string BuildSearchPattern(string search) =>
+        "%" + search.Replace(@"\", @"\\").Replace("%", @"\%").Replace("_", @"\_") + "%";
 
     internal static string ExtractType(string serializedProperties, ILogger? logger = null)
     {
         try
         {
-            using var doc = JsonDocument.Parse(serializedProperties);
-            if (doc.RootElement.TryGetProperty("Type", out var t) && t.ValueKind == JsonValueKind.String)
-                return t.GetString() ?? "(unknown)";
+            var properties = JsonSerializer.Deserialize<MessageProperties>(serializedProperties);
+            return properties?.Type ?? "(unknown)";
         }
         catch (JsonException ex)
         {
@@ -55,21 +31,6 @@ internal static class ManagementHelpers
             logger?.LogWarning(ex, "Failed to parse serialized message properties; returning '(unknown)' type.");
         }
         return "(unknown)";
-    }
-
-    internal static JsonElement SafeDeserializeToJsonElement(string json, ILogger? logger = null)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            return doc.RootElement.Clone();
-        }
-        catch (JsonException ex)
-        {
-            logger?.LogWarning(ex, "Failed to parse JSON for management detail view; returning empty object.");
-            using var empty = JsonDocument.Parse("{}");
-            return empty.RootElement.Clone();
-        }
     }
 
     internal static (string? JsonPayload, string PayloadBase64) DecodeContent(byte[] content, ILogger? logger = null)

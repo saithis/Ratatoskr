@@ -1,13 +1,8 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 
-namespace Ratatoskr.EfCore.Management;
+namespace Ratatoskr.Management;
 
-/// <summary>
-/// Centralises the management API's error response shapes as RFC 7807
-/// <c>application/problem+json</c> payloads so every endpoint surfaces the
-/// same fields for clients (UI, CLI, backend proxies) to consume.
-/// </summary>
 internal static class ManagementResults
 {
     internal const string ProblemTypeBase = "https://ratatoskr.dev/errors/management/";

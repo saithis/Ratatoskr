@@ -6,12 +6,13 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.EfCore.Internal;
+using Ratatoskr.Management;
 
 namespace Ratatoskr.EfCore.Management;
 
 internal static class BulkDeleteOutboxEndpoint
 {
-    internal static void Map(RouteGroupBuilder outboxGroup)
+    internal static void Map(IEndpointRouteBuilder outboxGroup)
     {
         // Two distinct URLs so that "delete all" cannot be requested by accident when a
         // client forgets to attach a body. Some HTTP intermediaries also strip request

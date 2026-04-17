@@ -5,12 +5,13 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.EfCore.Internal;
+using Ratatoskr.Management;
 
 namespace Ratatoskr.EfCore.Management;
 
 internal static class DeleteOutboxEndpoint
 {
-    internal static void Map(RouteGroupBuilder outboxGroup)
+    internal static void Map(IEndpointRouteBuilder outboxGroup)
     {
         outboxGroup.MapDelete("/poisoned/{id:guid}", Handle);
     }

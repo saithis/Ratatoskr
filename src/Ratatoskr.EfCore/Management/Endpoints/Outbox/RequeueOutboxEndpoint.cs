@@ -3,12 +3,13 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Ratatoskr.Management;
 
 namespace Ratatoskr.EfCore.Management;
 
 internal static class RequeueOutboxEndpoint
 {
-    internal static void Map(RouteGroupBuilder outboxGroup)
+    internal static void Map(IEndpointRouteBuilder outboxGroup)
     {
         outboxGroup.MapPost("/poisoned/{id:guid}/requeue", Handle);
     }

@@ -6,12 +6,13 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.EfCore.Internal;
+using Ratatoskr.Management;
 
 namespace Ratatoskr.EfCore.Management;
 
 internal static class BulkDeleteInboxEndpoint
 {
-    internal static void Map(RouteGroupBuilder inboxGroup)
+    internal static void Map(IEndpointRouteBuilder inboxGroup)
     {
         inboxGroup.MapDelete("/poisoned", HandleByIds);
         inboxGroup.MapDelete("/poisoned/all", HandleAll);

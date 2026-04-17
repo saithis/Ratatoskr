@@ -248,13 +248,13 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
     }
 
     [Test]
-    public async Task OutboxManagement_PoisonedList_FilterByType_ExcludesNonMatchingMessages()
+    public async Task OutboxManagement_PoisonedList_SearchFilter_ExcludesNonMatchingMessages()
     {
         await StartManagementTestAsync();
         await SeedPoisonedOutboxAsync("order.created");
         await SeedPoisonedOutboxAsync("payment.processed");
 
-        var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned?type=order.created");
+        var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned?search=order.created");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();

@@ -6,12 +6,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Ratatoskr.EfCore.Internal;
+using Ratatoskr.Management;
 
 namespace Ratatoskr.EfCore.Management;
 
 internal static class GetInboxMessageHandlersEndpoint
 {
-    internal static void Map(RouteGroupBuilder inboxGroup)
+    internal static void Map(IEndpointRouteBuilder inboxGroup)
     {
         inboxGroup.MapGet("/messages/{messageId}/handlers", Handle);
     }
@@ -42,7 +43,7 @@ internal static class GetInboxMessageHandlersEndpoint
             .Where(x => x.MessageId == messageId)
             .ToListAsync(ct);
 
-        var msgType = ManagementHelpers.ExtractType(msg.SerializedProperties, logger);
+        var msgType = msg.GetProperties().Type ?? "(unknown)";
         var summaries = handlers.Select(h => new InboxHandlerStatusSummary(
             h.Id, h.HandlerKey, h.ErrorCount, h.RequeuedCount,
             string.IsNullOrEmpty(h.LastError) ? null : h.LastError,

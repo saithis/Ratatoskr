@@ -7,13 +7,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.EfCore.Management;
 using Ratatoskr.Endpoints;
+using Ratatoskr.Management;
 using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Management;
 
 /// <summary>
 /// Covers the behaviours that came out of the management API review — keyset pagination,
-/// page-size clamping, type-filter exact matching, bulk request validation, problem-details
+/// page-size clamping, search-filter substring matching, bulk request validation, problem-details
 /// shape, the duplicate-short-name guard, and the "no configurators → no endpoints" path.
 ///
 /// These assertions are deliberately granular so that any regression in a single area fails
@@ -96,37 +97,39 @@ public class ManagementCoverageTests(RabbitMqContainerFixture rabbitMq, Postgres
     }
 
     [Test]
-    public async Task TypeFilter_DoesNotMatchSubstrings_OnlyExactType()
+    public async Task SearchFilter_MatchesSubstring()
     {
         await StartManagementTestAsync();
         await SeedPoisonedOutboxAsync("order.placed");
-        await SeedPoisonedOutboxAsync("order.placed.retried"); // longer — must NOT match
+        await SeedPoisonedOutboxAsync("payment.failed");
 
-        var response = await HttpClient.GetAsync($"{OutboxBaseUrl}/poisoned?type=order.placed");
+        // "order" is a substring of "order.placed" but not "payment.failed"
+        var response = await HttpClient.GetAsync($"{OutboxBaseUrl}/poisoned?search=order");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         var items = body.GetProperty("items").EnumerateArray().ToList();
-        items.Should().HaveCount(1, "the filter must not expand into a substring/prefix match");
+        items.Should().HaveCount(1);
         items[0].GetProperty("messageType").GetString().Should().Be("order.placed");
         body.GetProperty("totalCount").GetInt64().Should().Be(1);
     }
 
     [Test]
-    public async Task TypeFilter_WildcardsInUserInput_AreNotHonoured()
+    public async Task SearchFilter_WildcardsInUserInput_AreEscaped()
     {
         await StartManagementTestAsync();
         await SeedPoisonedOutboxAsync("order.placed");
         await SeedPoisonedOutboxAsync("order.shipped");
 
         // "%" is a SQL LIKE wildcard; if we forgot to escape it server-side, this query would
-        // match both rows above. Escaped correctly, it matches zero.
-        var response = await HttpClient.GetAsync($"{OutboxBaseUrl}/poisoned?type={Uri.EscapeDataString("order.%")}");
+        // match both rows above. Escaped correctly, it matches zero rows because no message
+        // has the literal string "order.%" in its serialized properties.
+        var response = await HttpClient.GetAsync($"{OutboxBaseUrl}/poisoned?search={Uri.EscapeDataString("order.%")}");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("items").GetArrayLength().Should().Be(0,
-            "LIKE wildcards in user input must be escaped so only exact matches come back");
+            "LIKE wildcards in user input must be escaped so they match literally");
     }
 
     [Test]

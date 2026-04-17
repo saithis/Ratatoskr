@@ -7,9 +7,11 @@ namespace Ratatoskr.Endpoints;
 /// Succeeds any authorization requirement when the request was dispatched
 /// in-process by the local backend proxy and targets a Ratatoskr management endpoint.
 ///
-/// The path check is the critical security boundary: even if another component
-/// accidentally attaches an <see cref="ILocalRatatoskrRequestFeature"/> to a request,
-/// authorization is only bypassed for <c>/ratatoskr/api/v1/...</c> routes.
+/// The endpoint metadata check is the critical security boundary: even if another
+/// component accidentally attaches an <see cref="ILocalRatatoskrRequestFeature"/> to a
+/// request, authorization is only bypassed for endpoints that carry
+/// <see cref="RatatoskrManagementApiMetadata"/>. This also means the bypass works
+/// correctly regardless of any URL prefix configured by the caller.
 /// </summary>
 internal sealed class LocalRatatoskrBypassAuthorizationHandler
     : IAuthorizationHandler
@@ -22,7 +24,7 @@ internal sealed class LocalRatatoskrBypassAuthorizationHandler
         if (httpContext.Features.Get<ILocalRatatoskrRequestFeature>() is null)
             return Task.CompletedTask;
 
-        if (!IsManagementApiPath(httpContext.Request.Path))
+        if (httpContext.GetEndpoint()?.Metadata.GetMetadata<RatatoskrManagementApiMetadata>() is null)
             return Task.CompletedTask;
 
         foreach (var req in context.PendingRequirements.ToList())
@@ -30,7 +32,4 @@ internal sealed class LocalRatatoskrBypassAuthorizationHandler
 
         return Task.CompletedTask;
     }
-
-    private static bool IsManagementApiPath(PathString path) =>
-        path.StartsWithSegments(ManagementApiEndpointExtensions.BasePath, StringComparison.OrdinalIgnoreCase);
 }

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.EfCore.Internal;
+using Ratatoskr.Management;
 
 namespace Ratatoskr.EfCore.Management;
 
@@ -12,7 +13,7 @@ internal static class BulkRequeueOutboxEndpoint
 {
     private const int BatchSize = 500;
 
-    internal static void Map(RouteGroupBuilder outboxGroup)
+    internal static void Map(IEndpointRouteBuilder outboxGroup)
     {
         outboxGroup.MapPost("/poisoned/requeue", HandleByIds);
         outboxGroup.MapPost("/poisoned/requeue/all", HandleAll);

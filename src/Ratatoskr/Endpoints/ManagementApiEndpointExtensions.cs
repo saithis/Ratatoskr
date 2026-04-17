@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -8,17 +9,22 @@ namespace Ratatoskr.Endpoints;
 public static class ManagementApiEndpointExtensions
 {
     /// <summary>
-    /// Base path prefix under which all Ratatoskr management endpoints are mounted.
-    /// Used by the in-process authorization bypass to scope the bypass to only
-    /// management routes.
+    /// Default base path under which all Ratatoskr management endpoints are mounted.
+    /// Pass a custom <c>basePath</c> to <see cref="MapRatatoskrManagementApi"/> to override.
     /// </summary>
-    internal const string BasePath = "/ratatoskr/api/v1";
+    public const string DefaultBasePath = "/ratatoskr/api/v1";
 
+    /// <summary>
+    /// Maps all registered Ratatoskr management endpoints under <paramref name="basePath"/>,
+    /// applying <paramref name="policyName"/> authorization and disabling antiforgery.
+    /// </summary>
     public static IEndpointRouteBuilder MapRatatoskrManagementApi(
         this IEndpointRouteBuilder endpoints,
-        string policyName)
+        string policyName,
+        string basePath = DefaultBasePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(policyName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(basePath);
 
         var configurators = endpoints.ServiceProvider
             .GetServices<IRatatoskrEndpointConfigurator>()
@@ -36,8 +42,14 @@ public static class ManagementApiEndpointExtensions
                 $"Authorization policy '{policyName}' is not registered. " +
                 "Call services.AddAuthorization() and define the policy before calling MapRatatoskrManagementApi.");
 
+        var group = endpoints
+            .MapGroup(basePath)
+            .RequireAuthorization(policyName)
+            .DisableAntiforgery()
+            .WithMetadata(new RatatoskrManagementApiMetadata());
+
         foreach (var configurator in configurators)
-            configurator.MapEndpoints(endpoints, policyName);
+            configurator.MapEndpoints(group);
 
         return endpoints;
     }

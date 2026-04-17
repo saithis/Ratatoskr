@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -6,13 +5,15 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Ratatoskr.Core;
 using Ratatoskr.EfCore.Internal;
+using Ratatoskr.Management;
 
 namespace Ratatoskr.EfCore.Management;
 
 internal static class GetInboxHandlerDetailEndpoint
 {
-    internal static void Map(RouteGroupBuilder inboxGroup)
+    internal static void Map(IEndpointRouteBuilder inboxGroup)
     {
         inboxGroup.MapGet("/poisoned/{handlerStatusId:guid}", Handle);
     }
@@ -45,12 +46,11 @@ internal static class GetInboxHandlerDetailEndpoint
         if (!result.hs.IsPoisoned)
             return ManagementResults.BadRequest("Handler status is not poisoned.");
 
-        var props = ManagementHelpers.SafeDeserializeToJsonElement(result.msg.SerializedProperties, logger);
-        var msgType = ManagementHelpers.ExtractType(result.msg.SerializedProperties, logger);
+        var props = result.msg.GetProperties();
         var (jsonPayload, base64) = ManagementHelpers.DecodeContent(result.msg.Content, logger);
 
         return TypedResults.Ok(new InboxHandlerDetail(
-            result.hs.Id, result.hs.MessageId, msgType, result.hs.HandlerKey, result.msg.ReceivedAt,
+            result.hs.Id, result.hs.MessageId, props.Type ?? "(unknown)", result.hs.HandlerKey, result.msg.ReceivedAt,
             result.hs.ErrorCount, result.hs.RequeuedCount,
             string.IsNullOrEmpty(result.hs.LastError) ? null : result.hs.LastError,
             props, jsonPayload, base64, provider.DbContextName));
@@ -65,7 +65,7 @@ internal static class GetInboxHandlerDetailEndpoint
         int ErrorCount,
         int RequeuedCount,
         string? LastError,
-        JsonElement Properties,
+        MessageProperties Properties,
         string? JsonPayload,
         string PayloadBase64,
         string DbContext);

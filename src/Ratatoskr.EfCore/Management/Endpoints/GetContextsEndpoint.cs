@@ -7,7 +7,7 @@ namespace Ratatoskr.EfCore.Management;
 
 internal static class GetContextsEndpoint
 {
-    internal static void Map(RouteGroupBuilder group)
+    internal static void Map(IEndpointRouteBuilder group)
     {
         group.MapGet("/contexts", Handle);
     }

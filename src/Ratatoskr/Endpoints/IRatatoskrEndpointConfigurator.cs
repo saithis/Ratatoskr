@@ -9,5 +9,5 @@ namespace Ratatoskr.Endpoints;
 /// </summary>
 internal interface IRatatoskrEndpointConfigurator
 {
-    void MapEndpoints(IEndpointRouteBuilder endpoints, string policyName);
+    void MapEndpoints(IEndpointRouteBuilder group);
 }
