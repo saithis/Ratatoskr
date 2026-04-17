@@ -7,26 +7,12 @@ namespace Ratatoskr.EfCore.Internal;
 /// Persisted record of a message received from any transport.
 /// One row per unique CloudEvents <c>id</c> — acts as the deduplication anchor.
 /// </summary>
-internal class InboxMessageEntity
+internal class InboxMessageEntity : BaseMessageEntity
 {
     /// <summary>CloudEvents "id" of the received message. Primary key and deduplication key.</summary>
     public string Id { get; private set; } = string.Empty;
 
-    /// <summary>Name of the transport that delivered the message (e.g. "efcore", "rabbitmq").</summary>
-    public string TransportName { get; private set; } = string.Empty;
-
-    public required byte[] Content { get; init; }
-
-    /// <summary>JSON-serialized <see cref="MessageProperties"/>.</summary>
-    public required string SerializedProperties { get; init; }
-
     public required DateTimeOffset ReceivedAt { get; init; }
-
-    private MessageProperties? _cachedProperties;
-
-    public MessageProperties GetProperties() =>
-        _cachedProperties ??= JsonSerializer.Deserialize<MessageProperties>(SerializedProperties)
-        ?? throw new InvalidOperationException($"Could not deserialize MessageProperties for inbox message '{Id}'.");
 
     internal const int MaxIdLength = 200;
 
@@ -56,6 +42,8 @@ internal class InboxMessageEntity
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
         ArgumentException.ThrowIfNullOrWhiteSpace(transportName);
+        if (transportName.Length > 50)
+            throw new ArgumentOutOfRangeException(nameof(transportName), "TransportName must be 50 characters or fewer.");
         ValidateIdLength(messageId);
         return new InboxMessageEntity
         {

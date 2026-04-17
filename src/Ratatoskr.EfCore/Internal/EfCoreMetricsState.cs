@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Microsoft.EntityFrameworkCore;
 
 namespace Ratatoskr.EfCore.Internal;
 
@@ -17,4 +18,15 @@ internal class EfCoreMetricsState
     /// Tracks metric state per DbContext type full name (see <see cref="System.Type.FullName"/>).
     /// </summary>
     public ConcurrentDictionary<string, DbContextMetrics> ContextMetrics { get; } = new();
+
+    public bool TryGetValue<TDbContext>(TDbContext _, out DbContextMetrics metrics) where TDbContext : DbContext
+    {
+        var type = typeof(TDbContext);
+        return TryGetValue(type, out metrics);
+    }
+    
+    public bool TryGetValue(Type dbContextType, out DbContextMetrics metrics)
+    {
+        return ContextMetrics.TryGetValue(dbContextType.FullName ?? dbContextType.Name, out metrics);
+    }
 }

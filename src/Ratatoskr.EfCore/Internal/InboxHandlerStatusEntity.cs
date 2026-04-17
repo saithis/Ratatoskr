@@ -44,6 +44,11 @@ internal class InboxHandlerStatusEntity
     /// </summary>
     public uint Version { get; private set; }
 
+    /// <summary>
+    /// Counts how many times this handler status has been requeued via the management API.
+    /// </summary>
+    public int RequeuedCount { get; private set; }
+
     private InboxHandlerStatusEntity() { }
 
     public static InboxHandlerStatusEntity Create(string messageId, string handlerKey, TimeProvider timeProvider)
@@ -88,6 +93,21 @@ internal class InboxHandlerStatusEntity
         {
             NextAttemptAt = timeProvider.GetUtcNow().Add(BackoffCalculator.CalculateDelay(ErrorCount, maxRetryDelay));
         }
+    }
+
+    /// <summary>
+    /// Clears the poisoned state so the inbox processor will retry the handler.
+    /// Increments <see cref="RequeuedCount"/> and resets the error counters.
+    /// </summary>
+    public void Requeue()
+    {
+        IsPoisoned = false;
+        ErrorCount = 0;
+        LastError = string.Empty;
+        NextAttemptAt = null;
+        ProcessingStartedAt = null;
+        RequeuedCount++;
+        Version++;
     }
 
     /// <summary>

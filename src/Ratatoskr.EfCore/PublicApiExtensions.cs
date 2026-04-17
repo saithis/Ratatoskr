@@ -5,6 +5,8 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore.Internal;
+using Ratatoskr.EfCore.Management;
+using Ratatoskr.Management;
 
 namespace Ratatoskr.EfCore;
 
@@ -49,6 +51,12 @@ public static class PublicApiExtensions
                 durabilityBuilder.MetricsPollingInterval,
                 durabilityBuilder.MetricsQueryTimeout));
             builder.Services.AddHostedService<EfCoreMetricsBackgroundService<TDbContext>>();
+
+            // Management API
+            builder.Services.AddSingleton<IEfCoreManagementDbContextDescriptor,
+                EfCoreManagementDbContextDescriptor<TDbContext>>();
+            builder.Services.TryAddScoped<EfCoreManagementDbContextLookup>();
+            builder.Services.TryAddSingleton<IRatatoskrEndpointConfigurator, EfCoreEndpointConfigurator>();
 
             return builder;
         }
