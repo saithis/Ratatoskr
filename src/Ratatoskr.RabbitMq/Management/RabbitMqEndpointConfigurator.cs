@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Ratatoskr.Management;
 
@@ -10,7 +11,7 @@ internal sealed class RabbitMqEndpointConfigurator : IRatatoskrEndpointConfigura
     public void MapEndpoints(IEndpointRouteBuilder group)
     {
         group.MapGet("/rabbitmq/health",
-            (RabbitMqConnectionManager conn, RabbitMqConsumer consumer) =>
+            ([FromServices] RabbitMqConnectionManager conn, [FromServices] RabbitMqConsumer consumer) =>
                 TypedResults.Ok(new RabbitMqHealthDto(conn.IsConnected, consumer.IsHealthy, null)));
     }
 }
