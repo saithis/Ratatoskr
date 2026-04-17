@@ -19,7 +19,7 @@ internal static class CursorHelper
     internal static string Encode(DateTimeOffset time, Guid id)
     {
         Span<byte> bytes = stackalloc byte[CursorByteLength];
-        BinaryPrimitives.WriteInt64LittleEndian(bytes[..8], time.UtcTicks);
+        BinaryPrimitives.WriteInt64LittleEndian(bytes[..8], time.Ticks);
         BinaryPrimitives.WriteInt16LittleEndian(bytes.Slice(8, 2), (short)time.Offset.TotalMinutes);
         if (!id.TryWriteBytes(bytes.Slice(10, 16)))
             throw new InvalidOperationException("Unexpected failure encoding Guid for cursor.");

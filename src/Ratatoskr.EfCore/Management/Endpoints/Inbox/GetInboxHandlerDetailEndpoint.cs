@@ -31,17 +31,19 @@ internal static class GetInboxHandlerDetailEndpoint
 
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);
-        db.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
 
         var result = await (
-            from hs in db.Set<InboxHandlerStatusEntity>()
+            from hs in db.Set<InboxHandlerStatusEntity>().AsNoTracking()
             join msg in db.Set<InboxMessageEntity>() on hs.MessageId equals msg.Id
-            where hs.Id == handlerStatusId && hs.IsPoisoned
+            where hs.Id == handlerStatusId
             select new { hs, msg }
         ).FirstOrDefaultAsync(ct);
 
         if (result is null)
-            return ManagementResults.NotFound($"Poisoned handler status '{handlerStatusId}' was not found.");
+            return ManagementResults.NotFound($"Handler status '{handlerStatusId}' was not found.");
+
+        if (!result.hs.IsPoisoned)
+            return ManagementResults.BadRequest("Handler status is not poisoned.");
 
         var props = ManagementHelpers.SafeDeserializeToJsonElement(result.msg.SerializedProperties, logger);
         var msgType = ManagementHelpers.ExtractType(result.msg.SerializedProperties, logger);

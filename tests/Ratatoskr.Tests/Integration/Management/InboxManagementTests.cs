@@ -146,7 +146,8 @@ public class InboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCon
             await db.SaveChangesAsync();
         });
 
-        await HttpClient.DeleteAsync($"{BaseUrl}/poisoned/{handlerStatusId}");
+        var response = await HttpClient.DeleteAsync($"{BaseUrl}/poisoned/{handlerStatusId}");
+        response.StatusCode.Should().Be(HttpStatusCode.OK)
 
         await InScopeAsync(async ctx =>
         {

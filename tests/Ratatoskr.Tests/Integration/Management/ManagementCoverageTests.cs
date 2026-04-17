@@ -67,16 +67,15 @@ public class ManagementCoverageTests(RabbitMqContainerFixture rabbitMq, Postgres
     public async Task Pagination_PageSizeOverMax_IsClampedSilently()
     {
         await StartManagementTestAsync();
-        for (var i = 0; i < 3; i++) await SeedPoisonedOutboxAsync();
+        // Seed one more than the cap so the clamp is observable in the response.
+        for (var i = 0; i < PaginationOptions.MaxPageSize + 1; i++) await SeedPoisonedOutboxAsync();
 
-        // PaginationOptions.MaxPageSize is 200 — request way past it and check the server neither
-        // errors nor honours the oversize value. We cannot directly observe the clamp without
-        // seeding 201+ rows, but we can at least confirm 200 is the ceiling.
         var response = await HttpClient.GetAsync($"{OutboxBaseUrl}/poisoned?pageSize=10000");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        body.GetProperty("items").GetArrayLength().Should().BeLessThanOrEqualTo(PaginationOptions.MaxPageSize);
+        body.GetProperty("items").GetArrayLength().Should().Be(PaginationOptions.MaxPageSize,
+            "the server must clamp an oversize pageSize to MaxPageSize");
     }
 
     [Test]

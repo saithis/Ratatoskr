@@ -63,8 +63,8 @@ public abstract class ManagementTestBase(RabbitMqContainerFixture rabbitMq, Post
             var props = new MessageProperties { Type = messageType ?? "test.event", Id = Guid.NewGuid().ToString() };
             var content = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new { Data = "payload" });
             var entity = OutboxMessageEntity.Create(content, props, time, "efcore");
-            // Poison it by exceeding max retries
-            for (var i = 0; i < 4; i++)
+            // Poison it by reaching max retries (ErrorCount >= maxRetries sets IsPoisoned)
+            for (var i = 0; i < 3; i++)
                 entity.PublishFailed("simulated error", time, 3, TimeSpan.FromSeconds(1));
             db.Set<OutboxMessageEntity>().Add(entity);
             await db.SaveChangesAsync();
@@ -90,7 +90,7 @@ public abstract class ManagementTestBase(RabbitMqContainerFixture rabbitMq, Post
             db.Set<InboxMessageEntity>().Add(msg);
 
             var handler = InboxHandlerStatusEntity.Create(msg.Id, "handler-a", time);
-            for (var i = 0; i < 4; i++)
+            for (var i = 0; i < 3; i++)
                 handler.MarkAsFailed("simulated inbox error", time, 3, TimeSpan.FromSeconds(1));
             db.Set<InboxHandlerStatusEntity>().Add(handler);
 

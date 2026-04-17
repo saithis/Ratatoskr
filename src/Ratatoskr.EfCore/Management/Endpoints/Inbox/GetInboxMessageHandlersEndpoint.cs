@@ -30,14 +30,15 @@ internal static class GetInboxMessageHandlersEndpoint
 
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);
-        db.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
 
         var msg = await db.Set<InboxMessageEntity>()
+            .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == messageId, ct);
         if (msg is null)
             return ManagementResults.NotFound($"Inbox message '{messageId}' was not found.");
 
         var handlers = await db.Set<InboxHandlerStatusEntity>()
+            .AsNoTracking()
             .Where(x => x.MessageId == messageId)
             .ToListAsync(ct);
 

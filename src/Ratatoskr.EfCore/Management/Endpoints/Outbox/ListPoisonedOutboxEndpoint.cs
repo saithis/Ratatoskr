@@ -49,9 +49,8 @@ internal static class ListPoisonedOutboxEndpoint
 
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);
-        db.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
 
-        var filtered = db.Set<OutboxMessageEntity>().Where(x => x.IsPoisoned);
+        var filtered = db.Set<OutboxMessageEntity>().AsNoTracking().Where(x => x.IsPoisoned);
         if (from.HasValue) filtered = filtered.Where(x => x.CreatedAt >= from.Value);
         if (to.HasValue) filtered = filtered.Where(x => x.CreatedAt <= to.Value);
         if (type is not null)
@@ -65,7 +64,7 @@ internal static class ListPoisonedOutboxEndpoint
         {
             // Tuple comparison: (CreatedAt, Id) > (cursor.Time, cursor.Id).
             // Expressed as OR-form so EF translates cleanly on both Postgres and SQL Server.
-            paged = paged.Where(x => x.CreatedAt > k.Time || (x.CreatedAt == k.Time && x.Id.CompareTo(k.Id) > 0));
+            paged = paged.Where(x => x.CreatedAt > k.Time || (x.CreatedAt == k.Time && x.Id > k.Id));
         }
 
         // Deliberately fetch pageSize + 1 so we can determine whether another page exists
@@ -87,11 +86,6 @@ internal static class ListPoisonedOutboxEndpoint
                 string.IsNullOrEmpty(x.Error) ? null : x.Error,
                 provider.DbContextName))
             .ToList();
-
-        // Belt-and-braces exact match — the DB-side LIKE is a coarse prefilter and
-        // may over-match on providers that do not honour the '\' LIKE escape char.
-        if (type is not null)
-            dtos = dtos.Where(x => x.MessageType == type).ToList();
 
         var nextCursor = hasNext
             ? CursorHelper.Encode(items[^1].CreatedAt, items[^1].Id)

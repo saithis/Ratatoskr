@@ -21,7 +21,7 @@ internal static class BulkDeleteOutboxEndpoint
         outboxGroup.MapDelete("/poisoned/all", HandleAll);
     }
 
-    private static async Task<Results<Ok, ProblemHttpResult>> HandleByIds(
+    private static async Task<Results<Ok<BulkDeleteOutboxResponse>, ProblemHttpResult>> HandleByIds(
         string contextName,
         [FromBody] BulkDeleteOutboxRequest req,
         EfCoreManagementProviderLookup lookup,
@@ -37,11 +37,11 @@ internal static class BulkDeleteOutboxEndpoint
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);
 
-        await db.Set<OutboxMessageEntity>()
+        var deletedCount = await db.Set<OutboxMessageEntity>()
             .Where(x => req.Ids!.Contains(x.Id) && x.IsPoisoned)
             .ExecuteDeleteAsync(ct);
 
-        return TypedResults.Ok();
+        return TypedResults.Ok(new BulkDeleteOutboxResponse(deletedCount));
     }
 
     private static async Task<Results<Ok, ProblemHttpResult>> HandleAll(
@@ -64,4 +64,6 @@ internal static class BulkDeleteOutboxEndpoint
     }
 
     internal record BulkDeleteOutboxRequest(List<Guid>? Ids);
+
+    internal record BulkDeleteOutboxResponse(int DeletedCount);
 }

@@ -37,12 +37,14 @@ internal static class BulkRequeueOutboxEndpoint
         var succeeded = new List<Guid>();
         var failed = new List<BulkRequeueOutboxFailure>();
 
+        var distinctIds = req.Ids!.Distinct().ToList();
+
         var entities = await db.Set<OutboxMessageEntity>()
-            .Where(x => req.Ids!.Contains(x.Id) && x.IsPoisoned)
+            .Where(x => distinctIds.Contains(x.Id) && x.IsPoisoned)
             .ToListAsync(ct);
 
         var foundIds = entities.Select(e => e.Id).ToHashSet();
-        failed.AddRange(req.Ids!
+        failed.AddRange(distinctIds
             .Where(id => !foundIds.Contains(id))
             .Select(id => new BulkRequeueOutboxFailure(id, "Not found, not poisoned, or concurrent modification.")));
 
@@ -71,6 +73,7 @@ internal static class BulkRequeueOutboxEndpoint
         // does not build a single massive transaction. Each batch reuses the domain
         // Requeue() method so invariants (Version increment, counter reset, etc.)
         // stay in sync with the rest of the processor.
+        var consecutiveNoProgress = 0;
         while (!ct.IsCancellationRequested)
         {
             var batch = await db.Set<OutboxMessageEntity>()
@@ -81,9 +84,19 @@ internal static class BulkRequeueOutboxEndpoint
 
             if (batch.Count == 0) break;
 
+            var succeededBefore = succeeded.Count;
             foreach (var entity in batch) entity.Requeue();
             await SaveBatchAsync(db, batch, succeeded, failed, ct);
             db.ChangeTracker.Clear();
+            
+            if (succeeded.Count == succeededBefore)
+            {
+                if (++consecutiveNoProgress >= 3) break; // give up; return what we have
+            }
+            else
+            {
+                consecutiveNoProgress = 0;
+            }
         }
 
         return TypedResults.Ok(new BulkRequeueOutboxResponse(succeeded, failed));

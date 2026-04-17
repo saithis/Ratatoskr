@@ -47,10 +47,9 @@ internal static class ListPoisonedInboxEndpoint
 
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);
-        db.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
 
         var filtered =
-            from hs in db.Set<InboxHandlerStatusEntity>()
+            from hs in db.Set<InboxHandlerStatusEntity>().AsNoTracking()
             join msg in db.Set<InboxMessageEntity>() on hs.MessageId equals msg.Id
             where hs.IsPoisoned
             select new { hs, msg };
@@ -68,7 +67,7 @@ internal static class ListPoisonedInboxEndpoint
         {
             // Tuple comparison keyed on (ReceivedAt, HandlerStatusId) which matches the ORDER BY.
             paged = paged.Where(x => x.msg.ReceivedAt > k.Time
-                                     || (x.msg.ReceivedAt == k.Time && x.hs.Id.CompareTo(k.Id) > 0));
+                                     || (x.msg.ReceivedAt == k.Time && x.hs.Id > k.Id));
         }
 
         var rows = await paged
@@ -93,10 +92,6 @@ internal static class ListPoisonedInboxEndpoint
                 string.IsNullOrEmpty(x.LastError) ? null : x.LastError,
                 provider.DbContextName))
             .ToList();
-
-        // Belt-and-braces exact match — see note in ListPoisonedOutboxEndpoint.
-        if (type is not null)
-            dtos = dtos.Where(x => x.MessageType == type).ToList();
 
         var nextCursor = hasNext
             ? CursorHelper.Encode(rows[^1].ReceivedAt, rows[^1].Id)

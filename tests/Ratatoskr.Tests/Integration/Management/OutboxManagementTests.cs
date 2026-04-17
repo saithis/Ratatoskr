@@ -193,6 +193,10 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         var response = await HttpClient.SendAsync(req);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
+        var body = await response.Content.ReadFromJsonAsync<BulkRequeueOutboxEndpoint.BulkRequeueOutboxResponse>();
+        body!.Succeeded.Should().BeEquivalentTo([id1, id2], "both ids must be reported as succeeded");
+        body.Failed.Should().BeEmpty("no ids should have failed");
+
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();

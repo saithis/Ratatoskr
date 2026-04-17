@@ -31,9 +31,9 @@ internal static class GetOutboxDetailEndpoint
 
         using var scope = scopeFactory.CreateScope();
         var db = provider.GetDbContext(scope.ServiceProvider);
-        db.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
 
         var entity = await db.Set<OutboxMessageEntity>()
+            .AsNoTracking()
             .Where(x => x.Id == id && x.IsPoisoned)
             .FirstOrDefaultAsync(ct);
 
