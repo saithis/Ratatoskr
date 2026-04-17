@@ -243,7 +243,7 @@ public class OutboxMessageEntityTests
         var fakeTime = new FakeTimeProvider();
         var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties(), fakeTime, "rabbitmq");
 
-        var backingField = typeof(OutboxMessageEntity)
+        var backingField = typeof(BaseMessageEntity)
             .GetField("<SerializedProperties>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance)!;
         backingField.SetValue(entity, "not valid json");
 
@@ -261,7 +261,7 @@ public class OutboxMessageEntityTests
         var fakeTime = new FakeTimeProvider();
         var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties(), fakeTime, "rabbitmq");
 
-        var backingField = typeof(OutboxMessageEntity)
+        var backingField = typeof(BaseMessageEntity)
             .GetField("<SerializedProperties>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance)!;
         backingField.SetValue(entity, "null");
 
