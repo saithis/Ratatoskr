@@ -148,5 +148,4 @@ jobs:
       uses: codacy/codacy-coverage-reporter-action@v1.3.0
       with:
         project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
-        # Downloaded coverage artifact keeps workspace-relative paths: TestResults/coverage.cobertura.xml → CoverageResults/TestResults/coverage.cobertura.xml
-        coverage-reports: CoverageResults/TestResults/coverage.cobertura.xml
+        coverage-reports: CoverageResults/coverage.cobertura.xml
