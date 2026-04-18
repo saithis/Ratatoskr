@@ -17,6 +17,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\PlaygroundHost\PlaygroundHost.csproj" />
+        <ProjectReference Include="..\OrderService\OrderService.csproj" />
     </ItemGroup>
 
 </Project>

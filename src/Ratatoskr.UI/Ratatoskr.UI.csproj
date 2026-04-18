@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <Description>Management UI host and proxy for Ratatoskr CloudEventBus.</Description>
+    <PackageTags>cloudevents;eventbus;management;ui</PackageTags>
+    <AddRazorSupportForMvc>false</AddRazorSupportForMvc>
+    <StaticWebAssetBasePath>ratatoskr-ui</StaticWebAssetBasePath>
+    <IsPackable>true</IsPackable>
+    <PackageId>Ratatoskr.UI</PackageId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" Condition="Exists('README.md')" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\Ratatoskr\Ratatoskr.csproj" />
+  </ItemGroup>
+
+  <!-- Build Angular before .NET build (release or explicit opt-in) -->
+  <Target Name="BuildAngularApp"
+          BeforeTargets="Build"
+          Condition="'$(Configuration)' == 'Release' Or '$(BuildAngular)' == 'true'">
+    <Message Text="Building Angular app..." Importance="high" />
+    <Exec Command="npm ci"
+          WorkingDirectory="$(MSBuildThisFileDirectory)ClientApp"
+          Condition="!Exists('$(MSBuildThisFileDirectory)ClientApp\node_modules')" />
+    <Exec Command="npx ng build --configuration production --output-path=../wwwroot"
+          WorkingDirectory="$(MSBuildThisFileDirectory)ClientApp" />
+  </Target>
+
+  <!-- wwwroot content is picked up automatically by the Razor SDK -->
+</Project>

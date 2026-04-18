@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Ratatoskr\Ratatoskr.csproj" />
+    <ProjectReference Include="..\..\src\Ratatoskr.UI\Ratatoskr.UI.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

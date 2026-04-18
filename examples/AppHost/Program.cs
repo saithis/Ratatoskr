@@ -27,4 +27,5 @@ builder.AddProject<Projects.PlaygroundHost>("playgroundhost")
     .WithEnvironment("RATATOSKR_EXAMPLES_PLAYGROUND", "1")
     .WithHttpHealthCheck("/health/ready");
 
+
 builder.Build().Run();
