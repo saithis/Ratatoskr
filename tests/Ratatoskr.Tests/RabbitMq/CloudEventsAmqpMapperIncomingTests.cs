@@ -75,10 +75,9 @@ public class CloudEventsAmqpMapperIncomingTests
     }
 
     [Test]
-    public void MapBinaryModeIncoming_ShouldPreferBareTraceparent_WhenBothHeadersExist()
+    public void MapBinaryModeIncoming_ShouldPreferCloudEventsTraceparent_WhenBothHeadersExist()
     {
-        // When both headers exist, the standard W3C traceparent takes priority
-        // (set by RabbitMQ.Client 7.x during BasicPublishAsync).
+        // Ratatoskr's CloudEvents trace context takes priority when present.
         var headers = new Dictionary<string, object?>
         {
             { "traceparent", "00-rmq-client-trace-01" },
@@ -99,7 +98,62 @@ public class CloudEventsAmqpMapperIncomingTests
 
         var result = _mapper.MapIncoming(incoming);
 
-        result.props.TraceParent.Should().Be("00-rmq-client-trace-01");
+        result.props.TraceParent.Should().Be("00-ratatoskr-send-trace-01");
+    }
+
+    [Test]
+    public void MapBinaryModeIncoming_ShouldDecodeReadOnlyMemoryTraceHeaderValues()
+    {
+        var headers = new Dictionary<string, object?>
+        {
+            { "traceparent", new ReadOnlyMemory<byte>(Encoding.UTF8.GetBytes("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")) },
+            { "tracestate", new ReadOnlyMemory<byte>(Encoding.UTF8.GetBytes("vendor=memory")) },
+            { "cloudEvents_id", "123" },
+            { "cloudEvents_source", "/unit-test" },
+            { "cloudEvents_type", "test.event" }
+        };
+
+        var basicProperties = new BasicProperties
+        {
+            Headers = headers,
+            ContentType = "application/json"
+        };
+
+        var body = Encoding.UTF8.GetBytes("{}");
+        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", basicProperties, body);
+
+        var result = _mapper.MapIncoming(incoming);
+
+        result.props.TraceParent.Should().Be("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
+        result.props.TraceState.Should().Be("vendor=memory");
+    }
+
+    [Test]
+    public void MapBinaryModeIncoming_ShouldFallbackToBareTraceparent_WhenCloudEventsTraceparentIsInvalid()
+    {
+        var headers = new Dictionary<string, object?>
+        {
+            { "cloudEvents_traceparent", "invalid-traceparent" },
+            { "traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" },
+            { "tracestate", "vendor=bare" },
+            { "cloudEvents_id", "123" },
+            { "cloudEvents_source", "/unit-test" },
+            { "cloudEvents_type", "test.event" }
+        };
+
+        var basicProperties = new BasicProperties
+        {
+            Headers = headers,
+            ContentType = "application/json"
+        };
+
+        var body = Encoding.UTF8.GetBytes("{}");
+        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", basicProperties, body);
+
+        var result = _mapper.MapIncoming(incoming);
+
+        result.props.TraceParent.Should().Be("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
+        result.props.TraceState.Should().Be("vendor=bare");
     }
 
     [Test]
@@ -129,6 +183,31 @@ public class CloudEventsAmqpMapperIncomingTests
         // Assert
         result.props.TraceParent.Should().Be("00-structured-trace-id-01");
         result.props.TraceState.Should().Be("structured=true");
+    }
+
+    [Test]
+    public void MapStructuredModeIncoming_ShouldPreferEnvelopeTraceContextOverBareHeaders()
+    {
+        var cloudEventJson = "{\"id\":\"123\",\"source\":\"/unit-test\",\"type\":\"test.event\",\"specversion\":\"1.0\",\"traceparent\":\"00-envelope-trace-id-01\",\"tracestate\":\"envelope=true\",\"data\":{\"foo\":\"bar\"}}";
+        var body = Encoding.UTF8.GetBytes(cloudEventJson);
+
+        var headers = new Dictionary<string, object?>
+        {
+            { "traceparent", "00-rmq-client-trace-id-01" },
+            { "tracestate", "rmq=true" }
+        };
+
+        var basicProperties = new BasicProperties
+        {
+            Headers = headers,
+            ContentType = "application/cloudevents+json"
+        };
+
+        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", basicProperties, body);
+        var result = _mapper.MapIncoming(incoming);
+
+        result.props.TraceParent.Should().Be("00-envelope-trace-id-01");
+        result.props.TraceState.Should().Be("envelope=true");
     }
 
     [Test]
