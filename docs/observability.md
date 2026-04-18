@@ -23,8 +23,9 @@ Ratatoskr creates `Activity` spans at key pipeline stages:
 
 Trace context is automatically propagated through messages:
 
-1. On publish, `traceparent` and `tracestate` are injected into the message as W3C trace context headers
-2. On consume, the trace context is extracted and used to create a child activity, continuing the distributed trace across services
+1. On publish, Ratatoskr stores `traceparent` and `tracestate` in CloudEvents trace fields
+2. On consume, Ratatoskr first restores trace context from those CloudEvents fields and falls back to bare transport `traceparent`/`tracestate` headers when needed
+3. The restored context is used to create a child activity, continuing the distributed trace across services
 
 This means your existing APM tools (Jaeger, Zipkin, Azure Monitor, Datadog, etc.) will show end-to-end traces spanning publish → transport → consume → handle.
 

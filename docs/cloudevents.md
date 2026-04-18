@@ -132,7 +132,11 @@ If an incoming binary message has neither AMQP `message-id` nor a `cloudEvents_i
 
 ## Trace Context Propagation
 
-W3C trace context (`traceparent`/`tracestate`) is propagated through messages automatically. On publish, Ratatoskr creates tracing activities and the trace context flows into the AMQP message headers. On consume, the trace context is extracted and used to continue the distributed trace.
+W3C trace context (`traceparent`/`tracestate`) is propagated through messages automatically.
+
+For RabbitMQ and CloudEvents, Ratatoskr stores trace context in CloudEvents fields (`cloudEvents_traceparent` / `cloudEvents_tracestate` in binary mode, and CloudEvents extension attributes in structured mode). On consume, Ratatoskr prefers this CloudEvents trace context and falls back to bare AMQP `traceparent`/`tracestate` headers when needed.
+
+This keeps Ratatoskr publish and consume spans in the same distributed trace even when broker/client instrumentation adds transport-level spans with separate context handling.
 
 This enables end-to-end tracing across services without any manual instrumentation. See [Observability](observability.md) for the complete tracing setup.
 
