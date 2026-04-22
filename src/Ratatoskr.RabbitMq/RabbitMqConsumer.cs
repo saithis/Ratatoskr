@@ -48,6 +48,24 @@ internal class RabbitMqConsumer(
     {
         logger.LogInformation("Starting RabbitMQ consumer");
 
+        // Validate channel configurations before entering the reconnect loop so a
+        // misconfigured channel causes an immediate startup failure instead of being
+        // silently retried forever as a transient disconnect.
+        foreach (var reg in registry.GetConsumeChannels())
+        {
+            var channelOptions = reg.GetRabbitMqChannelOptions() ?? new RabbitMqChannelOptions();
+            if (string.IsNullOrEmpty(channelOptions.QueueName))
+                continue;
+
+            ValidateChannelConcurrency(reg.ChannelName, channelOptions);
+
+            if (channelOptions.AutoAck && channelOptions.ConcurrencyLimit > 1)
+                logger.LogWarning(
+                    "Channel '{Channel}': AutoAck=true disables broker-side prefetch limiting; with " +
+                    "ConcurrencyLimit={Limit} messages may accumulate faster than handlers process them.",
+                    reg.ChannelName, channelOptions.ConcurrencyLimit);
+        }
+
         var reconnectAttempt = 0;
 
         while (!stoppingToken.IsCancellationRequested)
@@ -76,6 +94,10 @@ internal class RabbitMqConsumer(
                 logger.LogError(ex, "RabbitMQ consumer disconnected. Reconnecting in {Delay} (attempt {Attempt})...",
                     delay, reconnectAttempt);
 
+                // Drain in-flight dispatches before disposing channels/gates.
+                // channelClosedCts is already cancelled at this point, so dispatches
+                // notice cancellation quickly and the drain completes fast.
+                await WaitForInFlightDrainAsync(stoppingToken);
                 await CleanupChannelsAsync();
 
                 try
@@ -111,8 +133,6 @@ internal class RabbitMqConsumer(
                 continue;
             }
 
-            ValidateChannelConcurrency(reg.ChannelName, channelOptions);
-
             var channel = await connectionManager.CreateChannelAsync(false, stoppingToken);
             await channel.BasicQosAsync(0, channelOptions.PrefetchCount, false, stoppingToken);
             var concurrencyGate = new SemaphoreSlim(channelOptions.ConcurrencyLimit, channelOptions.ConcurrencyLimit);
@@ -136,7 +156,7 @@ internal class RabbitMqConsumer(
                     channelOptions.QueueName!,
                     reg.ChannelName,
                     concurrencyGate,
-                    stoppingToken);
+                    channelClosedCts.Token);
                 await Task.CompletedTask;
             };
 
@@ -281,7 +301,7 @@ internal class RabbitMqConsumer(
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            // Service is stopping. Any unstarted messages will be re-delivered by RabbitMQ.
+            // Channel closing or service stopping; unstarted messages will be re-delivered by RabbitMQ.
         }
         finally
         {

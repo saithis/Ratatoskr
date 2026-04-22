@@ -166,6 +166,12 @@ public class RabbitMqConsumerShutdownTests(
 
         handler.MaxConcurrency.Should().BeGreaterThan(1, "handlers should run concurrently when ConcurrencyLimit > 1");
         handler.MaxConcurrency.Should().BeLessThanOrEqualTo(3, "concurrency should be capped by ConcurrencyLimit");
-        (await GetMessageCountAsync(ConcurrencyQueueName)).Should().Be(0);
+
+        // WaitUntilProcessedAsync fires when the handler returns, but BasicAckAsync runs
+        // after that in RabbitMqConsumer. Poll until the broker confirms all acks.
+        await WaitForConditionAsync(
+            async () => (await GetMessageCountAsync(ConcurrencyQueueName)) == 0,
+            TimeSpan.FromSeconds(10),
+            "All messages should be acked on the queue");
     }
 }
