@@ -9,6 +9,11 @@ public class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposab
     private IConnection? _connection;
     private IChannel? _sendChannel;
 
+    /// <summary>
+    /// Returns <c>true</c> if an AMQP connection is currently open.
+    /// </summary>
+    public bool IsConnected => _connection is { IsOpen: true };
+
     public async Task<IChannel> CreateChannelAsync(bool enablePublisherConfirms, CancellationToken cancellationToken = default)
     {
         var connection = await GetOrCreateConnectionAsync(cancellationToken);

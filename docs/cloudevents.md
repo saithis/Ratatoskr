@@ -15,8 +15,6 @@ When a message is published, Ratatoskr automatically populates these CloudEvents
 | `time` | `Time` | Current UTC timestamp from `TimeProvider` |
 | `datacontenttype` | `DataContentType` | `"application/json"` (default) |
 | `dataschema` | `DataSchema` | Optional URI identifying the data schema |
-| `traceparent` | `TraceParent` | W3C trace context from `Activity.Current` |
-| `tracestate` | `TraceState` | W3C trace state from `Activity.Current` |
 
 ### Data Schema
 
@@ -129,18 +127,18 @@ When using the RabbitMQ transport, the `CloudEventsAmqpMapper` handles encoding 
 
 - Maps outgoing `MessageProperties` to AMQP headers on publish
 - Maps incoming AMQP headers back to `MessageProperties` on consume
-- Propagates W3C trace context through `traceparent` and `tracestate` headers
 
 If an incoming binary message has neither AMQP `message-id` nor a `cloudEvents_id` header, the mapper still assigns a synthetic id (a new GUID) so processing can continue, but it logs a **warning**: CloudEvents requires `id`, and inbox deduplication will not recognize duplicate deliveries of that message. Publishers should always set a stable event id.
 
 ## Trace Context Propagation
 
-Ratatoskr injects W3C trace context into CloudEvents attributes automatically:
+W3C trace context (`traceparent`/`tracestate`) is propagated through messages automatically.
 
-1. **On publish:** `Activity.Current.Id` and `Activity.Current.TraceStateString` are set as `traceparent` and `tracestate`
-2. **On consume:** The trace context is extracted and used to create a child `Activity`, continuing the distributed trace
+For RabbitMQ and CloudEvents, Ratatoskr stores trace context in CloudEvents fields (`cloudEvents_traceparent` / `cloudEvents_tracestate` in binary mode, and CloudEvents extension attributes in structured mode). On consume, Ratatoskr prefers this CloudEvents trace context and falls back to bare AMQP `traceparent`/`tracestate` headers when needed.
 
-This enables end-to-end distributed tracing across services without any manual instrumentation. See [Observability](observability.md) for the complete tracing setup.
+This keeps Ratatoskr publish and consume spans in the same distributed trace even when broker/client instrumentation adds transport-level spans with separate context handling.
+
+This enables end-to-end tracing across services without any manual instrumentation. See [Observability](observability.md) for the complete tracing setup.
 
 ## What's Next
 

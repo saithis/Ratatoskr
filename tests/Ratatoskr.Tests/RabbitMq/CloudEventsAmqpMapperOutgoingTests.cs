@@ -209,9 +209,10 @@ public class CloudEventsAmqpMapperOutgoingTests
     }
 
     [Test]
-    public void MapOutgoing_BinaryMode_TraceContextIncludedInHeaders()
+    public void MapOutgoing_BinaryMode_SetsCloudEventsTraceContextHeaders()
     {
-        // Arrange
+        // Keep Ratatoskr trace continuity via CloudEvents-prefixed headers.
+        // RabbitMQ.Client can independently manage bare traceparent/tracestate.
         var props = new MessageProperties
         {
             Id = "123",
@@ -228,10 +229,40 @@ public class CloudEventsAmqpMapperOutgoingTests
         _mapper.MapOutgoing(body, props, outgoing);
 
         // Assert
-        outgoing.Headers.Should().ContainKey("traceparent");
-        outgoing.Headers["traceparent"].Should().Be("00-traceid-spanid-01");
-        outgoing.Headers.Should().ContainKey("tracestate");
-        outgoing.Headers["tracestate"].Should().Be("vendor=value");
+        outgoing.Headers.Should().NotContainKey("traceparent");
+        outgoing.Headers.Should().NotContainKey("tracestate");
+        outgoing.Headers.Should().ContainKey("cloudEvents_traceparent");
+        outgoing.Headers["cloudEvents_traceparent"].Should().Be("00-traceid-spanid-01");
+        outgoing.Headers.Should().ContainKey("cloudEvents_tracestate");
+        outgoing.Headers["cloudEvents_tracestate"].Should().Be("vendor=value");
+    }
+
+    [Test]
+    public void MapOutgoing_StructuredMode_SetsTraceContextInEnvelopeExtensions()
+    {
+        var structuredMapper = new CloudEventsAmqpMapper(
+            new CloudEventsOptions { ContentMode = CloudEventsContentMode.Structured },
+            NullLogger<CloudEventsAmqpMapper>.Instance);
+        var props = new MessageProperties
+        {
+            Id = "123",
+            Source = "/test",
+            Type = "test.event",
+            Time = DateTimeOffset.UtcNow,
+            TraceParent = "00-struct-traceparent-01",
+            TraceState = "struct=true"
+        };
+        var outgoing = new BasicProperties();
+        var body = Encoding.UTF8.GetBytes("{}");
+
+        var result = structuredMapper.MapOutgoing(body, props, outgoing);
+        var envelope = JsonSerializer.Deserialize<CloudEventEnvelope>(result);
+
+        envelope.Should().NotBeNull();
+        envelope!.TryGetExtension<string>("traceparent", out var traceParent).Should().BeTrue();
+        traceParent.Should().Be("00-struct-traceparent-01");
+        envelope.TryGetExtension<string>("tracestate", out var traceState).Should().BeTrue();
+        traceState.Should().Be("struct=true");
     }
 
     [Test]

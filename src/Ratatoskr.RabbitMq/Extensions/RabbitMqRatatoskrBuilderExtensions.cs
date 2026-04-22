@@ -2,7 +2,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Ratatoskr.AsyncApi.Generation;
 using Ratatoskr.Core;
+using Ratatoskr.Management;
 using Ratatoskr.RabbitMq.AsyncApi;
+using Ratatoskr.RabbitMq.Management;
 
 namespace Ratatoskr.RabbitMq.Extensions;
 
@@ -32,11 +34,17 @@ public static class RabbitMqRatatoskrBuilderExtensions
         builder.Services.TryAddSingleton<MessageDispatcher>();
         builder.Services.TryAddSingleton<MessageRouter>();
         builder.Services.AddSingleton<RabbitMqRetryHandler>();
-        builder.Services.AddHostedService<RabbitMqConsumer>();
+        // Register as singleton so minimal APIs, health checks, and IHostedService share one instance.
+        builder.Services.AddSingleton<RabbitMqConsumer>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<RabbitMqConsumer>());
 
         // AsyncAPI RabbitMQ bindings
         builder.Services.TryAddEnumerable(
             ServiceDescriptor.Singleton<IAsyncApiTransportBindingProvider, RabbitMqAsyncApiBindingProvider>());
+
+        // Management API
+        builder.Services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IRatatoskrEndpointConfigurator, RabbitMqEndpointConfigurator>());
 
         return builder;
     }

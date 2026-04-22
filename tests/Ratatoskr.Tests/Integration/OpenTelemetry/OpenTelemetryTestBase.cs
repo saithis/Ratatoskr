@@ -98,10 +98,11 @@ public abstract class OpenTelemetryTestBase(RabbitMqContainerFixture rabbitMq, P
 
     protected List<Activity> GetRelevantActivities(IEnumerable<Activity> activities, string eventId)
     {
+        // Filter directly by message ID to isolate activities for this test's message.
+        // Trace-based grouping is unreliable when tests run in parallel because a shared
+        // ambient Activity.Current can cause multiple tests to share the same TraceId.
         return activities
-            .GroupBy(a => a.TraceId)
-            .Where(g => g.Any(a => a.TagObjects.Any(t => t.Key == "messaging.message.id" && (string?)t.Value == eventId)))
-            .SelectMany(g => g)
+            .Where(a => a.TagObjects.Any(t => t.Key == "messaging.message.id" && (string?)t.Value == eventId))
             .OrderBy(a => a.StartTimeUtc)
             .ToList();
     }

@@ -1,7 +1,7 @@
 - For every code change, make sure it is covered by tests
 - Prefer integration tests over unit tests
 - Use AwesomeAssertions of assertions
-- Always make sure the documentation in docs/ is in sync
+- Always make sure the documentation in `docs/` is in sync
 - Always use TimeProvider to create instances of DateTime/DateTimeOffset
 
 ## Running tests

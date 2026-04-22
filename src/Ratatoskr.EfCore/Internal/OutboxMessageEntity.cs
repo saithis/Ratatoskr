@@ -4,16 +4,9 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr.EfCore.Internal;
 
-internal class OutboxMessageEntity
+internal class OutboxMessageEntity : BaseMessageEntity
 {
     public Guid Id { get; private set; }
-    
-    public required byte[] Content { get; init; }
-
-    /// <summary>
-    /// JSON serialized properties
-    /// </summary>
-    public required string SerializedProperties { get; init; }
     
     public required DateTimeOffset CreatedAt { get; init; }
     
@@ -43,22 +36,15 @@ internal class OutboxMessageEntity
     public DateTimeOffset? ProcessingStartedAt { get; private set; }
 
     /// <summary>
-    /// The transport this outbox entry targets (e.g. "rabbitmq", "efcore").
-    /// </summary>
-    [MaxLength(50)]
-    public string TransportName { get; private set; } = string.Empty;
-
-    /// <summary>
     /// Optimistic concurrency token. Incremented on every state mutation to prevent
     /// two concurrent processors from processing the same message.
     /// </summary>
     public uint Version { get; private set; }
 
-    private MessageProperties? _cachedProperties;
-
-    public MessageProperties GetProperties() =>
-        _cachedProperties ??= JsonSerializer.Deserialize<MessageProperties>(SerializedProperties)
-        ?? throw new OutboxMessageSerializationException("Could not deserialize the message properties.", SerializedProperties);
+    /// <summary>
+    /// Counts how many times this message has been requeued via the management API.
+    /// </summary>
+    public int RequeuedCount { get; private set; }
 
     private OutboxMessageEntity(){}
     public static OutboxMessageEntity Create(byte[] message, MessageProperties props, TimeProvider timeProvider, string transportName)
@@ -108,6 +94,21 @@ internal class OutboxMessageEntity
         }
     }
     
+    /// <summary>
+    /// Clears the poisoned state so the outbox processor will retry the message.
+    /// Increments <see cref="RequeuedCount"/> and resets the error counters.
+    /// </summary>
+    public void Requeue()
+    {
+        IsPoisoned = false;
+        ErrorCount = 0;
+        Error = string.Empty;
+        NextAttemptAt = null;
+        ProcessingStartedAt = null;
+        RequeuedCount++;
+        Version++;
+    }
+
     public void MarkAsPoisoned(string reason, TimeProvider timeProvider)
     {
         IsPoisoned = true;
