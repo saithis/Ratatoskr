@@ -11,6 +11,7 @@
     <Project Path="tests/Ratatoskr.TestHost/Ratatoskr.TestHost.csproj" />
     <Project Path="tests\Ratatoskr.Tests\Ratatoskr.Tests.csproj" />
   </Folder>
+  <Project Path="src/Ratatoskr.RabbitMq.WolverineMigration/Ratatoskr.RabbitMq.WolverineMigration.csproj" />
   <Project Path="src\Ratatoskr.EfCore\Ratatoskr.EfCore.csproj" />
   <Project Path="src\Ratatoskr.RabbitMq\Ratatoskr.RabbitMq.csproj" />
   <Project Path="src\Ratatoskr.Testing\Ratatoskr.Testing.csproj" />

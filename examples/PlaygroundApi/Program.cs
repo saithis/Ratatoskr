@@ -71,7 +71,10 @@ if (!string.IsNullOrEmpty(dbConnectionString))
     // This bypasses Aspire's AddNpgsqlDbContext but still uses the connection string from Aspire
     builder.Services.AddDbContext<NotesDbContext>((sp, options) =>
     {
-        options.UseNpgsql(dbConnectionString);
+        options.UseNpgsql(dbConnectionString, npgsqlOptions =>
+        {
+            npgsqlOptions.EnableRetryOnFailure();
+        });
         options.RegisterOutbox<NotesDbContext>(sp);
     });
 }

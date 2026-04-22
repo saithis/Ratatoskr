@@ -31,5 +31,6 @@
     
     <ItemGroup>
         <InternalsVisibleTo Include="Ratatoskr.Tests" />
+        <InternalsVisibleTo Include="Ratatoskr.RabbitMq.WolverineMigration" />
     </ItemGroup>
 </Project>
