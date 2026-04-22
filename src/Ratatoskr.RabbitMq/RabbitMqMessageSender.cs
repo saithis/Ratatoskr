@@ -63,9 +63,6 @@ internal class RabbitMqMessageSender(
         finally
         {
             _publishLock.Release();
-        }
-        finally
-        {
             telemetry.RecordSent(startTimestamp, publishException, destination, routingKey);
 
             await _observers.NotifyAsync(new MessageActivity
