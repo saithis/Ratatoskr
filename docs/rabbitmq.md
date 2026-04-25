@@ -125,6 +125,7 @@ Set `WithManaged(false)` if you manage retry topology externally (e.g., via Terr
 |--------|---------|-------------|
 | `QueueName` | (required) | Name of the queue to consume from |
 | `PrefetchCount` | `10` | Maximum unacknowledged messages per consumer |
+| `ConcurrencyLimit` | `1` | Maximum number of handlers running in parallel for a consumer |
 | `AutoAck` | `false` | Whether the broker auto-acknowledges on delivery |
 | `QueueDurable` | `true` | Whether the queue survives broker restarts |
 | `QueueExclusive` | `false` | Whether the queue is exclusive to this connection |
@@ -135,8 +136,11 @@ Set `WithManaged(false)` if you manage retry topology externally (e.g., via Terr
 .WithRabbitMq(r => r
     .WithQueueName("orders.handler")
     .WithPrefetch(50)
+    .WithConcurrencyLimit(10)
     .WithDurableQueue())
 ```
+
+`ConcurrencyLimit` must be less than or equal to `PrefetchCount` (unless `PrefetchCount` is `0`, which means unlimited prefetch in RabbitMQ).
 
 ## Health Checks
 

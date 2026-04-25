@@ -102,7 +102,14 @@ public class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposab
             throw new InvalidOperationException(
                 "RabbitMQ connection string is not configured. Set RabbitMqOptions.ConnectionString.");
 
-        return new ConnectionFactory { Uri = options.ConnectionString };
+        return new ConnectionFactory
+        {
+            Uri = options.ConnectionString,
+            AutomaticRecoveryEnabled = true,
+            TopologyRecoveryEnabled = true,
+            NetworkRecoveryInterval = TimeSpan.FromSeconds(5),
+            ClientProvidedName = "Ratatoskr",
+        };
     }
 
     public async ValueTask DisposeAsync()

@@ -18,6 +18,7 @@ internal class RabbitMqMessageSender(
     : IMessageSender, IAsyncDisposable
 {
     private readonly IMessageActivityObserver[] _observers = observers.ToArray();
+    private readonly SemaphoreSlim _publishLock = new(1, 1);
 
     public string TransportName => RabbitMqConstants.TransportName;
 
@@ -42,6 +43,7 @@ internal class RabbitMqMessageSender(
         var startTimestamp = Stopwatch.GetTimestamp();
         Exception? publishException = null;
 
+        await _publishLock.WaitAsync(cancellationToken);
         try
         {
             await channel.BasicPublishAsync(
@@ -60,6 +62,7 @@ internal class RabbitMqMessageSender(
         }
         finally
         {
+            _publishLock.Release();
             telemetry.RecordSent(startTimestamp, publishException, destination, routingKey);
 
             await _observers.NotifyAsync(new MessageActivity
@@ -77,6 +80,7 @@ internal class RabbitMqMessageSender(
 
     public async ValueTask DisposeAsync()
     {
+        _publishLock.Dispose();
         await connectionManager.DisposeAsync();
     }
 }
