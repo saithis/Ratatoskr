@@ -323,7 +323,13 @@ public class RabbitMqConsumerShutdownTests(
         var body = "{}"u8.ToArray();
 
         var tasks = Enumerable.Range(0, messageCount)
-            .Select(_ => sender.SendAsync(body, new MessageProperties().SetRoutingKey(PublishStressQueueName), CancellationToken.None));
+            .Select(_ => sender.SendAsync(body, new MessageProperties
+            {
+                Id = Guid.NewGuid().ToString(),
+                Type = "test.event",
+                Source = "/test",
+                Time =  DateTimeOffset.UtcNow,
+            }.SetRoutingKey(PublishStressQueueName), CancellationToken.None));
 
         await Task.WhenAll(tasks);
 

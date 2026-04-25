@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Linq;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
@@ -10,7 +9,7 @@ using Ratatoskr.RabbitMq.Extensions;
 
 namespace Ratatoskr.RabbitMq;
 
-internal class RabbitMqConsumer(
+internal sealed class RabbitMqConsumer(
     RabbitMqConnectionManager connectionManager,
     ChannelRegistry registry,
     RabbitMqTopologyManager topologyManager,
@@ -31,7 +30,7 @@ internal class RabbitMqConsumer(
     /// <summary>
     /// Gets whether the consumer is healthy (all channels are open).
     /// </summary>
-    public virtual bool IsHealthy
+    public bool IsHealthy
     {
         get
         {
@@ -56,7 +55,7 @@ internal class RabbitMqConsumer(
 
             ValidateChannelConcurrency(reg.ChannelName, channelOptions);
 
-            if (channelOptions.AutoAck && channelOptions.ConcurrencyLimit > 1)
+            if (channelOptions is { AutoAck: true, ConcurrencyLimit: > 1 })
                 logger.LogWarning(
                     "Channel '{Channel}': AutoAck=true disables broker-side prefetch limiting; with " +
                     "ConcurrencyLimit={Limit} messages may accumulate faster than handlers process them.",
@@ -100,9 +99,8 @@ internal class RabbitMqConsumer(
             };
 
             var consumer = new AsyncEventingBasicConsumer(channel);
-            consumer.ReceivedAsync += async (_, ea) =>
+            consumer.ReceivedAsync += async (notNeededParam, ea) =>
             {
-                var delivery = CloneDelivery(ea);
                 Interlocked.Increment(ref _inFlightHandlers);
                 try
                 {
@@ -113,15 +111,29 @@ internal class RabbitMqConsumer(
                     Interlocked.Decrement(ref _inFlightHandlers);
                     return;
                 }
-                _ = DispatchAfterGateAsync(
-                    channel,
-                    delivery,
-                    channelOptions,
-                    channelOptions.QueueName!,
-                    reg.ChannelName,
-                    concurrencyGate,
-                    ackLock,
-                    stoppingToken);
+                _ = DispatchAfterGateAsync();
+                return;
+
+                async Task DispatchAfterGateAsync()
+                {
+                    try
+                    {
+                        await HandleMessageCoreAsync(channel, ea, channelOptions, channelOptions.QueueName, reg.ChannelName, ackLock, stoppingToken);
+                    }
+                    catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                    {
+                        // Service stopping; unacked messages will be re-delivered by RabbitMQ.
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Unhandled exception dispatching message on channel '{Channel}'", reg.ChannelName);
+                    }
+                    finally
+                    {
+                        concurrencyGate.Release();
+                        Interlocked.Decrement(ref _inFlightHandlers);
+                    }
+                }
             };
 
             logger.LogInformation("Starting consuming from queue '{Queue}' for channel '{Channel}'", channelOptions.QueueName, reg.ChannelName);
@@ -222,47 +234,6 @@ internal class RabbitMqConsumer(
             {
                 logger.LogDebug(ex, "Error cleaning up RabbitMQ channel during shutdown");
             }
-        }
-    }
-
-    private static BasicDeliverEventArgs CloneDelivery(BasicDeliverEventArgs ea)
-    {
-        return new BasicDeliverEventArgs(
-            ea.ConsumerTag,
-            ea.DeliveryTag,
-            ea.Redelivered,
-            ea.Exchange,
-            ea.RoutingKey,
-            ea.BasicProperties,
-            ea.Body.ToArray());
-    }
-
-    private async Task DispatchAfterGateAsync(
-        IChannel channel,
-        BasicDeliverEventArgs ea,
-        RabbitMqChannelOptions channelOptions,
-        string queueName,
-        string channelName,
-        SemaphoreSlim concurrencyGate,
-        SemaphoreSlim ackLock,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await HandleMessageCoreAsync(channel, ea, channelOptions, queueName, channelName, ackLock, cancellationToken);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            // Service stopping; unacked messages will be re-delivered by RabbitMQ.
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Unhandled exception dispatching message on channel '{Channel}'", channelName);
-        }
-        finally
-        {
-            concurrencyGate.Release();
-            Interlocked.Decrement(ref _inFlightHandlers);
         }
     }
 
