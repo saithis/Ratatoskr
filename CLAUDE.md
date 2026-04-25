@@ -1,6 +1,17 @@
+## Approach
+
+- Read existing files before writing. Don't re-read unless changed.
+- Thorough in reasoning, concise in output.
+- Skip files over 100KB unless required.
+- No sycophantic openers or closing fluff.
+- No emojis or em-dashes.
+- Do not guess APIs, versions, flags, commit SHAs, or package names. Verify by reading code or docs before asserting.
+
+## General rules
+
 - For every code change, make sure it is covered by tests
 - Prefer integration tests over unit tests
-- Use AwesomeAssertions of assertions
+- Use AwesomeAssertions for assertions
 - Always make sure the documentation in `docs/` is in sync
 - Always use TimeProvider to create instances of DateTime/DateTimeOffset
 
