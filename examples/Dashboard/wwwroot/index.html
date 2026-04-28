@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ratatoskr Playground</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 2rem; }
+    h1 { font-size: 1.5rem; font-weight: 700; color: #f8fafc; margin-bottom: 0.25rem; }
+    h2 { font-size: 1rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; }
+    p.subtitle { color: #64748b; margin-bottom: 2rem; font-size: 0.9rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+    .panel { background: #1e293b; border: 1px solid #334155; border-radius: 0.75rem; padding: 1.5rem; }
+    .panel--stale { opacity: 0.6; border-color: #475569; }
+    .panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+    .count { font-size: 2rem; font-weight: 700; color: #f1f5f9; }
+    .count-label { font-size: 0.75rem; color: #64748b; margin-top: 0.125rem; }
+    .stale-badge { display: inline-block; background: #7c3aed; color: #fff; border-radius: 9999px; padding: 0.1rem 0.5rem; font-size: 0.7rem; font-weight: 600; margin-left: 0.5rem; }
+    .error-msg { color: #f87171; font-size: 0.8rem; margin-top: 0.5rem; min-height: 1.25rem; }
+    .btn { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.5rem 1rem; border-radius: 0.5rem; font-size: 0.875rem; font-weight: 500; cursor: pointer; border: none; transition: background 0.15s; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary { background: #3b82f6; color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #2563eb; }
+    .btn-danger { background: #ef4444; color: #fff; }
+    .btn-danger:hover:not(:disabled) { background: #dc2626; }
+    .btn-armed { background: #f59e0b !important; color: #000 !important; }
+    .btn-outline { background: transparent; color: #94a3b8; border: 1px solid #475569; }
+    .btn-outline:hover:not(:disabled) { background: #1e293b; color: #e2e8f0; }
+    .btn-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+    .section-title { font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem; }
+    .item-list { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem; max-height: 200px; overflow-y: auto; }
+    .item { background: #0f172a; border: 1px solid #334155; border-radius: 0.5rem; padding: 0.625rem 0.75rem; font-size: 0.8rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem; }
+    .item-info { overflow: hidden; }
+    .item-type { color: #a78bfa; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .item-meta { color: #475569; font-size: 0.72rem; margin-top: 0.125rem; }
+    .steps { background: #1e293b; border: 1px solid #334155; border-radius: 0.75rem; padding: 1.5rem; margin-bottom: 2rem; }
+    .steps ol { padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.5rem; }
+    .steps li { color: #94a3b8; font-size: 0.875rem; }
+    .steps li strong { color: #e2e8f0; }
+    .failure-mode-on { color: #f87171; font-weight: 700; }
+    .failure-mode-off { color: #4ade80; font-weight: 700; }
+    #loading { color: #64748b; text-align: center; padding: 4rem 0; }
+  </style>
+</head>
+<body>
+  <h1>Ratatoskr Playground</h1>
+  <p class="subtitle">E-commerce demo — trigger order flows, observe outbox/inbox state, and test failure recovery.</p>
+
+  <div id="loading">Loading service configuration…</div>
+
+  <div id="app" hidden>
+
+    <div class="steps">
+      <h2>Failure Mode Demo</h2>
+      <ol>
+        <li><strong>Step 1:</strong> Click <em>Toggle Failure Mode</em> to enable it.</li>
+        <li><strong>Step 2:</strong> Click <em>Place Order (Outbox)</em> below.</li>
+        <li><strong>Step 3:</strong> Wait ~15 s for retries to exhaust (3 × 5 s).</li>
+        <li><strong>Step 4:</strong> Click <em>Toggle Failure Mode</em> again to disable it.</li>
+        <li><strong>Step 5:</strong> Click <em>Requeue</em> on the poisoned message — the Requeue button is disabled while failure mode is ON.</li>
+      </ol>
+    </div>
+
+    <div class="grid">
+
+      <!-- OrderService Actions -->
+      <section class="panel" aria-labelledby="order-actions-heading">
+        <h2 id="order-actions-heading">OrderService Actions</h2>
+        <div class="btn-row">
+          <button id="btn-place-outbox" class="btn btn-primary">Place Order (Outbox)</button>
+          <button id="btn-place-direct" class="btn btn-outline">Place Order (Direct)</button>
+          <button id="btn-replay" class="btn btn-outline" disabled title="Place an order first">Send Replay</button>
+        </div>
+        <div id="order-actions-error" class="error-msg"></div>
+        <div id="last-order-info" style="margin-top:0.75rem;font-size:0.8rem;color:#64748b;"></div>
+      </section>
+
+      <!-- InventoryService Failure Mode -->
+      <section class="panel" aria-labelledby="failure-mode-heading">
+        <h2 id="failure-mode-heading">InventoryService Failure Mode</h2>
+        <div style="margin-bottom:0.75rem;">
+          Status: <span id="failure-mode-status" class="failure-mode-off">OFF</span>
+        </div>
+        <div class="btn-row">
+          <button id="btn-toggle-failure" class="btn btn-danger">Toggle Failure Mode</button>
+        </div>
+        <div id="failure-mode-error" class="error-msg"></div>
+      </section>
+
+      <!-- OrderService Outbox Poisoned -->
+      <section class="panel" id="panel-order-outbox" aria-labelledby="order-outbox-heading">
+        <div class="panel-header">
+          <div>
+            <h2 id="order-outbox-heading">OrderService Outbox <span class="stale-badge" id="badge-order-outbox" hidden>stale</span></h2>
+            <div aria-live="polite" aria-atomic="true">
+              <div class="count" id="count-order-outbox">–</div>
+              <div class="count-label">poisoned messages</div>
+            </div>
+          </div>
+        </div>
+        <div id="error-order-outbox" class="error-msg" role="alert"></div>
+        <ul id="list-order-outbox" class="item-list"></ul>
+      </section>
+
+      <!-- OrderService Inbox Poisoned -->
+      <section class="panel" id="panel-order-inbox" aria-labelledby="order-inbox-heading">
+        <div class="panel-header">
+          <div>
+            <h2 id="order-inbox-heading">OrderService Inbox <span class="stale-badge" id="badge-order-inbox" hidden>stale</span></h2>
+            <div aria-live="polite" aria-atomic="true">
+              <div class="count" id="count-order-inbox">–</div>
+              <div class="count-label">poisoned handlers</div>
+            </div>
+          </div>
+        </div>
+        <div id="error-order-inbox" class="error-msg" role="alert"></div>
+        <ul id="list-order-inbox" class="item-list"></ul>
+      </section>
+
+      <!-- InventoryService Inbox Poisoned -->
+      <section class="panel" id="panel-inventory-inbox" aria-labelledby="inventory-inbox-heading">
+        <div class="panel-header">
+          <div>
+            <h2 id="inventory-inbox-heading">InventoryService Inbox <span class="stale-badge" id="badge-inventory-inbox" hidden>stale</span></h2>
+            <div aria-live="polite" aria-atomic="true">
+              <div class="count" id="count-inventory-inbox">–</div>
+              <div class="count-label">poisoned handlers</div>
+            </div>
+          </div>
+        </div>
+        <div id="error-inventory-inbox" class="error-msg" role="alert"></div>
+        <ul id="list-inventory-inbox" class="item-list"></ul>
+      </section>
+
+    </div>
+  </div>
+
+  <script type="module">
+    // --- State ---
+    const state = {
+      services: null,
+      lastOrderId: null,
+      failureModeEnabled: false,
+      requeueingIds: new Set(),
+      panels: {
+        'order-outbox':    { totalCount: null, items: [], error: null, stale: false },
+        'order-inbox':     { totalCount: null, items: [], error: null, stale: false },
+        'inventory-inbox': { totalCount: null, items: [], error: null, stale: false },
+      },
+    };
+
+    // --- Bootstrap ---
+    async function init() {
+      try {
+        const cfg = await fetch('/api/config').then(r => r.json());
+        state.services = cfg;
+        document.getElementById('loading').hidden = true;
+        document.getElementById('app').hidden = false;
+
+        await refreshFailureMode();
+        bindActions();
+        startPollers();
+      } catch (e) {
+        document.getElementById('loading').textContent = `Failed to load config: ${e.message}`;
+      }
+    }
+
+    // --- Polling: recursive setTimeout so each tick waits for the previous to finish ---
+    function startPollers() {
+      const { orderServiceUrl, orderManagementPath, inventoryServiceUrl, inventoryManagementPath } = state.services;
+      startPoller('order-outbox',    `${orderServiceUrl}/${orderManagementPath}/outbox/poisoned`);
+      startPoller('order-inbox',     `${orderServiceUrl}/${orderManagementPath}/inbox/poisoned`);
+      startPoller('inventory-inbox', `${inventoryServiceUrl}/${inventoryManagementPath}/inbox/poisoned`);
+    }
+
+    function startPoller(key, url) {
+      (async function tick() {
+        await fetchPanel(key, url);
+        setTimeout(tick, 3000);
+      })();
+    }
+
+    async function fetchPanel(key, url) {
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        state.panels[key] = { totalCount: data.totalCount, items: data.items ?? [], error: null, stale: false };
+      } catch (err) {
+        state.panels[key] = { ...state.panels[key], error: err.message, stale: true };
+      }
+      renderPanel(key);
+    }
+
+    function renderPanel(key) {
+      const s = state.panels[key];
+      const countEl = document.getElementById(`count-${key}`);
+      const errorEl = document.getElementById(`error-${key}`);
+      const badgeEl = document.getElementById(`badge-${key}`);
+      const listEl  = document.getElementById(`list-${key}`);
+      const panelEl = document.getElementById(`panel-${key}`);
+
+      countEl.textContent = s.totalCount !== null ? s.totalCount : '–';
+      errorEl.textContent = s.error ?? '';
+      badgeEl.hidden = !s.stale;
+      panelEl.classList.toggle('panel--stale', s.stale);
+
+      const visible = s.items.filter(m => !state.requeueingIds.has(m.handlerStatusId ?? m.id));
+      listEl.innerHTML = '';
+
+      for (const item of visible) {
+        const li = document.createElement('li');
+        li.className = 'item';
+        const id = item.handlerStatusId ?? item.id;
+        const type = item.messageType ?? item.type ?? '(unknown)';
+        const errors = item.errorCount ?? 0;
+        li.innerHTML = `
+          <div class="item-info">
+            <div class="item-type" title="${type}">${type}</div>
+            <div class="item-meta">errors: ${errors}${item.handlerKey ? ` · key: ${item.handlerKey}` : ''}</div>
+          </div>`;
+
+        if (key === 'inventory-inbox') {
+          const btn = document.createElement('button');
+          btn.className = 'btn btn-outline';
+          btn.style.fontSize = '0.75rem';
+          btn.style.padding = '0.25rem 0.625rem';
+          btn.textContent = 'Requeue';
+          btn.disabled = state.failureModeEnabled;
+          btn.title = state.failureModeEnabled
+            ? 'Disable failure mode before requeuing — otherwise the handler will fail again'
+            : '';
+          makeArmedButton(btn, () => requeueHandler(id));
+          li.appendChild(btn);
+        }
+
+        listEl.appendChild(li);
+      }
+    }
+
+    // --- Requeue ---
+    async function requeueHandler(id) {
+      if (state.requeueingIds.has(id)) return;
+      state.requeueingIds.add(id);
+      renderPanel('inventory-inbox');
+      try {
+        const { inventoryServiceUrl, inventoryManagementPath } = state.services;
+        const res = await fetch(
+          `${inventoryServiceUrl}/${inventoryManagementPath}/inbox/${id}/requeue`,
+          { method: 'POST', signal: AbortSignal.timeout(5000) }
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      } catch (e) {
+        document.getElementById('error-inventory-inbox').textContent = `Requeue failed: ${e.message}`;
+      } finally {
+        state.requeueingIds.delete(id);
+        renderPanel('inventory-inbox');
+      }
+    }
+
+    // --- Failure mode ---
+    async function refreshFailureMode() {
+      try {
+        const res = await fetch(`${state.services.inventoryServiceUrl}/api/inventory/failure-mode`,
+          { signal: AbortSignal.timeout(5000) });
+        if (res.ok) {
+          const data = await res.json();
+          setFailureMode(data.enabled);
+        }
+      } catch { /* ignore, service may not be up yet */ }
+    }
+
+    function setFailureMode(enabled) {
+      state.failureModeEnabled = enabled;
+      const el = document.getElementById('failure-mode-status');
+      el.textContent = enabled ? 'ON' : 'OFF';
+      el.className = enabled ? 'failure-mode-on' : 'failure-mode-off';
+      renderPanel('inventory-inbox');
+    }
+
+    // --- Actions ---
+    function bindActions() {
+      const btnToggle  = document.getElementById('btn-toggle-failure');
+      const btnOutbox  = document.getElementById('btn-place-outbox');
+      const btnDirect  = document.getElementById('btn-place-direct');
+      const btnReplay  = document.getElementById('btn-replay');
+
+      makeArmedButton(btnToggle, async () => {
+        try {
+          document.getElementById('failure-mode-error').textContent = '';
+          const res = await fetch(
+            `${state.services.inventoryServiceUrl}/api/inventory/failure-mode`,
+            { method: 'POST', signal: AbortSignal.timeout(5000) }
+          );
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          setFailureMode(data.enabled);
+        } catch (e) {
+          document.getElementById('failure-mode-error').textContent = e.message;
+        }
+      });
+
+      btnOutbox.addEventListener('click', async () => {
+        try {
+          document.getElementById('order-actions-error').textContent = '';
+          const res = await fetch(`${state.services.orderServiceUrl}/api/orders`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+              signal: AbortSignal.timeout(5000) });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          state.lastOrderId = data.id;
+          document.getElementById('last-order-info').textContent = `Last order: ${data.id} (${data.status})`;
+          btnReplay.disabled = false;
+          btnReplay.title = '';
+        } catch (e) {
+          document.getElementById('order-actions-error').textContent = e.message;
+        }
+      });
+
+      btnDirect.addEventListener('click', async () => {
+        try {
+          document.getElementById('order-actions-error').textContent = '';
+          const res = await fetch(`${state.services.orderServiceUrl}/api/orders/direct`,
+            { method: 'POST', signal: AbortSignal.timeout(5000) });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          document.getElementById('last-order-info').textContent = `Direct publish: ${data.orderId} (no outbox row)`;
+        } catch (e) {
+          document.getElementById('order-actions-error').textContent = e.message;
+        }
+      });
+
+      btnReplay.addEventListener('click', async () => {
+        if (!state.lastOrderId) return;
+        try {
+          document.getElementById('order-actions-error').textContent = '';
+          const res = await fetch(`${state.services.orderServiceUrl}/api/orders/${state.lastOrderId}/replay`,
+            { method: 'POST', signal: AbortSignal.timeout(5000) });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          document.getElementById('last-order-info').textContent += ' · replayed';
+        } catch (e) {
+          document.getElementById('order-actions-error').textContent = e.message;
+        }
+      });
+    }
+
+    // --- Armed button (two-step confirm) ---
+    function makeArmedButton(btn, action) {
+      let armed = false, resetTimer;
+      const origLabel = btn.textContent;
+
+      btn.addEventListener('click', () => {
+        if (!armed) {
+          armed = true;
+          btn.dataset.origLabel = btn.textContent;
+          btn.textContent = 'Click again to confirm';
+          btn.classList.add('btn--armed');
+          resetTimer = setTimeout(() => {
+            armed = false;
+            btn.textContent = btn.dataset.origLabel ?? origLabel;
+            btn.classList.remove('btn--armed');
+          }, 3000);
+        } else {
+          clearTimeout(resetTimer);
+          armed = false;
+          btn.textContent = btn.dataset.origLabel ?? origLabel;
+          btn.classList.remove('btn--armed');
+          action();
+        }
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>

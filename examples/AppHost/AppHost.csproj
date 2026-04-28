@@ -16,7 +16,10 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\PlaygroundApi\PlaygroundApi.csproj" />
+        <ProjectReference Include="..\OrderService\OrderService.csproj" />
+        <ProjectReference Include="..\InventoryService\InventoryService.csproj" />
+        <ProjectReference Include="..\NotificationService\NotificationService.csproj" />
+        <ProjectReference Include="..\Dashboard\Dashboard.csproj" />
     </ItemGroup>
 
 </Project>

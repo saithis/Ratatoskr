@@ -26,19 +26,19 @@ dotnet run
 ```
 
 This will start:
-- PostgreSQL database
+- PostgreSQL databases (ordersdb, inventorydb)
 - RabbitMQ message broker
-- PlaygroundApi example application
+- OrderService, InventoryService, NotificationService, Dashboard
 - Aspire Dashboard at http://localhost:15000
 
-See [examples/AppHost/README.md](examples/AppHost/README.md) for more details.
+See [examples/README.md](examples/README.md) for the full demo guide.
 
 ## Project Structure
 
 - `src/Ratatoskr` - Core library
-- `src/Ratatoskr.EfCore` - Entity Framework Core outbox pattern implementation
+- `src/Ratatoskr.EfCore` - Entity Framework Core outbox/inbox implementation
 - `src/Ratatoskr.RabbitMq` - RabbitMQ transport
-- `examples/PlaygroundApi` - Example API application
+- `examples/` - E-commerce playground (OrderService, InventoryService, NotificationService, Dashboard)
 - `examples/AppHost` - .NET Aspire orchestration
 - `tests/Ratatoskr.Tests` - Integration and unit tests
 
