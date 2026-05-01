@@ -1,7 +1,7 @@
 ---
 title: "feat: Expand examples with multi-service e-commerce playground"
 type: feat
-status: active
+status: completed
 date: 2026-04-25
 origin: docs/brainstorms/2026-04-25-expanded-examples-brainstorm.md
 ---
