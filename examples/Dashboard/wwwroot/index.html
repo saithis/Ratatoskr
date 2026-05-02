@@ -247,7 +247,7 @@
       try {
         const { inventoryServiceUrl, inventoryManagementPath } = state.services;
         const res = await fetch(
-          `${inventoryServiceUrl}/${inventoryManagementPath}/inbox/${id}/requeue`,
+          `${inventoryServiceUrl}/${inventoryManagementPath}/inbox/poisoned/${id}/requeue`,
           { method: 'POST', signal: AbortSignal.timeout(5000) }
         );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);

@@ -56,7 +56,8 @@ public static class PublicApiExtensions
             builder.Services.AddSingleton<IEfCoreManagementDbContextDescriptor,
                 EfCoreManagementDbContextDescriptor<TDbContext>>();
             builder.Services.TryAddScoped<EfCoreManagementDbContextLookup>();
-            builder.Services.TryAddSingleton<IRatatoskrEndpointConfigurator, EfCoreEndpointConfigurator>();
+            builder.Services.TryAddEnumerable(
+                ServiceDescriptor.Singleton<IRatatoskrEndpointConfigurator, EfCoreEndpointConfigurator>());
 
             return builder;
         }
