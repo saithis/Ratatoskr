@@ -15,10 +15,10 @@ const string mgmtBase = "ratatoskr/api/v1/efcore/contexts";
 
 app.MapGet("/api/config", (IConfiguration config) =>
 {
-    var orderServiceUrl = config["OrderService__ManagementUrl"]
-        ?? throw new InvalidOperationException("OrderService__ManagementUrl is not configured.");
-    var inventoryServiceUrl = config["InventoryService__ManagementUrl"]
-        ?? throw new InvalidOperationException("InventoryService__ManagementUrl is not configured.");
+    var orderServiceUrl = config["OrderService:ManagementUrl"]
+        ?? throw new InvalidOperationException("OrderService:ManagementUrl is not configured.");
+    var inventoryServiceUrl = config["InventoryService:ManagementUrl"]
+        ?? throw new InvalidOperationException("InventoryService:ManagementUrl is not configured.");
 
     return TypedResults.Ok(new
     {

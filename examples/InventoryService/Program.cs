@@ -74,7 +74,6 @@ var app = builder.Build();
 app.MapDefaultEndpoints();
 
 app.UseCors("LocalDashboard");
-app.UseAuthentication();
 app.UseAuthorization();
 app.MapRatatoskrManagementApi("DevOnlyNoAuth");
 
