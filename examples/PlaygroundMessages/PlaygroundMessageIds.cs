@@ -13,6 +13,8 @@ public static class PlaygroundMessageIds
 
     public static string OrderFailed(Guid orderId) => $"order-{orderId:D}-failed";
 
+    public static string ReserveStockInternal(Guid orderId) => $"order-{orderId:D}-reserve";
+
     /// <summary>
     /// Parses <c>order-&lt;guid&gt;-&lt;suffix&gt;</c> message ids used by this playground.
     /// </summary>

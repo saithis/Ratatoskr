@@ -9,7 +9,7 @@ public class OrderFulfilledNotificationHandler(
 {
     public Task HandleAsync(OrderFulfilled message, MessageProperties properties, CancellationToken cancellationToken)
     {
-        if (playground.OrderFulfilledHandlerFails)
+        if (playground.TryConsumeOrderFulfilledNotifyFailure())
         {
             logger.LogWarning("[Notification] OrderFulfilled fail toggle ON — throwing for Rabbit retry/DLQ, order {OrderId}", message.OrderId);
             throw new InvalidOperationException("Simulated OrderFulfilled notification failure (playground toggle).");

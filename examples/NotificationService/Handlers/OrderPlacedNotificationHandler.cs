@@ -9,7 +9,7 @@ public class OrderPlacedNotificationHandler(
 {
     public Task HandleAsync(OrderPlaced message, MessageProperties properties, CancellationToken cancellationToken)
     {
-        if (playground.OrderPlacedHandlerFails)
+        if (playground.TryConsumeOrderPlacedNotifyFailure())
         {
             logger.LogWarning("[Notification] OrderPlaced fail toggle ON — throwing for Rabbit retry/DLQ, order {OrderId}", message.OrderId);
             throw new InvalidOperationException("Simulated OrderPlaced notification failure (playground toggle).");

@@ -75,6 +75,7 @@ public sealed class PlaygroundActivityRecorder : IMessageActivityObserver
             ProcessOrderCommand c => c.OrderId,
             OrderFulfilled f => f.OrderId,
             OrderFailed x => x.OrderId,
+            ReserveStockInternal r => r.OrderId,
             _ => null,
         };
 }

@@ -16,7 +16,7 @@ public class OrderFailedHandler(
 {
     public async Task HandleAsync(OrderFailed message, MessageProperties properties, CancellationToken cancellationToken)
     {
-        if (playground.OrderFailedHandlerFails)
+        if (playground.TryConsumeOrderFailedFailure())
             throw new InvalidOperationException("Simulated OrderFailed inbox failure (playground toggle).");
 
         var order = await db.Orders.FirstOrDefaultAsync(o => o.Id == Guid.Parse(message.OrderId), cancellationToken);

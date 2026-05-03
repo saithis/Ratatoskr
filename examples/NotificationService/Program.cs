@@ -42,8 +42,10 @@ builder.Services.AddRatatoskr(bus =>
             .WithTopicExchange()
             .WithQueueName("ecommerce.events.notifications")
             .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-        .Consumes<OrderPlaced>(m => m.WithHandler<OrderPlacedNotificationHandler>(HandlerKeys.NotifyOrderPlaced))
-        .Consumes<OrderFulfilled>(m => m.WithHandler<OrderFulfilledNotificationHandler>(HandlerKeys.NotifyOrderFulfilled)));
+        .Consumes<OrderPlaced>(m => m
+            .WithHandler<OrderPlacedNotificationHandler>()
+            .WithHandler<OrderPlacedAnalyticsHandler>())
+        .Consumes<OrderFulfilled>(m => m.WithHandler<OrderFulfilledNotificationHandler>()));
 });
 
 var app = builder.Build();
@@ -63,7 +65,11 @@ playground.MapGet("/activities", ([FromServices] PlaygroundActivityRecorder reco
 });
 
 playground.MapGet("/control-state", ([FromServices] NotificationPlaygroundState state) =>
-    TypedResults.Ok(new
+{
+    var (placedNotifyMode, placedNotifyRem) = state.GetOrderPlacedNotifyApi();
+    var (placedAnalyticsMode, placedAnalyticsRem) = state.GetOrderPlacedAnalyticsApi();
+    var (fulfilledMode, fulfilledRem) = state.GetOrderFulfilledNotifyApi();
+    return TypedResults.Ok(new
     {
         service = "notificationservice",
         toggles = new object[]
@@ -71,29 +77,64 @@ playground.MapGet("/control-state", ([FromServices] NotificationPlaygroundState 
             new
             {
                 key = "consume-orderplaced-rabbit",
-                label = "Consume OrderPlaced (Rabbit, no inbox)",
-                kind = "rabbitInlineHandlerFail",
-                mode = state.OrderPlacedHandlerFails ? "fail" : "succeed",
+                label = "Consume OrderPlaced — notify (Rabbit, no inbox)",
+                kind = "rabbitInlineHandlerOutcome",
+                mode = placedNotifyMode,
+                failuresRemaining = placedNotifyRem,
+            },
+            new
+            {
+                key = "consume-orderplaced-analytics-rabbit",
+                label = "Consume OrderPlaced — analytics (same queue, fan-out)",
+                kind = "rabbitInlineHandlerOutcome",
+                mode = placedAnalyticsMode,
+                failuresRemaining = placedAnalyticsRem,
+                hint = "Both handlers run per delivery; if one throws, the whole message is nacked (no per-handler isolation without inbox).",
             },
             new
             {
                 key = "consume-orderfulfilled-rabbit",
                 label = "Consume OrderFulfilled (Rabbit, no inbox)",
-                kind = "rabbitInlineHandlerFail",
-                mode = state.OrderFulfilledHandlerFails ? "fail" : "succeed",
+                kind = "rabbitInlineHandlerOutcome",
+                mode = fulfilledMode,
+                failuresRemaining = fulfilledRem,
             },
         },
-    }));
+    });
+});
 
 playground.MapPost("/toggle", ([FromServices] NotificationPlaygroundState state, [FromBody] PlaygroundToggleRequest body) =>
 {
-    var (mode, key) = body.Key switch
+    string mode;
+    int failuresRemaining;
+    switch (body.Key)
     {
-        "consume-orderplaced-rabbit" => (state.ToggleOrderPlacedHandlerFails() ? "fail" : "succeed", body.Key),
-        "consume-orderfulfilled-rabbit" => (state.ToggleOrderFulfilledHandlerFails() ? "fail" : "succeed", body.Key),
-        _ => throw new BadHttpRequestException($"Unknown toggle key '{body.Key}'."),
-    };
-    return TypedResults.Ok(new { key, mode });
+        case "consume-orderplaced-rabbit":
+            if (string.IsNullOrEmpty(body.Mode))
+                state.CycleOrderPlacedNotify();
+            else
+                state.ApplyOrderPlacedNotify(body.Mode, body.FailureCount);
+            (mode, failuresRemaining) = state.GetOrderPlacedNotifyApi();
+            break;
+        case "consume-orderplaced-analytics-rabbit":
+            if (string.IsNullOrEmpty(body.Mode))
+                state.CycleOrderPlacedAnalytics();
+            else
+                state.ApplyOrderPlacedAnalytics(body.Mode, body.FailureCount);
+            (mode, failuresRemaining) = state.GetOrderPlacedAnalyticsApi();
+            break;
+        case "consume-orderfulfilled-rabbit":
+            if (string.IsNullOrEmpty(body.Mode))
+                state.CycleOrderFulfilledNotify();
+            else
+                state.ApplyOrderFulfilledNotify(body.Mode, body.FailureCount);
+            (mode, failuresRemaining) = state.GetOrderFulfilledNotifyApi();
+            break;
+        default:
+            throw new BadHttpRequestException($"Unknown toggle key '{body.Key}'.");
+    }
+
+    return TypedResults.Ok(new { key = body.Key, mode, failuresRemaining });
 });
 
 app.Run();

@@ -25,6 +25,7 @@ var lockFileDirectory = new DirectoryInfo(Environment.CurrentDirectory);
 builder.Services.AddSingleton<IDistributedLockProvider>(_ => new FileDistributedSynchronizationProvider(lockFileDirectory));
 
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+builder.Services.AddSingleton<OutboxFailureState>();
 builder.Services.AddSingleton<OrderConsumePlaygroundState>();
 builder.Services.AddSingleton<PlaygroundActivityRecorder>();
 builder.Services.AddSingleton<IMessageActivityObserver>(sp =>
@@ -50,9 +51,19 @@ builder.Services.AddRatatoskr(bus =>
     bus.AddEfCoreDurability<OrdersDbContext>(d =>
     {
         // Default polling is 60s. Short interval so crash-recovery is visible in demos.
-        d.UseOutbox(o => o.WithPollingInterval(TimeSpan.FromSeconds(2)));
+        d.UseOutbox(o => o
+            .WithPollingInterval(TimeSpan.FromSeconds(2))
+            .WithMaxMessageSize(8_192));
         d.UseInbox(i => i.WithPollingInterval(TimeSpan.FromSeconds(2)));
     });
+
+    bus.AddCommandPublishChannel("orders.internal", c => c
+        .WithEfCore()
+        .Produces<ReserveStockInternal>());
+
+    bus.AddCommandConsumeChannel("orders.internal", c => c
+        .Consumes<ReserveStockInternal>(m => m.WithHandler<ReserveStockInternalHandler>(HandlerKeys.ReserveStockInternal))
+        .UseInbox<OrdersDbContext>());
 
     bus.AddEventPublishChannel("ecommerce.events", c => c
         .WithRabbitMq(r => r.WithTopicExchange())
@@ -71,6 +82,8 @@ builder.Services.AddRatatoskr(bus =>
         .Consumes<OrderFailed>(m => m.WithHandler<OrderFailedHandler>(HandlerKeys.OrderFailed))
         .UseInbox<OrdersDbContext>());
 });
+
+PlaygroundMessageSenderDecoration.WrapAllMessageSenders(builder.Services);
 
 var dbConnectionString = builder.Configuration.GetConnectionString("ordersdb")
     ?? throw new InvalidOperationException("Connection string 'ordersdb' is not configured.");
@@ -114,6 +127,9 @@ app.MapPost("/api/orders", async ([FromServices] OrdersDbContext db, [FromServic
     db.OutboxMessages.Add(
         new ProcessOrderCommand { OrderId = orderIdStr },
         new MessageProperties { Id = PlaygroundMessageIds.ProcessOrderCommand(order.Id) });
+    db.OutboxMessages.Add(
+        new ReserveStockInternal { OrderId = orderIdStr },
+        new MessageProperties { Id = PlaygroundMessageIds.ReserveStockInternal(order.Id) });
     await db.SaveChangesAsync();
     return TypedResults.Ok(new { order.Id, order.Status });
 });
@@ -138,6 +154,9 @@ app.MapPost("/api/orders/direct", async ([FromServices] OrdersDbContext db, [Fro
     await bus.PublishDirectAsync(
         new ProcessOrderCommand { OrderId = orderIdStr },
         new MessageProperties { Id = PlaygroundMessageIds.ProcessOrderCommand(order.Id) });
+    await bus.PublishDirectAsync(
+        new ReserveStockInternal { OrderId = orderIdStr },
+        new MessageProperties { Id = PlaygroundMessageIds.ReserveStockInternal(order.Id) });
     return TypedResults.Ok(new { id = order.Id, status = order.Status.ToString() });
 });
 
@@ -152,6 +171,9 @@ app.MapPost("/api/orders/{id}/replay", async (Guid id, [FromServices] OrdersDbCo
     await bus.PublishDirectAsync(
         new ProcessOrderCommand { OrderId = orderIdStr },
         new MessageProperties { Id = PlaygroundMessageIds.ProcessOrderCommand(order.Id) });
+    await bus.PublishDirectAsync(
+        new ReserveStockInternal { OrderId = orderIdStr },
+        new MessageProperties { Id = PlaygroundMessageIds.ReserveStockInternal(order.Id) });
     return Results.Ok(new { order.Id });
 });
 
@@ -183,12 +205,21 @@ app.MapGet("/api/orders/{id:guid}/flow", async (Guid id, [FromServices] OrdersDb
         {
             orderPlaced = PlaygroundMessageIds.OrderPlaced(order.Id),
             processOrderCommand = PlaygroundMessageIds.ProcessOrderCommand(order.Id),
+            reserveStockInternal = PlaygroundMessageIds.ReserveStockInternal(order.Id),
             orderFulfilled = PlaygroundMessageIds.OrderFulfilled(order.Id),
             orderFailed = PlaygroundMessageIds.OrderFailed(order.Id),
         },
         steps = new object[]
         {
             new { key = "persisted", label = "Order row created", done = true },
+            new
+            {
+                key = "internal-reserve",
+                label = publishOrigin == "direct"
+                    ? "ReserveStockInternal published via EF Core transport (inbox)"
+                    : "ReserveStockInternal staged for EF Core inbox (same SaveChanges / same DbContext)",
+                done = true,
+            },
             new
             {
                 key = "initial-publish",
@@ -220,6 +251,43 @@ app.MapGet("/api/orders/{id:guid}/flow", async (Guid id, [FromServices] OrdersDb
     return TypedResults.Ok(flow);
 });
 
+app.MapPost("/api/orders/oversized", async Task<IResult> (HttpContext http) =>
+{
+    var db = http.RequestServices.GetRequiredService<OrdersDbContext>();
+    var scopeFactory = http.RequestServices.GetRequiredService<IServiceScopeFactory>();
+    var time = http.RequestServices.GetRequiredService<TimeProvider>();
+    var now = time.GetUtcNow().UtcDateTime;
+    var order = new Order
+    {
+        Id = Guid.NewGuid(),
+        Status = OrderStatus.Placed,
+        CreatedAt = now,
+        StatusChangedAt = now,
+        PublishOrigin = "outbox",
+    };
+    db.Orders.Add(order);
+    var orderIdStr = order.Id.ToString("D");
+    db.OutboxMessages.Add(
+        new OrderPlaced
+        {
+            OrderId = orderIdStr,
+            BulkPaddingForDemo = new string('x', 50_000),
+        },
+        new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(order.Id) });
+    try
+    {
+        await db.SaveChangesAsync();
+        return TypedResults.Json(new { error = "expected oversized staging to fail SaveChanges" }, statusCode: 500);
+    }
+    catch (Exception ex)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db2 = scope.ServiceProvider.GetRequiredService<OrdersDbContext>();
+        var orderRowExists = await db2.Orders.AsNoTracking().AnyAsync(o => o.Id == order.Id);
+        return TypedResults.Ok(new { saveFailed = true, orderRowExists, message = ex.Message });
+    }
+});
+
 var playground = app.MapGroup("/api/playground").RequireCors("LocalDashboard").RequireAuthorization("DevOnlyNoAuth");
 
 playground.MapGet("/activities", ([FromServices] PlaygroundActivityRecorder recorder, Guid? orderId) =>
@@ -229,8 +297,12 @@ playground.MapGet("/activities", ([FromServices] PlaygroundActivityRecorder reco
     return TypedResults.Ok(recorder.GetRecentEntries());
 });
 
-playground.MapGet("/control-state", ([FromServices] OrderConsumePlaygroundState state) =>
-    TypedResults.Ok(new
+playground.MapGet("/control-state", ([FromServices] OrderConsumePlaygroundState state, [FromServices] OutboxFailureState outboxFailure) =>
+{
+    var (fulfilledMode, fulfilledRemaining) = state.GetOrderFulfilledApi();
+    var (failedMode, failedRemaining) = state.GetOrderFailedApi();
+    var (outboxMode, outboxRemaining) = outboxFailure.GetApi();
+    return TypedResults.Ok(new
     {
         service = "orderservice",
         toggles =
@@ -238,30 +310,85 @@ playground.MapGet("/control-state", ([FromServices] OrderConsumePlaygroundState 
             {
                 new
                 {
+                    key = "simulate-outbox-transport-failure",
+                    label = "Simulate Rabbit + EF Core transport send failures (outbox relay + PublishDirect)",
+                    kind = "outboxSendOutcome",
+                    mode = outboxMode,
+                    failuresRemaining = outboxRemaining,
+                    hint = "succeed | fail | succeed-after (failureCount). Wraps all IMessageSender instances.",
+                },
+                new
+                {
                     key = "consume-orderfulfilled-inbox",
                     label = "Consume OrderFulfilled (inbox)",
-                    kind = "inboxHandlerFail",
-                    mode = state.OrderFulfilledHandlerFails ? "fail" : "succeed",
+                    kind = "inboxHandlerOutcome",
+                    mode = fulfilledMode,
+                    failuresRemaining = fulfilledRemaining,
+                    hint = "succeed | fail | succeed-after (set failureCount). Omit mode to cycle.",
                 },
                 new
                 {
                     key = "consume-orderfailed-inbox",
                     label = "Consume OrderFailed (inbox)",
-                    kind = "inboxHandlerFail",
-                    mode = state.OrderFailedHandlerFails ? "fail" : "succeed",
+                    kind = "inboxHandlerOutcome",
+                    mode = failedMode,
+                    failuresRemaining = failedRemaining,
+                    hint = "succeed | fail | succeed-after (set failureCount). Omit mode to cycle.",
                 },
             },
-    }));
+    });
+});
 
-playground.MapPost("/toggle", ([FromServices] OrderConsumePlaygroundState state, [FromBody] PlaygroundToggleRequest body) =>
+playground.MapPost("/toggle", ([FromServices] OrderConsumePlaygroundState state, [FromServices] OutboxFailureState outboxFailure, [FromBody] PlaygroundToggleRequest body) =>
 {
-    var next = body.Key switch
+    string next;
+    int failuresRemaining;
+    switch (body.Key)
     {
-        "consume-orderfulfilled-inbox" => state.ToggleOrderFulfilledFails() ? "fail" : "succeed",
-        "consume-orderfailed-inbox" => state.ToggleOrderFailedFails() ? "fail" : "succeed",
-        _ => throw new BadHttpRequestException($"Unknown toggle key '{body.Key}'."),
-    };
-    return TypedResults.Ok(new { key = body.Key, mode = next });
+        case "simulate-outbox-transport-failure":
+            if (string.IsNullOrEmpty(body.Mode))
+            {
+                outboxFailure.Cycle();
+                (next, failuresRemaining) = outboxFailure.GetApi();
+            }
+            else
+            {
+                outboxFailure.Apply(body.Mode, body.FailureCount);
+                (next, failuresRemaining) = outboxFailure.GetApi();
+            }
+
+            break;
+        case "consume-orderfulfilled-inbox":
+            if (string.IsNullOrEmpty(body.Mode))
+            {
+                state.CycleOrderFulfilled();
+                (next, failuresRemaining) = state.GetOrderFulfilledApi();
+            }
+            else
+            {
+                state.ApplyOrderFulfilled(body.Mode, body.FailureCount);
+                (next, failuresRemaining) = state.GetOrderFulfilledApi();
+            }
+
+            break;
+        case "consume-orderfailed-inbox":
+            if (string.IsNullOrEmpty(body.Mode))
+            {
+                state.CycleOrderFailed();
+                (next, failuresRemaining) = state.GetOrderFailedApi();
+            }
+            else
+            {
+                state.ApplyOrderFailed(body.Mode, body.FailureCount);
+                (next, failuresRemaining) = state.GetOrderFailedApi();
+            }
+
+            break;
+        default:
+            throw new BadHttpRequestException($"Unknown toggle key '{body.Key}'.");
+    }
+
+    return TypedResults.Ok(new { key = body.Key, mode = next, failuresRemaining });
 });
 
 app.Run();

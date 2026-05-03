@@ -116,23 +116,30 @@ playground.MapGet("/control-state", ([FromServices] InventoryDemoModeState state
                 label = "Consume ProcessOrderCommand (inbox) — business path",
                 kind = "inventoryCommandMode",
                 mode = state.Mode.ToString().ToLowerInvariant(),
-                hint = "Cycles off (fulfill) → throw (inbox retries) → reject (OrderFailed).",
+                failuresRemaining = state.Mode == InventoryDemoMode.SucceedAfter ? state.SucceedAfterFailuresRemaining : 0,
+                succeedAfterBudget = state.Mode == InventoryDemoMode.SucceedAfter ? state.SucceedAfterInitialBudget : 0,
+                hint = "Cycles off → throw → succeed-after(2) → reject. Or POST mode: off | throw | succeed-after | reject with failureCount.",
             },
         },
     }));
 
 playground.MapPost("/toggle", ([FromServices] InventoryDemoModeState state, [FromBody] PlaygroundToggleRequest body) =>
 {
-    var mode = body.Key switch
-    {
-        "consume-processordercommand-inbox" => state.Cycle(),
-        _ => throw new BadHttpRequestException($"Unknown toggle key '{body.Key}'."),
-    };
+    if (body.Key != "consume-processordercommand-inbox")
+        throw new BadHttpRequestException($"Unknown toggle key '{body.Key}'.");
+
+    if (string.IsNullOrEmpty(body.Mode))
+        state.Cycle();
+    else
+        state.ApplyFromToggle(body.Mode, body.FailureCount);
+
+    var mode = state.Mode;
     return TypedResults.Ok(new
     {
         key = body.Key,
         mode = mode.ToString().ToLowerInvariant(),
         enabled = mode != InventoryDemoMode.Off,
+        failuresRemaining = mode == InventoryDemoMode.SucceedAfter ? state.SucceedAfterFailuresRemaining : 0,
     });
 });
 

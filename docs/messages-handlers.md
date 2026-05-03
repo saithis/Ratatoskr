@@ -80,6 +80,16 @@ The handler is registered with a **stable key** (`"order-handler"`). The message
 > [!NOTE]
 > Handler keys must be **globally unique** across all channels and DbContexts.
 
+### Fan-out (Rabbit, no inbox)
+
+You can register **multiple** `.WithHandler<THandler>()` handlers for the same message type on one consume channel. Each handler runs for every delivery.
+
+On RabbitMQ **without** `UseInbox()`, use **fire-and-forget** registration (parameterless `WithHandler<THandler>()`). Stable-key overloads (`WithHandler<THandler>("key")`) register **inbox-managed** handlers; they are only dispatched when the channel has `UseInbox<TDbContext>()` (and `AddEfCoreDurability` runs inbox validation at startup).
+
+If one handler throws, the transport typically **nacks the whole message** and both handlers run again on redelivery — there is no per-handler isolation without an inbox.
+
+**Runnable demo:** `examples/NotificationService/Program.cs` registers two handlers for `OrderPlaced` on the same queue. The Dashboard scenario `fanout-two-handlers-on-orderplaced` exercises this. See [examples/README.md](../examples/README.md#feature-coverage).
+
 ## MessageProperties
 
 The `MessageProperties` object provides access to CloudEvents metadata and extension attributes:

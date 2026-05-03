@@ -15,11 +15,14 @@ public class ProcessOrderHandler(
         if (!Guid.TryParse(message.OrderId, out var orderGuid))
             throw new InvalidOperationException($"Order id '{message.OrderId}' is not a GUID.");
 
+        if (demoMode.TryConsumeProcessFailure())
+        {
+            logger.LogWarning("Inventory demo mode simulating handler failure for order {OrderId}", message.OrderId);
+            throw new InvalidOperationException("Simulated inventory failure (demo mode).");
+        }
+
         switch (demoMode.Mode)
         {
-            case InventoryDemoMode.Throw:
-                logger.LogWarning("Inventory demo mode Throw — simulating handler failure for order {OrderId}", message.OrderId);
-                throw new InvalidOperationException("Simulated inventory failure (demo mode is Throw).");
             case InventoryDemoMode.Reject:
                 db.OutboxMessages.Add(
                     new OrderFailed
@@ -32,6 +35,8 @@ public class ProcessOrderHandler(
                 logger.LogInformation("Order {OrderId} rejected (demo mode)", message.OrderId);
                 return;
             case InventoryDemoMode.Off:
+            case InventoryDemoMode.Throw:
+            case InventoryDemoMode.SucceedAfter:
             default:
                 db.OutboxMessages.Add(
                     new OrderFulfilled { OrderId = message.OrderId },

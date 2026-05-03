@@ -42,6 +42,9 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
     public virtual async Task StartTestAsync(Action<IServiceCollection>? configure = null)
     {
         await CreateDatabaseAsync();
+        // Hosted services (e.g. EF Core metrics) query the DbContext as soon as the host starts.
+        // EnsureCreated must run before the host is built so tables exist on first poll.
+        await EnsureTestDatabaseSchemaAsync();
 
         // Custom configuration for the factory if needed
         _factory = new RatatoskrTestFactory(rabbitMq, postgres).WithWebHostBuilder(builder =>
@@ -75,6 +78,17 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
         await using var command = connection.CreateCommand();
         command.CommandText = $"CREATE DATABASE \"test_{TestId}\"";
         await command.ExecuteNonQueryAsync();
+    }
+
+    private async Task EnsureTestDatabaseSchemaAsync()
+    {
+        if (postgres == null) return;
+
+        var options = new DbContextOptionsBuilder<TestDbContext>()
+            .UseNpgsql(PostgresConnectionString)
+            .Options;
+        await using var db = new TestDbContext(options);
+        await db.Database.EnsureCreatedAsync();
     }
 
     protected virtual void ConfigureServices(IServiceCollection services)
