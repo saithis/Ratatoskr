@@ -35,7 +35,6 @@ The project includes comprehensive tests using TUnit and TestContainers:
 
 ```bash
 dotnet run --project tests/Ratatoskr.Tests -- --maximum-parallel-tests 10
-dotnet run --project tests/PlaygroundHost.Tests -- --maximum-parallel-tests 4
 ```
 
 - Integration tests with real PostgreSQL and RabbitMQ containers

@@ -17,8 +17,8 @@ internal static class PlaygroundMessageSenderDecoration
             services.AddSingleton<IMessageSender>(sp =>
             {
                 var inner = CreateInner(sp, original);
-                var state = sp.GetRequiredService<OutboxFailureState>();
-                return new FailableMessageSender(inner, state);
+                var registry = sp.GetRequiredService<OutboxSendFailureRegistry>();
+                return new FailableMessageSender(inner, registry);
             });
         }
     }

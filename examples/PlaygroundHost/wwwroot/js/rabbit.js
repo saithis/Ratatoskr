@@ -29,7 +29,7 @@ export async function refreshRabbitDepths() {
         }
         const row = document.createElement('div');
         row.className = 'rabbit-row';
-        row.innerHTML = `<span title="${q.mainQueue}">${q.key}</span>
+        row.innerHTML = `<span title="${q.mainQueue}">${q.slug} · ${q.key}</span>
           <span class="rabbit-n">${q.main}</span>
           <span class="rabbit-n">${q.retry}</span>
           <span class="rabbit-n">${q.dlq}</span>

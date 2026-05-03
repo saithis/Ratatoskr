@@ -19,6 +19,36 @@ public static class PlaygroundSqlMetrics
             """,
             cancellationToken);
 
+    /// <summary>Poisoned outbox rows whose serialized properties include the scenario run id (concurrent-safe).</summary>
+    public static Task<int> CountPoisonedOutboxForScenarioRunAsync(
+        DbContext db,
+        string scenarioRunId,
+        CancellationToken cancellationToken = default) =>
+        ExecuteScalarIntAsync(
+            db,
+            $"""
+            SELECT COUNT(*) FROM "OutboxMessages"
+            WHERE "IsPoisoned" = true
+              AND "SerializedProperties" LIKE '%{EscapeLike(scenarioRunId)}%'
+            """,
+            cancellationToken);
+
+    public static Task<int> CountPoisonedInboxForScenarioRunAsync(
+        DbContext db,
+        string scenarioRunId,
+        CancellationToken cancellationToken = default) =>
+        ExecuteScalarIntAsync(
+            db,
+            $"""
+            SELECT COUNT(*) FROM "InboxHandlerStatuses" s
+            INNER JOIN "InboxMessages" m ON s."MessageId" = m."Id"
+            WHERE s."IsPoisoned" = true
+              AND (m."SerializedProperties" LIKE '%{EscapeLike(scenarioRunId)}%' OR encode(m."Content", 'escape') LIKE '%{EscapeLike(scenarioRunId)}%')
+            """,
+            cancellationToken);
+
+    private static string EscapeLike(string s) => s.Replace("'", "''");
+
     private static async Task<int> ExecuteScalarIntAsync(DbContext db, string sql, CancellationToken cancellationToken)
     {
         var conn = db.Database.GetDbConnection();

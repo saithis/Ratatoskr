@@ -1,4 +1,4 @@
-// Minimal copies for integration tests (avoids referencing examples PlaygroundHost which would conflict on Program with TestHost).
+// Minimal message shapes for in-process Ratatoskr tests (playground HTTP coverage uses PlaygroundHostAppMarker in Ratatoskr.Tests).
 using Ratatoskr;
 
 namespace Ratatoskr.Tests.Examples;

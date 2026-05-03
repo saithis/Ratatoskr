@@ -10,7 +10,6 @@
     <File Path="notes\todos.md" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/PlaygroundHost.Tests/PlaygroundHost.Tests.csproj" />
     <Project Path="tests/Ratatoskr.TestHost/Ratatoskr.TestHost.csproj" />
     <Project Path="tests\Ratatoskr.Tests\Ratatoskr.Tests.csproj" />
   </Folder>

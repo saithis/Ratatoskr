@@ -11,28 +11,31 @@ public sealed class ScenarioRunService(
     IEnumerable<IScenario> scenarios,
     TimeProvider time)
 {
-    private static readonly SemaphoreSlim Gate = new(1, 1);
     private readonly Dictionary<string, IScenario> _bySlug = scenarios.ToDictionary(s => s.Slug, StringComparer.OrdinalIgnoreCase);
 
     public IReadOnlyList<ScenarioCatalogEntry> ListCatalog() =>
         _bySlug.Values
-            .Select(s => new ScenarioCatalogEntry(s.Slug, s.Title, s.Description, s.Topic))
+            .Select(s => new ScenarioCatalogEntry(
+                s.Slug,
+                s.Title,
+                s.Description,
+                s.Topic,
+                s.RequiresDangerConfirmation,
+                s.DangerConfirmationText))
             .OrderBy(s => s.Slug)
             .ToList();
 
-    public async Task<ScenarioStartResult> StartRunAsync(string slug, CancellationToken cancellationToken)
+    public async Task<ScenarioStartResult> StartRunAsync(string slug, bool confirmDanger, CancellationToken cancellationToken)
     {
         var opts = options.Value;
         if (!_bySlug.TryGetValue(slug, out var scenario))
             return new ScenarioStartResult(null, null, $"Unknown scenario '{slug}'.");
 
-        var gateHeld = false;
-        if (opts.SingleFlight)
-        {
-            if (!await Gate.WaitAsync(0, cancellationToken))
-                return new ScenarioStartResult(null, null, "Another scenario run is in progress (single-flight).");
-            gateHeld = true;
-        }
+        if (scenario.RequiresDangerConfirmation && !confirmDanger)
+            return new ScenarioStartResult(
+                null,
+                null,
+                "This scenario requires confirmDanger=true (acknowledge the risk in the dashboard).");
 
         var runId = Guid.NewGuid();
         try
@@ -57,14 +60,12 @@ public sealed class ScenarioRunService(
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(opts.RunTimeoutSeconds, 5, 600)));
             var executionCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token);
 
-            _ = RunInBackgroundAsync(runId, scenario, executionCts, timeoutCts, gateHeld);
+            _ = RunInBackgroundAsync(runId, scenario, executionCts, timeoutCts);
 
             return new ScenarioStartResult(runId, scenario.Title, null);
         }
         catch
         {
-            if (gateHeld)
-                Gate.Release();
             throw;
         }
     }
@@ -73,8 +74,7 @@ public sealed class ScenarioRunService(
         Guid runId,
         IScenario scenario,
         CancellationTokenSource executionCts,
-        CancellationTokenSource timeoutCts,
-        bool gateHeld)
+        CancellationTokenSource timeoutCts)
     {
         _ = PollCancelRequestedAsync(runId, executionCts, timeoutCts.Token);
         try
@@ -93,20 +93,18 @@ public sealed class ScenarioRunService(
         }
         catch (OperationCanceledException)
         {
-            var detail = await TryResolveCancelOrTimeoutDetailAsync(runId, cancellationToken: default);
-            await MarkFailedAsync(runId, detail);
+            var (terminal, detail) = await TryResolveCancelOrTimeoutAsync(runId, cancellationToken: default);
+            await MarkTerminalAsync(runId, terminal, detail);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Scenario {Slug} failed", scenario.Slug);
-            await MarkFailedAsync(runId, ex.Message);
+            await MarkTerminalAsync(runId, "Failed", ex.Message);
         }
         finally
         {
             executionCts.Dispose();
             timeoutCts.Dispose();
-            if (gateHeld)
-                Gate.Release();
         }
     }
 
@@ -138,21 +136,21 @@ public sealed class ScenarioRunService(
         }
     }
 
-    private async Task<string> TryResolveCancelOrTimeoutDetailAsync(Guid runId, CancellationToken cancellationToken)
+    private async Task<(string State, string Detail)> TryResolveCancelOrTimeoutAsync(Guid runId, CancellationToken cancellationToken)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<PlaygroundDbContext>();
         var row = await db.Runs.AsNoTracking().FirstOrDefaultAsync(r => r.Id == runId, cancellationToken);
-        return row?.CancelRequested == true ? "Cancelled." : "Timed out.";
+        return row?.CancelRequested == true ? ("Cancelled", "Cancelled.") : ("Failed", "Timed out.");
     }
 
-    private async Task MarkFailedAsync(Guid runId, string detail)
+    private async Task MarkTerminalAsync(Guid runId, string state, string? detail)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<PlaygroundDbContext>();
         var row = await db.Runs.FirstOrDefaultAsync(r => r.Id == runId);
         if (row is null) return;
-        row.State = "Failed";
+        row.State = state;
         row.CompletedAt = time.GetUtcNow();
         row.Detail = detail;
         await db.SaveChangesAsync();
@@ -172,7 +170,7 @@ public sealed class ScenarioRunService(
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<PlaygroundDbContext>();
         var row = await db.Runs.FirstOrDefaultAsync(r => r.Id == runId, cancellationToken);
-        if (row is null || row.State is "Passed" or "Failed")
+        if (row is null || row.State is "Passed" or "Failed" or "Cancelled")
             return false;
         row.CancelRequested = true;
         await db.SaveChangesAsync(cancellationToken);
@@ -180,7 +178,13 @@ public sealed class ScenarioRunService(
     }
 }
 
-public sealed record ScenarioCatalogEntry(string Slug, string Title, string Description, string Topic);
+public sealed record ScenarioCatalogEntry(
+    string Slug,
+    string Title,
+    string Description,
+    string Topic,
+    bool RequiresDangerConfirmation,
+    string? DangerConfirmationText);
 
 public sealed record ScenarioStartResult(Guid? RunId, string? Title, string? Error);
 

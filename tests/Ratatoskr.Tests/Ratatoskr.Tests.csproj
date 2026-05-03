@@ -25,6 +25,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\..\examples\PlaygroundHost\PlaygroundHost.csproj" />
         <ProjectReference Include="..\..\src\Ratatoskr\Ratatoskr.csproj" />
         <ProjectReference Include="..\..\src\Ratatoskr.EfCore\Ratatoskr.EfCore.csproj" />
         <ProjectReference Include="..\..\src\Ratatoskr.RabbitMq\Ratatoskr.RabbitMq.csproj" />

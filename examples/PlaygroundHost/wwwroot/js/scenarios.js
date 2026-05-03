@@ -48,6 +48,7 @@ export function fillScenarioSelect(selectEl, catalog) {
       const o = document.createElement('option');
       o.value = s.slug;
       o.textContent = s.title;
+      if (s.requiresDangerConfirmation) o.textContent += ' (!)';
       og.appendChild(o);
     }
     selectEl.appendChild(og);
@@ -58,7 +59,10 @@ export function bindScenarioDescription(selectEl, descEl) {
   if (!selectEl || !descEl) return;
   selectEl.addEventListener('change', () => {
     const s = cachedCatalog.find((x) => x.slug === selectEl.value);
-    descEl.textContent = s?.description ?? '';
+    let t = s?.description ?? '';
+    if (s?.requiresDangerConfirmation && s?.dangerConfirmationText)
+      t += `\n\n⚠ ${s.dangerConfirmationText}`;
+    descEl.textContent = t;
   });
 }
 
@@ -67,18 +71,46 @@ export async function loadScenarioCatalog() {
   return cachedCatalog;
 }
 
+function wireCancelButton(runId) {
+  const host = document.getElementById('scenario-cancel-wrap');
+  if (!host) return;
+  host.innerHTML = '';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn btn-outline';
+  btn.textContent = 'Cancel run';
+  btn.addEventListener('click', async () => {
+    try {
+      await api.cancelScenarioRun(runId);
+      btn.disabled = true;
+      btn.textContent = 'Cancel requested';
+    } catch (e) {
+      btn.title = e.message;
+    }
+  });
+  host.appendChild(btn);
+}
+
 export async function runScenario(slug) {
   const meta = cachedCatalog.find((x) => x.slug === slug);
   if (!meta) throw new Error('unknown scenario');
+  if (meta.requiresDangerConfirmation) {
+    const ok = window.confirm(
+      meta.dangerConfirmationText ||
+        'This scenario is marked as potentially disruptive. Start anyway?',
+    );
+    if (!ok) throw new Error('cancelled');
+  }
   setProgress(['Arrange', 'Act', 'Verify'], 0);
   setProgress(['Arrange', 'Act', 'Verify'], 1);
-  const start = await api.startScenarioRun(slug);
+  const start = await api.startScenarioRun(slug, !!meta.requiresDangerConfirmation);
   const runId = start.runId;
   state.lastScenarioRunId = runId;
+  wireCancelButton(runId);
   setProgress(['Arrange', 'Act', 'Verify'], 2);
   const pr = await pollUntil(
     () => api.fetchRunStatus(runId),
-    (s) => s.state === 'Passed' || s.state === 'Failed',
+    (s) => s.state === 'Passed' || s.state === 'Failed' || s.state === 'Cancelled',
     120_000,
   );
   const st = pr.value;

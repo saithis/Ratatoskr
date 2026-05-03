@@ -1,6 +1,8 @@
 # Ratatoskr examples playground
 
-Single ASP.NET Core host (**PlaygroundHost**) plus Aspire **AppHost** demonstrates the main Ratatoskr building blocks: EF Core outbox/inbox on two logical PostgreSQL databases (publisher vs consumer roles), RabbitMQ fan-out and retries, a **playground** HTTP surface (toggles, activities, diagnostics), a **server-driven scenario runner** (catalog, run status, cancel), and the static dashboard under `examples/PlaygroundHost/wwwroot/`.
+Single ASP.NET Core host (**PlaygroundHost**) plus Aspire **AppHost** demonstrates Ratatoskr building blocks: EF Core outbox/inbox on two logical PostgreSQL databases (publisher vs consumer), RabbitMQ fan-out and retries, a **playground** HTTP surface (activities, diagnostics, Rabbit queue depths), a **server-driven scenario runner** (catalog, run status, cancel), and the static dashboard under `examples/PlaygroundHost/wwwroot/`.
+
+Each **scenario** is a fixed script with its own **wire types** (`[RatatoskrMessage("{slug}.{kind}")]` style names) and **per-slug Rabbit topology** (`pg.{slug}.events`, `pg.{slug}.commands`, and queues such as `pg.{slug}.orders`) so concurrent runs do not share retry or DLQ mailboxes. There are no global playground toggles; failure paths are encoded in the scenario handlers or run-scoped helpers (for example outbox send simulation).
 
 `examples/Docs` remains a **docfx-only** snippet project; it is not part of the runnable playground.
 
@@ -8,11 +10,11 @@ Single ASP.NET Core host (**PlaygroundHost**) plus Aspire **AppHost** demonstrat
 
 | Piece | Role |
 |---|---|
-| **PlaygroundHost** | Ratatoskr bus, all handlers, order + playground HTTP APIs, scenario runner, static UI, Rabbit depth probe |
-| **publisherdb** | Publisher `DbContext`: order row, outbox for cross-service messages, inbox for outcomes, EF Core internal `orders.internal` channel |
+| **PlaygroundHost** | Ratatoskr bus, handlers, minimal HTTP APIs, scenario runner, static UI, Rabbit depth probe |
+| **publisherdb** | Publisher `DbContext`: order row where scenarios need it, outbox, inbox, EF Core internal channel where registered |
 | **consumerdb** | Consumer `DbContext`: command inbox + outcome outbox |
 | **playgrounddb** | Scenario run ledger (`Runs` table) |
-| **RabbitMQ** | `ecommerce.events` / `ecommerce.commands` topology (two logical consume channel names can share one AMQP exchange) |
+| **RabbitMQ** | Per-scenario exchanges and queues derived from slug (see `PlaygroundAmqpNames`) |
 
 ## Quick start
 
@@ -30,43 +32,45 @@ Aspire opens the dashboard (often `http://localhost:15000`). Open the **playgrou
 |---|---|
 | `RATATOSKR_EXAMPLES_PLAYGROUND=1` | Forces `Playground:Enabled` on (used by AppHost). |
 | `Playground:Enabled` | When false, `/api/playground/*` returns 404 (except static files and health). |
-| `Playground:SingleFlight` | When true, only one scenario run at a time (HTTP 400 if another is in progress). |
-| `Playground:RegisterBlockingScenario=1` | Registers `blocking-hold` scenario (long sleep) for manual single-flight experiments. |
-| `Playground:RegisterCancelSmokeScenario=1` | Registers `cancel-smoke` scenario (waits until cancelled) for tests. |
+| `Playground:RunTimeoutSeconds` | Server-side cap for scenario execution (default 120). |
+
+Scenarios marked **dangerous** in the catalog require `POST .../run?confirmDanger=true` (the dashboard asks for confirmation before sending this).
 
 ## Feature coverage (where)
 
 | Feature | Where |
 |---|---|
-| Outbox (multi-message one transaction) | `POST /api/orders` — scenario `outbox-success` and related slugs |
-| Outbox transport failure injection | Toggle `simulate-outbox-transport-failure` + `OutboxFailureState` (run-scoped via CloudEvents extension when configured in scenarios) |
-| Outbox max message size | `WithMaxMessageSize` on publisher outbox; `POST /api/orders/oversized`; scenario `oversized-payload-rolls-back` |
-| EF Core internal channel | `orders.internal` + `ReserveStockInternal`; scenario `efcore-internal-command` |
-| Direct publish | `POST /api/orders/direct`; scenario `direct-consume-success` |
-| Replay | `POST /api/orders/{id}/replay`; scenario `replay-dedups` |
-| Fan-out (two handlers, one queue) | Notification handlers on `ecommerce.events.notifications`; scenario `fanout-two-handlers-on-orderplaced` |
-| Inbox retries / poison | Inventory throw / succeed-after; scenarios `inbox-poison`, `inbox-retry-then-success` |
-| Rabbit retry + DLQ | Managed consumer queues; scenario `direct-consume-dlq` |
+| Outbox (multi-message one transaction) | Scenario `outbox-success` and related slugs under `examples/PlaygroundHost/Scenarios/` |
+| Outbox transport failure until poison | Scenario `outbox-retry-then-success`, `outbox-poison` (run-scoped outbox send registry) |
+| Outbox max message size | `WithMaxMessageSize` on publisher outbox; scenario `oversized-payload-rolls-back` |
+| EF Core internal channel | Scenario `efcore-internal-command` |
+| Direct publish / consume | Scenarios `direct-consume-success`, `direct-consume-retry`, `direct-consume-dlq` |
+| Replay deduplication | Scenario `replay-dedups` |
+| Fan-out (two handlers, one queue) | Scenario `fanout-two-handlers-on-orderplaced` |
+| Inbox retries / poison | Scenarios `inbox-poison`, `inbox-retry-then-success` |
+| Business rejection path | Scenario `business-rejection` |
 | Management API + requeue | `MapRatatoskrManagementApi` — paths under `ratatoskr/api/v1/efcore/contexts/{PublisherDbContext\|ConsumerDbContext}/...` |
-| Diagnostics summary | `GET /api/playground/diagnostics/poisoned-summary` (publisher vs consumer poisoned counts) |
+| Diagnostics summary | `GET /api/playground/diagnostics/poisoned-summary` |
 | Activity log | `PlaygroundActivityRecorder` — `GET /api/playground/activities?orderId=` or `?scenarioRunId=` |
 
 ## Scenario catalog
 
 Scenarios are **server-side** (`GET /api/playground/scenarios`, `POST /api/playground/scenarios/{slug}/run`, `GET /api/playground/runs/{id}`, `POST /api/playground/runs/{id}/cancel`). The dashboard loads the catalog from the server (no duplicate JSON in `wwwroot`).
 
-Slug examples: `outbox-success`, `outbox-retry-then-success`, `outbox-poison`, `inbox-retry-then-success`, `inbox-poison`, `business-rejection`, `direct-consume-success`, `direct-consume-retry`, `direct-consume-dlq`, `replay-dedups`, `efcore-internal-command`, `fanout-two-handlers-on-orderplaced`, `oversized-payload-rolls-back`.
+Implementation lives under `examples/PlaygroundHost/Scenarios/{Topic}/{slug}/` (messages, handlers, `*Scenario.cs`). Ratatoskr channel wiring is grouped in `examples/PlaygroundHost/Composition/PlaygroundRatatoskrRegistrations.cs` with explicit `AddSingleton<IScenario, ...>()` in `Program.cs`.
+
+Slug examples: `outbox-success`, `outbox-retry-then-success`, `outbox-poison`, `inbox-retry-then-success`, `inbox-poison`, `business-rejection`, `direct-consume-success`, `direct-consume-retry`, `direct-consume-dlq`, `replay-dedups`, `efcore-internal-command`, `fanout-two-handlers-on-orderplaced`, `oversized-payload-rolls-back`, `blocking-hold`, `cancel-smoke`.
 
 ## Project layout
 
 ```
 examples/
   AppHost/           Aspire — postgres (publisherdb, consumerdb, playgrounddb) + rabbit + PlaygroundHost
-  PlaygroundHost/    Single demo host + wwwroot dashboard
+  PlaygroundHost/    Single demo host + wwwroot dashboard + Scenarios/
   ServiceDefaults/   Shared OpenTelemetry + health
   Docs/              Docfx snippets only
 ```
 
 ## Tests
 
-HTTP-first playground tests live in `tests/PlaygroundHost.Tests` (separate assembly so `WebApplicationFactory<Program>` does not collide with `Ratatoskr.TestHost`). Library-level Ratatoskr integration tests remain in `tests/Ratatoskr.Tests`.
+HTTP integration coverage for the playground host lives in **`tests/Ratatoskr.Tests`** (`Examples/PlaygroundHostScenarioHttpTests.cs`), using `WebApplicationFactory<PlaygroundHost.PlaygroundHostAppMarker>` together with the shared RabbitMQ and PostgreSQL Testcontainers fixtures. Library-level Ratatoskr integration tests remain in the same project under `Integration/`.

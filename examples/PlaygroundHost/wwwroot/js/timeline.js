@@ -1,29 +1,18 @@
 import { state } from './state.js';
-import { getFlow, mergeActivities } from './api.js';
+import { mergeActivities, mergeActivitiesByScenarioRun } from './api.js';
 
 let flowTimer = null;
 let activityTimer = null;
 
-function renderFlow(data) {
-  const origin = data.publishOrigin ?? 'outbox';
+function renderFlowPlaceholder() {
   const line = document.getElementById('flow-status-line');
   if (line)
-    line.textContent = `Status: ${data.status} · publish: ${origin} · created ${data.createdAt} · last change ${data.statusChangedAt}`;
-  const ids = data.messageIds;
+    line.textContent =
+      'Activity is driven by scenario runs. Message ids appear on staged rows in the raw table when available.';
   const idsEl = document.getElementById('flow-ids');
-  if (idsEl && ids)
-    idsEl.textContent = `${ids.orderPlaced} | ${ids.processOrderCommand} | ${ids.reserveStockInternal ?? ''} | ${ids.orderFulfilled} | ${ids.orderFailed}`;
-  const steps = data.steps ?? [];
+  if (idsEl) idsEl.textContent = '';
   const host = document.getElementById('flow-steps');
-  if (host) {
-    host.innerHTML = '';
-    for (const step of steps) {
-      const el = document.createElement('span');
-      el.className = 'flow-step ' + (step.done ? 'done' : 'pending');
-      el.textContent = step.label;
-      host.appendChild(el);
-    }
-  }
+  if (host) host.innerHTML = '';
 }
 
 function renderSwimlanes(activities) {
@@ -36,8 +25,10 @@ function renderSwimlanes(activities) {
     const type = (e.messageType ?? '').toLowerCase();
     let lane = 'Publisher';
     if (type.includes('reserve') || transport.includes('efcore')) lane = 'EfCore';
-    else if (type.includes('processorder') || type.includes('inventory.process')) lane = 'Consumer';
-    else if (type.includes('order.placed') || type.includes('placed')) lane = 'Notifications';
+    else if (type.includes('process-order') || type.includes('inventory.process') || type.includes('processorder'))
+      lane = 'Consumer';
+    else if (type.includes('order-placed') || type.includes('order.placed') || type.includes('placed'))
+      lane = 'Notifications';
     (lanes[lane] ??= []).push(e);
   }
   host.innerHTML = '';
@@ -64,12 +55,15 @@ function renderSwimlanes(activities) {
 }
 
 async function refreshActivitiesTable() {
-  if (!state.lastOrderId) return;
-  const oid = state.lastOrderId;
   const errEl = document.getElementById('error-activities');
   const raw = document.getElementById('raw-activity-wrap');
   try {
-    const merge = await mergeActivities(oid);
+    let merge = [];
+    if (state.lastScenarioRunId)
+      merge = await mergeActivitiesByScenarioRun(state.lastScenarioRunId);
+    else if (state.lastOrderId) merge = await mergeActivities(state.lastOrderId);
+    else return;
+
     renderSwimlanes(merge);
     const tb = document.getElementById('activity-rows');
     if (tb && raw && !raw.hidden) {
@@ -97,7 +91,7 @@ export function restartFlowPoll() {
     clearInterval(activityTimer);
     activityTimer = null;
   }
-  if (!state.lastOrderId) {
+  if (!state.lastOrderId && !state.lastScenarioRunId) {
     const fb = document.getElementById('flow-body');
     const fe = document.getElementById('flow-empty');
     if (fb) fb.hidden = true;
@@ -113,8 +107,7 @@ export function restartFlowPoll() {
 
   const tick = async () => {
     try {
-      const data = await getFlow(state.lastOrderId);
-      renderFlow(data);
+      renderFlowPlaceholder();
       const errf = document.getElementById('error-flow');
       if (errf) errf.textContent = '';
       const b = document.getElementById('badge-flow');

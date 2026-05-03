@@ -88,7 +88,7 @@ On RabbitMQ **without** `UseInbox()`, use **fire-and-forget** registration (para
 
 If one handler throws, the transport typically **nacks the whole message** and both handlers run again on redelivery — there is no per-handler isolation without an inbox.
 
-**Runnable demo:** `examples/PlaygroundHost/Program.cs` registers two handlers for `OrderPlaced` on the same queue. The server scenario `fanout-two-handlers-on-orderplaced` exercises this. See [examples/README.md](../examples/README.md#feature-coverage-where).
+**Runnable demo:** The playground host scenario `fanout-two-handlers-on-orderplaced` registers two handlers for the scenario's `OrderPlaced` message type on the same queue. See [examples/README.md](../examples/README.md#feature-coverage-where).
 
 ## MessageProperties
 

@@ -11,7 +11,7 @@
 <body>
   <h1>Ratatoskr Playground</h1>
   <p class="subtitle">
-    Single-host e-commerce demo: server-driven scenarios (PASS/FAIL), swim-lane timeline for the last order, then free-form toggles and infra widgets.
+    Single-host playground: each scenario has isolated Rabbit queues and message types; run one or many concurrently, cancel in-flight runs, and inspect activity plus per-scenario queue depths.
   </p>
   <p class="subtitle" style="margin-top:0.35rem;">
     <a href="http://localhost:15000" target="_blank" rel="noopener">Aspire dashboard</a> (default URL when using <code>aspire run</code>) for resource health and full distributed traces.
@@ -28,6 +28,7 @@
           <select id="scenario-select" aria-label="Scenario"></select>
         </div>
         <button type="button" id="btn-run-scenario" class="btn btn-primary">Run</button>
+        <span id="scenario-cancel-wrap" style="margin-left:0.5rem;"></span>
       </div>
       <p id="scenario-desc" class="scenario-desc"></p>
       <div id="scenario-progress" class="progress-strip"></div>
@@ -37,9 +38,9 @@
     </section>
 
     <section class="panel" style="margin-bottom:1.25rem;" aria-labelledby="flow-heading">
-      <h2 id="flow-heading">Last order <span class="stale-badge" id="badge-flow" hidden>stale</span></h2>
+      <h2 id="flow-heading">Activity <span class="stale-badge" id="badge-flow" hidden>stale</span></h2>
       <p id="flow-empty" style="color:#64748b;font-size:0.875rem;margin-bottom:0.75rem;">
-        Place an order or run a scenario to poll flow and the merged activity timeline.
+        Run a scenario to attach a correlation id; the swim lanes below follow the latest scenario run (or last known order id).
       </p>
       <div id="flow-body" hidden>
         <div class="mode-tag" id="flow-status-line"></div>
@@ -64,22 +65,12 @@
       </div>
     </section>
 
-    <details class="freeform panel" open style="margin-bottom:1.25rem;">
-      <summary><strong>Advanced: free-form playground</strong> (place orders, toggles, replay)</summary>
+    <details class="panel" open style="margin-bottom:1.25rem;">
+      <summary><strong>Scenario catalog</strong></summary>
       <div style="margin-top:0.75rem;">
-        <div class="btn-row">
-          <button type="button" id="btn-place-outbox" class="btn btn-primary">Place Order (Outbox)</button>
-          <button type="button" id="btn-place-direct" class="btn btn-outline">Place Order (Direct)</button>
-          <button type="button" id="btn-place-oversized" class="btn btn-outline">Try oversized payload</button>
-          <button type="button" id="btn-replay" class="btn btn-outline" disabled title="Place an order first">Replay</button>
-        </div>
-        <div id="order-actions-error" class="error-msg"></div>
-        <div id="last-order-info" style="margin-top:0.65rem;font-size:0.8rem;color:#64748b;"></div>
+        <div id="playground-services"></div>
+        <div id="playground-services-error" class="error-msg"></div>
       </div>
-      <h3 style="margin-top:1rem;">Per-service toggles</h3>
-      <p style="color:#64748b;font-size:0.78rem;margin-bottom:0.5rem;">Apply explicit modes or use Cycle. Inventory uses off / throw / succeed-after / reject.</p>
-      <div id="playground-services"></div>
-      <div id="playground-services-error" class="error-msg"></div>
     </details>
 
     <details class="panel" style="margin-bottom:1.25rem;">

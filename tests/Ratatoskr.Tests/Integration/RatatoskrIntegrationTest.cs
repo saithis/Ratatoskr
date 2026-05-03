@@ -7,14 +7,15 @@ using Medallion.Threading;
 using Medallion.Threading.FileSystem;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Ratatoskr.RabbitMq;
+using Ratatoskr.TestHost;
 
 namespace Ratatoskr.Tests.Integration;
 
 [ClassDataSource<RabbitMqContainerFixture, PostgresContainerFixture>(Shared = [SharedType.PerTestSession, SharedType.PerTestSession])]
-public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture? postgres = null) 
+public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
     : IAsyncDisposable
 {
-    private WebApplicationFactory<Program>? _factory;
+    private WebApplicationFactory<RatatoskrTestHostAppMarker>? _factory;
 
     /// <summary>
     /// Provides access to the application's root service provider.
@@ -30,7 +31,7 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
     {
         get
         {
-            var builder = new Npgsql.NpgsqlConnectionStringBuilder(postgres?.ConnectionString ?? "")
+            var builder = new Npgsql.NpgsqlConnectionStringBuilder(postgres.ConnectionString)
             {
                 Database = $"test_{TestId}",
                 MaxPoolSize = 2
@@ -69,8 +70,6 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
 
     private async Task CreateDatabaseAsync()
     {
-        if (postgres == null) return;
-        
         // Connect to the maintenance database (usually 'postgres' or the one from fixture) to create the new one
         await using var connection = new Npgsql.NpgsqlConnection(postgres.ConnectionString);
         await connection.OpenAsync();
@@ -82,8 +81,6 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
 
     private async Task EnsureTestDatabaseSchemaAsync()
     {
-        if (postgres == null) return;
-
         var options = new DbContextOptionsBuilder<TestDbContext>()
             .UseNpgsql(PostgresConnectionString)
             .Options;
@@ -121,8 +118,6 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
 
     private async Task DropDatabaseAsync()
     {
-        if (postgres == null) return;
-
         try
         {
             // Connect to the maintenance database to drop the test database
