@@ -1,21 +1,20 @@
-# Ratatoskr E-Commerce Playground
+# Ratatoskr examples playground
 
-A multi-service example that demonstrates major Ratatoskr features in one runnable demo.
+Single ASP.NET Core host (**PlaygroundHost**) plus Aspire **AppHost** demonstrates the main Ratatoskr building blocks: EF Core outbox/inbox on two logical PostgreSQL databases (publisher vs consumer roles), RabbitMQ fan-out and retries, a **playground** HTTP surface (toggles, activities, diagnostics), a **server-driven scenario runner** (catalog, run status, cancel), and the static dashboard under `examples/PlaygroundHost/wwwroot/`.
 
-## The Scenario
+`examples/Docs` remains a **docfx-only** snippet project; it is not part of the runnable playground.
 
-A simplified order pipeline across three services:
+## Topology
 
-| Service | Role |
+| Piece | Role |
 |---|---|
-| **OrderService** | Creates orders, stages `OrderPlaced`, `ProcessOrderCommand`, and broker-less `ReserveStockInternal` in one outbox transaction (or publishes direct after persisting the order); consumes `OrderFulfilled` / `OrderFailed` via inbox; optional **simulated outbox transport failures** (`IMessageSender` decorator) |
-| **InventoryService** | Consumes `ProcessOrderCommand` with inbox deduplication; stages `OrderFulfilled` / `OrderFailed` through its **outbox**; playground modes: off, throw (retries/poison), **succeed-after N**, reject (`OrderFailed`) |
-| **NotificationService** | **Fan-out**: two fire-and-forget handlers on the same `OrderPlaced` queue (no inbox); per-handler toggles drive **RabbitMQ** retry and DLQ |
-| **Dashboard** | Hybrid UI: **scenario runner** (PASS/FAIL, expected vs actual) on top, swim-lane **timeline** for the last order, collapsible **free-form** toggles and place/replay actions, Rabbit depths, poisoned panels + requeue |
+| **PlaygroundHost** | Ratatoskr bus, all handlers, order + playground HTTP APIs, scenario runner, static UI, Rabbit depth probe |
+| **publisherdb** | Publisher `DbContext`: order row, outbox for cross-service messages, inbox for outcomes, EF Core internal `orders.internal` channel |
+| **consumerdb** | Consumer `DbContext`: command inbox + outcome outbox |
+| **playgrounddb** | Scenario run ledger (`Runs` table) |
+| **RabbitMQ** | `ecommerce.events` / `ecommerce.commands` topology (two logical consume channel names can share one AMQP exchange) |
 
-## Quick Start
-
-Use the [.NET Aspire](https://learn.microsoft.com/dotnet/aspire/) CLI (the Aspire workload is not required):
+## Quick start
 
 ```bash
 cd examples/AppHost
@@ -23,111 +22,51 @@ aspire run
 # or: dotnet run
 ```
 
-The Aspire dashboard opens (for example at http://localhost:15000). Open the **dashboard** resource URL to load the playground UI. Rabbit queue depths load from the Dashboard service via `RabbitMQ.Client` passive `MessageCount` (no management HTTP API required). You can still use RabbitMQ Management for message inspection.
+Aspire opens the dashboard (often `http://localhost:15000`). Open the **playgroundhost** HTTP endpoint for the UI. Playground APIs and scenarios respond with **404** unless the host enables the playground (`RATATOSKR_EXAMPLES_PLAYGROUND=1` is set from AppHost, or configure `Playground:Enabled` for local runs).
 
-## Feature Coverage
+## Environment
+
+| Variable / setting | Effect |
+|---|---|
+| `RATATOSKR_EXAMPLES_PLAYGROUND=1` | Forces `Playground:Enabled` on (used by AppHost). |
+| `Playground:Enabled` | When false, `/api/playground/*` returns 404 (except static files and health). |
+| `Playground:SingleFlight` | When true, only one scenario run at a time (HTTP 400 if another is in progress). |
+| `Playground:RegisterBlockingScenario=1` | Registers `blocking-hold` scenario (long sleep) for manual single-flight experiments. |
+| `Playground:RegisterCancelSmokeScenario=1` | Registers `cancel-smoke` scenario (waits until cancelled) for tests. |
+
+## Feature coverage (where)
 
 | Feature | Where |
 |---|---|
-| Outbox (EF Core, multiple messages one transaction) | `OrderService` — `POST /api/orders` stages `OrderPlaced` + `ProcessOrderCommand` + `ReserveStockInternal` with stable CloudEvents ids (`PlaygroundMessageIds`) |
-| Outbox transport failure injection | `OrderService` — playground toggle `simulate-outbox-transport-failure` wraps `IMessageSender` (`FailableMessageSender` + `OutboxFailureState`): succeed, **succeed-after N**, or always-fail (real outbox retry/poison path) |
-| Outbox max message size | `OrderService` — `WithMaxMessageSize` on outbox; `POST /api/orders/oversized` fills `OrderPlaced.BulkPaddingForDemo` so `SaveChanges` rolls back (see [Outbox message size](../docs/outbox.md#message-size-validation)) |
-| EF Core transport (same DbContext) | `OrderService` — internal channel `orders.internal` publishes/consumes `ReserveStockInternal` with `WithEfCore()` + inbox (see [EF Core transport](../docs/efcore-transport.md#same-dbcontext-optimization)) |
-| Direct publish (no outbox) | `OrderService` — `POST /api/orders/direct` persists the order row then `PublishDirectAsync` for staged messages |
-| Replay (dedup demo) | `OrderService` — `POST /api/orders/{id}/replay` republishes with the same ids |
-| `[RatatoskrMessage]` attribute | All message types in `PlaygroundMessages` |
-| Event publish/consume | `OrderPlaced`, `OrderFulfilled`, `OrderFailed` |
-| Command send/consume | `ProcessOrderCommand` |
-| Fan-out (two handlers, one queue) | `NotificationService` — `OrderPlacedNotificationHandler` + `OrderPlacedAnalyticsHandler` on `ecommerce.events.notifications` (fire-and-forget `.WithHandler<T>()`; see [Messages & handlers](../docs/messages-handlers.md#fan-out-rabbit-no-inbox)) |
-| **Inbox** retries + poison | Inventory **throw** mode; OrderService consume toggles; short retry delay in tests |
-| **Rabbit** retry + DLQ | Consumer queues use managed retry (`WithRetry`); DLQ `*.dlq` |
-| **Direct consume** (no inbox) | `NotificationService`: handlers run on the consumer thread; **both** handlers run per delivery; if one throws, the whole delivery is nacked (no per-handler isolation without inbox) |
-| Inbox deduplication | InventoryService command inbox; replay uses stable message ids |
-| Management API + requeue | OrderService + InventoryService poisoned outbox/inbox |
-| Outbox / inbox polling | Short intervals in examples for demo responsiveness |
-| RabbitMQ transport | Cross-service messaging |
-| EF Core durability | OrderService (`ordersdb`), InventoryService (`inventorydb`) |
-| Playground observability | `PlaygroundActivityRecorder` (`IMessageActivityObserver`) — `GET /api/playground/activities?orderId=` |
+| Outbox (multi-message one transaction) | `POST /api/orders` — scenario `outbox-success` and related slugs |
+| Outbox transport failure injection | Toggle `simulate-outbox-transport-failure` + `OutboxFailureState` (run-scoped via CloudEvents extension when configured in scenarios) |
+| Outbox max message size | `WithMaxMessageSize` on publisher outbox; `POST /api/orders/oversized`; scenario `oversized-payload-rolls-back` |
+| EF Core internal channel | `orders.internal` + `ReserveStockInternal`; scenario `efcore-internal-command` |
+| Direct publish | `POST /api/orders/direct`; scenario `direct-consume-success` |
+| Replay | `POST /api/orders/{id}/replay`; scenario `replay-dedups` |
+| Fan-out (two handlers, one queue) | Notification handlers on `ecommerce.events.notifications`; scenario `fanout-two-handlers-on-orderplaced` |
+| Inbox retries / poison | Inventory throw / succeed-after; scenarios `inbox-poison`, `inbox-retry-then-success` |
+| Rabbit retry + DLQ | Managed consumer queues; scenario `direct-consume-dlq` |
+| Management API + requeue | `MapRatatoskrManagementApi` — paths under `ratatoskr/api/v1/efcore/contexts/{PublisherDbContext\|ConsumerDbContext}/...` |
+| Diagnostics summary | `GET /api/playground/diagnostics/poisoned-summary` (publisher vs consumer poisoned counts) |
+| Activity log | `PlaygroundActivityRecorder` — `GET /api/playground/activities?orderId=` or `?scenarioRunId=` |
 
-## Dashboard scenario catalog
+## Scenario catalog
 
-Scenarios are **client-side only** (no scenario-specific server APIs). Each run resets toggles, arranges state, acts (place order, replay, or call a dedicated endpoint), then polls until pass or timeout (~30–60 s). Toggle bodies support optional `mode` and `failureCount` (see below).
+Scenarios are **server-side** (`GET /api/playground/scenarios`, `POST /api/playground/scenarios/{slug}/run`, `GET /api/playground/runs/{id}`, `POST /api/playground/runs/{id}/cancel`). The dashboard loads the catalog from the server (no duplicate JSON in `wwwroot`).
 
-| ID | Topic | What it proves |
-|---|---|---|
-| `outbox-success` | Outbox | Happy path to **Fulfilled** |
-| `outbox-retry-then-success` | Outbox | Simulated send failures then recovery |
-| `outbox-poison` | Outbox | Poisoned outbox rows when send always fails |
-| `inbox-success` | Inbox | Inventory inbox processes command |
-| `inbox-retry-then-success` | Inbox | Inventory **succeed-after N** then **Fulfilled** |
-| `inbox-poison-and-requeue` | Inbox | Poisoned inventory inbox, optional requeue narrative |
-| `business-rejection` | Inbox | Inventory **reject** leads to **Failed** order |
-| `direct-consume-success` | Rabbit | Notifications succeed |
-| `direct-consume-retry-then-success` | Rabbit | Notification **succeed-after N** |
-| `direct-consume-dlq` | Rabbit | Notification fail-until DLQ |
-| `replay-dedups` | Dedup | Replay: inventory inbox dedups; notifications may run again (no inbox) |
-| `efcore-internal-command` | EF Core | `ReserveStockInternal` activity without Rabbit for that channel |
-| `fanout-two-handlers-on-orderplaced` | Rabbit | Both notification handlers recorded |
-| `oversized-payload-rolls-back` | Outbox | `POST /api/orders/oversized` rolls back order row |
+Slug examples: `outbox-success`, `outbox-retry-then-success`, `outbox-poison`, `inbox-retry-then-success`, `inbox-poison`, `business-rejection`, `direct-consume-success`, `direct-consume-retry`, `direct-consume-dlq`, `replay-dedups`, `efcore-internal-command`, `fanout-two-handlers-on-orderplaced`, `oversized-payload-rolls-back`.
 
-Static assets live under `examples/Dashboard/wwwroot/` (`index.html`, `css/`, `js/`).
-
-## Playground HTTP APIs (dev-only)
-
-| Service | Endpoints |
-|---|---|
-| OrderService | `GET /api/playground/activities?orderId=`, `GET /api/playground/control-state`, `POST /api/playground/toggle`, `POST /api/orders/oversized` |
-| InventoryService | same playground paths |
-| NotificationService | same playground paths |
-| Dashboard | `GET /api/playground/rabbit-depths` (queue main / retry / DLQ counts) |
-
-### Toggle body
-
-- Cycle (backward compatible): `{ "key": "<toggle-key>" }`.
-- Explicit: `{ "key": "<toggle-key>", "mode": "succeed" \| "fail" \| "succeed-after", "failureCount": <n> }` (see each service’s `control-state` for keys).
-
-## Manual demo sequences
-
-### Inventory inbox poison (throw)
-
-1. Dashboard: under **InventoryService**, set **Consume ProcessOrderCommand** to **throw** (or cycle until throw).
-2. **Place Order (Outbox)** or **Place Order (Direct)**.
-3. Wait for the InventoryService inbox poisoned panel; set mode to **off** and **Requeue** the poisoned row.
-
-### Business rejection (reject)
-
-1. Set inventory command mode to **reject**.
-2. Place an order. Inventory stages `OrderFailed` via outbox; OrderService inbox marks the order **Failed**.
-
-### Rabbit retry + DLQ (notifications)
-
-1. Under **NotificationService**, set **Consume OrderPlaced** (notify or analytics) to **fail**.
-2. Place an order. Watch **RabbitMQ queue depth** (retry then DLQ). Without inbox, transport retry applies to the **whole** delivery (both fan-out handlers are retried together).
-
-### OrderService inbox handler failures
-
-1. Toggle **Consume OrderFulfilled** or **Consume OrderFailed** to **fail** on OrderService.
-2. Drive an order to fulfilled or failed, then observe poisoned OrderService inbox and **Requeue** after setting the toggle back to **succeed**.
-
-## Project Structure
+## Project layout
 
 ```
 examples/
-  AppHost/              Aspire host — services + infra
-  ServiceDefaults/      Shared OTEL + health checks
-  PlaygroundMessages/   Contracts, handler keys, ids, shared playground types
-  OrderService/         Outbox + inbox + EF internal channel + management API + flow API + playground APIs
-  InventoryService/     Command consume, outbox for outcomes, inbox, playground APIs
-  NotificationService/  Fan-out consumer, Rabbit retry, playground APIs
-  Dashboard/            Playground UI (scenario runner + timeline + toggles) + Rabbit depth endpoint
+  AppHost/           Aspire — postgres (publisherdb, consumerdb, playgrounddb) + rabbit + PlaygroundHost
+  PlaygroundHost/    Single demo host + wwwroot dashboard
+  ServiceDefaults/   Shared OpenTelemetry + health
+  Docs/              Docfx snippets only
 ```
 
-## Design notes
+## Tests
 
-- **InventoryService stages `OrderFulfilled` / `OrderFailed` in its outbox** in the same `SaveChanges` as inbox-side effects, so the happy path does not rely on `PublishDirectAsync` from the handler.
-- **NotificationService has no inbox.** Use **parameterless** `.WithHandler<THandler>()` so handlers are fire-and-forget; stable keys require `UseInbox` on the channel. Same `OrderPlaced` id replayed from the Dashboard fires handlers again; inventory command replay is deduplicated by inbox when ids match.
-- **Requeue on Inventory poisoned rows** is disabled while inventory mode is **throw**, so you do not immediately re-poison during a live demo.
-
-## Database shape changes
-
-If you use persistent Postgres volumes from an older checkout, reset the dev volume after pulling changes that alter `Order` or `InventoryDbContext` layout (`EnsureCreated` only applies cleanly on empty databases). Recent columns include `Orders.PublishOrigin` and `StatusChangedAt` on orders.
+HTTP-first playground tests live in `tests/PlaygroundHost.Tests` (separate assembly so `WebApplicationFactory<Program>` does not collide with `Ratatoskr.TestHost`). Library-level Ratatoskr integration tests remain in `tests/Ratatoskr.Tests`.

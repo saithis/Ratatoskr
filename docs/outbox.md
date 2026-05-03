@@ -104,7 +104,7 @@ d.UseOutbox(outbox => outbox
 
 Messages exceeding this limit cause `SaveChangesAsync` to throw, rolling back the entire transaction (including business data).
 
-**Runnable demo:** The playground `OrderService` configures a max outbox message size and exposes `POST /api/orders/oversized`, which stages an `OrderPlaced` with a large `BulkPaddingForDemo` field so the save fails and the order row is not persisted. See [examples/README.md](../examples/README.md#feature-coverage) and `examples/OrderService/Program.cs`.
+**Runnable demo:** `examples/PlaygroundHost/Program.cs` configures a max outbox message size and exposes `POST /api/orders/oversized`, which stages an `OrderPlaced` with a large `BulkPaddingForDemo` field so the save fails and the order row is not persisted. The server scenario `oversized-payload-rolls-back` covers the same behavior. See [examples/README.md](../examples/README.md#feature-coverage-where).
 
 ## Configuration
 

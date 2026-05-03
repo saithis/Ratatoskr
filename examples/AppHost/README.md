@@ -1,6 +1,6 @@
 # Ratatoskr AppHost
 
-This .NET Aspire AppHost orchestrates the e-commerce playground — four services, two PostgreSQL databases, and a RabbitMQ broker.
+This .NET Aspire AppHost orchestrates the e-commerce playground: **PlaygroundHost**, PostgreSQL (publisher, consumer, and playground logical databases), and RabbitMQ.
 
 See [examples/README.md](../README.md) for the full demo guide.
 
@@ -8,13 +8,13 @@ See [examples/README.md](../README.md) for the full demo guide.
 
 - .NET 10 SDK
 - Docker (for PostgreSQL and RabbitMQ containers)
-- .NET Aspire workload: `dotnet workload install aspire`
+- [Aspire CLI](https://aspire.dev) (`aspire` command)
 
 ## Running
 
 ```bash
 cd examples/AppHost
-dotnet run
+aspire run
 ```
 
-The Aspire Dashboard opens at http://localhost:15000. From there, find the **dashboard** service URL to open the playground UI.
+The Aspire dashboard opens (often at http://localhost:15000). Open the **playgroundhost** resource URL for the playground UI.

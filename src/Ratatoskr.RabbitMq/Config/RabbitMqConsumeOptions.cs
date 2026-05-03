@@ -61,6 +61,15 @@ public class RabbitMqConsumeOptions(RabbitMqChannelOptions inner)
         return this;
     }
 
+    /// <summary>
+    /// Binds this consumer to the given AMQP exchange (when it differs from the Ratatoskr channel name).
+    /// </summary>
+    public RabbitMqConsumeOptions WithAmqpExchangeName(string exchangeName)
+    {
+        inner.WithAmqpExchangeName(exchangeName);
+        return this;
+    }
+
     /// <summary>Sets the prefetch count (max unacknowledged messages per consumer).</summary>
     public RabbitMqConsumeOptions WithPrefetch(ushort count)
     {

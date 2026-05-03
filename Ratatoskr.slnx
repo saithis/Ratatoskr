@@ -1,12 +1,8 @@
 ﻿<Solution>
   <Folder Name="/examples/">
     <Project Path="examples/AppHost/AppHost.csproj" />
-    <Project Path="examples/Dashboard/Dashboard.csproj" />
     <Project Path="examples/Docs/Docs.csproj" />
-    <Project Path="examples/InventoryService/InventoryService.csproj" />
-    <Project Path="examples/NotificationService/NotificationService.csproj" />
-    <Project Path="examples/OrderService/OrderService.csproj" />
-    <Project Path="examples/PlaygroundMessages/PlaygroundMessages.csproj" />
+    <Project Path="examples/PlaygroundHost/PlaygroundHost.csproj" />
     <Project Path="examples/ServiceDefaults/ServiceDefaults.csproj" />
   </Folder>
   <Folder Name="/notes/">
@@ -14,6 +10,7 @@
     <File Path="notes\todos.md" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/PlaygroundHost.Tests/PlaygroundHost.Tests.csproj" />
     <Project Path="tests/Ratatoskr.TestHost/Ratatoskr.TestHost.csproj" />
     <Project Path="tests\Ratatoskr.Tests\Ratatoskr.Tests.csproj" />
   </Folder>

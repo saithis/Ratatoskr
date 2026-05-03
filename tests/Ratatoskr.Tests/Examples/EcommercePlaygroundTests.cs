@@ -3,8 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Time.Testing;
-using PlaygroundMessages;
-using PlaygroundMessages.Messages;
 using Ratatoskr;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
@@ -30,8 +28,8 @@ public class EcommercePlaygroundTests(RabbitMqContainerFixture rabbitMq, Postgre
     [Test]
     public async Task OrderPlaced_TwoHandlersOnChannel_BothInvoked()
     {
-        // Simulates OrderService publishing OrderPlaced and two independent handlers
-        // (InventoryService-like and NotificationService-like) both receiving it.
+        // Simulates publisher publishing OrderPlaced and two independent handlers
+        // (inventory-like and notification-like) both receiving it.
         // In production these are separate services/queues; here they are separate handlers
         // on the same channel to stay within a single test host.
         var inventoryCounter  = new InventoryCounter();
@@ -88,8 +86,8 @@ public class EcommercePlaygroundTests(RabbitMqContainerFixture rabbitMq, Postgre
     [Test]
     public async Task InboxDedup_DuplicateMessageId_HandlerInvokedOnce()
     {
-        // Simulates InventoryService inbox dedup: if the same CloudEvents message ID is
-        // delivered twice (e.g., via the Dashboard "Replay" button), the inbox constraint
+        // Simulates consumer command inbox dedup: if the same CloudEvents message ID is
+        // delivered twice (e.g., via a replay), the inbox constraint
         // ensures the handler runs exactly once.
         var counter = new InventoryCounter();
 
@@ -112,7 +110,7 @@ public class EcommercePlaygroundTests(RabbitMqContainerFixture rabbitMq, Postgre
                         .WithTransientQueue()
                         .WithQueueType(QueueType.Classic))
                     .Consumes<ProcessOrderCommand>(m =>
-                        m.WithHandler<ProcessCommandHandler>(HandlerKeys.InventoryProcessOrder))
+                        m.WithHandler<ProcessCommandHandler>(EcommerceHandlerKeys.InventoryProcessOrder))
                     .UseInbox<TestDbContext>());
             });
 
@@ -264,7 +262,7 @@ public class EcommercePlaygroundTests(RabbitMqContainerFixture rabbitMq, Postgre
     [Test]
     public async Task InboxPoison_HandlerAlwaysFails_StatusBecomesPoisoned()
     {
-        // Simulates InventoryService failure mode:
+        // Simulates consumer inventory failure mode:
         // a handler that always throws exhausts retries and the inbox handler status is poisoned.
         await StartTestAsync(services =>
         {
@@ -288,7 +286,7 @@ public class EcommercePlaygroundTests(RabbitMqContainerFixture rabbitMq, Postgre
                         .WithTransientQueue()
                         .WithQueueType(QueueType.Classic))
                     .Consumes<ProcessOrderCommand>(m =>
-                        m.WithHandler<AlwaysFailingCommandHandler>(HandlerKeys.InventoryProcessOrder))
+                        m.WithHandler<AlwaysFailingCommandHandler>(EcommerceHandlerKeys.InventoryProcessOrder))
                     .UseInbox<TestDbContext>());
             });
 

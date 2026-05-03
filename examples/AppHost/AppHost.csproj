@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-    <Sdk Name="Aspire.AppHost.Sdk" Version="13.1.0" />
+    <Sdk Name="Aspire.AppHost.Sdk" Version="13.2.2" />
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
@@ -16,10 +16,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\OrderService\OrderService.csproj" />
-        <ProjectReference Include="..\InventoryService\InventoryService.csproj" />
-        <ProjectReference Include="..\NotificationService\NotificationService.csproj" />
-        <ProjectReference Include="..\Dashboard\Dashboard.csproj" />
+        <ProjectReference Include="..\PlaygroundHost\PlaygroundHost.csproj" />
     </ItemGroup>
 
 </Project>
