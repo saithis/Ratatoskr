@@ -180,6 +180,55 @@ public class EcommercePlaygroundTests(RabbitMqContainerFixture rabbitMq, Postgre
         });
     }
 
+    [Test]
+    public async Task Outbox_OneSave_StagesOrderPlacedAndCommand_CreatesTwoOutboxRows()
+    {
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseOutbox(o => o.WithoutBackgroundProcessing()));
+
+                bus.AddEventPublishChannel(EvtChannel, c => c
+                    .WithRabbitMq(r => r.WithTopicExchange())
+                    .Produces<OrderPlaced>());
+
+                bus.AddCommandPublishChannel(CmdChannel, c => c
+                    .WithRabbitMq(r => r.WithDirectExchange())
+                    .Produces<ProcessOrderCommand>());
+            });
+
+            services.AddDbContext<TestDbContext>((sp, opts) =>
+            {
+                opts.UseNpgsql(PostgresConnectionString);
+                opts.RegisterOutbox<TestDbContext>(sp);
+            });
+        });
+        await InitializeDatabase();
+
+        var orderId = Guid.NewGuid();
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            db.OutboxMessages.Add(
+                new OrderPlaced { OrderId = orderId.ToString() },
+                new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(orderId) });
+            db.OutboxMessages.Add(
+                new ProcessOrderCommand { OrderId = orderId.ToString() },
+                new MessageProperties { Id = PlaygroundMessageIds.ProcessOrderCommand(orderId) });
+            await db.SaveChangesAsync();
+        });
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var rows = await db.Set<OutboxMessageEntity>().ToListAsync();
+            rows.Should().HaveCount(2, "each staged message type should produce one outbox row");
+        });
+    }
+
     // --- Test 4: failure mode — handler that always throws causes inbox handler to be poisoned ---
 
     [Test]

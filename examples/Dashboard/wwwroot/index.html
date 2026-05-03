@@ -40,6 +40,11 @@
     .steps li strong { color: #e2e8f0; }
     .failure-mode-on { color: #f87171; font-weight: 700; }
     .failure-mode-off { color: #4ade80; font-weight: 700; }
+    .mode-tag { font-family: ui-monospace, monospace; font-size: 0.85rem; color: #cbd5e1; }
+    .flow-steps { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+    .flow-step { padding: 0.35rem 0.65rem; border-radius: 0.375rem; border: 1px solid #475569; font-size: 0.78rem; color: #94a3b8; }
+    .flow-step.done { border-color: #22c55e; color: #bbf7d0; background: rgba(34, 197, 94, 0.12); }
+    .flow-step.pending { border-color: #475569; }
     #loading { color: #64748b; text-align: center; padding: 4rem 0; }
   </style>
 </head>
@@ -52,17 +57,26 @@
   <div id="app" hidden>
 
     <div class="steps">
-      <h2>Failure Mode Demo</h2>
+      <h2>Demo scenarios</h2>
       <ol>
-        <li><strong>Step 1:</strong> Click <em>Toggle Failure Mode</em> to enable it.</li>
-        <li><strong>Step 2:</strong> Click <em>Place Order (Outbox)</em> below.</li>
-        <li><strong>Step 3:</strong> Wait ~15 s for retries to exhaust (3 × 5 s).</li>
-        <li><strong>Step 4:</strong> Click <em>Toggle Failure Mode</em> again to disable it.</li>
-        <li><strong>Step 5:</strong> Click <em>Requeue</em> on the poisoned message — the Requeue button is disabled while failure mode is ON.</li>
+        <li><strong>Inventory inbox poison (Throw mode):</strong> Cycle Inventory to <em>throw</em>, place an order (outbox). The command handler fails; the <strong>inbox</strong> processor retries with backoff until poisoned. Turn mode to <em>off</em>, then <strong>Requeue</strong> on the poisoned row.</li>
+        <li><strong>Business rejection (Reject mode):</strong> Cycle Inventory to <em>reject</em>, place an order. Inventory publishes <code>OrderFailed</code>; OrderService inbox marks the order Failed.</li>
+        <li><strong>Rabbit retry + DLQ (notifications):</strong> Toggle <em>Notification failure</em>, place an order. The notification handler throws on the consumer thread (no inbox), so Rabbit retry (3 × 5 s) then DLQ <code>ecommerce.events.notifications.dlq</code> — inspect in RabbitMQ Management.</li>
       </ol>
     </div>
 
     <div class="grid">
+
+      <section class="panel" style="grid-column: 1 / -1" aria-labelledby="flow-heading">
+        <h2 id="flow-heading">Order flow <span class="stale-badge" id="badge-flow" hidden>stale</span></h2>
+        <p id="flow-empty" style="color:#64748b;font-size:0.875rem;margin-bottom:0.75rem;">Place an order via <strong>Place Order (Outbox)</strong> to poll <code>/api/orders/{id}/flow</code> here.</p>
+        <div id="flow-body" hidden>
+          <div class="mode-tag" id="flow-status-line"></div>
+          <div class="flow-steps" id="flow-steps"></div>
+          <p style="margin-top:0.75rem;font-size:0.72rem;color:#64748b;">Message ids (replay uses the same CloudEvents ids for dedup on the command inbox): <span id="flow-ids"></span></p>
+        </div>
+        <div id="error-flow" class="error-msg" role="alert"></div>
+      </section>
 
       <!-- OrderService Actions -->
       <section class="panel" aria-labelledby="order-actions-heading">
@@ -76,16 +90,29 @@
         <div id="last-order-info" style="margin-top:0.75rem;font-size:0.8rem;color:#64748b;"></div>
       </section>
 
-      <!-- InventoryService Failure Mode -->
+      <!-- InventoryService demo mode -->
       <section class="panel" aria-labelledby="failure-mode-heading">
-        <h2 id="failure-mode-heading">InventoryService Failure Mode</h2>
+        <h2 id="failure-mode-heading">InventoryService demo mode</h2>
         <div style="margin-bottom:0.75rem;">
-          Status: <span id="failure-mode-status" class="failure-mode-off">OFF</span>
+          Mode: <span id="inventory-mode-label" class="mode-tag">off</span>
+          <span style="color:#64748b;font-size:0.75rem;display:block;margin-top:0.35rem;">Cycles <strong>off</strong> → <strong>throw</strong> (inbox retries) → <strong>reject</strong> (<code>OrderFailed</code>) → off.</span>
         </div>
         <div class="btn-row">
-          <button id="btn-toggle-failure" class="btn btn-danger">Toggle Failure Mode</button>
+          <button id="btn-cycle-inventory-mode" class="btn btn-danger">Cycle inventory mode</button>
         </div>
         <div id="failure-mode-error" class="error-msg"></div>
+      </section>
+
+      <!-- NotificationService Rabbit DLQ demo -->
+      <section class="panel" aria-labelledby="notif-failure-heading">
+        <h2 id="notif-failure-heading">NotificationService (Rabbit DLQ)</h2>
+        <div style="margin-bottom:0.75rem;">
+          Throw on <code>OrderPlaced</code>: <span id="notif-failure-status" class="failure-mode-off">OFF</span>
+        </div>
+        <div class="btn-row">
+          <button id="btn-toggle-notif-failure" class="btn btn-outline">Toggle notification failure</button>
+        </div>
+        <div id="notif-failure-error" class="error-msg"></div>
       </section>
 
       <!-- OrderService Outbox Poisoned -->
@@ -141,8 +168,10 @@
     const state = {
       services: null,
       lastOrderId: null,
-      failureModeEnabled: false,
+      inventoryDemoMode: 'off',
+      notificationFailureEnabled: false,
       requeueingIds: new Set(),
+      flowTimer: null,
       panels: {
         'order-outbox':    { totalCount: null, items: [], error: null, stale: false },
         'order-inbox':     { totalCount: null, items: [], error: null, stale: false },
@@ -158,11 +187,62 @@
         document.getElementById('loading').hidden = true;
         document.getElementById('app').hidden = false;
 
-        await refreshFailureMode();
+        await refreshInventoryDemoMode();
+        await refreshNotificationFailureMode();
         bindActions();
         startPollers();
+        restartFlowPoll();
       } catch (e) {
         document.getElementById('loading').textContent = `Failed to load config: ${e.message}`;
+      }
+    }
+
+    function restartFlowPoll() {
+      if (state.flowTimer) {
+        clearInterval(state.flowTimer);
+        state.flowTimer = null;
+      }
+      if (!state.lastOrderId) {
+        document.getElementById('flow-body').hidden = true;
+        document.getElementById('flow-empty').hidden = false;
+        document.getElementById('badge-flow').hidden = true;
+        return;
+      }
+      document.getElementById('flow-empty').hidden = true;
+      document.getElementById('flow-body').hidden = false;
+      const tick = async () => {
+        try {
+          const r = await fetch(
+            `${state.services.orderServiceUrl}/api/orders/${state.lastOrderId}/flow`,
+            { signal: AbortSignal.timeout(5000) });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const data = await r.json();
+          renderFlow(data);
+          document.getElementById('badge-flow').hidden = true;
+          document.getElementById('error-flow').textContent = '';
+        } catch (e) {
+          document.getElementById('error-flow').textContent = e.message;
+          document.getElementById('badge-flow').hidden = false;
+        }
+      };
+      tick();
+      state.flowTimer = setInterval(tick, 2000);
+    }
+
+    function renderFlow(data) {
+      document.getElementById('flow-status-line').textContent =
+        `Status: ${data.status} · created ${data.createdAt} · last change ${data.statusChangedAt}`;
+      const ids = data.messageIds;
+      document.getElementById('flow-ids').textContent =
+        ids ? `${ids.orderPlaced} / ${ids.processOrderCommand}` : '';
+      const steps = data.steps ?? [];
+      const host = document.getElementById('flow-steps');
+      host.innerHTML = '';
+      for (const step of steps) {
+        const el = document.createElement('span');
+        el.className = 'flow-step ' + (step.done ? 'done' : 'pending');
+        el.textContent = step.label;
+        host.appendChild(el);
       }
     }
 
@@ -193,6 +273,16 @@
       renderPanel(key);
     }
 
+    function requeueTargets(key) {
+      if (key === 'order-outbox') {
+        return { urlBase: `${state.services.orderServiceUrl}/${state.services.orderManagementPath}/outbox/poisoned` };
+      }
+      if (key === 'order-inbox') {
+        return { urlBase: `${state.services.orderServiceUrl}/${state.services.orderManagementPath}/inbox/poisoned` };
+      }
+      return { urlBase: `${state.services.inventoryServiceUrl}/${state.services.inventoryManagementPath}/inbox/poisoned` };
+    }
+
     function renderPanel(key) {
       const s = state.panels[key];
       const countEl = document.getElementById(`count-${key}`);
@@ -221,17 +311,18 @@
             <div class="item-meta">errors: ${errors}${item.handlerKey ? ` · key: ${item.handlerKey}` : ''}</div>
           </div>`;
 
-        if (key === 'inventory-inbox') {
+        if (key === 'inventory-inbox' || key === 'order-inbox' || key === 'order-outbox') {
           const btn = document.createElement('button');
           btn.className = 'btn btn-outline';
           btn.style.fontSize = '0.75rem';
           btn.style.padding = '0.25rem 0.625rem';
           btn.textContent = 'Requeue';
-          btn.disabled = state.failureModeEnabled;
-          btn.title = state.failureModeEnabled
-            ? 'Disable failure mode before requeuing — otherwise the handler will fail again'
+          const invThrow = key === 'inventory-inbox' && state.inventoryDemoMode === 'throw';
+          btn.disabled = invThrow;
+          btn.title = invThrow
+            ? 'Set inventory mode away from throw before requeue, or the handler will fail again'
             : '';
-          makeArmedButton(btn, () => requeueHandler(id));
+          makeArmedButton(btn, () => requeuePanelItem(key, id));
           li.appendChild(btn);
         }
 
@@ -239,65 +330,92 @@
       }
     }
 
-    // --- Requeue ---
-    async function requeueHandler(id) {
+    async function requeuePanelItem(key, id) {
       if (state.requeueingIds.has(id)) return;
       state.requeueingIds.add(id);
-      renderPanel('inventory-inbox');
+      renderPanel(key);
       try {
-        const { inventoryServiceUrl, inventoryManagementPath } = state.services;
-        const res = await fetch(
-          `${inventoryServiceUrl}/${inventoryManagementPath}/inbox/poisoned/${id}/requeue`,
-          { method: 'POST', signal: AbortSignal.timeout(5000) }
-        );
+        const { urlBase } = requeueTargets(key);
+        const res = await fetch(`${urlBase}/${id}/requeue`, { method: 'POST', signal: AbortSignal.timeout(5000) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
       } catch (e) {
-        document.getElementById('error-inventory-inbox').textContent = `Requeue failed: ${e.message}`;
+        document.getElementById(`error-${key}`).textContent = `Requeue failed: ${e.message}`;
       } finally {
         state.requeueingIds.delete(id);
-        renderPanel('inventory-inbox');
+        renderPanel(key);
       }
     }
 
-    // --- Failure mode ---
-    async function refreshFailureMode() {
+    async function refreshInventoryDemoMode() {
       try {
         const res = await fetch(`${state.services.inventoryServiceUrl}/api/inventory/failure-mode`,
           { signal: AbortSignal.timeout(5000) });
         if (res.ok) {
           const data = await res.json();
-          setFailureMode(data.enabled);
+          setInventoryDemoMode(data.mode ?? 'off');
         }
-      } catch { /* ignore, service may not be up yet */ }
+      } catch { /* ignore */ }
     }
 
-    function setFailureMode(enabled) {
-      state.failureModeEnabled = enabled;
-      const el = document.getElementById('failure-mode-status');
+    function setInventoryDemoMode(mode) {
+      state.inventoryDemoMode = (mode || 'off').toLowerCase();
+      const el = document.getElementById('inventory-mode-label');
+      el.textContent = state.inventoryDemoMode;
+      el.className = 'mode-tag ' + (state.inventoryDemoMode === 'off' ? 'failure-mode-off' : 'failure-mode-on');
+      renderPanel('inventory-inbox');
+    }
+
+    async function refreshNotificationFailureMode() {
+      try {
+        const res = await fetch(`${state.services.notificationServiceUrl}/api/notifications/failure-mode`,
+          { signal: AbortSignal.timeout(5000) });
+        if (res.ok) {
+          const data = await res.json();
+          setNotificationFailure(!!data.enabled);
+        }
+      } catch { /* ignore */ }
+    }
+
+    function setNotificationFailure(enabled) {
+      state.notificationFailureEnabled = enabled;
+      const el = document.getElementById('notif-failure-status');
       el.textContent = enabled ? 'ON' : 'OFF';
       el.className = enabled ? 'failure-mode-on' : 'failure-mode-off';
-      renderPanel('inventory-inbox');
     }
 
     // --- Actions ---
     function bindActions() {
-      const btnToggle  = document.getElementById('btn-toggle-failure');
-      const btnOutbox  = document.getElementById('btn-place-outbox');
-      const btnDirect  = document.getElementById('btn-place-direct');
-      const btnReplay  = document.getElementById('btn-replay');
+      const btnCycleInv = document.getElementById('btn-cycle-inventory-mode');
+      const btnNotif    = document.getElementById('btn-toggle-notif-failure');
+      const btnOutbox   = document.getElementById('btn-place-outbox');
+      const btnDirect   = document.getElementById('btn-place-direct');
+      const btnReplay   = document.getElementById('btn-replay');
 
-      makeArmedButton(btnToggle, async () => {
+      makeArmedButton(btnCycleInv, async () => {
         try {
           document.getElementById('failure-mode-error').textContent = '';
           const res = await fetch(
             `${state.services.inventoryServiceUrl}/api/inventory/failure-mode`,
-            { method: 'POST', signal: AbortSignal.timeout(5000) }
-          );
+            { method: 'POST', signal: AbortSignal.timeout(5000) });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
-          setFailureMode(data.enabled);
+          setInventoryDemoMode(data.mode ?? 'off');
         } catch (e) {
           document.getElementById('failure-mode-error').textContent = e.message;
+        }
+      });
+
+      btnNotif.addEventListener('click', async () => {
+        try {
+          document.getElementById('notif-failure-error').textContent = '';
+          const res = await fetch(
+            `${state.services.notificationServiceUrl}/api/notifications/failure-mode`,
+            { method: 'POST', signal: AbortSignal.timeout(5000) });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          setNotificationFailure(!!data.enabled);
+        } catch (e) {
+          document.getElementById('notif-failure-error').textContent = e.message;
         }
       });
 
@@ -313,6 +431,7 @@
           document.getElementById('last-order-info').textContent = `Last order: ${data.id} (${data.status})`;
           btnReplay.disabled = false;
           btnReplay.title = '';
+          restartFlowPoll();
         } catch (e) {
           document.getElementById('order-actions-error').textContent = e.message;
         }
@@ -325,7 +444,8 @@
             { method: 'POST', signal: AbortSignal.timeout(5000) });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
-          document.getElementById('last-order-info').textContent = `Direct publish: ${data.orderId} (no outbox row)`;
+          document.getElementById('last-order-info').textContent =
+            `Direct publish: ${data.orderId} (no order row; OrderPlaced + ProcessOrderCommand published)`;
         } catch (e) {
           document.getElementById('order-actions-error').textContent = e.message;
         }

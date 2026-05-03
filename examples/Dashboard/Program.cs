@@ -19,6 +19,8 @@ app.MapGet("/api/config", (IConfiguration config) =>
         ?? throw new InvalidOperationException("OrderService:ManagementUrl is not configured.");
     var inventoryServiceUrl = config["InventoryService:ManagementUrl"]
         ?? throw new InvalidOperationException("InventoryService:ManagementUrl is not configured.");
+    var notificationServiceUrl = config["NotificationService:BaseUrl"]
+        ?? throw new InvalidOperationException("NotificationService:BaseUrl is not configured.");
 
     return TypedResults.Ok(new
     {
@@ -26,6 +28,7 @@ app.MapGet("/api/config", (IConfiguration config) =>
         orderManagementPath = $"{mgmtBase}/OrdersDbContext",
         inventoryServiceUrl,
         inventoryManagementPath = $"{mgmtBase}/InventoryDbContext",
+        notificationServiceUrl,
     });
 });
 

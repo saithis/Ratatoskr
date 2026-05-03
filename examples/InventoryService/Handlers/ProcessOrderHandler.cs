@@ -6,16 +6,28 @@ using Ratatoskr.Core;
 namespace InventoryService.Handlers;
 
 public class ProcessOrderHandler(
-    FailureModeState failureMode,
+    InventoryDemoModeState demoMode,
     IRatatoskr bus,
     ILogger<ProcessOrderHandler> logger) : IMessageHandler<ProcessOrderCommand>
 {
     public async Task HandleAsync(ProcessOrderCommand message, MessageProperties properties, CancellationToken cancellationToken)
     {
-        if (failureMode.IsEnabled)
+        switch (demoMode.Mode)
         {
-            logger.LogWarning("Failure mode is ON — throwing to trigger retry for order {OrderId}", message.OrderId);
-            throw new InvalidOperationException("Simulated inventory failure (failure mode is ON).");
+            case InventoryDemoMode.Throw:
+                logger.LogWarning("Inventory demo mode Throw — simulating handler failure for order {OrderId}", message.OrderId);
+                throw new InvalidOperationException("Simulated inventory failure (demo mode is Throw).");
+            case InventoryDemoMode.Reject:
+                await bus.PublishDirectAsync(new OrderFailed
+                {
+                    OrderId = message.OrderId,
+                    Reason = "Simulated business rejection (demo mode is Reject).",
+                });
+                logger.LogInformation("Order {OrderId} rejected (demo mode)", message.OrderId);
+                return;
+            case InventoryDemoMode.Off:
+            default:
+                break;
         }
 
         // PublishDirectAsync bypasses the outbox. There is a small loss window: if this service crashes

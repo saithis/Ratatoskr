@@ -1,6 +1,6 @@
 // Local development example only. See examples/README.md.
-using InventoryService;
 using Microsoft.AspNetCore.Mvc;
+using InventoryService;
 using InventoryService.Database;
 using InventoryService.Handlers;
 using Medallion.Threading;
@@ -22,7 +22,7 @@ var lockFileDirectory = new DirectoryInfo(Environment.CurrentDirectory);
 builder.Services.AddSingleton<IDistributedLockProvider>(_ => new FileDistributedSynchronizationProvider(lockFileDirectory));
 
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
-builder.Services.AddSingleton<FailureModeState>();
+builder.Services.AddSingleton<InventoryDemoModeState>();
 
 // DevOnlyNoAuth: permissive policy for local development example only.
 // Remove or replace before any deployment.
@@ -42,9 +42,11 @@ builder.Services.AddRatatoskr(bus =>
     bus.UseRabbitMq(c => { c.ConnectionString = new Uri(rabbitMqConnectionString); });
 
     bus.AddEfCoreDurability<InventoryDbContext>(d =>
-        d.UseInbox(o =>
-            o.WithRetention(TimeSpan.FromMinutes(30))
-             .WithCleanupInterval(TimeSpan.FromMinutes(5))));
+        d.UseInbox(o => o
+            .WithPollingInterval(TimeSpan.FromSeconds(2))
+            .WithMaxRetries(5)
+            .WithRetention(TimeSpan.FromMinutes(30))
+            .WithCleanupInterval(TimeSpan.FromMinutes(5))));
 
     bus.AddEventPublishChannel("ecommerce.events", c => c
         .WithRabbitMq(r => r.WithTopicExchange())
@@ -55,7 +57,7 @@ builder.Services.AddRatatoskr(bus =>
         .WithRabbitMq(r => r
             .WithDirectExchange()
             .WithQueueName("ecommerce.commands.inventory")
-            // Default is 30s. Short delay for demo visibility.
+            // Retries apply when the consumer nacks before inbox acceptance; with UseInbox the handler runs in the inbox processor instead.
             .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
         .Consumes<ProcessOrderCommand>(m => m.WithHandler<ProcessOrderHandler>(HandlerKeys.InventoryProcessOrder))
         .UseInbox<InventoryDbContext>());
@@ -84,14 +86,23 @@ using (var scope = app.Services.CreateScope())
 }
 
 // Dev-only endpoint — remove before deployment.
-app.MapPost("/api/inventory/failure-mode", ([FromServices] FailureModeState state) =>
+app.MapPost("/api/inventory/failure-mode", ([FromServices] InventoryDemoModeState state) =>
 {
-    var enabled = state.Toggle();
-    return TypedResults.Ok(new { enabled });
+    var mode = state.Cycle();
+    return TypedResults.Ok(new
+    {
+        mode = mode.ToString().ToLowerInvariant(),
+        // Back-compat: "failure" means a path that blocks success (throw or reject).
+        enabled = mode != InventoryDemoMode.Off,
+    });
 });
 
 // Dev-only endpoint — remove before deployment.
-app.MapGet("/api/inventory/failure-mode", ([FromServices] FailureModeState state) =>
-    TypedResults.Ok(new { enabled = state.IsEnabled }));
+app.MapGet("/api/inventory/failure-mode", ([FromServices] InventoryDemoModeState state) =>
+    TypedResults.Ok(new
+    {
+        mode = state.Mode.ToString().ToLowerInvariant(),
+        enabled = state.Mode != InventoryDemoMode.Off,
+    }));
 
 app.Run();

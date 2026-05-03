@@ -6,7 +6,8 @@ using Ratatoskr.Core;
 
 namespace OrderService.Handlers;
 
-public class OrderFulfilledHandler(OrdersDbContext db, ILogger<OrderFulfilledHandler> logger) : IMessageHandler<OrderFulfilled>
+public class OrderFulfilledHandler(OrdersDbContext db, TimeProvider time, ILogger<OrderFulfilledHandler> logger)
+    : IMessageHandler<OrderFulfilled>
 {
     public async Task HandleAsync(OrderFulfilled message, MessageProperties properties, CancellationToken cancellationToken)
     {
@@ -17,7 +18,9 @@ public class OrderFulfilledHandler(OrdersDbContext db, ILogger<OrderFulfilledHan
             return;
         }
 
+        var now = time.GetUtcNow().UtcDateTime;
         order.Status = OrderStatus.Fulfilled;
+        order.StatusChangedAt = now;
         await db.SaveChangesAsync(cancellationToken);
         logger.LogInformation("Order {OrderId} marked as Fulfilled", message.OrderId);
     }

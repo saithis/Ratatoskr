@@ -6,7 +6,8 @@ using Ratatoskr.Core;
 
 namespace OrderService.Handlers;
 
-public class OrderFailedHandler(OrdersDbContext db, ILogger<OrderFailedHandler> logger) : IMessageHandler<OrderFailed>
+public class OrderFailedHandler(OrdersDbContext db, TimeProvider time, ILogger<OrderFailedHandler> logger)
+    : IMessageHandler<OrderFailed>
 {
     public async Task HandleAsync(OrderFailed message, MessageProperties properties, CancellationToken cancellationToken)
     {
@@ -17,7 +18,9 @@ public class OrderFailedHandler(OrdersDbContext db, ILogger<OrderFailedHandler> 
             return;
         }
 
+        var now = time.GetUtcNow().UtcDateTime;
         order.Status = OrderStatus.Failed;
+        order.StatusChangedAt = now;
         await db.SaveChangesAsync(cancellationToken);
         logger.LogInformation("Order {OrderId} marked as Failed: {Reason}", message.OrderId, message.Reason);
     }
