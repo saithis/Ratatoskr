@@ -72,29 +72,21 @@ public sealed class BusinessRejectionScenario : IPlaygroundScenario
         string runId,
         CancellationToken cancellationToken)
     {
-        var now = time.GetUtcNow().UtcDateTime;
-        var order = new Order
-        {
-            Id = Guid.NewGuid(),
-            Status = OrderStatus.Placed,
-            CreatedAt = now,
-            StatusChangedAt = now,
-            PublishOrigin = "outbox",
-        };
-        db.Orders.Add(order);
+        var order = PlaygroundScenarioStaging.AddPlacedOrderToContext(db, time, "outbox");
         var orderIdStr = order.Id.ToString();
-        var mpCmd = new MessageProperties { Id = PlaygroundMessageIds.ProcessOrderCommand(order.Id) };
-        PlaygroundCorrelation.AttachToMessageProperties(mpCmd, runId);
-        db.OutboxMessages.Add(new ProcessOrderCommand(orderIdStr, runId), mpCmd);
+        PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
+            db,
+            runId,
+            new ProcessOrderCommand(orderIdStr, runId),
+            PlaygroundMessageIds.ProcessOrderCommand(order.Id));
         await db.SaveChangesAsync(cancellationToken);
         return order.Id;
     }
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
-        var sp = context.Services;
-        var time = sp.GetRequiredService<TimeProvider>();
-        var db = sp.GetRequiredService<PublisherDbContext>();
+        var time = context.GetTimeProvider();
+        var db = context.GetPublisherDb();
         var runId = context.ScenarioRunId;
         var orderId = await StageOrderAsync(db, time, runId, cancellationToken);
         context.StepsCompleted.Add("inventory_reject_mode");
@@ -102,7 +94,7 @@ public sealed class BusinessRejectionScenario : IPlaygroundScenario
             context.ScopeFactory,
             orderId,
             OrderStatus.Failed,
-            TimeSpan.FromSeconds(90),
+            ScenarioTiming.OrderEventuallyLong,
             time,
             cancellationToken);
     }

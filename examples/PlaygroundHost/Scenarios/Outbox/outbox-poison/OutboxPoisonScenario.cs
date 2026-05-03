@@ -96,36 +96,32 @@ public sealed class OutboxPoisonScenario : IPlaygroundScenario
         string runId,
         CancellationToken cancellationToken)
     {
-        var now = time.GetUtcNow().UtcDateTime;
-        var order = new Order
-        {
-            Id = Guid.NewGuid(),
-            Status = OrderStatus.Placed,
-            CreatedAt = now,
-            StatusChangedAt = now,
-            PublishOrigin = "outbox",
-        };
-        db.Orders.Add(order);
+        var order = PlaygroundScenarioStaging.AddPlacedOrderToContext(db, time, "outbox");
         var orderIdStr = order.Id.ToString();
-        var mpPlaced = new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(order.Id) };
-        var mpCmd = new MessageProperties { Id = PlaygroundMessageIds.ProcessOrderCommand(order.Id) };
-        var mpRes = new MessageProperties { Id = PlaygroundMessageIds.ReserveStockInternal(order.Id) };
-        PlaygroundCorrelation.AttachToMessageProperties(mpPlaced, runId);
-        PlaygroundCorrelation.AttachToMessageProperties(mpCmd, runId);
-        PlaygroundCorrelation.AttachToMessageProperties(mpRes, runId);
-        db.OutboxMessages.Add(new OrderPlaced(orderIdStr, runId), mpPlaced);
-        db.OutboxMessages.Add(new ProcessOrderCommand(orderIdStr, runId), mpCmd);
-        db.OutboxMessages.Add(new ReserveStockInternal(orderIdStr, runId), mpRes);
+        PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
+            db,
+            runId,
+            new OrderPlaced(orderIdStr, runId),
+            PlaygroundMessageIds.OrderPlaced(order.Id));
+        PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
+            db,
+            runId,
+            new ProcessOrderCommand(orderIdStr, runId),
+            PlaygroundMessageIds.ProcessOrderCommand(order.Id));
+        PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
+            db,
+            runId,
+            new ReserveStockInternal(orderIdStr, runId),
+            PlaygroundMessageIds.ReserveStockInternal(order.Id));
         await db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
-        var sp = context.Services;
-        var time = sp.GetRequiredService<TimeProvider>();
-        var db = sp.GetRequiredService<PublisherDbContext>();
+        var time = context.GetTimeProvider();
+        var db = context.GetPublisherDb();
         var runId = context.ScenarioRunId;
-        var registry = sp.GetRequiredService<OutboxSendFailureRegistry>();
+        var registry = context.GetRequired<OutboxSendFailureRegistry>();
         registry.Register(runId, OutboxSendFailureKind.AlwaysFail, 0);
         try
         {
@@ -133,25 +129,19 @@ public sealed class OutboxPoisonScenario : IPlaygroundScenario
             await StageOrderAsync(db, time, runId, cancellationToken);
             context.StepsCompleted.Add("staged_always_fail_send");
 
-            var deadline = time.GetUtcNow() + TimeSpan.FromSeconds(90);
-            while (time.GetUtcNow() < deadline)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                await using var scope2 = context.ScopeFactory.CreateAsyncScope();
-                var db2 = scope2.ServiceProvider.GetRequiredService<PublisherDbContext>();
-                var after = await PlaygroundSqlMetrics.CountPoisonedOutboxForScenarioRunAsync(db2, runId, cancellationToken);
-                if (after > before)
-                    return new ScenarioVerdict(true, details: new { before, after });
-
-                await Task.Delay(800, cancellationToken);
-            }
-
-            await using var scope3 = context.ScopeFactory.CreateAsyncScope();
-            var db3 = scope3.ServiceProvider.GetRequiredService<PublisherDbContext>();
-            var final = await PlaygroundSqlMetrics.CountPoisonedOutboxForScenarioRunAsync(db3, runId, cancellationToken);
-            return new ScenarioVerdict(
-                false,
-                $"Poisoned outbox count did not increase within timeout (before={before}, after={final}).");
+            return await ScenarioAssertions.IntMetricEventuallyExceedsBaselineAsync(
+                time,
+                ScenarioTiming.PollLoopLong,
+                ScenarioTiming.PollIntervalSlow,
+                before,
+                async ct =>
+                {
+                    await using var scope2 = context.ScopeFactory.CreateAsyncScope();
+                    var db2 = scope2.ServiceProvider.GetRequiredService<PublisherDbContext>();
+                    return await PlaygroundSqlMetrics.CountPoisonedOutboxForScenarioRunAsync(db2, runId, ct);
+                },
+                "Poisoned outbox count",
+                cancellationToken);
         }
         finally
         {

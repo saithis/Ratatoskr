@@ -48,21 +48,11 @@ public sealed class DirectConsumeRetryScenario : IPlaygroundScenario
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
-        var sp = context.Services;
-        var time = sp.GetRequiredService<TimeProvider>();
-        var db = sp.GetRequiredService<PublisherDbContext>();
-        var bus = sp.GetRequiredService<IRatatoskr>();
+        var time = context.GetTimeProvider();
+        var db = context.GetPublisherDb();
+        var bus = context.GetRatatoskr();
         var runId = context.ScenarioRunId;
-        var now = time.GetUtcNow().UtcDateTime;
-        var order = new Order
-        {
-            Id = Guid.NewGuid(),
-            Status = OrderStatus.Placed,
-            CreatedAt = now,
-            StatusChangedAt = now,
-            PublishOrigin = "direct",
-        };
-        db.Orders.Add(order);
+        var order = PlaygroundScenarioStaging.AddPlacedOrderToContext(db, time, "direct");
         await db.SaveChangesAsync(cancellationToken);
         var orderIdStr = order.Id.ToString();
         var mp = new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(order.Id) };
@@ -73,7 +63,7 @@ public sealed class DirectConsumeRetryScenario : IPlaygroundScenario
             context.ScopeFactory,
             order.Id,
             OrderStatus.Fulfilled,
-            TimeSpan.FromSeconds(90),
+            ScenarioTiming.OrderEventuallyLong,
             time,
             cancellationToken);
     }

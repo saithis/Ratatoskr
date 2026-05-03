@@ -34,20 +34,10 @@ public sealed class OversizedPayloadRollsBackScenario : IPlaygroundScenario
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
-        var sp = context.Services;
-        var time = sp.GetRequiredService<TimeProvider>();
-        var db = sp.GetRequiredService<PublisherDbContext>();
+        var time = context.GetTimeProvider();
+        var db = context.GetPublisherDb();
         var runId = context.ScenarioRunId;
-        var now = time.GetUtcNow().UtcDateTime;
-        var order = new Order
-        {
-            Id = Guid.NewGuid(),
-            Status = OrderStatus.Placed,
-            CreatedAt = now,
-            StatusChangedAt = now,
-            PublishOrigin = "outbox",
-        };
-        db.Orders.Add(order);
+        var order = PlaygroundScenarioStaging.AddPlacedOrderToContext(db, time, "outbox");
         var orderIdStr = order.Id.ToString("D");
         var mp = new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(order.Id) };
         PlaygroundCorrelation.AttachToMessageProperties(mp, runId);

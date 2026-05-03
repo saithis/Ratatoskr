@@ -45,37 +45,31 @@ public sealed class EfcoreInternalCommandScenario : IPlaygroundScenario
         string runId,
         CancellationToken cancellationToken)
     {
-        var now = time.GetUtcNow().UtcDateTime;
-        var order = new Order
-        {
-            Id = Guid.NewGuid(),
-            Status = OrderStatus.Placed,
-            CreatedAt = now,
-            StatusChangedAt = now,
-            PublishOrigin = "outbox",
-        };
-        db.Orders.Add(order);
+        var order = PlaygroundScenarioStaging.AddPlacedOrderToContext(db, time, "outbox");
         var orderIdStr = order.Id.ToString();
-        var mpRes = new MessageProperties { Id = PlaygroundMessageIds.ReserveStockInternal(order.Id) };
-        var mpSib = new MessageProperties { Id = $"{order.Id:D}:efcore-sibling" };
-        PlaygroundCorrelation.AttachToMessageProperties(mpRes, runId);
-        PlaygroundCorrelation.AttachToMessageProperties(mpSib, runId);
-        db.OutboxMessages.Add(new ReserveStockInternal(orderIdStr, runId), mpRes);
-        db.OutboxMessages.Add(new OutboxSibling(orderIdStr, runId), mpSib);
+        PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
+            db,
+            runId,
+            new ReserveStockInternal(orderIdStr, runId),
+            PlaygroundMessageIds.ReserveStockInternal(order.Id));
+        PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
+            db,
+            runId,
+            new OutboxSibling(orderIdStr, runId),
+            $"{order.Id:D}:efcore-sibling");
         await db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
-        var sp = context.Services;
-        var time = sp.GetRequiredService<TimeProvider>();
-        var db = sp.GetRequiredService<PublisherDbContext>();
-        var recorder = sp.GetRequiredService<PlaygroundActivityRecorder>();
+        var time = context.GetTimeProvider();
+        var db = context.GetPublisherDb();
+        var recorder = context.GetRequired<PlaygroundActivityRecorder>();
         var runId = context.ScenarioRunId;
         await StageOrderAsync(db, time, runId, cancellationToken);
         context.StepsCompleted.Add("staged_with_internal_pair");
 
-        await Task.Delay(TimeSpan.FromSeconds(6), cancellationToken);
+        await Task.Delay(ScenarioTiming.EfCoreActivitySettleDelay, cancellationToken);
         var entries = recorder.GetEntriesForScenarioRun(runId);
         var hit = entries.Any(e =>
             (e.MessageType ?? "").Contains("reserve-stock-internal", StringComparison.OrdinalIgnoreCase) &&

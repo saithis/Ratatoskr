@@ -96,37 +96,33 @@ public sealed class OutboxRetryThenSuccessScenario : IPlaygroundScenario
         string runId,
         CancellationToken cancellationToken)
     {
-        var now = time.GetUtcNow().UtcDateTime;
-        var order = new Order
-        {
-            Id = Guid.NewGuid(),
-            Status = OrderStatus.Placed,
-            CreatedAt = now,
-            StatusChangedAt = now,
-            PublishOrigin = "outbox",
-        };
-        db.Orders.Add(order);
+        var order = PlaygroundScenarioStaging.AddPlacedOrderToContext(db, time, "outbox");
         var orderIdStr = order.Id.ToString();
-        var mpPlaced = new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(order.Id) };
-        var mpCmd = new MessageProperties { Id = PlaygroundMessageIds.ProcessOrderCommand(order.Id) };
-        var mpRes = new MessageProperties { Id = PlaygroundMessageIds.ReserveStockInternal(order.Id) };
-        PlaygroundCorrelation.AttachToMessageProperties(mpPlaced, runId);
-        PlaygroundCorrelation.AttachToMessageProperties(mpCmd, runId);
-        PlaygroundCorrelation.AttachToMessageProperties(mpRes, runId);
-        db.OutboxMessages.Add(new OrderPlaced(orderIdStr, runId), mpPlaced);
-        db.OutboxMessages.Add(new ProcessOrderCommand(orderIdStr, runId), mpCmd);
-        db.OutboxMessages.Add(new ReserveStockInternal(orderIdStr, runId), mpRes);
+        PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
+            db,
+            runId,
+            new OrderPlaced(orderIdStr, runId),
+            PlaygroundMessageIds.OrderPlaced(order.Id));
+        PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
+            db,
+            runId,
+            new ProcessOrderCommand(orderIdStr, runId),
+            PlaygroundMessageIds.ProcessOrderCommand(order.Id));
+        PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
+            db,
+            runId,
+            new ReserveStockInternal(orderIdStr, runId),
+            PlaygroundMessageIds.ReserveStockInternal(order.Id));
         await db.SaveChangesAsync(cancellationToken);
         return order.Id;
     }
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
-        var sp = context.Services;
-        var time = sp.GetRequiredService<TimeProvider>();
-        var db = sp.GetRequiredService<PublisherDbContext>();
+        var time = context.GetTimeProvider();
+        var db = context.GetPublisherDb();
         var runId = context.ScenarioRunId;
-        var registry = sp.GetRequiredService<OutboxSendFailureRegistry>();
+        var registry = context.GetRequired<OutboxSendFailureRegistry>();
         registry.Register(runId, OutboxSendFailureKind.SucceedAfterNFailures, 2);
         try
         {
@@ -136,7 +132,7 @@ public sealed class OutboxRetryThenSuccessScenario : IPlaygroundScenario
                 context.ScopeFactory,
                 orderId,
                 OrderStatus.Fulfilled,
-                TimeSpan.FromSeconds(90),
+                ScenarioTiming.OrderEventuallyLong,
                 time,
                 cancellationToken);
         }

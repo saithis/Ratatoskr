@@ -53,28 +53,20 @@ public sealed class InboxPoisonScenario : IPlaygroundScenario
         string runId,
         CancellationToken cancellationToken)
     {
-        var now = time.GetUtcNow().UtcDateTime;
-        var order = new Order
-        {
-            Id = Guid.NewGuid(),
-            Status = OrderStatus.Placed,
-            CreatedAt = now,
-            StatusChangedAt = now,
-            PublishOrigin = "outbox",
-        };
-        db.Orders.Add(order);
+        var order = PlaygroundScenarioStaging.AddPlacedOrderToContext(db, time, "outbox");
         var orderIdStr = order.Id.ToString();
-        var mpCmd = new MessageProperties { Id = PlaygroundMessageIds.ProcessOrderCommand(order.Id) };
-        PlaygroundCorrelation.AttachToMessageProperties(mpCmd, runId);
-        db.OutboxMessages.Add(new ProcessOrderCommand(orderIdStr, runId), mpCmd);
+        PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
+            db,
+            runId,
+            new ProcessOrderCommand(orderIdStr, runId),
+            PlaygroundMessageIds.ProcessOrderCommand(order.Id));
         await db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
-        var sp = context.Services;
-        var time = sp.GetRequiredService<TimeProvider>();
-        var pub = sp.GetRequiredService<PublisherDbContext>();
+        var time = context.GetTimeProvider();
+        var pub = context.GetPublisherDb();
         var runId = context.ScenarioRunId;
         int before;
         await using (var conScope = context.ScopeFactory.CreateAsyncScope())
@@ -86,25 +78,19 @@ public sealed class InboxPoisonScenario : IPlaygroundScenario
         await StageOrderAsync(pub, time, runId, cancellationToken);
         context.StepsCompleted.Add("inventory_throw_mode");
 
-        var deadline = time.GetUtcNow() + TimeSpan.FromSeconds(90);
-        while (time.GetUtcNow() < deadline)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            await using var scope2 = context.ScopeFactory.CreateAsyncScope();
-            var db2 = scope2.ServiceProvider.GetRequiredService<ConsumerDbContext>();
-            var after = await PlaygroundSqlMetrics.CountPoisonedInboxForScenarioRunAsync(db2, runId, cancellationToken);
-            if (after > before)
-                return new ScenarioVerdict(true, details: new { before, after });
-
-            await Task.Delay(800, cancellationToken);
-        }
-
-        await using var conFinal = context.ScopeFactory.CreateAsyncScope();
-        var conDbFinal = conFinal.ServiceProvider.GetRequiredService<ConsumerDbContext>();
-        var final = await PlaygroundSqlMetrics.CountPoisonedInboxForScenarioRunAsync(conDbFinal, runId, cancellationToken);
-        return new ScenarioVerdict(
-            false,
-            $"Poisoned consumer inbox count did not increase (before={before}, after={final}).");
+        return await ScenarioAssertions.IntMetricEventuallyExceedsBaselineAsync(
+            time,
+            ScenarioTiming.PollLoopLong,
+            ScenarioTiming.PollIntervalSlow,
+            before,
+            async ct =>
+            {
+                await using var scope2 = context.ScopeFactory.CreateAsyncScope();
+                var db2 = scope2.ServiceProvider.GetRequiredService<ConsumerDbContext>();
+                return await PlaygroundSqlMetrics.CountPoisonedInboxForScenarioRunAsync(db2, runId, ct);
+            },
+            "Poisoned consumer inbox count",
+            cancellationToken);
     }
 
     [RatatoskrMessage("inbox-poison.process-order-command")]

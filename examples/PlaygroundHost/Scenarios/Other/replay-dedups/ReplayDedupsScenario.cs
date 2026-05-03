@@ -87,41 +87,35 @@ public sealed class ReplayDedupsScenario : IPlaygroundScenario
         string runId,
         CancellationToken cancellationToken)
     {
-        var now = time.GetUtcNow().UtcDateTime;
-        var order = new Order
-        {
-            Id = Guid.NewGuid(),
-            Status = OrderStatus.Placed,
-            CreatedAt = now,
-            StatusChangedAt = now,
-            PublishOrigin = "outbox",
-        };
-        db.Orders.Add(order);
+        var order = PlaygroundScenarioStaging.AddPlacedOrderToContext(db, time, "outbox");
         var orderIdStr = order.Id.ToString();
-        var mpPlaced = new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(order.Id) };
-        var mpCmd = new MessageProperties { Id = PlaygroundMessageIds.ProcessOrderCommand(order.Id) };
-        PlaygroundCorrelation.AttachToMessageProperties(mpPlaced, runId);
-        PlaygroundCorrelation.AttachToMessageProperties(mpCmd, runId);
-        db.OutboxMessages.Add(new OrderPlaced(orderIdStr, runId), mpPlaced);
-        db.OutboxMessages.Add(new ProcessOrderCommand(orderIdStr, runId), mpCmd);
+        PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
+            db,
+            runId,
+            new OrderPlaced(orderIdStr, runId),
+            PlaygroundMessageIds.OrderPlaced(order.Id));
+        PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
+            db,
+            runId,
+            new ProcessOrderCommand(orderIdStr, runId),
+            PlaygroundMessageIds.ProcessOrderCommand(order.Id));
         await db.SaveChangesAsync(cancellationToken);
         return order.Id;
     }
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
-        var sp = context.Services;
-        var time = sp.GetRequiredService<TimeProvider>();
-        var db = sp.GetRequiredService<PublisherDbContext>();
-        var bus = sp.GetRequiredService<IRatatoskr>();
-        var recorder = sp.GetRequiredService<PlaygroundActivityRecorder>();
+        var time = context.GetTimeProvider();
+        var db = context.GetPublisherDb();
+        var bus = context.GetRatatoskr();
+        var recorder = context.GetRequired<PlaygroundActivityRecorder>();
         var runId = context.ScenarioRunId;
         var orderId = await StageOrderAsync(db, time, runId, cancellationToken);
         var v = await ScenarioAssertions.OrderEventuallyAsync(
             context.ScopeFactory,
             orderId,
             OrderStatus.Fulfilled,
-            TimeSpan.FromSeconds(90),
+            ScenarioTiming.OrderEventuallyLong,
             time,
             cancellationToken);
         if (!v.Passed)
@@ -137,9 +131,10 @@ public sealed class ReplayDedupsScenario : IPlaygroundScenario
         await bus.PublishDirectAsync(new ProcessOrderCommand(orderIdStr, runId), p2, cancellationToken);
         context.StepsCompleted.Add("replay_direct_publish");
 
-        await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
-        var after = recorder.GetEntriesForOrder(orderId).Count;
-        var nPlaced = recorder.GetEntriesForOrder(orderId).Count(e =>
+        await Task.Delay(ScenarioTiming.ReplaySettleDelay, cancellationToken);
+        var entriesAfterReplay = recorder.GetEntriesForOrder(orderId).ToList();
+        var after = entriesAfterReplay.Count;
+        var nPlaced = entriesAfterReplay.Count(e =>
             e.Stage == nameof(MessageStage.Dispatched) &&
             e.IsSuccess == true &&
             (e.MessageType ?? "").Contains("order-placed", StringComparison.OrdinalIgnoreCase));

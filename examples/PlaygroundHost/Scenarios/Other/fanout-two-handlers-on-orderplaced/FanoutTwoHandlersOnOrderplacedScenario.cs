@@ -55,52 +55,52 @@ public sealed class FanoutTwoHandlersOnOrderplacedScenario : IPlaygroundScenario
         string runId,
         CancellationToken cancellationToken)
     {
-        var now = time.GetUtcNow().UtcDateTime;
-        var order = new Order
-        {
-            Id = Guid.NewGuid(),
-            Status = OrderStatus.Placed,
-            CreatedAt = now,
-            StatusChangedAt = now,
-            PublishOrigin = "outbox",
-        };
-        db.Orders.Add(order);
+        var order = PlaygroundScenarioStaging.AddPlacedOrderToContext(db, time, "outbox");
         var orderIdStr = order.Id.ToString();
-        var mpPlaced = new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(order.Id) };
-        PlaygroundCorrelation.AttachToMessageProperties(mpPlaced, runId);
-        db.OutboxMessages.Add(new OrderPlaced(orderIdStr, runId), mpPlaced);
+        PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
+            db,
+            runId,
+            new OrderPlaced(orderIdStr, runId),
+            PlaygroundMessageIds.OrderPlaced(order.Id));
         await db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
-        var sp = context.Services;
-        var time = sp.GetRequiredService<TimeProvider>();
-        var db = sp.GetRequiredService<PublisherDbContext>();
-        var recorder = sp.GetRequiredService<PlaygroundActivityRecorder>();
+        static int CountSuccessfulOrderPlacedDispatches(IReadOnlyList<PlaygroundActivityEntry> entries) =>
+            entries.Count(e =>
+                e.Stage == nameof(MessageStage.Dispatched) &&
+                e.IsSuccess == true &&
+                (e.MessageType ?? "").Contains("order-placed", StringComparison.OrdinalIgnoreCase));
+
+        var time = context.GetTimeProvider();
+        var db = context.GetPublisherDb();
+        var recorder = context.GetRequired<PlaygroundActivityRecorder>();
         var runId = context.ScenarioRunId;
         await StageOrderAsync(db, time, runId, cancellationToken);
         context.StepsCompleted.Add("staged_for_fanout");
 
-        var deadline = time.GetUtcNow() + TimeSpan.FromSeconds(90);
-        while (time.GetUtcNow() < deadline)
+        var ok = await ScenarioAssertions.WaitUntilAsync(
+            time,
+            ScenarioTiming.PollLoopLong,
+            ScenarioTiming.OrderPollInterval,
+            async ct =>
+            {
+                ct.ThrowIfCancellationRequested();
+                var entries = recorder.GetEntriesForScenarioRun(runId);
+                return CountSuccessfulOrderPlacedDispatches(entries) >= 2;
+            },
+            cancellationToken);
+
+        if (ok)
         {
-            cancellationToken.ThrowIfCancellationRequested();
             var entries = recorder.GetEntriesForScenarioRun(runId);
-            var ok = entries.Count(e =>
-                e.Stage == nameof(MessageStage.Dispatched) &&
-                e.IsSuccess == true &&
-                (e.MessageType ?? "").Contains("order-placed", StringComparison.OrdinalIgnoreCase));
-            if (ok >= 2)
-                return new ScenarioVerdict(true, details: new { matchingRows = ok });
-            await Task.Delay(500, cancellationToken);
+            var okCount = CountSuccessfulOrderPlacedDispatches(entries);
+            return new ScenarioVerdict(true, details: new { matchingRows = okCount });
         }
 
         var final = recorder.GetEntriesForScenarioRun(runId);
-        var n = final.Count(e =>
-            e.Stage == nameof(MessageStage.Dispatched) &&
-            e.IsSuccess == true &&
-            (e.MessageType ?? "").Contains("order-placed", StringComparison.OrdinalIgnoreCase));
+        var n = CountSuccessfulOrderPlacedDispatches(final);
         return new ScenarioVerdict(false, $"Expected at least 2 successful OrderPlaced handler rows for this run; saw {n}.");
     }
 

@@ -48,27 +48,17 @@ public sealed class DirectConsumeDlqScenario : IPlaygroundScenario
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
-        var sp = context.Services;
-        var cfg = sp.GetRequiredService<IConfiguration>();
+        var cfg = context.GetRequired<IConfiguration>();
         var rabbitCs = cfg.GetConnectionString("rabbitmq")
             ?? throw new InvalidOperationException("rabbitmq connection string missing.");
-        var time = sp.GetRequiredService<TimeProvider>();
-        var db = sp.GetRequiredService<PublisherDbContext>();
-        var bus = sp.GetRequiredService<IRatatoskr>();
+        var time = context.GetTimeProvider();
+        var db = context.GetPublisherDb();
+        var bus = context.GetRatatoskr();
         var runId = context.ScenarioRunId;
         var mainQ = PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug);
         var d0 = await RabbitDlqDepthReader.GetDlqCountAsync(rabbitCs, mainQ, cancellationToken);
 
-        var now = time.GetUtcNow().UtcDateTime;
-        var order = new Order
-        {
-            Id = Guid.NewGuid(),
-            Status = OrderStatus.Placed,
-            CreatedAt = now,
-            StatusChangedAt = now,
-            PublishOrigin = "direct",
-        };
-        db.Orders.Add(order);
+        var order = PlaygroundScenarioStaging.AddPlacedOrderToContext(db, time, "direct");
         await db.SaveChangesAsync(cancellationToken);
         var orderIdStr = order.Id.ToString();
         var mpPlaced = new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(order.Id) };
@@ -76,19 +66,14 @@ public sealed class DirectConsumeDlqScenario : IPlaygroundScenario
         await bus.PublishDirectAsync(new OrderPlaced(orderIdStr, runId), mpPlaced, cancellationToken);
         context.StepsCompleted.Add("direct_publish_always_fail");
 
-        var deadline = time.GetUtcNow() + TimeSpan.FromSeconds(90);
-        while (time.GetUtcNow() < deadline)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var d = await RabbitDlqDepthReader.GetDlqCountAsync(rabbitCs, mainQ, cancellationToken);
-            if (d > d0)
-                return new ScenarioVerdict(true, details: new { before = d0, after = d });
-
-            await Task.Delay(1000, cancellationToken);
-        }
-
-        var final = await RabbitDlqDepthReader.GetDlqCountAsync(rabbitCs, mainQ, cancellationToken);
-        return new ScenarioVerdict(false, $"DLQ depth did not increase (before={d0}, after={final}).");
+        return await ScenarioAssertions.DlqDepthEventuallyExceedsBaselineAsync(
+            rabbitCs,
+            mainQ,
+            d0,
+            time,
+            ScenarioTiming.PollLoopLong,
+            ScenarioTiming.DlqPollInterval,
+            cancellationToken);
     }
 
     [RatatoskrMessage("direct-consume-dlq.order-placed")]
