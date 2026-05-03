@@ -9,6 +9,7 @@
     body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 2rem; }
     h1 { font-size: 1.5rem; font-weight: 700; color: #f8fafc; margin-bottom: 0.25rem; }
     h2 { font-size: 1rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; }
+    h3 { font-size: 0.95rem; font-weight: 600; color: #cbd5e1; margin-bottom: 0.5rem; }
     p.subtitle { color: #64748b; margin-bottom: 2rem; font-size: 0.9rem; }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
     .panel { background: #1e293b; border: 1px solid #334155; border-radius: 0.75rem; padding: 1.5rem; }
@@ -27,8 +28,7 @@
     .btn-armed { background: #f59e0b !important; color: #000 !important; }
     .btn-outline { background: transparent; color: #94a3b8; border: 1px solid #475569; }
     .btn-outline:hover:not(:disabled) { background: #1e293b; color: #e2e8f0; }
-    .btn-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
-    .section-title { font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem; }
+    .btn-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
     .item-list { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem; max-height: 200px; overflow-y: auto; }
     .item { background: #0f172a; border: 1px solid #334155; border-radius: 0.5rem; padding: 0.625rem 0.75rem; font-size: 0.8rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem; }
     .item-info { overflow: hidden; }
@@ -38,30 +38,37 @@
     .steps ol { padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.5rem; }
     .steps li { color: #94a3b8; font-size: 0.875rem; }
     .steps li strong { color: #e2e8f0; }
-    .failure-mode-on { color: #f87171; font-weight: 700; }
-    .failure-mode-off { color: #4ade80; font-weight: 700; }
-    .mode-tag { font-family: ui-monospace, monospace; font-size: 0.85rem; color: #cbd5e1; }
+    .mode-tag { font-family: ui-monospace, monospace; font-size: 0.78rem; color: #cbd5e1; }
     .flow-steps { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
     .flow-step { padding: 0.35rem 0.65rem; border-radius: 0.375rem; border: 1px solid #475569; font-size: 0.78rem; color: #94a3b8; }
     .flow-step.done { border-color: #22c55e; color: #bbf7d0; background: rgba(34, 197, 94, 0.12); }
     .flow-step.pending { border-color: #475569; }
+    .svc-box { border: 1px solid #334155; border-radius: 0.5rem; padding: 0.75rem; margin-bottom: 0.75rem; background: #0f172a; }
+    .toggle-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.35rem; font-size: 0.8rem; color: #94a3b8; }
+    .activity-table { width: 100%; border-collapse: collapse; font-size: 0.72rem; margin-top: 0.75rem; }
+    .activity-table th, .activity-table td { border: 1px solid #334155; padding: 0.35rem 0.45rem; text-align: left; vertical-align: top; }
+    .activity-table th { color: #64748b; font-weight: 600; }
+    .rabbit-row { display: grid; grid-template-columns: 1fr repeat(4, minmax(0, 4rem)); gap: 0.35rem; font-size: 0.75rem; align-items: center; margin-top: 0.35rem; }
+    .rabbit-h { color: #64748b; font-size: 0.65rem; text-transform: uppercase; }
+    .rabbit-n { font-family: ui-monospace, monospace; color: #e2e8f0; }
+    .retry-pulse { color: #fbbf24; font-size: 0.7rem; margin-top: 0.25rem; }
     #loading { color: #64748b; text-align: center; padding: 4rem 0; }
   </style>
 </head>
 <body>
   <h1>Ratatoskr Playground</h1>
-  <p class="subtitle">E-commerce demo — trigger order flows, observe outbox/inbox state, and test failure recovery.</p>
+  <p class="subtitle">E-commerce demo — place orders (outbox or direct), drive per-handler outcomes, watch Ratatoskr stages and Rabbit retry/DLQ depth from this page.</p>
 
   <div id="loading">Loading service configuration…</div>
 
   <div id="app" hidden>
 
     <div class="steps">
-      <h2>Demo scenarios</h2>
+      <h2>Quick tips</h2>
       <ol>
-        <li><strong>Inventory inbox poison (Throw mode):</strong> Cycle Inventory to <em>throw</em>, place an order (outbox). The command handler fails; the <strong>inbox</strong> processor retries with backoff until poisoned. Turn mode to <em>off</em>, then <strong>Requeue</strong> on the poisoned row.</li>
-        <li><strong>Business rejection (Reject mode):</strong> Cycle Inventory to <em>reject</em>, place an order. Inventory publishes <code>OrderFailed</code>; OrderService inbox marks the order Failed.</li>
-        <li><strong>Rabbit retry + DLQ (notifications):</strong> Toggle <em>Notification failure</em>, place an order. The notification handler throws on the consumer thread (no inbox), so Rabbit retry (3 × 5 s) then DLQ <code>ecommerce.events.notifications.dlq</code> — inspect in RabbitMQ Management.</li>
+        <li><strong>Activity timeline</strong> merges in-memory <code>MessageStage</code> captures from Order, Inventory, and Notification services (same order id).</li>
+        <li><strong>Rabbit queues</strong> uses passive <code>MessageCount</code> on main, <code>.retry</code>, and <code>.dlq</code> for each consumer queue. When <em>retry</em> &gt; 0, messages are in the delay queue (TTL ≈ shown seconds) before returning to main.</li>
+        <li><strong>Inventory</strong> now stages <code>OrderFulfilled</code> / <code>OrderFailed</code> via <strong>outbox</strong>. Use toggles below instead of the old cycle-only panel.</li>
       </ol>
     </div>
 
@@ -69,16 +76,23 @@
 
       <section class="panel" style="grid-column: 1 / -1" aria-labelledby="flow-heading">
         <h2 id="flow-heading">Order flow <span class="stale-badge" id="badge-flow" hidden>stale</span></h2>
-        <p id="flow-empty" style="color:#64748b;font-size:0.875rem;margin-bottom:0.75rem;">Place an order via <strong>Place Order (Outbox)</strong> to poll <code>/api/orders/{id}/flow</code> here.</p>
+        <p id="flow-empty" style="color:#64748b;font-size:0.875rem;margin-bottom:0.75rem;">Place an order (outbox or direct) to poll <code>/api/orders/{id}/flow</code> and the merged activity timeline.</p>
         <div id="flow-body" hidden>
           <div class="mode-tag" id="flow-status-line"></div>
           <div class="flow-steps" id="flow-steps"></div>
-          <p style="margin-top:0.75rem;font-size:0.72rem;color:#64748b;">Message ids (replay uses the same CloudEvents ids for dedup on the command inbox): <span id="flow-ids"></span></p>
+          <p style="margin-top:0.75rem;font-size:0.72rem;color:#64748b;">Message ids: <span id="flow-ids"></span></p>
+          <h3 style="margin-top:1rem;">Merged pipeline (all services)</h3>
+          <div id="error-activities" class="error-msg"></div>
+          <div style="max-height:280px;overflow:auto;">
+            <table class="activity-table" aria-label="Message activities">
+              <thead><tr><th>Time</th><th>Service</th><th>Stage</th><th>Type</th><th>Ok</th><th>Detail</th></tr></thead>
+              <tbody id="activity-rows"></tbody>
+            </table>
+          </div>
         </div>
         <div id="error-flow" class="error-msg" role="alert"></div>
       </section>
 
-      <!-- OrderService Actions -->
       <section class="panel" aria-labelledby="order-actions-heading">
         <h2 id="order-actions-heading">OrderService Actions</h2>
         <div class="btn-row">
@@ -90,32 +104,24 @@
         <div id="last-order-info" style="margin-top:0.75rem;font-size:0.8rem;color:#64748b;"></div>
       </section>
 
-      <!-- InventoryService demo mode -->
-      <section class="panel" aria-labelledby="failure-mode-heading">
-        <h2 id="failure-mode-heading">InventoryService demo mode</h2>
-        <div style="margin-bottom:0.75rem;">
-          Mode: <span id="inventory-mode-label" class="mode-tag">off</span>
-          <span style="color:#64748b;font-size:0.75rem;display:block;margin-top:0.35rem;">Cycles <strong>off</strong> → <strong>throw</strong> (inbox retries) → <strong>reject</strong> (<code>OrderFailed</code>) → off.</span>
-        </div>
-        <div class="btn-row">
-          <button id="btn-cycle-inventory-mode" class="btn btn-danger">Cycle inventory mode</button>
-        </div>
-        <div id="failure-mode-error" class="error-msg"></div>
+      <section class="panel" style="grid-column: 1 / -1" aria-labelledby="svc-heading">
+        <h2 id="svc-heading">Per-service playground toggles</h2>
+        <p style="color:#64748b;font-size:0.8rem;margin-bottom:0.75rem;">Only meaningful controls are shown (inbox fail vs Rabbit inline fail). Inventory command row cycles business outcome: fulfill / throw / reject.</p>
+        <div id="playground-services"></div>
+        <div id="playground-services-error" class="error-msg"></div>
       </section>
 
-      <!-- NotificationService Rabbit DLQ demo -->
-      <section class="panel" aria-labelledby="notif-failure-heading">
-        <h2 id="notif-failure-heading">NotificationService (Rabbit DLQ)</h2>
-        <div style="margin-bottom:0.75rem;">
-          Throw on <code>OrderPlaced</code>: <span id="notif-failure-status" class="failure-mode-off">OFF</span>
+      <section class="panel" style="grid-column: 1 / -1" aria-labelledby="rabbit-heading">
+        <h2 id="rabbit-heading">RabbitMQ queue depth <span class="stale-badge" id="badge-rabbit" hidden>stale</span></h2>
+        <p id="rabbit-unconfigured" style="color:#64748b;font-size:0.8rem;" hidden>Dashboard has no RabbitMQ connection string. Add <code>WithReference(rabbitmq)</code> to the Dashboard resource in AppHost.</p>
+        <div id="rabbit-body" hidden>
+          <div class="rabbit-row rabbit-h"><span>Queue set</span><span>Main</span><span>Retry</span><span>DLQ</span><span>TTL</span></div>
+          <div id="rabbit-rows"></div>
+          <p id="rabbit-retry-hint" class="retry-pulse"></p>
         </div>
-        <div class="btn-row">
-          <button id="btn-toggle-notif-failure" class="btn btn-outline">Toggle notification failure</button>
-        </div>
-        <div id="notif-failure-error" class="error-msg"></div>
+        <div id="error-rabbit" class="error-msg"></div>
       </section>
 
-      <!-- OrderService Outbox Poisoned -->
       <section class="panel" id="panel-order-outbox" aria-labelledby="order-outbox-heading">
         <div class="panel-header">
           <div>
@@ -130,7 +136,6 @@
         <ul id="list-order-outbox" class="item-list"></ul>
       </section>
 
-      <!-- OrderService Inbox Poisoned -->
       <section class="panel" id="panel-order-inbox" aria-labelledby="order-inbox-heading">
         <div class="panel-header">
           <div>
@@ -145,7 +150,6 @@
         <ul id="list-order-inbox" class="item-list"></ul>
       </section>
 
-      <!-- InventoryService Inbox Poisoned -->
       <section class="panel" id="panel-inventory-inbox" aria-labelledby="inventory-inbox-heading">
         <div class="panel-header">
           <div>
@@ -164,14 +168,14 @@
   </div>
 
   <script type="module">
-    // --- State ---
     const state = {
       services: null,
       lastOrderId: null,
       inventoryDemoMode: 'off',
-      notificationFailureEnabled: false,
       requeueingIds: new Set(),
       flowTimer: null,
+      activityTimer: null,
+      rabbitTimer: null,
       panels: {
         'order-outbox':    { totalCount: null, items: [], error: null, stale: false },
         'order-inbox':     { totalCount: null, items: [], error: null, stale: false },
@@ -179,7 +183,169 @@
       },
     };
 
-    // --- Bootstrap ---
+    const jsonHeaders = { 'Content-Type': 'application/json' };
+
+    async function postToggle(baseUrl, key) {
+      const res = await fetch(`${baseUrl}/api/playground/toggle`, {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify({ key }),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+
+    async function fetchControlState(baseUrl) {
+      const res = await fetch(`${baseUrl}/api/playground/control-state`, { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+
+    async function refreshServicePanels() {
+      const errEl = document.getElementById('playground-services-error');
+      errEl.textContent = '';
+      const host = document.getElementById('playground-services');
+      host.innerHTML = '';
+      const defs = [
+        { title: 'OrderService', base: state.services.orderServiceUrl },
+        { title: 'InventoryService', base: state.services.inventoryServiceUrl },
+        { title: 'NotificationService', base: state.services.notificationServiceUrl },
+      ];
+      for (const d of defs) {
+        const box = document.createElement('div');
+        box.className = 'svc-box';
+        box.innerHTML = `<h3>${d.title}</h3>`;
+        const inner = document.createElement('div');
+        try {
+          const data = await fetchControlState(d.base);
+          if (data.service === 'inventoryservice' && data.toggles?.[0]?.mode)
+            state.inventoryDemoMode = String(data.toggles[0].mode).toLowerCase();
+          for (const t of data.toggles ?? []) {
+            const row = document.createElement('div');
+            row.className = 'toggle-line';
+            const modeSpan = document.createElement('span');
+            modeSpan.className = 'mode-tag';
+            modeSpan.textContent = t.mode;
+            if (t.mode === 'fail' || t.mode === 'throw' || t.mode === 'reject')
+              modeSpan.style.color = '#f87171';
+            const lab = document.createElement('span');
+            lab.textContent = t.label;
+            row.appendChild(lab);
+            row.appendChild(modeSpan);
+            const btn = document.createElement('button');
+            btn.className = 'btn btn-outline';
+            btn.style.fontSize = '0.72rem';
+            btn.style.padding = '0.2rem 0.5rem';
+            btn.textContent = 'Toggle';
+            btn.addEventListener('click', async () => {
+              try {
+                await postToggle(d.base, t.key);
+                await refreshServicePanels();
+              } catch (e) {
+                errEl.textContent = e.message;
+              }
+            });
+            row.appendChild(btn);
+            inner.appendChild(row);
+            if (t.hint) {
+              const hint = document.createElement('div');
+              hint.style.cssText = 'font-size:0.72rem;color:#64748b;margin:0.15rem 0 0.4rem 0;';
+              hint.textContent = t.hint;
+              inner.appendChild(hint);
+            }
+          }
+        } catch (e) {
+          inner.textContent = `Could not load control state: ${e.message}`;
+        }
+        box.appendChild(inner);
+        host.appendChild(box);
+      }
+    }
+
+    async function refreshRabbitDepths() {
+      const badge = document.getElementById('badge-rabbit');
+      const err = document.getElementById('error-rabbit');
+      const uncfg = document.getElementById('rabbit-unconfigured');
+      const body = document.getElementById('rabbit-body');
+      const rows = document.getElementById('rabbit-rows');
+      const hint = document.getElementById('rabbit-retry-hint');
+      try {
+        const res = await fetch('/api/playground/rabbit-depths', { signal: AbortSignal.timeout(8000) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        badge.hidden = true;
+        err.textContent = '';
+        if (!data.configured) {
+          uncfg.hidden = false;
+          body.hidden = true;
+          return;
+        }
+        uncfg.hidden = true;
+        body.hidden = false;
+        rows.innerHTML = '';
+        let anyRetry = false;
+        let minTtl = 999;
+        for (const q of data.queues) {
+          if (q.retry > 0) {
+            anyRetry = true;
+            minTtl = Math.min(minTtl, q.retryDelaySeconds ?? 5);
+          }
+          const row = document.createElement('div');
+          row.className = 'rabbit-row';
+          row.innerHTML = `<span title="${q.mainQueue}">${q.key}</span>
+            <span class="rabbit-n">${q.main}</span>
+            <span class="rabbit-n">${q.retry}</span>
+            <span class="rabbit-n">${q.dlq}</span>
+            <span class="rabbit-n">${q.retryDelaySeconds ?? '–'}s</span>`;
+          rows.appendChild(row);
+        }
+        if (anyRetry) {
+          const t = Date.now() / 1000;
+          const phase = minTtl - (t % minTtl);
+          hint.textContent = `Retry queues hold messages waiting up to ~${minTtl}s TTL before redelivery (countdown ≈ ${phase.toFixed(0)}s until next TTL wave, illustrative).`;
+        } else {
+          hint.textContent = '';
+        }
+      } catch (e) {
+        err.textContent = e.message;
+        badge.hidden = false;
+      }
+    }
+
+    async function refreshActivities() {
+      if (!state.lastOrderId) return;
+      const oid = state.lastOrderId;
+      const { orderServiceUrl, inventoryServiceUrl, notificationServiceUrl } = state.services;
+      const errEl = document.getElementById('error-activities');
+      try {
+        const [a, b, c] = await Promise.all([
+          fetch(`${orderServiceUrl}/api/playground/activities?orderId=${oid}`, { signal: AbortSignal.timeout(8000) }),
+          fetch(`${inventoryServiceUrl}/api/playground/activities?orderId=${oid}`, { signal: AbortSignal.timeout(8000) }),
+          fetch(`${notificationServiceUrl}/api/playground/activities?orderId=${oid}`, { signal: AbortSignal.timeout(8000) }),
+        ]);
+        if (!a.ok || !b.ok || !c.ok) throw new Error('activity fetch failed');
+        const merge = [
+          ...(await a.json()).map(x => ({ ...x, _svc: 'Order' })),
+          ...(await b.json()).map(x => ({ ...x, _svc: 'Inventory' })),
+          ...(await c.json()).map(x => ({ ...x, _svc: 'Notification' })),
+        ];
+        merge.sort((x, y) => new Date(x.timestamp).getTime() - new Date(y.timestamp).getTime());
+        const tb = document.getElementById('activity-rows');
+        tb.innerHTML = '';
+        for (const e of merge) {
+          const tr = document.createElement('tr');
+          const ok = e.isSuccess === true ? 'yes' : e.isSuccess === false ? 'no' : '';
+          const detail = (e.error ?? e.dispatchResult ?? '').toString().slice(0, 120);
+          tr.innerHTML = `<td>${e.timestamp}</td><td>${e._svc}</td><td>${e.stage}</td><td>${e.messageType ?? ''}</td><td>${ok}</td><td>${detail}</td>`;
+          tb.appendChild(tr);
+        }
+        errEl.textContent = '';
+      } catch (e) {
+        errEl.textContent = e.message;
+      }
+    }
+
     async function init() {
       try {
         const cfg = await fetch('/api/config').then(r => r.json());
@@ -187,11 +353,12 @@
         document.getElementById('loading').hidden = true;
         document.getElementById('app').hidden = false;
 
-        await refreshInventoryDemoMode();
-        await refreshNotificationFailureMode();
+        await refreshServicePanels();
         bindActions();
         startPollers();
         restartFlowPoll();
+        refreshRabbitDepths();
+        state.rabbitTimer = setInterval(refreshRabbitDepths, 3000);
       } catch (e) {
         document.getElementById('loading').textContent = `Failed to load config: ${e.message}`;
       }
@@ -201,6 +368,10 @@
       if (state.flowTimer) {
         clearInterval(state.flowTimer);
         state.flowTimer = null;
+      }
+      if (state.activityTimer) {
+        clearInterval(state.activityTimer);
+        state.activityTimer = null;
       }
       if (!state.lastOrderId) {
         document.getElementById('flow-body').hidden = true;
@@ -227,14 +398,18 @@
       };
       tick();
       state.flowTimer = setInterval(tick, 2000);
+      refreshActivities();
+      state.activityTimer = setInterval(refreshActivities, 2000);
     }
 
     function renderFlow(data) {
+      const origin = data.publishOrigin ?? 'outbox';
       document.getElementById('flow-status-line').textContent =
-        `Status: ${data.status} · created ${data.createdAt} · last change ${data.statusChangedAt}`;
+        `Status: ${data.status} · publish: ${origin} · created ${data.createdAt} · last change ${data.statusChangedAt}`;
       const ids = data.messageIds;
-      document.getElementById('flow-ids').textContent =
-        ids ? `${ids.orderPlaced} / ${ids.processOrderCommand}` : '';
+      document.getElementById('flow-ids').textContent = ids
+        ? `${ids.orderPlaced} | ${ids.processOrderCommand} | ${ids.orderFulfilled} | ${ids.orderFailed}`
+        : '';
       const steps = data.steps ?? [];
       const host = document.getElementById('flow-steps');
       host.innerHTML = '';
@@ -246,7 +421,6 @@
       }
     }
 
-    // --- Polling: recursive setTimeout so each tick waits for the previous to finish ---
     function startPollers() {
       const { orderServiceUrl, orderManagementPath, inventoryServiceUrl, inventoryManagementPath } = state.services;
       startPoller('order-outbox',    `${orderServiceUrl}/${orderManagementPath}/outbox/poisoned`);
@@ -346,89 +520,21 @@
       }
     }
 
-    async function refreshInventoryDemoMode() {
-      try {
-        const res = await fetch(`${state.services.inventoryServiceUrl}/api/inventory/failure-mode`,
-          { signal: AbortSignal.timeout(5000) });
-        if (res.ok) {
-          const data = await res.json();
-          setInventoryDemoMode(data.mode ?? 'off');
-        }
-      } catch { /* ignore */ }
-    }
-
-    function setInventoryDemoMode(mode) {
-      state.inventoryDemoMode = (mode || 'off').toLowerCase();
-      const el = document.getElementById('inventory-mode-label');
-      el.textContent = state.inventoryDemoMode;
-      el.className = 'mode-tag ' + (state.inventoryDemoMode === 'off' ? 'failure-mode-off' : 'failure-mode-on');
-      renderPanel('inventory-inbox');
-    }
-
-    async function refreshNotificationFailureMode() {
-      try {
-        const res = await fetch(`${state.services.notificationServiceUrl}/api/notifications/failure-mode`,
-          { signal: AbortSignal.timeout(5000) });
-        if (res.ok) {
-          const data = await res.json();
-          setNotificationFailure(!!data.enabled);
-        }
-      } catch { /* ignore */ }
-    }
-
-    function setNotificationFailure(enabled) {
-      state.notificationFailureEnabled = enabled;
-      const el = document.getElementById('notif-failure-status');
-      el.textContent = enabled ? 'ON' : 'OFF';
-      el.className = enabled ? 'failure-mode-on' : 'failure-mode-off';
-    }
-
-    // --- Actions ---
     function bindActions() {
-      const btnCycleInv = document.getElementById('btn-cycle-inventory-mode');
-      const btnNotif    = document.getElementById('btn-toggle-notif-failure');
-      const btnOutbox   = document.getElementById('btn-place-outbox');
-      const btnDirect   = document.getElementById('btn-place-direct');
-      const btnReplay   = document.getElementById('btn-replay');
-
-      makeArmedButton(btnCycleInv, async () => {
-        try {
-          document.getElementById('failure-mode-error').textContent = '';
-          const res = await fetch(
-            `${state.services.inventoryServiceUrl}/api/inventory/failure-mode`,
-            { method: 'POST', signal: AbortSignal.timeout(5000) });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const data = await res.json();
-          setInventoryDemoMode(data.mode ?? 'off');
-        } catch (e) {
-          document.getElementById('failure-mode-error').textContent = e.message;
-        }
-      });
-
-      btnNotif.addEventListener('click', async () => {
-        try {
-          document.getElementById('notif-failure-error').textContent = '';
-          const res = await fetch(
-            `${state.services.notificationServiceUrl}/api/notifications/failure-mode`,
-            { method: 'POST', signal: AbortSignal.timeout(5000) });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const data = await res.json();
-          setNotificationFailure(!!data.enabled);
-        } catch (e) {
-          document.getElementById('notif-failure-error').textContent = e.message;
-        }
-      });
+      const btnOutbox = document.getElementById('btn-place-outbox');
+      const btnDirect = document.getElementById('btn-place-direct');
+      const btnReplay = document.getElementById('btn-replay');
 
       btnOutbox.addEventListener('click', async () => {
         try {
           document.getElementById('order-actions-error').textContent = '';
           const res = await fetch(`${state.services.orderServiceUrl}/api/orders`,
-            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+            { method: 'POST', headers: jsonHeaders, body: '{}',
               signal: AbortSignal.timeout(5000) });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
           state.lastOrderId = data.id;
-          document.getElementById('last-order-info').textContent = `Last order: ${data.id} (${data.status})`;
+          document.getElementById('last-order-info').textContent = `Last order: ${data.id} (${data.status}, outbox)`;
           btnReplay.disabled = false;
           btnReplay.title = '';
           restartFlowPoll();
@@ -444,8 +550,12 @@
             { method: 'POST', signal: AbortSignal.timeout(5000) });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
+          state.lastOrderId = data.id;
           document.getElementById('last-order-info').textContent =
-            `Direct publish: ${data.orderId} (no order row; OrderPlaced + ProcessOrderCommand published)`;
+            `Last order: ${data.id} (${data.status}, direct publish)`;
+          btnReplay.disabled = false;
+          btnReplay.title = '';
+          restartFlowPoll();
         } catch (e) {
           document.getElementById('order-actions-error').textContent = e.message;
         }
@@ -465,7 +575,6 @@
       });
     }
 
-    // --- Armed button (two-step confirm) ---
     function makeArmedButton(btn, action) {
       let armed = false, resetTimer;
       const origLabel = btn.textContent;

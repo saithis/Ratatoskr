@@ -1,10 +1,13 @@
 // Local development example only. See examples/README.md.
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using NotificationService;
 using NotificationService.Handlers;
 using PlaygroundMessages;
 using PlaygroundMessages.Messages;
 using Ratatoskr;
+using Ratatoskr.Core;
 using Ratatoskr.RabbitMq.Extensions;
 using ServiceDefaults;
 
@@ -13,9 +16,16 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
-builder.Services.AddSingleton<NotificationFailureState>();
+builder.Services.AddSingleton<NotificationPlaygroundState>();
+builder.Services.AddSingleton<PlaygroundActivityRecorder>();
+builder.Services.AddSingleton<IMessageActivityObserver>(sp =>
+    sp.GetRequiredService<PlaygroundActivityRecorder>());
+
+builder.Services.AddAuthorization(o =>
+    o.AddPolicy("DevOnlyNoAuth", p => p.RequireAssertion(_ => true)));
 
 // AllowAnyOrigin is intentional for a local dev example only.
+// Gate behind app.Environment.IsDevelopment() before any deployment.
 builder.Services.AddCors(o => o.AddPolicy("LocalDashboard",
     p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
 
@@ -27,8 +37,6 @@ builder.Services.AddRatatoskr(bus =>
     bus.UseRabbitMq(c => { c.ConnectionString = new Uri(rabbitMqConnectionString); });
 
     // No inbox: handler runs inline on the consumer thread, so failures use Rabbit retry + DLQ topology.
-    // If OrderPlaced is replayed with the same message ID, this handler fires again — intentional
-    // contrast with InventoryService, which deduplicates via inbox.
     bus.AddEventConsumeChannel("ecommerce.events", c => c
         .WithRabbitMq(r => r
             .WithTopicExchange()
@@ -43,15 +51,49 @@ var app = builder.Build();
 app.MapDefaultEndpoints();
 
 app.UseCors("LocalDashboard");
+app.UseAuthorization();
 
-// Dev-only endpoints — remove before deployment.
-app.MapPost("/api/notifications/failure-mode", ([FromServices] NotificationFailureState state) =>
+var playground = app.MapGroup("/api/playground").RequireCors("LocalDashboard").RequireAuthorization("DevOnlyNoAuth");
+
+playground.MapGet("/activities", ([FromServices] PlaygroundActivityRecorder recorder, Guid? orderId) =>
 {
-    var enabled = state.Toggle();
-    return TypedResults.Ok(new { enabled });
+    if (orderId is { } id)
+        return TypedResults.Ok(recorder.GetEntriesForOrder(id));
+    return TypedResults.Ok(recorder.GetRecentEntries());
 });
 
-app.MapGet("/api/notifications/failure-mode", ([FromServices] NotificationFailureState state) =>
-    TypedResults.Ok(new { enabled = state.IsEnabled }));
+playground.MapGet("/control-state", ([FromServices] NotificationPlaygroundState state) =>
+    TypedResults.Ok(new
+    {
+        service = "notificationservice",
+        toggles = new object[]
+        {
+            new
+            {
+                key = "consume-orderplaced-rabbit",
+                label = "Consume OrderPlaced (Rabbit, no inbox)",
+                kind = "rabbitInlineHandlerFail",
+                mode = state.OrderPlacedHandlerFails ? "fail" : "succeed",
+            },
+            new
+            {
+                key = "consume-orderfulfilled-rabbit",
+                label = "Consume OrderFulfilled (Rabbit, no inbox)",
+                kind = "rabbitInlineHandlerFail",
+                mode = state.OrderFulfilledHandlerFails ? "fail" : "succeed",
+            },
+        },
+    }));
+
+playground.MapPost("/toggle", ([FromServices] NotificationPlaygroundState state, [FromBody] PlaygroundToggleRequest body) =>
+{
+    var (mode, key) = body.Key switch
+    {
+        "consume-orderplaced-rabbit" => (state.ToggleOrderPlacedHandlerFails() ? "fail" : "succeed", body.Key),
+        "consume-orderfulfilled-rabbit" => (state.ToggleOrderFulfilledHandlerFails() ? "fail" : "succeed", body.Key),
+        _ => throw new BadHttpRequestException($"Unknown toggle key '{body.Key}'."),
+    };
+    return TypedResults.Ok(new { key, mode });
+});
 
 app.Run();

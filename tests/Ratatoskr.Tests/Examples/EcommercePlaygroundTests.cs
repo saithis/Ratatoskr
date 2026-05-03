@@ -349,4 +349,23 @@ public class EcommercePlaygroundTests(RabbitMqContainerFixture rabbitMq, Postgre
         public Task HandleAsync(ProcessOrderCommand message, MessageProperties props, CancellationToken ct)
             => throw new InvalidOperationException("Simulated failure mode — handler always fails");
     }
+
+    [Test]
+    public void PlaygroundMessageIds_TryParseOrderId_AllStableIdsRoundTrip()
+    {
+        var g = Guid.Parse("a1b2c3d4-e5f6-4789-a012-3456789abcde");
+        foreach (var id in new[]
+                 {
+                     PlaygroundMessageIds.OrderPlaced(g),
+                     PlaygroundMessageIds.ProcessOrderCommand(g),
+                     PlaygroundMessageIds.OrderFulfilled(g),
+                     PlaygroundMessageIds.OrderFailed(g),
+                 })
+        {
+            PlaygroundMessageIds.TryParseOrderId(id, out var parsed).Should().BeTrue();
+            parsed.Should().Be(g);
+        }
+
+        PlaygroundMessageIds.TryParseOrderId("not-an-order-id", out _).Should().BeFalse();
+    }
 }

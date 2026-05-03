@@ -4,7 +4,8 @@ var postgresPassword = builder.AddParameter("postgres-password", "guest", secret
 var rabbitmqPassword = builder.AddParameter("rabbitmq-password", "guest", secret: false);
 
 var postgres = builder.AddPostgres("postgres", password: postgresPassword)
-    .WithPgAdmin()
+    .WithPgAdmin(pga => pga
+        .WithLifetime(ContainerLifetime.Persistent))
     .WithLifetime(ContainerLifetime.Persistent)
     .WithDataVolume("postgres-ceb");
 
@@ -41,6 +42,7 @@ builder.AddProject<Projects.Dashboard>("dashboard")
     .WithReference(orderSvc)
     .WithReference(inventorySvc)
     .WithReference(notificationSvc)
+    .WithReference(rabbitmq).WaitFor(rabbitmq)
     .WithEnvironment("OrderService__ManagementUrl", orderSvc.GetEndpoint("http"))
     .WithEnvironment("InventoryService__ManagementUrl", inventorySvc.GetEndpoint("http"))
     .WithEnvironment("NotificationService__BaseUrl", notificationSvc.GetEndpoint("http"))

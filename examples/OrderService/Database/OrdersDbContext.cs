@@ -13,5 +13,9 @@ public class OrdersDbContext(DbContextOptions<OrdersDbContext> options) : DbCont
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.AddRatatoskrEfCoreModel(Database);
+        modelBuilder.Entity<Order>(e =>
+        {
+            e.Property(o => o.PublishOrigin).HasMaxLength(32).HasDefaultValue("outbox");
+        });
     }
 }

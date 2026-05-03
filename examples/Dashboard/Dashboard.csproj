@@ -9,6 +9,11 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="RabbitMQ.Client" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\PlaygroundMessages\PlaygroundMessages.csproj" />
         <ProjectReference Include="..\ServiceDefaults\ServiceDefaults.csproj" />
     </ItemGroup>
 

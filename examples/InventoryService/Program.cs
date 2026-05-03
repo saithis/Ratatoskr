@@ -1,14 +1,17 @@
 // Local development example only. See examples/README.md.
-using Microsoft.AspNetCore.Mvc;
 using InventoryService;
 using InventoryService.Database;
 using InventoryService.Handlers;
 using Medallion.Threading;
 using Medallion.Threading.FileSystem;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using PlaygroundMessages;
 using PlaygroundMessages.Messages;
 using Ratatoskr;
+using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.Management;
 using Ratatoskr.RabbitMq.Extensions;
@@ -23,6 +26,9 @@ builder.Services.AddSingleton<IDistributedLockProvider>(_ => new FileDistributed
 
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddSingleton<InventoryDemoModeState>();
+builder.Services.AddSingleton<PlaygroundActivityRecorder>();
+builder.Services.AddSingleton<IMessageActivityObserver>(sp =>
+    sp.GetRequiredService<PlaygroundActivityRecorder>());
 
 // DevOnlyNoAuth: permissive policy for local development example only.
 // Remove or replace before any deployment.
@@ -42,11 +48,14 @@ builder.Services.AddRatatoskr(bus =>
     bus.UseRabbitMq(c => { c.ConnectionString = new Uri(rabbitMqConnectionString); });
 
     bus.AddEfCoreDurability<InventoryDbContext>(d =>
+    {
+        d.UseOutbox(o => o.WithPollingInterval(TimeSpan.FromSeconds(2)));
         d.UseInbox(o => o
             .WithPollingInterval(TimeSpan.FromSeconds(2))
             .WithMaxRetries(5)
             .WithRetention(TimeSpan.FromMinutes(30))
-            .WithCleanupInterval(TimeSpan.FromMinutes(5))));
+            .WithCleanupInterval(TimeSpan.FromMinutes(5)));
+    });
 
     bus.AddEventPublishChannel("ecommerce.events", c => c
         .WithRabbitMq(r => r.WithTopicExchange())
@@ -69,6 +78,7 @@ var dbConnectionString = builder.Configuration.GetConnectionString("inventorydb"
 builder.Services.AddDbContext<InventoryDbContext>((sp, options) =>
 {
     options.UseNpgsql(dbConnectionString);
+    options.RegisterOutbox<InventoryDbContext>(sp);
 });
 
 var app = builder.Build();
@@ -85,24 +95,45 @@ using (var scope = app.Services.CreateScope())
     await db.Database.EnsureCreatedAsync();
 }
 
-// Dev-only endpoint — remove before deployment.
-app.MapPost("/api/inventory/failure-mode", ([FromServices] InventoryDemoModeState state) =>
+var playground = app.MapGroup("/api/playground").RequireCors("LocalDashboard").RequireAuthorization("DevOnlyNoAuth");
+
+playground.MapGet("/activities", ([FromServices] PlaygroundActivityRecorder recorder, Guid? orderId) =>
 {
-    var mode = state.Cycle();
+    if (orderId is { } id)
+        return TypedResults.Ok(recorder.GetEntriesForOrder(id));
+    return TypedResults.Ok(recorder.GetRecentEntries());
+});
+
+playground.MapGet("/control-state", ([FromServices] InventoryDemoModeState state) =>
+    TypedResults.Ok(new
+    {
+        service = "inventoryservice",
+        toggles = new[]
+        {
+            new
+            {
+                key = "consume-processordercommand-inbox",
+                label = "Consume ProcessOrderCommand (inbox) — business path",
+                kind = "inventoryCommandMode",
+                mode = state.Mode.ToString().ToLowerInvariant(),
+                hint = "Cycles off (fulfill) → throw (inbox retries) → reject (OrderFailed).",
+            },
+        },
+    }));
+
+playground.MapPost("/toggle", ([FromServices] InventoryDemoModeState state, [FromBody] PlaygroundToggleRequest body) =>
+{
+    var mode = body.Key switch
+    {
+        "consume-processordercommand-inbox" => state.Cycle(),
+        _ => throw new BadHttpRequestException($"Unknown toggle key '{body.Key}'."),
+    };
     return TypedResults.Ok(new
     {
+        key = body.Key,
         mode = mode.ToString().ToLowerInvariant(),
-        // Back-compat: "failure" means a path that blocks success (throw or reject).
         enabled = mode != InventoryDemoMode.Off,
     });
 });
-
-// Dev-only endpoint — remove before deployment.
-app.MapGet("/api/inventory/failure-mode", ([FromServices] InventoryDemoModeState state) =>
-    TypedResults.Ok(new
-    {
-        mode = state.Mode.ToString().ToLowerInvariant(),
-        enabled = state.Mode != InventoryDemoMode.Off,
-    }));
 
 app.Run();
