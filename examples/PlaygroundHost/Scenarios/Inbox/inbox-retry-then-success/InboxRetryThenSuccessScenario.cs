@@ -42,8 +42,7 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
         bus.AddEventPublishChannel(exEvt, c => c
             .WithRabbitMq(r => r.WithTopicExchange())
             .Produces<InboxRetryThenSuccessOrderPlaced>()
-            .Produces<InboxRetryThenSuccessOrderFulfilled>()
-            .Produces<InboxRetryThenSuccessOrderFailed>());
+            .Produces<InboxRetryThenSuccessOrderFulfilled>());
 
         bus.AddCommandPublishChannel(exCmd, c => c
             .WithRabbitMq(r => r.WithDirectExchange())
@@ -57,7 +56,6 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
                 .WithQueueType(QueueType.Classic)
                 .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
             .Consumes<InboxRetryThenSuccessOrderFulfilled>(m => m.WithHandler<InboxRetryThenSuccessOrderFulfilledHandler>($"{ScenarioSlug}.fulfilled"))
-            .Consumes<InboxRetryThenSuccessOrderFailed>(m => m.WithHandler<InboxRetryThenSuccessOrderFailedHandler>($"{ScenarioSlug}.failed"))
             .UseInbox<PublisherDbContext>());
 
         bus.AddCommandConsumeChannel($"{ScenarioSlug}-inventory", c => c
@@ -80,7 +78,6 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
             .Consumes<InboxRetryThenSuccessOrderPlaced>(m => m
                 .WithHandler<InboxRetryThenSuccessOrderPlacedNotifyHandler>($"{ScenarioSlug}.notify")
                 .WithHandler<InboxRetryThenSuccessOrderPlacedAnalyticsHandler>($"{ScenarioSlug}.analytics"))
-            .Consumes<InboxRetryThenSuccessOrderFulfilled>(m => m.WithHandler<InboxRetryThenSuccessOrderFulfilledNotifyHandler>($"{ScenarioSlug}.fulfilled-notify"))
             .UseInbox<PublisherDbContext>());
     }
 

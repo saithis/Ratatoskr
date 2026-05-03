@@ -42,21 +42,6 @@ public sealed class OutboxPoisonOrderFulfilledHandler(PublisherDbContext db, Tim
     }
 }
 
-public sealed class OutboxPoisonOrderFailedHandler(PublisherDbContext db, TimeProvider time, ILogger<OutboxPoisonOrderFailedHandler> logger)
-    : IMessageHandler<OutboxPoisonOrderFailed>
-{
-    public async Task HandleAsync(OutboxPoisonOrderFailed message, MessageProperties properties, CancellationToken cancellationToken)
-    {
-        var order = await db.Orders.FirstOrDefaultAsync(o => o.Id == Guid.Parse(message.OrderId), cancellationToken);
-        if (order is null) return;
-        var now = time.GetUtcNow().UtcDateTime;
-        order.Status = OrderStatus.Failed;
-        order.StatusChangedAt = now;
-        await db.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Order {OrderId} marked Failed", message.OrderId);
-    }
-}
-
 public sealed class OutboxPoisonOrderPlacedNotifyHandler(ILogger<OutboxPoisonOrderPlacedNotifyHandler> logger) : IMessageHandler<OutboxPoisonOrderPlaced>
 {
     public Task HandleAsync(OutboxPoisonOrderPlaced message, MessageProperties properties, CancellationToken cancellationToken)
@@ -69,15 +54,6 @@ public sealed class OutboxPoisonOrderPlacedAnalyticsHandler(ILogger<OutboxPoison
 {
     public Task HandleAsync(OutboxPoisonOrderPlaced message, MessageProperties properties, CancellationToken cancellationToken)
     {
-        return Task.CompletedTask;
-    }
-}
-
-public sealed class OutboxPoisonOrderFulfilledNotifyHandler(ILogger<OutboxPoisonOrderFulfilledNotifyHandler> logger) : IMessageHandler<OutboxPoisonOrderFulfilled>
-{
-    public Task HandleAsync(OutboxPoisonOrderFulfilled message, MessageProperties properties, CancellationToken cancellationToken)
-    {
-        logger.LogInformation("[Notification] Order fulfilled {OrderId}", message.OrderId);
         return Task.CompletedTask;
     }
 }

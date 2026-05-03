@@ -42,8 +42,7 @@ public sealed class ReplayDedupsScenario : IPlaygroundScenario
         bus.AddEventPublishChannel(exEvt, c => c
             .WithRabbitMq(r => r.WithTopicExchange())
             .Produces<ReplayDedupsOrderPlaced>()
-            .Produces<ReplayDedupsOrderFulfilled>()
-            .Produces<ReplayDedupsOrderFailed>());
+            .Produces<ReplayDedupsOrderFulfilled>());
 
         bus.AddCommandPublishChannel(exCmd, c => c
             .WithRabbitMq(r => r.WithDirectExchange())
@@ -57,7 +56,6 @@ public sealed class ReplayDedupsScenario : IPlaygroundScenario
                 .WithQueueType(QueueType.Classic)
                 .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
             .Consumes<ReplayDedupsOrderFulfilled>(m => m.WithHandler<ReplayDedupsOrderFulfilledHandler>($"{ScenarioSlug}.fulfilled"))
-            .Consumes<ReplayDedupsOrderFailed>(m => m.WithHandler<ReplayDedupsOrderFailedHandler>($"{ScenarioSlug}.failed"))
             .UseInbox<PublisherDbContext>());
 
         bus.AddCommandConsumeChannel($"{ScenarioSlug}-inventory", c => c
@@ -80,7 +78,6 @@ public sealed class ReplayDedupsScenario : IPlaygroundScenario
             .Consumes<ReplayDedupsOrderPlaced>(m => m
                 .WithHandler<ReplayDedupsOrderPlacedNotifyHandler>($"{ScenarioSlug}.notify")
                 .WithHandler<ReplayDedupsOrderPlacedAnalyticsHandler>($"{ScenarioSlug}.analytics"))
-            .Consumes<ReplayDedupsOrderFulfilled>(m => m.WithHandler<ReplayDedupsOrderFulfilledNotifyHandler>($"{ScenarioSlug}.fulfilled-notify"))
             .UseInbox<PublisherDbContext>());
     }
 

@@ -42,8 +42,7 @@ public sealed class DirectConsumeRetryScenario : IPlaygroundScenario
         bus.AddEventPublishChannel(exEvt, c => c
             .WithRabbitMq(r => r.WithTopicExchange())
             .Produces<DirectConsumeRetryOrderPlaced>()
-            .Produces<DirectConsumeRetryOrderFulfilled>()
-            .Produces<DirectConsumeRetryOrderFailed>());
+            .Produces<DirectConsumeRetryOrderFulfilled>());
 
         bus.AddCommandPublishChannel(exCmd, c => c
             .WithRabbitMq(r => r.WithDirectExchange())
@@ -57,7 +56,6 @@ public sealed class DirectConsumeRetryScenario : IPlaygroundScenario
                 .WithQueueType(QueueType.Classic)
                 .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
             .Consumes<DirectConsumeRetryOrderFulfilled>(m => m.WithHandler<DirectConsumeRetryOrderFulfilledHandler>($"{ScenarioSlug}.fulfilled"))
-            .Consumes<DirectConsumeRetryOrderFailed>(m => m.WithHandler<DirectConsumeRetryOrderFailedHandler>($"{ScenarioSlug}.failed"))
             .UseInbox<PublisherDbContext>());
 
         bus.AddCommandConsumeChannel($"{ScenarioSlug}-inventory", c => c
@@ -80,7 +78,6 @@ public sealed class DirectConsumeRetryScenario : IPlaygroundScenario
             .Consumes<DirectConsumeRetryOrderPlaced>(m => m
                 .WithHandler<DirectConsumeRetryOrderPlacedNotifyHandler>($"{ScenarioSlug}.notify")
                 .WithHandler<DirectConsumeRetryOrderPlacedAnalyticsHandler>($"{ScenarioSlug}.analytics"))
-            .Consumes<DirectConsumeRetryOrderFulfilled>(m => m.WithHandler<DirectConsumeRetryOrderFulfilledNotifyHandler>($"{ScenarioSlug}.fulfilled-notify"))
             .UseInbox<PublisherDbContext>());
     }
 

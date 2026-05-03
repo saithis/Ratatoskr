@@ -14,6 +14,3 @@ public sealed record DirectConsumeSuccessReserveStockInternal(string OrderId, st
 
 [RatatoskrMessage("direct-consume-success.order-fulfilled")]
 public sealed record DirectConsumeSuccessOrderFulfilled(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
-
-[RatatoskrMessage("direct-consume-success.order-failed")]
-public sealed record DirectConsumeSuccessOrderFailed(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;

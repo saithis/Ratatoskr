@@ -14,6 +14,3 @@ public sealed record OutboxRetryThenSuccessReserveStockInternal(string OrderId, 
 
 [RatatoskrMessage("outbox-retry-then-success.order-fulfilled")]
 public sealed record OutboxRetryThenSuccessOrderFulfilled(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
-
-[RatatoskrMessage("outbox-retry-then-success.order-failed")]
-public sealed record OutboxRetryThenSuccessOrderFailed(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;

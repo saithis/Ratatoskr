@@ -42,7 +42,6 @@ public sealed class BusinessRejectionScenario : IPlaygroundScenario
         bus.AddEventPublishChannel(exEvt, c => c
             .WithRabbitMq(r => r.WithTopicExchange())
             .Produces<BusinessRejectionOrderPlaced>()
-            .Produces<BusinessRejectionOrderFulfilled>()
             .Produces<BusinessRejectionOrderFailed>());
 
         bus.AddCommandPublishChannel(exCmd, c => c
@@ -56,7 +55,6 @@ public sealed class BusinessRejectionScenario : IPlaygroundScenario
                 .WithQueueName(qOrders)
                 .WithQueueType(QueueType.Classic)
                 .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<BusinessRejectionOrderFulfilled>(m => m.WithHandler<BusinessRejectionOrderFulfilledHandler>($"{ScenarioSlug}.fulfilled"))
             .Consumes<BusinessRejectionOrderFailed>(m => m.WithHandler<BusinessRejectionOrderFailedHandler>($"{ScenarioSlug}.failed"))
             .UseInbox<PublisherDbContext>());
 
@@ -80,7 +78,6 @@ public sealed class BusinessRejectionScenario : IPlaygroundScenario
             .Consumes<BusinessRejectionOrderPlaced>(m => m
                 .WithHandler<BusinessRejectionOrderPlacedNotifyHandler>($"{ScenarioSlug}.notify")
                 .WithHandler<BusinessRejectionOrderPlacedAnalyticsHandler>($"{ScenarioSlug}.analytics"))
-            .Consumes<BusinessRejectionOrderFulfilled>(m => m.WithHandler<BusinessRejectionOrderFulfilledNotifyHandler>($"{ScenarioSlug}.fulfilled-notify"))
             .UseInbox<PublisherDbContext>());
     }
 

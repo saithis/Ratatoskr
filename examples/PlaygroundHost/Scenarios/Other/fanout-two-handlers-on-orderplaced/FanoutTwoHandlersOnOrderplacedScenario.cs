@@ -42,8 +42,7 @@ public sealed class FanoutTwoHandlersOnOrderplacedScenario : IPlaygroundScenario
         bus.AddEventPublishChannel(exEvt, c => c
             .WithRabbitMq(r => r.WithTopicExchange())
             .Produces<FanoutTwoHandlersOnOrderplacedOrderPlaced>()
-            .Produces<FanoutTwoHandlersOnOrderplacedOrderFulfilled>()
-            .Produces<FanoutTwoHandlersOnOrderplacedOrderFailed>());
+            .Produces<FanoutTwoHandlersOnOrderplacedOrderFulfilled>());
 
         bus.AddCommandPublishChannel(exCmd, c => c
             .WithRabbitMq(r => r.WithDirectExchange())
@@ -57,7 +56,6 @@ public sealed class FanoutTwoHandlersOnOrderplacedScenario : IPlaygroundScenario
                 .WithQueueType(QueueType.Classic)
                 .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
             .Consumes<FanoutTwoHandlersOnOrderplacedOrderFulfilled>(m => m.WithHandler<FanoutTwoHandlersOnOrderplacedOrderFulfilledHandler>($"{ScenarioSlug}.fulfilled"))
-            .Consumes<FanoutTwoHandlersOnOrderplacedOrderFailed>(m => m.WithHandler<FanoutTwoHandlersOnOrderplacedOrderFailedHandler>($"{ScenarioSlug}.failed"))
             .UseInbox<PublisherDbContext>());
 
         bus.AddCommandConsumeChannel($"{ScenarioSlug}-inventory", c => c
@@ -80,7 +78,6 @@ public sealed class FanoutTwoHandlersOnOrderplacedScenario : IPlaygroundScenario
             .Consumes<FanoutTwoHandlersOnOrderplacedOrderPlaced>(m => m
                 .WithHandler<FanoutTwoHandlersOnOrderplacedOrderPlacedNotifyHandler>($"{ScenarioSlug}.notify")
                 .WithHandler<FanoutTwoHandlersOnOrderplacedOrderPlacedAnalyticsHandler>($"{ScenarioSlug}.analytics"))
-            .Consumes<FanoutTwoHandlersOnOrderplacedOrderFulfilled>(m => m.WithHandler<FanoutTwoHandlersOnOrderplacedOrderFulfilledNotifyHandler>($"{ScenarioSlug}.fulfilled-notify"))
             .UseInbox<PublisherDbContext>());
     }
 

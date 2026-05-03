@@ -14,6 +14,3 @@ public sealed record FanoutTwoHandlersOnOrderplacedReserveStockInternal(string O
 
 [RatatoskrMessage("fanout-two-handlers-on-orderplaced.order-fulfilled")]
 public sealed record FanoutTwoHandlersOnOrderplacedOrderFulfilled(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
-
-[RatatoskrMessage("fanout-two-handlers-on-orderplaced.order-failed")]
-public sealed record FanoutTwoHandlersOnOrderplacedOrderFailed(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;

@@ -42,8 +42,7 @@ public sealed class DirectConsumeSuccessScenario : IPlaygroundScenario
         bus.AddEventPublishChannel(exEvt, c => c
             .WithRabbitMq(r => r.WithTopicExchange())
             .Produces<DirectConsumeSuccessOrderPlaced>()
-            .Produces<DirectConsumeSuccessOrderFulfilled>()
-            .Produces<DirectConsumeSuccessOrderFailed>());
+            .Produces<DirectConsumeSuccessOrderFulfilled>());
 
         bus.AddCommandPublishChannel(exCmd, c => c
             .WithRabbitMq(r => r.WithDirectExchange())
@@ -57,7 +56,6 @@ public sealed class DirectConsumeSuccessScenario : IPlaygroundScenario
                 .WithQueueType(QueueType.Classic)
                 .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
             .Consumes<DirectConsumeSuccessOrderFulfilled>(m => m.WithHandler<DirectConsumeSuccessOrderFulfilledHandler>($"{ScenarioSlug}.fulfilled"))
-            .Consumes<DirectConsumeSuccessOrderFailed>(m => m.WithHandler<DirectConsumeSuccessOrderFailedHandler>($"{ScenarioSlug}.failed"))
             .UseInbox<PublisherDbContext>());
 
         bus.AddCommandConsumeChannel($"{ScenarioSlug}-inventory", c => c
@@ -80,7 +78,6 @@ public sealed class DirectConsumeSuccessScenario : IPlaygroundScenario
             .Consumes<DirectConsumeSuccessOrderPlaced>(m => m
                 .WithHandler<DirectConsumeSuccessOrderPlacedNotifyHandler>($"{ScenarioSlug}.notify")
                 .WithHandler<DirectConsumeSuccessOrderPlacedAnalyticsHandler>($"{ScenarioSlug}.analytics"))
-            .Consumes<DirectConsumeSuccessOrderFulfilled>(m => m.WithHandler<DirectConsumeSuccessOrderFulfilledNotifyHandler>($"{ScenarioSlug}.fulfilled-notify"))
             .UseInbox<PublisherDbContext>());
     }
 

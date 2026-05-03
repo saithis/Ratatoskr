@@ -47,21 +47,6 @@ public sealed class InboxRetryThenSuccessOrderFulfilledHandler(PublisherDbContex
     }
 }
 
-public sealed class InboxRetryThenSuccessOrderFailedHandler(PublisherDbContext db, TimeProvider time, ILogger<InboxRetryThenSuccessOrderFailedHandler> logger)
-    : IMessageHandler<InboxRetryThenSuccessOrderFailed>
-{
-    public async Task HandleAsync(InboxRetryThenSuccessOrderFailed message, MessageProperties properties, CancellationToken cancellationToken)
-    {
-        var order = await db.Orders.FirstOrDefaultAsync(o => o.Id == Guid.Parse(message.OrderId), cancellationToken);
-        if (order is null) return;
-        var now = time.GetUtcNow().UtcDateTime;
-        order.Status = OrderStatus.Failed;
-        order.StatusChangedAt = now;
-        await db.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Order {OrderId} marked Failed", message.OrderId);
-    }
-}
-
 public sealed class InboxRetryThenSuccessOrderPlacedNotifyHandler(ILogger<InboxRetryThenSuccessOrderPlacedNotifyHandler> logger) : IMessageHandler<InboxRetryThenSuccessOrderPlaced>
 {
     public Task HandleAsync(InboxRetryThenSuccessOrderPlaced message, MessageProperties properties, CancellationToken cancellationToken)
@@ -74,15 +59,6 @@ public sealed class InboxRetryThenSuccessOrderPlacedAnalyticsHandler(ILogger<Inb
 {
     public Task HandleAsync(InboxRetryThenSuccessOrderPlaced message, MessageProperties properties, CancellationToken cancellationToken)
     {
-        return Task.CompletedTask;
-    }
-}
-
-public sealed class InboxRetryThenSuccessOrderFulfilledNotifyHandler(ILogger<InboxRetryThenSuccessOrderFulfilledNotifyHandler> logger) : IMessageHandler<InboxRetryThenSuccessOrderFulfilled>
-{
-    public Task HandleAsync(InboxRetryThenSuccessOrderFulfilled message, MessageProperties properties, CancellationToken cancellationToken)
-    {
-        logger.LogInformation("[Notification] Order fulfilled {OrderId}", message.OrderId);
         return Task.CompletedTask;
     }
 }

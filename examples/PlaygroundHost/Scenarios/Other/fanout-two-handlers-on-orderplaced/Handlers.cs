@@ -42,21 +42,6 @@ public sealed class FanoutTwoHandlersOnOrderplacedOrderFulfilledHandler(Publishe
     }
 }
 
-public sealed class FanoutTwoHandlersOnOrderplacedOrderFailedHandler(PublisherDbContext db, TimeProvider time, ILogger<FanoutTwoHandlersOnOrderplacedOrderFailedHandler> logger)
-    : IMessageHandler<FanoutTwoHandlersOnOrderplacedOrderFailed>
-{
-    public async Task HandleAsync(FanoutTwoHandlersOnOrderplacedOrderFailed message, MessageProperties properties, CancellationToken cancellationToken)
-    {
-        var order = await db.Orders.FirstOrDefaultAsync(o => o.Id == Guid.Parse(message.OrderId), cancellationToken);
-        if (order is null) return;
-        var now = time.GetUtcNow().UtcDateTime;
-        order.Status = OrderStatus.Failed;
-        order.StatusChangedAt = now;
-        await db.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Order {OrderId} marked Failed", message.OrderId);
-    }
-}
-
 public sealed class FanoutTwoHandlersOnOrderplacedOrderPlacedNotifyHandler(ILogger<FanoutTwoHandlersOnOrderplacedOrderPlacedNotifyHandler> logger) : IMessageHandler<FanoutTwoHandlersOnOrderplacedOrderPlaced>
 {
     public Task HandleAsync(FanoutTwoHandlersOnOrderplacedOrderPlaced message, MessageProperties properties, CancellationToken cancellationToken)
@@ -69,15 +54,6 @@ public sealed class FanoutTwoHandlersOnOrderplacedOrderPlacedAnalyticsHandler(IL
 {
     public Task HandleAsync(FanoutTwoHandlersOnOrderplacedOrderPlaced message, MessageProperties properties, CancellationToken cancellationToken)
     {
-        return Task.CompletedTask;
-    }
-}
-
-public sealed class FanoutTwoHandlersOnOrderplacedOrderFulfilledNotifyHandler(ILogger<FanoutTwoHandlersOnOrderplacedOrderFulfilledNotifyHandler> logger) : IMessageHandler<FanoutTwoHandlersOnOrderplacedOrderFulfilled>
-{
-    public Task HandleAsync(FanoutTwoHandlersOnOrderplacedOrderFulfilled message, MessageProperties properties, CancellationToken cancellationToken)
-    {
-        logger.LogInformation("[Notification] Order fulfilled {OrderId}", message.OrderId);
         return Task.CompletedTask;
     }
 }

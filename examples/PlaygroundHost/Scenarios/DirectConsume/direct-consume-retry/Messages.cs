@@ -14,6 +14,3 @@ public sealed record DirectConsumeRetryReserveStockInternal(string OrderId, stri
 
 [RatatoskrMessage("direct-consume-retry.order-fulfilled")]
 public sealed record DirectConsumeRetryOrderFulfilled(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
-
-[RatatoskrMessage("direct-consume-retry.order-failed")]
-public sealed record DirectConsumeRetryOrderFailed(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;

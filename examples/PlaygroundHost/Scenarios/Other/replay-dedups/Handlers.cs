@@ -42,21 +42,6 @@ public sealed class ReplayDedupsOrderFulfilledHandler(PublisherDbContext db, Tim
     }
 }
 
-public sealed class ReplayDedupsOrderFailedHandler(PublisherDbContext db, TimeProvider time, ILogger<ReplayDedupsOrderFailedHandler> logger)
-    : IMessageHandler<ReplayDedupsOrderFailed>
-{
-    public async Task HandleAsync(ReplayDedupsOrderFailed message, MessageProperties properties, CancellationToken cancellationToken)
-    {
-        var order = await db.Orders.FirstOrDefaultAsync(o => o.Id == Guid.Parse(message.OrderId), cancellationToken);
-        if (order is null) return;
-        var now = time.GetUtcNow().UtcDateTime;
-        order.Status = OrderStatus.Failed;
-        order.StatusChangedAt = now;
-        await db.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Order {OrderId} marked Failed", message.OrderId);
-    }
-}
-
 public sealed class ReplayDedupsOrderPlacedNotifyHandler(ILogger<ReplayDedupsOrderPlacedNotifyHandler> logger) : IMessageHandler<ReplayDedupsOrderPlaced>
 {
     public Task HandleAsync(ReplayDedupsOrderPlaced message, MessageProperties properties, CancellationToken cancellationToken)
@@ -69,15 +54,6 @@ public sealed class ReplayDedupsOrderPlacedAnalyticsHandler(ILogger<ReplayDedups
 {
     public Task HandleAsync(ReplayDedupsOrderPlaced message, MessageProperties properties, CancellationToken cancellationToken)
     {
-        return Task.CompletedTask;
-    }
-}
-
-public sealed class ReplayDedupsOrderFulfilledNotifyHandler(ILogger<ReplayDedupsOrderFulfilledNotifyHandler> logger) : IMessageHandler<ReplayDedupsOrderFulfilled>
-{
-    public Task HandleAsync(ReplayDedupsOrderFulfilled message, MessageProperties properties, CancellationToken cancellationToken)
-    {
-        logger.LogInformation("[Notification] Order fulfilled {OrderId}", message.OrderId);
         return Task.CompletedTask;
     }
 }

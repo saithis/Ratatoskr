@@ -42,8 +42,7 @@ public sealed class EfcoreInternalCommandScenario : IPlaygroundScenario
         bus.AddEventPublishChannel(exEvt, c => c
             .WithRabbitMq(r => r.WithTopicExchange())
             .Produces<EfcoreInternalCommandOrderPlaced>()
-            .Produces<EfcoreInternalCommandOrderFulfilled>()
-            .Produces<EfcoreInternalCommandOrderFailed>());
+            .Produces<EfcoreInternalCommandOrderFulfilled>());
 
         bus.AddCommandPublishChannel(exCmd, c => c
             .WithRabbitMq(r => r.WithDirectExchange())
@@ -57,7 +56,6 @@ public sealed class EfcoreInternalCommandScenario : IPlaygroundScenario
                 .WithQueueType(QueueType.Classic)
                 .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
             .Consumes<EfcoreInternalCommandOrderFulfilled>(m => m.WithHandler<EfcoreInternalCommandOrderFulfilledHandler>($"{ScenarioSlug}.fulfilled"))
-            .Consumes<EfcoreInternalCommandOrderFailed>(m => m.WithHandler<EfcoreInternalCommandOrderFailedHandler>($"{ScenarioSlug}.failed"))
             .UseInbox<PublisherDbContext>());
 
         bus.AddCommandConsumeChannel($"{ScenarioSlug}-inventory", c => c
@@ -80,7 +78,6 @@ public sealed class EfcoreInternalCommandScenario : IPlaygroundScenario
             .Consumes<EfcoreInternalCommandOrderPlaced>(m => m
                 .WithHandler<EfcoreInternalCommandOrderPlacedNotifyHandler>($"{ScenarioSlug}.notify")
                 .WithHandler<EfcoreInternalCommandOrderPlacedAnalyticsHandler>($"{ScenarioSlug}.analytics"))
-            .Consumes<EfcoreInternalCommandOrderFulfilled>(m => m.WithHandler<EfcoreInternalCommandOrderFulfilledNotifyHandler>($"{ScenarioSlug}.fulfilled-notify"))
             .UseInbox<PublisherDbContext>());
     }
 

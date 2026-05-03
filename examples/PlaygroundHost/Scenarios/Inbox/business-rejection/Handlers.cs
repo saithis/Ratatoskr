@@ -31,21 +31,6 @@ public sealed class BusinessRejectionProcessOrderHandler(ConsumerDbContext db, I
     }
 }
 
-public sealed class BusinessRejectionOrderFulfilledHandler(PublisherDbContext db, TimeProvider time, ILogger<BusinessRejectionOrderFulfilledHandler> logger)
-    : IMessageHandler<BusinessRejectionOrderFulfilled>
-{
-    public async Task HandleAsync(BusinessRejectionOrderFulfilled message, MessageProperties properties, CancellationToken cancellationToken)
-    {
-        var order = await db.Orders.FirstOrDefaultAsync(o => o.Id == Guid.Parse(message.OrderId), cancellationToken);
-        if (order is null) return;
-        var now = time.GetUtcNow().UtcDateTime;
-        order.Status = OrderStatus.Fulfilled;
-        order.StatusChangedAt = now;
-        await db.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Order {OrderId} marked Fulfilled", message.OrderId);
-    }
-}
-
 public sealed class BusinessRejectionOrderFailedHandler(PublisherDbContext db, TimeProvider time, ILogger<BusinessRejectionOrderFailedHandler> logger)
     : IMessageHandler<BusinessRejectionOrderFailed>
 {
@@ -73,15 +58,6 @@ public sealed class BusinessRejectionOrderPlacedAnalyticsHandler(ILogger<Busines
 {
     public Task HandleAsync(BusinessRejectionOrderPlaced message, MessageProperties properties, CancellationToken cancellationToken)
     {
-        return Task.CompletedTask;
-    }
-}
-
-public sealed class BusinessRejectionOrderFulfilledNotifyHandler(ILogger<BusinessRejectionOrderFulfilledNotifyHandler> logger) : IMessageHandler<BusinessRejectionOrderFulfilled>
-{
-    public Task HandleAsync(BusinessRejectionOrderFulfilled message, MessageProperties properties, CancellationToken cancellationToken)
-    {
-        logger.LogInformation("[Notification] Order fulfilled {OrderId}", message.OrderId);
         return Task.CompletedTask;
     }
 }

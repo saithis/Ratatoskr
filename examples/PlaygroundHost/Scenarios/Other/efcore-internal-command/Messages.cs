@@ -14,6 +14,3 @@ public sealed record EfcoreInternalCommandReserveStockInternal(string OrderId, s
 
 [RatatoskrMessage("efcore-internal-command.order-fulfilled")]
 public sealed record EfcoreInternalCommandOrderFulfilled(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
-
-[RatatoskrMessage("efcore-internal-command.order-failed")]
-public sealed record EfcoreInternalCommandOrderFailed(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;

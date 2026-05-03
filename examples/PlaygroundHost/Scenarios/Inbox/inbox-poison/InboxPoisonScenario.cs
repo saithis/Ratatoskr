@@ -17,7 +17,6 @@ public sealed class InboxPoisonScenario : IPlaygroundScenario
 
     public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues =>
     [
-        new("orders", PlaygroundAmqpNames.OrdersQueue(ScenarioSlug)),
         new("inventory", PlaygroundAmqpNames.InventoryQueue(ScenarioSlug)),
         new("notifications", PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug)),
     ];
@@ -26,7 +25,6 @@ public sealed class InboxPoisonScenario : IPlaygroundScenario
     {
         var exEvt = PlaygroundAmqpNames.EventsExchange(ScenarioSlug);
         var exCmd = PlaygroundAmqpNames.CommandsExchange(ScenarioSlug);
-        var qOrders = PlaygroundAmqpNames.OrdersQueue(ScenarioSlug);
         var qInv = PlaygroundAmqpNames.InventoryQueue(ScenarioSlug);
         var qNot = PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug);
         var internalCh = $"pg.{ScenarioSlug}.orders.internal";
@@ -41,24 +39,11 @@ public sealed class InboxPoisonScenario : IPlaygroundScenario
 
         bus.AddEventPublishChannel(exEvt, c => c
             .WithRabbitMq(r => r.WithTopicExchange())
-            .Produces<InboxPoisonOrderPlaced>()
-            .Produces<InboxPoisonOrderFulfilled>()
-            .Produces<InboxPoisonOrderFailed>());
+            .Produces<InboxPoisonOrderPlaced>());
 
         bus.AddCommandPublishChannel(exCmd, c => c
             .WithRabbitMq(r => r.WithDirectExchange())
             .Produces<InboxPoisonProcessOrderCommand>());
-
-        bus.AddEventConsumeChannel($"{ScenarioSlug}-orders-inbox", c => c
-            .WithRabbitMq(r => r
-                .WithTopicExchange()
-                .WithAmqpExchangeName(exEvt)
-                .WithQueueName(qOrders)
-                .WithQueueType(QueueType.Classic)
-                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<InboxPoisonOrderFulfilled>(m => m.WithHandler<InboxPoisonOrderFulfilledHandler>($"{ScenarioSlug}.fulfilled"))
-            .Consumes<InboxPoisonOrderFailed>(m => m.WithHandler<InboxPoisonOrderFailedHandler>($"{ScenarioSlug}.failed"))
-            .UseInbox<PublisherDbContext>());
 
         bus.AddCommandConsumeChannel($"{ScenarioSlug}-inventory", c => c
             .WithRabbitMq(r => r
@@ -80,7 +65,6 @@ public sealed class InboxPoisonScenario : IPlaygroundScenario
             .Consumes<InboxPoisonOrderPlaced>(m => m
                 .WithHandler<InboxPoisonOrderPlacedNotifyHandler>($"{ScenarioSlug}.notify")
                 .WithHandler<InboxPoisonOrderPlacedAnalyticsHandler>($"{ScenarioSlug}.analytics"))
-            .Consumes<InboxPoisonOrderFulfilled>(m => m.WithHandler<InboxPoisonOrderFulfilledNotifyHandler>($"{ScenarioSlug}.fulfilled-notify"))
             .UseInbox<PublisherDbContext>());
     }
 

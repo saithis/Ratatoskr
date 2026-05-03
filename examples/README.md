@@ -2,7 +2,7 @@
 
 Single ASP.NET Core host (**PlaygroundHost**) plus Aspire **AppHost** demonstrates Ratatoskr building blocks: EF Core outbox/inbox on two logical PostgreSQL databases (publisher vs consumer), RabbitMQ fan-out and retries, a **playground** HTTP surface (activities, diagnostics, Rabbit queue depths), a **server-driven scenario runner** (catalog, run status, cancel), and the static dashboard under `examples/PlaygroundHost/wwwroot/`.
 
-Each **scenario** is a fixed script with its own **wire types** (`[RatatoskrMessage("{slug}.{kind}")]` style names) and **per-slug Rabbit topology** (`pg.{slug}.events`, `pg.{slug}.commands`, and queues such as `pg.{slug}.orders`) so concurrent runs do not share retry or DLQ mailboxes. There are no global playground toggles; failure paths are encoded in the scenario handlers or run-scoped helpers (for example outbox send simulation).
+Each **scenario** is a fixed script with its own **wire types** (`[RatatoskrMessage("{slug}.{kind}")]` style names) and **per-slug Rabbit topology** (`pg.{slug}.events`, `pg.{slug}.commands`, and queues such as `pg.{slug}.orders`) so concurrent runs do not share retry or DLQ mailboxes. Scenarios register only the channels, message CLR types, and handlers their script actually uses (for example `direct-consume-dlq` wires only `OrderPlaced` on the notifications queue). There are no global playground toggles; failure paths are encoded in the scenario handlers or run-scoped helpers (for example outbox send simulation).
 
 `examples/Docs` remains a **docfx-only** snippet project; it is not part of the runnable playground.
 

@@ -14,6 +14,3 @@ public sealed record OutboxPoisonReserveStockInternal(string OrderId, string Sce
 
 [RatatoskrMessage("outbox-poison.order-fulfilled")]
 public sealed record OutboxPoisonOrderFulfilled(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
-
-[RatatoskrMessage("outbox-poison.order-failed")]
-public sealed record OutboxPoisonOrderFailed(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;

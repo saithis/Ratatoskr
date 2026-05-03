@@ -14,6 +14,3 @@ public sealed record ReplayDedupsReserveStockInternal(string OrderId, string Sce
 
 [RatatoskrMessage("replay-dedups.order-fulfilled")]
 public sealed record ReplayDedupsOrderFulfilled(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
-
-[RatatoskrMessage("replay-dedups.order-failed")]
-public sealed record ReplayDedupsOrderFailed(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
