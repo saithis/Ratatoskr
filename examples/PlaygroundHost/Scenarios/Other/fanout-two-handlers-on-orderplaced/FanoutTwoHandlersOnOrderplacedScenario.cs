@@ -16,57 +16,16 @@ public sealed class FanoutTwoHandlersOnOrderplacedScenario : IPlaygroundScenario
     private const string ScenarioSlug = "fanout-two-handlers-on-orderplaced";
 
     public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues =>
-    [
-        new("orders", PlaygroundAmqpNames.OrdersQueue(ScenarioSlug)),
-        new("inventory", PlaygroundAmqpNames.InventoryQueue(ScenarioSlug)),
-        new("notifications", PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug)),
-    ];
+        [new("notifications", PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug))];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
     {
         var exEvt = PlaygroundAmqpNames.EventsExchange(ScenarioSlug);
-        var exCmd = PlaygroundAmqpNames.CommandsExchange(ScenarioSlug);
-        var qOrders = PlaygroundAmqpNames.OrdersQueue(ScenarioSlug);
-        var qInv = PlaygroundAmqpNames.InventoryQueue(ScenarioSlug);
         var qNot = PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug);
-        var internalCh = $"pg.{ScenarioSlug}.orders.internal";
-
-        bus.AddCommandPublishChannel(internalCh, c => c
-            .WithEfCore()
-            .Produces<FanoutTwoHandlersOnOrderplacedReserveStockInternal>());
-
-        bus.AddCommandConsumeChannel(internalCh, c => c
-            .Consumes<FanoutTwoHandlersOnOrderplacedReserveStockInternal>(m => m.WithHandler<FanoutTwoHandlersOnOrderplacedReserveStockInternalHandler>($"{ScenarioSlug}.reserve"))
-            .UseInbox<PublisherDbContext>());
 
         bus.AddEventPublishChannel(exEvt, c => c
             .WithRabbitMq(r => r.WithTopicExchange())
-            .Produces<FanoutTwoHandlersOnOrderplacedOrderPlaced>()
-            .Produces<FanoutTwoHandlersOnOrderplacedOrderFulfilled>());
-
-        bus.AddCommandPublishChannel(exCmd, c => c
-            .WithRabbitMq(r => r.WithDirectExchange())
-            .Produces<FanoutTwoHandlersOnOrderplacedProcessOrderCommand>());
-
-        bus.AddEventConsumeChannel($"{ScenarioSlug}-orders-inbox", c => c
-            .WithRabbitMq(r => r
-                .WithTopicExchange()
-                .WithAmqpExchangeName(exEvt)
-                .WithQueueName(qOrders)
-                .WithQueueType(QueueType.Classic)
-                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<FanoutTwoHandlersOnOrderplacedOrderFulfilled>(m => m.WithHandler<FanoutTwoHandlersOnOrderplacedOrderFulfilledHandler>($"{ScenarioSlug}.fulfilled"))
-            .UseInbox<PublisherDbContext>());
-
-        bus.AddCommandConsumeChannel($"{ScenarioSlug}-inventory", c => c
-            .WithRabbitMq(r => r
-                .WithDirectExchange()
-                .WithAmqpExchangeName(exCmd)
-                .WithQueueName(qInv)
-                .WithQueueType(QueueType.Classic)
-                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<FanoutTwoHandlersOnOrderplacedProcessOrderCommand>(m => m.WithHandler<FanoutTwoHandlersOnOrderplacedProcessOrderHandler>($"{ScenarioSlug}.process"))
-            .UseInbox<ConsumerDbContext>());
+            .Produces<OrderPlaced>());
 
         bus.AddEventConsumeChannel($"{ScenarioSlug}-notifications", c => c
             .WithRabbitMq(r => r
@@ -75,9 +34,9 @@ public sealed class FanoutTwoHandlersOnOrderplacedScenario : IPlaygroundScenario
                 .WithQueueName(qNot)
                 .WithQueueType(QueueType.Classic)
                 .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<FanoutTwoHandlersOnOrderplacedOrderPlaced>(m => m
-                .WithHandler<FanoutTwoHandlersOnOrderplacedOrderPlacedNotifyHandler>($"{ScenarioSlug}.notify")
-                .WithHandler<FanoutTwoHandlersOnOrderplacedOrderPlacedAnalyticsHandler>($"{ScenarioSlug}.analytics"))
+            .Consumes<OrderPlaced>(m => m
+                .WithHandler<OrderPlacedNotifyHandler>($"{ScenarioSlug}.notify")
+                .WithHandler<OrderPlacedAnalyticsHandler>($"{ScenarioSlug}.analytics"))
             .UseInbox<PublisherDbContext>());
     }
 
@@ -90,7 +49,7 @@ public sealed class FanoutTwoHandlersOnOrderplacedScenario : IPlaygroundScenario
 
     public string Topic => "Other";
 
-    private static async Task<Guid> StageOrderAsync(
+    private static async Task StageOrderAsync(
         PublisherDbContext db,
         TimeProvider time,
         string runId,
@@ -108,16 +67,9 @@ public sealed class FanoutTwoHandlersOnOrderplacedScenario : IPlaygroundScenario
         db.Orders.Add(order);
         var orderIdStr = order.Id.ToString();
         var mpPlaced = new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(order.Id) };
-        var mpCmd = new MessageProperties { Id = PlaygroundMessageIds.ProcessOrderCommand(order.Id) };
-        var mpRes = new MessageProperties { Id = PlaygroundMessageIds.ReserveStockInternal(order.Id) };
         PlaygroundCorrelation.AttachToMessageProperties(mpPlaced, runId);
-        PlaygroundCorrelation.AttachToMessageProperties(mpCmd, runId);
-        PlaygroundCorrelation.AttachToMessageProperties(mpRes, runId);
-        db.OutboxMessages.Add(new FanoutTwoHandlersOnOrderplacedOrderPlaced(orderIdStr, runId), mpPlaced);
-        db.OutboxMessages.Add(new FanoutTwoHandlersOnOrderplacedProcessOrderCommand(orderIdStr, runId), mpCmd);
-        db.OutboxMessages.Add(new FanoutTwoHandlersOnOrderplacedReserveStockInternal(orderIdStr, runId), mpRes);
+        db.OutboxMessages.Add(new OrderPlaced(orderIdStr, runId), mpPlaced);
         await db.SaveChangesAsync(cancellationToken);
-        return order.Id;
     }
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
@@ -128,7 +80,7 @@ public sealed class FanoutTwoHandlersOnOrderplacedScenario : IPlaygroundScenario
         var db = sp.GetRequiredService<PublisherDbContext>();
         var recorder = sp.GetRequiredService<PlaygroundActivityRecorder>();
         var runId = context.ScenarioRunId;
-        _ = await StageOrderAsync(db, time, runId, cancellationToken);
+        await StageOrderAsync(db, time, runId, cancellationToken);
         context.StepsCompleted.Add("staged_for_fanout");
 
         var deadline = time.GetUtcNow() + TimeSpan.FromSeconds(90);
@@ -151,5 +103,20 @@ public sealed class FanoutTwoHandlersOnOrderplacedScenario : IPlaygroundScenario
             e.IsSuccess == true &&
             (e.MessageType ?? "").Contains("order-placed", StringComparison.OrdinalIgnoreCase));
         return new ScenarioVerdict(false, $"Expected at least 2 successful OrderPlaced handler rows for this run; saw {n}.");
+    }
+
+    [RatatoskrMessage("fanout-two-handlers-on-orderplaced.order-placed")]
+    public sealed record OrderPlaced(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
+
+    public sealed class OrderPlacedNotifyHandler(ILogger<OrderPlacedNotifyHandler> _) : IMessageHandler<OrderPlaced>
+    {
+        public Task HandleAsync(OrderPlaced message, MessageProperties properties, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+    }
+
+    public sealed class OrderPlacedAnalyticsHandler(ILogger<OrderPlacedAnalyticsHandler> _) : IMessageHandler<OrderPlaced>
+    {
+        public Task HandleAsync(OrderPlaced message, MessageProperties properties, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
 }

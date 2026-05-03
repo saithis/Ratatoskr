@@ -6,7 +6,6 @@ using PlaygroundHost.Persistence;
 using PlaygroundHost.Persistence.Entities;
 using Ratatoskr;
 using Ratatoskr.Core;
-using Ratatoskr.EfCore;
 using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 
@@ -26,7 +25,7 @@ public sealed class DirectConsumeDlqScenario : IPlaygroundScenario
 
         bus.AddEventPublishChannel(exEvt, c => c
             .WithRabbitMq(r => r.WithTopicExchange())
-            .Produces<DirectConsumeDlqOrderPlaced>());
+            .Produces<OrderPlaced>());
 
         bus.AddEventConsumeChannel($"{ScenarioSlug}-notifications", c => c
             .WithRabbitMq(r => r
@@ -35,10 +34,7 @@ public sealed class DirectConsumeDlqScenario : IPlaygroundScenario
                 .WithQueueName(qNot)
                 .WithQueueType(QueueType.Classic)
                 .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<DirectConsumeDlqOrderPlaced>(m => m
-                .WithHandler<DirectConsumeDlqOrderPlacedNotifyHandler>($"{ScenarioSlug}.notify")
-                .WithHandler<DirectConsumeDlqOrderPlacedAnalyticsHandler>($"{ScenarioSlug}.analytics"))
-            .UseInbox<PublisherDbContext>());
+            .Consumes<OrderPlaced>(m => m.WithHandler<AlwaysFailHandler>()));
     }
 
     public string Slug => ScenarioSlug;
@@ -46,32 +42,9 @@ public sealed class DirectConsumeDlqScenario : IPlaygroundScenario
     public string Title => "Notification DLQ (no inbox)";
 
     public string Description =>
-        "OrderPlaced notify handler always fails; expect this scenario's notifications DLQ depth to grow.";
+        "PublishDirectAsync; one fire-and-forget handler always fails so this queue's DLQ depth grows after Rabbit retries exhaust.";
 
     public string Topic => "Direct consume";
-
-    private static async Task StageOrderAsync(
-        PublisherDbContext db,
-        TimeProvider time,
-        string runId,
-        CancellationToken cancellationToken)
-    {
-        var now = time.GetUtcNow().UtcDateTime;
-        var order = new Order
-        {
-            Id = Guid.NewGuid(),
-            Status = OrderStatus.Placed,
-            CreatedAt = now,
-            StatusChangedAt = now,
-            PublishOrigin = "outbox",
-        };
-        db.Orders.Add(order);
-        var orderIdStr = order.Id.ToString();
-        var mpPlaced = new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(order.Id) };
-        PlaygroundCorrelation.AttachToMessageProperties(mpPlaced, runId);
-        db.OutboxMessages.Add(new DirectConsumeDlqOrderPlaced(orderIdStr, runId), mpPlaced);
-        await db.SaveChangesAsync(cancellationToken);
-    }
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
@@ -82,11 +55,27 @@ public sealed class DirectConsumeDlqScenario : IPlaygroundScenario
             ?? throw new InvalidOperationException("rabbitmq connection string missing.");
         var time = sp.GetRequiredService<TimeProvider>();
         var db = sp.GetRequiredService<PublisherDbContext>();
+        var bus = sp.GetRequiredService<IRatatoskr>();
         var runId = context.ScenarioRunId;
         var mainQ = PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug);
         var d0 = await RabbitDlqDepthReader.GetDlqCountAsync(rabbitCs, mainQ, cancellationToken);
-        await StageOrderAsync(db, time, runId, cancellationToken);
-        context.StepsCompleted.Add("notification_always_fail");
+
+        var now = time.GetUtcNow().UtcDateTime;
+        var order = new Order
+        {
+            Id = Guid.NewGuid(),
+            Status = OrderStatus.Placed,
+            CreatedAt = now,
+            StatusChangedAt = now,
+            PublishOrigin = "direct",
+        };
+        db.Orders.Add(order);
+        await db.SaveChangesAsync(cancellationToken);
+        var orderIdStr = order.Id.ToString();
+        var mpPlaced = new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(order.Id) };
+        PlaygroundCorrelation.AttachToMessageProperties(mpPlaced, runId);
+        await bus.PublishDirectAsync(new OrderPlaced(orderIdStr, runId), mpPlaced, cancellationToken);
+        context.StepsCompleted.Add("direct_publish_always_fail");
 
         var deadline = time.GetUtcNow() + TimeSpan.FromSeconds(90);
         while (time.GetUtcNow() < deadline)
@@ -101,5 +90,14 @@ public sealed class DirectConsumeDlqScenario : IPlaygroundScenario
 
         var final = await RabbitDlqDepthReader.GetDlqCountAsync(rabbitCs, mainQ, cancellationToken);
         return new ScenarioVerdict(false, $"DLQ depth did not increase (before={d0}, after={final}).");
+    }
+
+    [RatatoskrMessage("direct-consume-dlq.order-placed")]
+    public sealed record OrderPlaced(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
+
+    public sealed class AlwaysFailHandler(ILogger<AlwaysFailHandler> _) : IMessageHandler<OrderPlaced>
+    {
+        public Task HandleAsync(OrderPlaced message, MessageProperties properties, CancellationToken cancellationToken) =>
+            Task.FromException(new InvalidOperationException("Simulated OrderPlaced failure (DLQ scenario)."));
     }
 }

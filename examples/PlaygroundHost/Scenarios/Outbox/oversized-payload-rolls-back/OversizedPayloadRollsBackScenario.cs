@@ -20,7 +20,7 @@ public sealed class OversizedPayloadRollsBackScenario : IPlaygroundScenario
         var exEvt = PlaygroundAmqpNames.EventsExchange(ScenarioSlug);
         bus.AddEventPublishChannel(exEvt, c => c
             .WithRabbitMq(r => r.WithTopicExchange())
-            .Produces<OversizedPayloadRollsBackOrderPlaced>());
+            .Produces<OrderPlaced>());
     }
 
     public string Slug => ScenarioSlug;
@@ -53,7 +53,7 @@ public sealed class OversizedPayloadRollsBackScenario : IPlaygroundScenario
         var mp = new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(order.Id) };
         PlaygroundCorrelation.AttachToMessageProperties(mp, runId);
         db.OutboxMessages.Add(
-            new OversizedPayloadRollsBackOrderPlaced(orderIdStr, runId, new string('x', 50_000)),
+            new OrderPlaced(orderIdStr, runId, new string('x', 50_000)),
             mp);
         try
         {
@@ -70,4 +70,10 @@ public sealed class OversizedPayloadRollsBackScenario : IPlaygroundScenario
                 : new ScenarioVerdict(true);
         }
     }
+
+    [RatatoskrMessage("oversized-payload-rolls-back.order-placed")]
+    public sealed record OrderPlaced(
+        string OrderId,
+        string ScenarioRunId,
+        string? BulkPaddingForDemo) : IPlaygroundCorrelatedOrderMessage;
 }

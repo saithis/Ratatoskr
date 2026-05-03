@@ -19,7 +19,6 @@ public sealed class BusinessRejectionScenario : IPlaygroundScenario
     [
         new("orders", PlaygroundAmqpNames.OrdersQueue(ScenarioSlug)),
         new("inventory", PlaygroundAmqpNames.InventoryQueue(ScenarioSlug)),
-        new("notifications", PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug)),
     ];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
@@ -28,25 +27,14 @@ public sealed class BusinessRejectionScenario : IPlaygroundScenario
         var exCmd = PlaygroundAmqpNames.CommandsExchange(ScenarioSlug);
         var qOrders = PlaygroundAmqpNames.OrdersQueue(ScenarioSlug);
         var qInv = PlaygroundAmqpNames.InventoryQueue(ScenarioSlug);
-        var qNot = PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug);
-        var internalCh = $"pg.{ScenarioSlug}.orders.internal";
-
-        bus.AddCommandPublishChannel(internalCh, c => c
-            .WithEfCore()
-            .Produces<BusinessRejectionReserveStockInternal>());
-
-        bus.AddCommandConsumeChannel(internalCh, c => c
-            .Consumes<BusinessRejectionReserveStockInternal>(m => m.WithHandler<BusinessRejectionReserveStockInternalHandler>($"{ScenarioSlug}.reserve"))
-            .UseInbox<PublisherDbContext>());
 
         bus.AddEventPublishChannel(exEvt, c => c
             .WithRabbitMq(r => r.WithTopicExchange())
-            .Produces<BusinessRejectionOrderPlaced>()
-            .Produces<BusinessRejectionOrderFailed>());
+            .Produces<OrderFailed>());
 
         bus.AddCommandPublishChannel(exCmd, c => c
             .WithRabbitMq(r => r.WithDirectExchange())
-            .Produces<BusinessRejectionProcessOrderCommand>());
+            .Produces<ProcessOrderCommand>());
 
         bus.AddEventConsumeChannel($"{ScenarioSlug}-orders-inbox", c => c
             .WithRabbitMq(r => r
@@ -55,7 +43,7 @@ public sealed class BusinessRejectionScenario : IPlaygroundScenario
                 .WithQueueName(qOrders)
                 .WithQueueType(QueueType.Classic)
                 .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<BusinessRejectionOrderFailed>(m => m.WithHandler<BusinessRejectionOrderFailedHandler>($"{ScenarioSlug}.failed"))
+            .Consumes<OrderFailed>(m => m.WithHandler<OrderFailedHandler>($"{ScenarioSlug}.failed"))
             .UseInbox<PublisherDbContext>());
 
         bus.AddCommandConsumeChannel($"{ScenarioSlug}-inventory", c => c
@@ -65,20 +53,8 @@ public sealed class BusinessRejectionScenario : IPlaygroundScenario
                 .WithQueueName(qInv)
                 .WithQueueType(QueueType.Classic)
                 .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<BusinessRejectionProcessOrderCommand>(m => m.WithHandler<BusinessRejectionProcessOrderHandler>($"{ScenarioSlug}.process"))
+            .Consumes<ProcessOrderCommand>(m => m.WithHandler<ProcessOrderHandler>($"{ScenarioSlug}.process"))
             .UseInbox<ConsumerDbContext>());
-
-        bus.AddEventConsumeChannel($"{ScenarioSlug}-notifications", c => c
-            .WithRabbitMq(r => r
-                .WithTopicExchange()
-                .WithAmqpExchangeName(exEvt)
-                .WithQueueName(qNot)
-                .WithQueueType(QueueType.Classic)
-                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<BusinessRejectionOrderPlaced>(m => m
-                .WithHandler<BusinessRejectionOrderPlacedNotifyHandler>($"{ScenarioSlug}.notify")
-                .WithHandler<BusinessRejectionOrderPlacedAnalyticsHandler>($"{ScenarioSlug}.analytics"))
-            .UseInbox<PublisherDbContext>());
     }
 
     public string Slug => ScenarioSlug;
@@ -107,15 +83,9 @@ public sealed class BusinessRejectionScenario : IPlaygroundScenario
         };
         db.Orders.Add(order);
         var orderIdStr = order.Id.ToString();
-        var mpPlaced = new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(order.Id) };
         var mpCmd = new MessageProperties { Id = PlaygroundMessageIds.ProcessOrderCommand(order.Id) };
-        var mpRes = new MessageProperties { Id = PlaygroundMessageIds.ReserveStockInternal(order.Id) };
-        PlaygroundCorrelation.AttachToMessageProperties(mpPlaced, runId);
         PlaygroundCorrelation.AttachToMessageProperties(mpCmd, runId);
-        PlaygroundCorrelation.AttachToMessageProperties(mpRes, runId);
-        db.OutboxMessages.Add(new BusinessRejectionOrderPlaced(orderIdStr, runId), mpPlaced);
-        db.OutboxMessages.Add(new BusinessRejectionProcessOrderCommand(orderIdStr, runId), mpCmd);
-        db.OutboxMessages.Add(new BusinessRejectionReserveStockInternal(orderIdStr, runId), mpRes);
+        db.OutboxMessages.Add(new ProcessOrderCommand(orderIdStr, runId), mpCmd);
         await db.SaveChangesAsync(cancellationToken);
         return order.Id;
     }
@@ -136,5 +106,41 @@ public sealed class BusinessRejectionScenario : IPlaygroundScenario
             TimeSpan.FromSeconds(90),
             time,
             cancellationToken);
+    }
+
+    [RatatoskrMessage("business-rejection.process-order-command")]
+    public sealed record ProcessOrderCommand(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
+
+    [RatatoskrMessage("business-rejection.order-failed")]
+    public sealed record OrderFailed(string OrderId, string ScenarioRunId, string Reason) : IPlaygroundCorrelatedOrderMessage;
+
+    public sealed class ProcessOrderHandler(ConsumerDbContext db, ILogger<ProcessOrderHandler> _) : IMessageHandler<ProcessOrderCommand>
+    {
+        public async Task HandleAsync(ProcessOrderCommand message, MessageProperties properties, CancellationToken cancellationToken)
+        {
+            var orderGuid = Guid.Parse(message.OrderId);
+            db.OutboxMessages.Add(
+                new OrderFailed(
+                    message.OrderId,
+                    message.ScenarioRunId,
+                    "Simulated business rejection."),
+                new MessageProperties { Id = PlaygroundMessageIds.OrderFailed(orderGuid) });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    public sealed class OrderFailedHandler(PublisherDbContext db, TimeProvider time, ILogger<OrderFailedHandler> logger)
+        : IMessageHandler<OrderFailed>
+    {
+        public async Task HandleAsync(OrderFailed message, MessageProperties properties, CancellationToken cancellationToken)
+        {
+            var order = await db.Orders.FirstOrDefaultAsync(o => o.Id == Guid.Parse(message.OrderId), cancellationToken);
+            if (order is null) return;
+            var now = time.GetUtcNow().UtcDateTime;
+            order.Status = OrderStatus.Failed;
+            order.StatusChangedAt = now;
+            await db.SaveChangesAsync(cancellationToken);
+            logger.LogInformation("Order {OrderId} marked Failed", message.OrderId);
+        }
     }
 }

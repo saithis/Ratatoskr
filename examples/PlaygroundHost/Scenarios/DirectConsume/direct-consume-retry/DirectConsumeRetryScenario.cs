@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Infrastructure.ScenarioRunning;
@@ -5,7 +6,6 @@ using PlaygroundHost.Persistence;
 using PlaygroundHost.Persistence.Entities;
 using Ratatoskr;
 using Ratatoskr.Core;
-using Ratatoskr.EfCore;
 using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 
@@ -16,109 +16,35 @@ public sealed class DirectConsumeRetryScenario : IPlaygroundScenario
     private const string ScenarioSlug = "direct-consume-retry";
 
     public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues =>
-    [
-        new("orders", PlaygroundAmqpNames.OrdersQueue(ScenarioSlug)),
-        new("inventory", PlaygroundAmqpNames.InventoryQueue(ScenarioSlug)),
-        new("notifications", PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug)),
-    ];
+        [new("work", PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug))];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
     {
         var exEvt = PlaygroundAmqpNames.EventsExchange(ScenarioSlug);
-        var exCmd = PlaygroundAmqpNames.CommandsExchange(ScenarioSlug);
-        var qOrders = PlaygroundAmqpNames.OrdersQueue(ScenarioSlug);
-        var qInv = PlaygroundAmqpNames.InventoryQueue(ScenarioSlug);
-        var qNot = PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug);
-        var internalCh = $"pg.{ScenarioSlug}.orders.internal";
-
-        bus.AddCommandPublishChannel(internalCh, c => c
-            .WithEfCore()
-            .Produces<DirectConsumeRetryReserveStockInternal>());
-
-        bus.AddCommandConsumeChannel(internalCh, c => c
-            .Consumes<DirectConsumeRetryReserveStockInternal>(m => m.WithHandler<DirectConsumeRetryReserveStockInternalHandler>($"{ScenarioSlug}.reserve"))
-            .UseInbox<PublisherDbContext>());
+        var qWork = PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug);
 
         bus.AddEventPublishChannel(exEvt, c => c
             .WithRabbitMq(r => r.WithTopicExchange())
-            .Produces<DirectConsumeRetryOrderPlaced>()
-            .Produces<DirectConsumeRetryOrderFulfilled>());
+            .Produces<RetryDemo>());
 
-        bus.AddCommandPublishChannel(exCmd, c => c
-            .WithRabbitMq(r => r.WithDirectExchange())
-            .Produces<DirectConsumeRetryProcessOrderCommand>());
-
-        bus.AddEventConsumeChannel($"{ScenarioSlug}-orders-inbox", c => c
+        bus.AddEventConsumeChannel($"{ScenarioSlug}-work", c => c
             .WithRabbitMq(r => r
                 .WithTopicExchange()
                 .WithAmqpExchangeName(exEvt)
-                .WithQueueName(qOrders)
+                .WithQueueName(qWork)
                 .WithQueueType(QueueType.Classic)
                 .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<DirectConsumeRetryOrderFulfilled>(m => m.WithHandler<DirectConsumeRetryOrderFulfilledHandler>($"{ScenarioSlug}.fulfilled"))
-            .UseInbox<PublisherDbContext>());
-
-        bus.AddCommandConsumeChannel($"{ScenarioSlug}-inventory", c => c
-            .WithRabbitMq(r => r
-                .WithDirectExchange()
-                .WithAmqpExchangeName(exCmd)
-                .WithQueueName(qInv)
-                .WithQueueType(QueueType.Classic)
-                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<DirectConsumeRetryProcessOrderCommand>(m => m.WithHandler<DirectConsumeRetryProcessOrderHandler>($"{ScenarioSlug}.process"))
-            .UseInbox<ConsumerDbContext>());
-
-        bus.AddEventConsumeChannel($"{ScenarioSlug}-notifications", c => c
-            .WithRabbitMq(r => r
-                .WithTopicExchange()
-                .WithAmqpExchangeName(exEvt)
-                .WithQueueName(qNot)
-                .WithQueueType(QueueType.Classic)
-                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<DirectConsumeRetryOrderPlaced>(m => m
-                .WithHandler<DirectConsumeRetryOrderPlacedNotifyHandler>($"{ScenarioSlug}.notify")
-                .WithHandler<DirectConsumeRetryOrderPlacedAnalyticsHandler>($"{ScenarioSlug}.analytics"))
-            .UseInbox<PublisherDbContext>());
+            .Consumes<RetryDemo>(m => m.WithHandler<RetryDemoHandler>()));
     }
 
     public string Slug => ScenarioSlug;
 
-    public string Title => "Notification OrderPlaced succeed-after-2";
+    public string Title => "Rabbit consumer retry (no inbox)";
 
     public string Description =>
-        "Rabbit fan-out handler fails twice then succeeds; order still reaches Fulfilled.";
+        "PublishDirectAsync to a single topic exchange; one fire-and-forget handler fails twice then marks the order Fulfilled (Rabbit retry, no inbox).";
 
     public string Topic => "Direct consume";
-
-    private static async Task<Guid> StageOrderAsync(
-        PublisherDbContext db,
-        TimeProvider time,
-        string runId,
-        CancellationToken cancellationToken)
-    {
-        var now = time.GetUtcNow().UtcDateTime;
-        var order = new Order
-        {
-            Id = Guid.NewGuid(),
-            Status = OrderStatus.Placed,
-            CreatedAt = now,
-            StatusChangedAt = now,
-            PublishOrigin = "outbox",
-        };
-        db.Orders.Add(order);
-        var orderIdStr = order.Id.ToString();
-        var mpPlaced = new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(order.Id) };
-        var mpCmd = new MessageProperties { Id = PlaygroundMessageIds.ProcessOrderCommand(order.Id) };
-        var mpRes = new MessageProperties { Id = PlaygroundMessageIds.ReserveStockInternal(order.Id) };
-        PlaygroundCorrelation.AttachToMessageProperties(mpPlaced, runId);
-        PlaygroundCorrelation.AttachToMessageProperties(mpCmd, runId);
-        PlaygroundCorrelation.AttachToMessageProperties(mpRes, runId);
-        db.OutboxMessages.Add(new DirectConsumeRetryOrderPlaced(orderIdStr, runId), mpPlaced);
-        db.OutboxMessages.Add(new DirectConsumeRetryProcessOrderCommand(orderIdStr, runId), mpCmd);
-        db.OutboxMessages.Add(new DirectConsumeRetryReserveStockInternal(orderIdStr, runId), mpRes);
-        await db.SaveChangesAsync(cancellationToken);
-        return order.Id;
-    }
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
@@ -126,15 +52,57 @@ public sealed class DirectConsumeRetryScenario : IPlaygroundScenario
         var sp = setup.ServiceProvider;
         var time = sp.GetRequiredService<TimeProvider>();
         var db = sp.GetRequiredService<PublisherDbContext>();
+        var bus = sp.GetRequiredService<IRatatoskr>();
         var runId = context.ScenarioRunId;
-        var orderId = await StageOrderAsync(db, time, runId, cancellationToken);
-        context.StepsCompleted.Add("notification_succeed_after_two");
+        var now = time.GetUtcNow().UtcDateTime;
+        var order = new Order
+        {
+            Id = Guid.NewGuid(),
+            Status = OrderStatus.Placed,
+            CreatedAt = now,
+            StatusChangedAt = now,
+            PublishOrigin = "direct",
+        };
+        db.Orders.Add(order);
+        await db.SaveChangesAsync(cancellationToken);
+        var orderIdStr = order.Id.ToString();
+        var mp = new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(order.Id) };
+        PlaygroundCorrelation.AttachToMessageProperties(mp, runId);
+        await bus.PublishDirectAsync(new RetryDemo(orderIdStr, runId), mp, cancellationToken);
+        context.StepsCompleted.Add("direct_publish_one_message");
         return await ScenarioAssertions.OrderEventuallyAsync(
             context.ScopeFactory,
-            orderId,
+            order.Id,
             OrderStatus.Fulfilled,
             TimeSpan.FromSeconds(90),
             time,
             cancellationToken);
+    }
+
+    [RatatoskrMessage("direct-consume-retry.retry-demo")]
+    public sealed record RetryDemo(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
+
+    public sealed class RetryDemoHandler(
+        PublisherDbContext db,
+        TimeProvider time,
+        ILogger<RetryDemoHandler> logger) : IMessageHandler<RetryDemo>
+    {
+        private static readonly ConcurrentDictionary<string, int> Attempts = new();
+
+        public async Task HandleAsync(RetryDemo message, MessageProperties properties, CancellationToken cancellationToken)
+        {
+            var key = properties.Id ?? message.OrderId;
+            var n = Attempts.AddOrUpdate(key, 1, (_, old) => old + 1);
+            if (n <= 2)
+                throw new InvalidOperationException("Simulated Rabbit consumer failure (succeed-after-2).");
+
+            var order = await db.Orders.FirstOrDefaultAsync(o => o.Id == Guid.Parse(message.OrderId), cancellationToken);
+            if (order is null) return;
+            var now = time.GetUtcNow().UtcDateTime;
+            order.Status = OrderStatus.Fulfilled;
+            order.StatusChangedAt = now;
+            await db.SaveChangesAsync(cancellationToken);
+            logger.LogInformation("Order {OrderId} marked Fulfilled after Rabbit retries", message.OrderId);
+        }
     }
 }

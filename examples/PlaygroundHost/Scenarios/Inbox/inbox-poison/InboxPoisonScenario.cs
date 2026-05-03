@@ -16,34 +16,16 @@ public sealed class InboxPoisonScenario : IPlaygroundScenario
     private const string ScenarioSlug = "inbox-poison";
 
     public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues =>
-    [
-        new("inventory", PlaygroundAmqpNames.InventoryQueue(ScenarioSlug)),
-        new("notifications", PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug)),
-    ];
+        [new("inventory", PlaygroundAmqpNames.InventoryQueue(ScenarioSlug))];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
     {
-        var exEvt = PlaygroundAmqpNames.EventsExchange(ScenarioSlug);
         var exCmd = PlaygroundAmqpNames.CommandsExchange(ScenarioSlug);
         var qInv = PlaygroundAmqpNames.InventoryQueue(ScenarioSlug);
-        var qNot = PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug);
-        var internalCh = $"pg.{ScenarioSlug}.orders.internal";
-
-        bus.AddCommandPublishChannel(internalCh, c => c
-            .WithEfCore()
-            .Produces<InboxPoisonReserveStockInternal>());
-
-        bus.AddCommandConsumeChannel(internalCh, c => c
-            .Consumes<InboxPoisonReserveStockInternal>(m => m.WithHandler<InboxPoisonReserveStockInternalHandler>($"{ScenarioSlug}.reserve"))
-            .UseInbox<PublisherDbContext>());
-
-        bus.AddEventPublishChannel(exEvt, c => c
-            .WithRabbitMq(r => r.WithTopicExchange())
-            .Produces<InboxPoisonOrderPlaced>());
 
         bus.AddCommandPublishChannel(exCmd, c => c
             .WithRabbitMq(r => r.WithDirectExchange())
-            .Produces<InboxPoisonProcessOrderCommand>());
+            .Produces<ProcessOrderCommand>());
 
         bus.AddCommandConsumeChannel($"{ScenarioSlug}-inventory", c => c
             .WithRabbitMq(r => r
@@ -52,20 +34,8 @@ public sealed class InboxPoisonScenario : IPlaygroundScenario
                 .WithQueueName(qInv)
                 .WithQueueType(QueueType.Classic)
                 .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<InboxPoisonProcessOrderCommand>(m => m.WithHandler<InboxPoisonProcessOrderHandler>($"{ScenarioSlug}.process"))
+            .Consumes<ProcessOrderCommand>(m => m.WithHandler<ProcessOrderHandler>($"{ScenarioSlug}.process"))
             .UseInbox<ConsumerDbContext>());
-
-        bus.AddEventConsumeChannel($"{ScenarioSlug}-notifications", c => c
-            .WithRabbitMq(r => r
-                .WithTopicExchange()
-                .WithAmqpExchangeName(exEvt)
-                .WithQueueName(qNot)
-                .WithQueueType(QueueType.Classic)
-                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<InboxPoisonOrderPlaced>(m => m
-                .WithHandler<InboxPoisonOrderPlacedNotifyHandler>($"{ScenarioSlug}.notify")
-                .WithHandler<InboxPoisonOrderPlacedAnalyticsHandler>($"{ScenarioSlug}.analytics"))
-            .UseInbox<PublisherDbContext>());
     }
 
     public string Slug => ScenarioSlug;
@@ -94,15 +64,9 @@ public sealed class InboxPoisonScenario : IPlaygroundScenario
         };
         db.Orders.Add(order);
         var orderIdStr = order.Id.ToString();
-        var mpPlaced = new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(order.Id) };
         var mpCmd = new MessageProperties { Id = PlaygroundMessageIds.ProcessOrderCommand(order.Id) };
-        var mpRes = new MessageProperties { Id = PlaygroundMessageIds.ReserveStockInternal(order.Id) };
-        PlaygroundCorrelation.AttachToMessageProperties(mpPlaced, runId);
         PlaygroundCorrelation.AttachToMessageProperties(mpCmd, runId);
-        PlaygroundCorrelation.AttachToMessageProperties(mpRes, runId);
-        db.OutboxMessages.Add(new InboxPoisonOrderPlaced(orderIdStr, runId), mpPlaced);
-        db.OutboxMessages.Add(new InboxPoisonProcessOrderCommand(orderIdStr, runId), mpCmd);
-        db.OutboxMessages.Add(new InboxPoisonReserveStockInternal(orderIdStr, runId), mpRes);
+        db.OutboxMessages.Add(new ProcessOrderCommand(orderIdStr, runId), mpCmd);
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -142,5 +106,14 @@ public sealed class InboxPoisonScenario : IPlaygroundScenario
         return new ScenarioVerdict(
             false,
             $"Poisoned consumer inbox count did not increase (before={before}, after={final}).");
+    }
+
+    [RatatoskrMessage("inbox-poison.process-order-command")]
+    public sealed record ProcessOrderCommand(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
+
+    public sealed class ProcessOrderHandler(ILogger<ProcessOrderHandler> _) : IMessageHandler<ProcessOrderCommand>
+    {
+        public Task HandleAsync(ProcessOrderCommand message, MessageProperties properties, CancellationToken cancellationToken) =>
+            Task.FromException(new InvalidOperationException("Simulated inventory inbox failure (poison scenario)."));
     }
 }

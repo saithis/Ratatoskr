@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Infrastructure.ScenarioRunning;
@@ -19,7 +20,6 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
     [
         new("orders", PlaygroundAmqpNames.OrdersQueue(ScenarioSlug)),
         new("inventory", PlaygroundAmqpNames.InventoryQueue(ScenarioSlug)),
-        new("notifications", PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug)),
     ];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
@@ -28,25 +28,14 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
         var exCmd = PlaygroundAmqpNames.CommandsExchange(ScenarioSlug);
         var qOrders = PlaygroundAmqpNames.OrdersQueue(ScenarioSlug);
         var qInv = PlaygroundAmqpNames.InventoryQueue(ScenarioSlug);
-        var qNot = PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug);
-        var internalCh = $"pg.{ScenarioSlug}.orders.internal";
-
-        bus.AddCommandPublishChannel(internalCh, c => c
-            .WithEfCore()
-            .Produces<InboxRetryThenSuccessReserveStockInternal>());
-
-        bus.AddCommandConsumeChannel(internalCh, c => c
-            .Consumes<InboxRetryThenSuccessReserveStockInternal>(m => m.WithHandler<InboxRetryThenSuccessReserveStockInternalHandler>($"{ScenarioSlug}.reserve"))
-            .UseInbox<PublisherDbContext>());
 
         bus.AddEventPublishChannel(exEvt, c => c
             .WithRabbitMq(r => r.WithTopicExchange())
-            .Produces<InboxRetryThenSuccessOrderPlaced>()
-            .Produces<InboxRetryThenSuccessOrderFulfilled>());
+            .Produces<OrderFulfilled>());
 
         bus.AddCommandPublishChannel(exCmd, c => c
             .WithRabbitMq(r => r.WithDirectExchange())
-            .Produces<InboxRetryThenSuccessProcessOrderCommand>());
+            .Produces<ProcessOrderCommand>());
 
         bus.AddEventConsumeChannel($"{ScenarioSlug}-orders-inbox", c => c
             .WithRabbitMq(r => r
@@ -55,7 +44,7 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
                 .WithQueueName(qOrders)
                 .WithQueueType(QueueType.Classic)
                 .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<InboxRetryThenSuccessOrderFulfilled>(m => m.WithHandler<InboxRetryThenSuccessOrderFulfilledHandler>($"{ScenarioSlug}.fulfilled"))
+            .Consumes<OrderFulfilled>(m => m.WithHandler<OrderFulfilledHandler>($"{ScenarioSlug}.fulfilled"))
             .UseInbox<PublisherDbContext>());
 
         bus.AddCommandConsumeChannel($"{ScenarioSlug}-inventory", c => c
@@ -65,20 +54,8 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
                 .WithQueueName(qInv)
                 .WithQueueType(QueueType.Classic)
                 .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<InboxRetryThenSuccessProcessOrderCommand>(m => m.WithHandler<InboxRetryThenSuccessProcessOrderHandler>($"{ScenarioSlug}.process"))
+            .Consumes<ProcessOrderCommand>(m => m.WithHandler<ProcessOrderHandler>($"{ScenarioSlug}.process"))
             .UseInbox<ConsumerDbContext>());
-
-        bus.AddEventConsumeChannel($"{ScenarioSlug}-notifications", c => c
-            .WithRabbitMq(r => r
-                .WithTopicExchange()
-                .WithAmqpExchangeName(exEvt)
-                .WithQueueName(qNot)
-                .WithQueueType(QueueType.Classic)
-                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<InboxRetryThenSuccessOrderPlaced>(m => m
-                .WithHandler<InboxRetryThenSuccessOrderPlacedNotifyHandler>($"{ScenarioSlug}.notify")
-                .WithHandler<InboxRetryThenSuccessOrderPlacedAnalyticsHandler>($"{ScenarioSlug}.analytics"))
-            .UseInbox<PublisherDbContext>());
     }
 
     public string Slug => ScenarioSlug;
@@ -107,15 +84,9 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
         };
         db.Orders.Add(order);
         var orderIdStr = order.Id.ToString();
-        var mpPlaced = new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(order.Id) };
         var mpCmd = new MessageProperties { Id = PlaygroundMessageIds.ProcessOrderCommand(order.Id) };
-        var mpRes = new MessageProperties { Id = PlaygroundMessageIds.ReserveStockInternal(order.Id) };
-        PlaygroundCorrelation.AttachToMessageProperties(mpPlaced, runId);
         PlaygroundCorrelation.AttachToMessageProperties(mpCmd, runId);
-        PlaygroundCorrelation.AttachToMessageProperties(mpRes, runId);
-        db.OutboxMessages.Add(new InboxRetryThenSuccessOrderPlaced(orderIdStr, runId), mpPlaced);
-        db.OutboxMessages.Add(new InboxRetryThenSuccessProcessOrderCommand(orderIdStr, runId), mpCmd);
-        db.OutboxMessages.Add(new InboxRetryThenSuccessReserveStockInternal(orderIdStr, runId), mpRes);
+        db.OutboxMessages.Add(new ProcessOrderCommand(orderIdStr, runId), mpCmd);
         await db.SaveChangesAsync(cancellationToken);
         return order.Id;
     }
@@ -136,5 +107,44 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
             TimeSpan.FromSeconds(90),
             time,
             cancellationToken);
+    }
+
+    [RatatoskrMessage("inbox-retry-then-success.process-order-command")]
+    public sealed record ProcessOrderCommand(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
+
+    [RatatoskrMessage("inbox-retry-then-success.order-fulfilled")]
+    public sealed record OrderFulfilled(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
+
+    public sealed class ProcessOrderHandler(ConsumerDbContext db, ILogger<ProcessOrderHandler> _) : IMessageHandler<ProcessOrderCommand>
+    {
+        private static readonly ConcurrentDictionary<string, int> DeliveryAttempts = new();
+
+        public async Task HandleAsync(ProcessOrderCommand message, MessageProperties properties, CancellationToken cancellationToken)
+        {
+            var key = properties.Id ?? message.OrderId;
+            var n = DeliveryAttempts.AddOrUpdate(key, 1, (_, old) => old + 1);
+            if (n <= 2)
+                throw new InvalidOperationException("Simulated consumer failure (succeed-after-2).");
+            var orderGuid = Guid.Parse(message.OrderId);
+            db.OutboxMessages.Add(
+                new OrderFulfilled(message.OrderId, message.ScenarioRunId),
+                new MessageProperties { Id = PlaygroundMessageIds.OrderFulfilled(orderGuid) });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    public sealed class OrderFulfilledHandler(PublisherDbContext db, TimeProvider time, ILogger<OrderFulfilledHandler> logger)
+        : IMessageHandler<OrderFulfilled>
+    {
+        public async Task HandleAsync(OrderFulfilled message, MessageProperties properties, CancellationToken cancellationToken)
+        {
+            var order = await db.Orders.FirstOrDefaultAsync(o => o.Id == Guid.Parse(message.OrderId), cancellationToken);
+            if (order is null) return;
+            var now = time.GetUtcNow().UtcDateTime;
+            order.Status = OrderStatus.Fulfilled;
+            order.StatusChangedAt = now;
+            await db.SaveChangesAsync(cancellationToken);
+            logger.LogInformation("Order {OrderId} marked Fulfilled", message.OrderId);
+        }
     }
 }

@@ -6,8 +6,6 @@ using PlaygroundHost.Persistence.Entities;
 using Ratatoskr;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
-using Ratatoskr.RabbitMq.Config;
-using Ratatoskr.RabbitMq.Extensions;
 
 namespace PlaygroundHost.Scenarios.Other.EfcoreInternalCommand;
 
@@ -15,69 +13,20 @@ public sealed class EfcoreInternalCommandScenario : IPlaygroundScenario
 {
     private const string ScenarioSlug = "efcore-internal-command";
 
-    public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues =>
-    [
-        new("orders", PlaygroundAmqpNames.OrdersQueue(ScenarioSlug)),
-        new("inventory", PlaygroundAmqpNames.InventoryQueue(ScenarioSlug)),
-        new("notifications", PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug)),
-    ];
+    public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues => [];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
     {
-        var exEvt = PlaygroundAmqpNames.EventsExchange(ScenarioSlug);
-        var exCmd = PlaygroundAmqpNames.CommandsExchange(ScenarioSlug);
-        var qOrders = PlaygroundAmqpNames.OrdersQueue(ScenarioSlug);
-        var qInv = PlaygroundAmqpNames.InventoryQueue(ScenarioSlug);
-        var qNot = PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug);
         var internalCh = $"pg.{ScenarioSlug}.orders.internal";
 
         bus.AddCommandPublishChannel(internalCh, c => c
             .WithEfCore()
-            .Produces<EfcoreInternalCommandReserveStockInternal>());
+            .Produces<ReserveStockInternal>()
+            .Produces<OutboxSibling>());
 
         bus.AddCommandConsumeChannel(internalCh, c => c
-            .Consumes<EfcoreInternalCommandReserveStockInternal>(m => m.WithHandler<EfcoreInternalCommandReserveStockInternalHandler>($"{ScenarioSlug}.reserve"))
-            .UseInbox<PublisherDbContext>());
-
-        bus.AddEventPublishChannel(exEvt, c => c
-            .WithRabbitMq(r => r.WithTopicExchange())
-            .Produces<EfcoreInternalCommandOrderPlaced>()
-            .Produces<EfcoreInternalCommandOrderFulfilled>());
-
-        bus.AddCommandPublishChannel(exCmd, c => c
-            .WithRabbitMq(r => r.WithDirectExchange())
-            .Produces<EfcoreInternalCommandProcessOrderCommand>());
-
-        bus.AddEventConsumeChannel($"{ScenarioSlug}-orders-inbox", c => c
-            .WithRabbitMq(r => r
-                .WithTopicExchange()
-                .WithAmqpExchangeName(exEvt)
-                .WithQueueName(qOrders)
-                .WithQueueType(QueueType.Classic)
-                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<EfcoreInternalCommandOrderFulfilled>(m => m.WithHandler<EfcoreInternalCommandOrderFulfilledHandler>($"{ScenarioSlug}.fulfilled"))
-            .UseInbox<PublisherDbContext>());
-
-        bus.AddCommandConsumeChannel($"{ScenarioSlug}-inventory", c => c
-            .WithRabbitMq(r => r
-                .WithDirectExchange()
-                .WithAmqpExchangeName(exCmd)
-                .WithQueueName(qInv)
-                .WithQueueType(QueueType.Classic)
-                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<EfcoreInternalCommandProcessOrderCommand>(m => m.WithHandler<EfcoreInternalCommandProcessOrderHandler>($"{ScenarioSlug}.process"))
-            .UseInbox<ConsumerDbContext>());
-
-        bus.AddEventConsumeChannel($"{ScenarioSlug}-notifications", c => c
-            .WithRabbitMq(r => r
-                .WithTopicExchange()
-                .WithAmqpExchangeName(exEvt)
-                .WithQueueName(qNot)
-                .WithQueueType(QueueType.Classic)
-                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<EfcoreInternalCommandOrderPlaced>(m => m
-                .WithHandler<EfcoreInternalCommandOrderPlacedNotifyHandler>($"{ScenarioSlug}.notify")
-                .WithHandler<EfcoreInternalCommandOrderPlacedAnalyticsHandler>($"{ScenarioSlug}.analytics"))
+            .Consumes<ReserveStockInternal>(m => m.WithHandler<ReserveStockInternalHandler>($"{ScenarioSlug}.reserve"))
+            .Consumes<OutboxSibling>(m => m.WithHandler<OutboxSiblingHandler>($"{ScenarioSlug}.sibling"))
             .UseInbox<PublisherDbContext>());
     }
 
@@ -86,11 +35,11 @@ public sealed class EfcoreInternalCommandScenario : IPlaygroundScenario
     public string Title => "EF Core internal command";
 
     public string Description =>
-        "ReserveStockInternal is staged in the same SaveChanges as other outbox messages; activity should show EF Core transport handling.";
+        "Two internal commands are staged in the same SaveChanges as the order; activity should show EF Core transport handling for ReserveStockInternal.";
 
     public string Topic => "Other";
 
-    private static async Task<Guid> StageOrderAsync(
+    private static async Task StageOrderAsync(
         PublisherDbContext db,
         TimeProvider time,
         string runId,
@@ -107,17 +56,13 @@ public sealed class EfcoreInternalCommandScenario : IPlaygroundScenario
         };
         db.Orders.Add(order);
         var orderIdStr = order.Id.ToString();
-        var mpPlaced = new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(order.Id) };
-        var mpCmd = new MessageProperties { Id = PlaygroundMessageIds.ProcessOrderCommand(order.Id) };
         var mpRes = new MessageProperties { Id = PlaygroundMessageIds.ReserveStockInternal(order.Id) };
-        PlaygroundCorrelation.AttachToMessageProperties(mpPlaced, runId);
-        PlaygroundCorrelation.AttachToMessageProperties(mpCmd, runId);
+        var mpSib = new MessageProperties { Id = $"{order.Id:D}:efcore-sibling" };
         PlaygroundCorrelation.AttachToMessageProperties(mpRes, runId);
-        db.OutboxMessages.Add(new EfcoreInternalCommandOrderPlaced(orderIdStr, runId), mpPlaced);
-        db.OutboxMessages.Add(new EfcoreInternalCommandProcessOrderCommand(orderIdStr, runId), mpCmd);
-        db.OutboxMessages.Add(new EfcoreInternalCommandReserveStockInternal(orderIdStr, runId), mpRes);
+        PlaygroundCorrelation.AttachToMessageProperties(mpSib, runId);
+        db.OutboxMessages.Add(new ReserveStockInternal(orderIdStr, runId), mpRes);
+        db.OutboxMessages.Add(new OutboxSibling(orderIdStr, runId), mpSib);
         await db.SaveChangesAsync(cancellationToken);
-        return order.Id;
     }
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
@@ -128,8 +73,8 @@ public sealed class EfcoreInternalCommandScenario : IPlaygroundScenario
         var db = sp.GetRequiredService<PublisherDbContext>();
         var recorder = sp.GetRequiredService<PlaygroundActivityRecorder>();
         var runId = context.ScenarioRunId;
-        _ = await StageOrderAsync(db, time, runId, cancellationToken);
-        context.StepsCompleted.Add("staged_with_internal");
+        await StageOrderAsync(db, time, runId, cancellationToken);
+        context.StepsCompleted.Add("staged_with_internal_pair");
 
         await Task.Delay(TimeSpan.FromSeconds(6), cancellationToken);
         var entries = recorder.GetEntriesForScenarioRun(runId);
@@ -141,5 +86,29 @@ public sealed class EfcoreInternalCommandScenario : IPlaygroundScenario
         return hit
             ? new ScenarioVerdict(true)
             : new ScenarioVerdict(false, "No ReserveStockInternal / EF Core transport activity captured for this run yet.");
+    }
+
+    [RatatoskrMessage("efcore-internal-command.reserve-stock-internal")]
+    public sealed record ReserveStockInternal(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
+
+    [RatatoskrMessage("efcore-internal-command.outbox-sibling")]
+    public sealed record OutboxSibling(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
+
+    public sealed class ReserveStockInternalHandler(ILogger<ReserveStockInternalHandler> logger) : IMessageHandler<ReserveStockInternal>
+    {
+        public Task HandleAsync(ReserveStockInternal message, MessageProperties properties, CancellationToken cancellationToken)
+        {
+            logger.LogInformation("ReserveStockInternal processed for order {OrderId}", message.OrderId);
+            return Task.CompletedTask;
+        }
+    }
+
+    public sealed class OutboxSiblingHandler(ILogger<OutboxSiblingHandler> logger) : IMessageHandler<OutboxSibling>
+    {
+        public Task HandleAsync(OutboxSibling message, MessageProperties properties, CancellationToken cancellationToken)
+        {
+            logger.LogInformation("OutboxSibling processed for order {OrderId}", message.OrderId);
+            return Task.CompletedTask;
+        }
     }
 }
