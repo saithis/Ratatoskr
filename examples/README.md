@@ -57,7 +57,7 @@ Scenarios marked **dangerous** in the catalog require `POST .../run?confirmDange
 
 Scenarios are **server-side** (`GET /api/playground/scenarios`, `POST /api/playground/scenarios/{slug}/run`, `GET /api/playground/runs/{id}`, `POST /api/playground/runs/{id}/cancel`). The dashboard loads the catalog from the server (no duplicate JSON in `wwwroot`).
 
-Implementation lives under `examples/PlaygroundHost/Scenarios/{Topic}/{slug}/` (messages, handlers, `*Scenario.cs`). Ratatoskr channel wiring is grouped in `examples/PlaygroundHost/Composition/PlaygroundRatatoskrRegistrations.cs` with explicit `AddSingleton<IScenario, ...>()` in `Program.cs`.
+Implementation lives under `examples/PlaygroundHost/Scenarios/{Topic}/{slug}/` (messages, handlers, `*Scenario.cs`). Each scenario class implements `IPlaygroundScenario` with `RegisterRatatoskrTopology(RatatoskrBuilder)` and optional `RabbitDepthQueues` for `/api/playground/rabbit-depths`. All scenario types are listed once in `PlaygroundScenarioManifest.All` (`PlaygroundScenarioManifest.cs`); `RegisterScenarioTopologies` and `RegisterScenarioServices` are called from `Program.cs` during `AddRatatoskr` and service registration respectively.
 
 Slug examples: `outbox-success`, `outbox-retry-then-success`, `outbox-poison`, `inbox-retry-then-success`, `inbox-poison`, `business-rejection`, `direct-consume-success`, `direct-consume-retry`, `direct-consume-dlq`, `replay-dedups`, `efcore-internal-command`, `fanout-two-handlers-on-orderplaced`, `oversized-payload-rolls-back`, `blocking-hold`, `cancel-smoke`.
 

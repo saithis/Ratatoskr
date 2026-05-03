@@ -5,26 +5,11 @@ using Medallion.Threading.FileSystem;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using PlaygroundHost.Composition;
+using PlaygroundHost;
 using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Infrastructure.ScenarioRunning;
 using PlaygroundHost.Persistence;
 using PlaygroundHost.Persistence.Entities;
-using PlaygroundHost.Scenarios.DirectConsume.DirectConsumeDlq;
-using PlaygroundHost.Scenarios.DirectConsume.DirectConsumeRetry;
-using PlaygroundHost.Scenarios.DirectConsume.DirectConsumeSuccess;
-using PlaygroundHost.Scenarios.Inbox.BusinessRejection;
-using PlaygroundHost.Scenarios.Inbox.InboxPoison;
-using PlaygroundHost.Scenarios.Inbox.InboxRetryThenSuccess;
-using PlaygroundHost.Scenarios.Other.EfcoreInternalCommand;
-using PlaygroundHost.Scenarios.Other.FanoutTwoHandlersOnOrderplaced;
-using PlaygroundHost.Scenarios.Other.ReplayDedups;
-using PlaygroundHost.Scenarios.Outbox.OutboxPoison;
-using PlaygroundHost.Scenarios.Outbox.OutboxRetryThenSuccess;
-using PlaygroundHost.Scenarios.Outbox.OutboxSuccess;
-using PlaygroundHost.Scenarios.Outbox.OversizedPayloadRollsBack;
-using PlaygroundHost.Scenarios.Tests.BlockingHold;
-using PlaygroundHost.Scenarios.Tests.CancelSmoke;
 using RabbitMQ.Client;
 using Ratatoskr;
 using Ratatoskr.Core;
@@ -85,7 +70,7 @@ builder.Services.AddRatatoskr(bus =>
             .WithCleanupInterval(TimeSpan.FromMinutes(5)));
     });
 
-    PlaygroundRatatoskrRegistrations.AddAllPipelineScenarios(bus);
+    PlaygroundScenarioManifest.RegisterScenarioTopologies(bus);
 });
 
 PlaygroundMessageSenderDecoration.WrapAllMessageSenders(builder.Services);
@@ -111,21 +96,7 @@ builder.Services.AddDbContext<ConsumerDbContext>((sp, options) =>
 
 builder.Services.AddDbContext<PlaygroundDbContext>(options => options.UseNpgsql(playgroundCs));
 
-builder.Services.AddSingleton<IScenario, OutboxSuccessScenario>();
-builder.Services.AddSingleton<IScenario, OutboxRetryThenSuccessScenario>();
-builder.Services.AddSingleton<IScenario, OutboxPoisonScenario>();
-builder.Services.AddSingleton<IScenario, OversizedPayloadRollsBackScenario>();
-builder.Services.AddSingleton<IScenario, InboxRetryThenSuccessScenario>();
-builder.Services.AddSingleton<IScenario, InboxPoisonScenario>();
-builder.Services.AddSingleton<IScenario, BusinessRejectionScenario>();
-builder.Services.AddSingleton<IScenario, DirectConsumeSuccessScenario>();
-builder.Services.AddSingleton<IScenario, DirectConsumeRetryScenario>();
-builder.Services.AddSingleton<IScenario, DirectConsumeDlqScenario>();
-builder.Services.AddSingleton<IScenario, FanoutTwoHandlersOnOrderplacedScenario>();
-builder.Services.AddSingleton<IScenario, EfcoreInternalCommandScenario>();
-builder.Services.AddSingleton<IScenario, ReplayDedupsScenario>();
-builder.Services.AddSingleton<IScenario, BlockingHoldScenario>();
-builder.Services.AddSingleton<IScenario, CancelSmokeScenario>();
+PlaygroundScenarioManifest.RegisterScenarioServices(builder.Services);
 builder.Services.AddSingleton<ScenarioRunService>();
 
 var app = builder.Build();
@@ -170,43 +141,22 @@ app.MapGet("/api/playground/rabbit-depths", async Task<IResult> (HttpContext htt
     await using var channel = await connection.CreateChannelAsync(cancellationToken: cancellationToken);
 
     var queues = new List<object>();
-    foreach (var slug in (string[])
-             [
-                 "outbox-success",
-                 "outbox-retry-then-success",
-                 "outbox-poison",
-                 "inbox-retry-then-success",
-                 "inbox-poison",
-                 "business-rejection",
-                 "direct-consume-success",
-                 "direct-consume-retry",
-                 "direct-consume-dlq",
-                 "fanout-two-handlers-on-orderplaced",
-                 "efcore-internal-command",
-                 "replay-dedups",
-             ])
+    foreach (var (slug, q) in PlaygroundScenarioManifest.EnumerateRabbitDepthProbeTargets())
     {
-        foreach (var (key, main) in new[]
-                 {
-                     ("orders", PlaygroundAmqpNames.OrdersQueue(slug)),
-                     ("inventory", PlaygroundAmqpNames.InventoryQueue(slug)),
-                     ("notifications", PlaygroundAmqpNames.NotificationsQueue(slug)),
-                 })
+        var main = q.MainQueueName;
+        var mainCount = await SafeMessageCountAsync(channel, main, cancellationToken);
+        var retry = await SafeMessageCountAsync(channel, PlaygroundAmqpNames.RetryQueueName(main), cancellationToken);
+        var dlq = await SafeMessageCountAsync(channel, PlaygroundAmqpNames.DlqQueueName(main), cancellationToken);
+        queues.Add(new
         {
-            var mainCount = await SafeMessageCountAsync(channel, main, cancellationToken);
-            var retry = await SafeMessageCountAsync(channel, PlaygroundAmqpNames.RetryQueueName(main), cancellationToken);
-            var dlq = await SafeMessageCountAsync(channel, PlaygroundAmqpNames.DlqQueueName(main), cancellationToken);
-            queues.Add(new
-            {
-                slug,
-                key,
-                mainQueue = main,
-                main = mainCount,
-                retry,
-                dlq,
-                retryDelaySeconds = 5,
-            });
-        }
+            slug,
+            key = q.Key,
+            mainQueue = main,
+            main = mainCount,
+            retry,
+            dlq,
+            retryDelaySeconds = 5,
+        });
     }
 
     return TypedResults.Ok(new { configured = true, queues });

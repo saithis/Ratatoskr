@@ -3,13 +3,88 @@ using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Infrastructure.ScenarioRunning;
 using PlaygroundHost.Persistence;
 using PlaygroundHost.Persistence.Entities;
+using Ratatoskr;
 using Ratatoskr.Core;
+using Ratatoskr.EfCore;
+using Ratatoskr.RabbitMq.Config;
+using Ratatoskr.RabbitMq.Extensions;
 
 namespace PlaygroundHost.Scenarios.Outbox.OutboxSuccess;
 
-public sealed class OutboxSuccessScenario : IScenario
+public sealed class OutboxSuccessScenario : IPlaygroundScenario
 {
-    public string Slug => "outbox-success";
+    private const string ScenarioSlug = "outbox-success";
+
+    public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues =>
+    [
+        new("orders", PlaygroundAmqpNames.OrdersQueue(ScenarioSlug)),
+        new("inventory", PlaygroundAmqpNames.InventoryQueue(ScenarioSlug)),
+        new("notifications", PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug)),
+    ];
+
+    public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
+    {
+        var exEvt = PlaygroundAmqpNames.EventsExchange(ScenarioSlug);
+        var exCmd = PlaygroundAmqpNames.CommandsExchange(ScenarioSlug);
+        var qOrders = PlaygroundAmqpNames.OrdersQueue(ScenarioSlug);
+        var qInv = PlaygroundAmqpNames.InventoryQueue(ScenarioSlug);
+        var qNot = PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug);
+        var internalCh = $"pg.{ScenarioSlug}.orders.internal";
+
+        bus.AddCommandPublishChannel(internalCh, c => c
+            .WithEfCore()
+            .Produces<OutboxSuccessReserveStockInternal>());
+
+        bus.AddCommandConsumeChannel(internalCh, c => c
+            .Consumes<OutboxSuccessReserveStockInternal>(m => m.WithHandler<OutboxSuccessReserveStockInternalHandler>($"{ScenarioSlug}.reserve"))
+            .UseInbox<PublisherDbContext>());
+
+        bus.AddEventPublishChannel(exEvt, c => c
+            .WithRabbitMq(r => r.WithTopicExchange())
+            .Produces<OutboxSuccessOrderPlaced>()
+            .Produces<OutboxSuccessOrderFulfilled>()
+            .Produces<OutboxSuccessOrderFailed>());
+
+        bus.AddCommandPublishChannel(exCmd, c => c
+            .WithRabbitMq(r => r.WithDirectExchange())
+            .Produces<OutboxSuccessProcessOrderCommand>());
+
+        bus.AddEventConsumeChannel($"{ScenarioSlug}-orders-inbox", c => c
+            .WithRabbitMq(r => r
+                .WithTopicExchange()
+                .WithAmqpExchangeName(exEvt)
+                .WithQueueName(qOrders)
+                .WithQueueType(QueueType.Classic)
+                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
+            .Consumes<OutboxSuccessOrderFulfilled>(m => m.WithHandler<OutboxSuccessOrderFulfilledHandler>($"{ScenarioSlug}.fulfilled"))
+            .Consumes<OutboxSuccessOrderFailed>(m => m.WithHandler<OutboxSuccessOrderFailedHandler>($"{ScenarioSlug}.failed"))
+            .UseInbox<PublisherDbContext>());
+
+        bus.AddCommandConsumeChannel($"{ScenarioSlug}-inventory", c => c
+            .WithRabbitMq(r => r
+                .WithDirectExchange()
+                .WithAmqpExchangeName(exCmd)
+                .WithQueueName(qInv)
+                .WithQueueType(QueueType.Classic)
+                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
+            .Consumes<OutboxSuccessProcessOrderCommand>(m => m.WithHandler<OutboxSuccessProcessOrderHandler>($"{ScenarioSlug}.process"))
+            .UseInbox<ConsumerDbContext>());
+
+        bus.AddEventConsumeChannel($"{ScenarioSlug}-notifications", c => c
+            .WithRabbitMq(r => r
+                .WithTopicExchange()
+                .WithAmqpExchangeName(exEvt)
+                .WithQueueName(qNot)
+                .WithQueueType(QueueType.Classic)
+                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
+            .Consumes<OutboxSuccessOrderPlaced>(m => m
+                .WithHandler<OutboxSuccessOrderPlacedNotifyHandler>($"{ScenarioSlug}.notify")
+                .WithHandler<OutboxSuccessOrderPlacedAnalyticsHandler>($"{ScenarioSlug}.analytics"))
+            .Consumes<OutboxSuccessOrderFulfilled>(m => m.WithHandler<OutboxSuccessOrderFulfilledNotifyHandler>($"{ScenarioSlug}.fulfilled-notify"))
+            .UseInbox<PublisherDbContext>());
+    }
+
+    public string Slug => ScenarioSlug;
 
     public string Title => "Outbox happy path";
 

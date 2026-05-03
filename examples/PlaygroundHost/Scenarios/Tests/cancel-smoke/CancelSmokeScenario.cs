@@ -1,9 +1,16 @@
 using PlaygroundHost.Infrastructure.ScenarioRunning;
+using Ratatoskr;
 
 namespace PlaygroundHost.Scenarios.Tests.CancelSmoke;
 
-public sealed class CancelSmokeScenario : IScenario
+public sealed class CancelSmokeScenario : IPlaygroundScenario
 {
+    public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues => [];
+
+    public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
+    {
+    }
+
     public string Slug => "cancel-smoke";
 
     public string Title => "Cancel smoke";

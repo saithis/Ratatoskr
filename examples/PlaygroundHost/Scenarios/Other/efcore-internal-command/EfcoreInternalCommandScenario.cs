@@ -3,13 +3,88 @@ using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Infrastructure.ScenarioRunning;
 using PlaygroundHost.Persistence;
 using PlaygroundHost.Persistence.Entities;
+using Ratatoskr;
 using Ratatoskr.Core;
+using Ratatoskr.EfCore;
+using Ratatoskr.RabbitMq.Config;
+using Ratatoskr.RabbitMq.Extensions;
 
 namespace PlaygroundHost.Scenarios.Other.EfcoreInternalCommand;
 
-public sealed class EfcoreInternalCommandScenario : IScenario
+public sealed class EfcoreInternalCommandScenario : IPlaygroundScenario
 {
-    public string Slug => "efcore-internal-command";
+    private const string ScenarioSlug = "efcore-internal-command";
+
+    public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues =>
+    [
+        new("orders", PlaygroundAmqpNames.OrdersQueue(ScenarioSlug)),
+        new("inventory", PlaygroundAmqpNames.InventoryQueue(ScenarioSlug)),
+        new("notifications", PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug)),
+    ];
+
+    public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
+    {
+        var exEvt = PlaygroundAmqpNames.EventsExchange(ScenarioSlug);
+        var exCmd = PlaygroundAmqpNames.CommandsExchange(ScenarioSlug);
+        var qOrders = PlaygroundAmqpNames.OrdersQueue(ScenarioSlug);
+        var qInv = PlaygroundAmqpNames.InventoryQueue(ScenarioSlug);
+        var qNot = PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug);
+        var internalCh = $"pg.{ScenarioSlug}.orders.internal";
+
+        bus.AddCommandPublishChannel(internalCh, c => c
+            .WithEfCore()
+            .Produces<EfcoreInternalCommandReserveStockInternal>());
+
+        bus.AddCommandConsumeChannel(internalCh, c => c
+            .Consumes<EfcoreInternalCommandReserveStockInternal>(m => m.WithHandler<EfcoreInternalCommandReserveStockInternalHandler>($"{ScenarioSlug}.reserve"))
+            .UseInbox<PublisherDbContext>());
+
+        bus.AddEventPublishChannel(exEvt, c => c
+            .WithRabbitMq(r => r.WithTopicExchange())
+            .Produces<EfcoreInternalCommandOrderPlaced>()
+            .Produces<EfcoreInternalCommandOrderFulfilled>()
+            .Produces<EfcoreInternalCommandOrderFailed>());
+
+        bus.AddCommandPublishChannel(exCmd, c => c
+            .WithRabbitMq(r => r.WithDirectExchange())
+            .Produces<EfcoreInternalCommandProcessOrderCommand>());
+
+        bus.AddEventConsumeChannel($"{ScenarioSlug}-orders-inbox", c => c
+            .WithRabbitMq(r => r
+                .WithTopicExchange()
+                .WithAmqpExchangeName(exEvt)
+                .WithQueueName(qOrders)
+                .WithQueueType(QueueType.Classic)
+                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
+            .Consumes<EfcoreInternalCommandOrderFulfilled>(m => m.WithHandler<EfcoreInternalCommandOrderFulfilledHandler>($"{ScenarioSlug}.fulfilled"))
+            .Consumes<EfcoreInternalCommandOrderFailed>(m => m.WithHandler<EfcoreInternalCommandOrderFailedHandler>($"{ScenarioSlug}.failed"))
+            .UseInbox<PublisherDbContext>());
+
+        bus.AddCommandConsumeChannel($"{ScenarioSlug}-inventory", c => c
+            .WithRabbitMq(r => r
+                .WithDirectExchange()
+                .WithAmqpExchangeName(exCmd)
+                .WithQueueName(qInv)
+                .WithQueueType(QueueType.Classic)
+                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
+            .Consumes<EfcoreInternalCommandProcessOrderCommand>(m => m.WithHandler<EfcoreInternalCommandProcessOrderHandler>($"{ScenarioSlug}.process"))
+            .UseInbox<ConsumerDbContext>());
+
+        bus.AddEventConsumeChannel($"{ScenarioSlug}-notifications", c => c
+            .WithRabbitMq(r => r
+                .WithTopicExchange()
+                .WithAmqpExchangeName(exEvt)
+                .WithQueueName(qNot)
+                .WithQueueType(QueueType.Classic)
+                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
+            .Consumes<EfcoreInternalCommandOrderPlaced>(m => m
+                .WithHandler<EfcoreInternalCommandOrderPlacedNotifyHandler>($"{ScenarioSlug}.notify")
+                .WithHandler<EfcoreInternalCommandOrderPlacedAnalyticsHandler>($"{ScenarioSlug}.analytics"))
+            .Consumes<EfcoreInternalCommandOrderFulfilled>(m => m.WithHandler<EfcoreInternalCommandOrderFulfilledNotifyHandler>($"{ScenarioSlug}.fulfilled-notify"))
+            .UseInbox<PublisherDbContext>());
+    }
+
+    public string Slug => ScenarioSlug;
 
     public string Title => "EF Core internal command";
 

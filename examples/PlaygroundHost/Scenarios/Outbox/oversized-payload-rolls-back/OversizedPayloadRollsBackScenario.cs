@@ -3,13 +3,27 @@ using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Infrastructure.ScenarioRunning;
 using PlaygroundHost.Persistence;
 using PlaygroundHost.Persistence.Entities;
+using Ratatoskr;
 using Ratatoskr.Core;
+using Ratatoskr.RabbitMq.Extensions;
 
 namespace PlaygroundHost.Scenarios.Outbox.OversizedPayloadRollsBack;
 
-public sealed class OversizedPayloadRollsBackScenario : IScenario
+public sealed class OversizedPayloadRollsBackScenario : IPlaygroundScenario
 {
-    public string Slug => "oversized-payload-rolls-back";
+    private const string ScenarioSlug = "oversized-payload-rolls-back";
+
+    public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues => [];
+
+    public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
+    {
+        var exEvt = PlaygroundAmqpNames.EventsExchange(ScenarioSlug);
+        bus.AddEventPublishChannel(exEvt, c => c
+            .WithRabbitMq(r => r.WithTopicExchange())
+            .Produces<OversizedPayloadRollsBackOrderPlaced>());
+    }
+
+    public string Slug => ScenarioSlug;
 
     public string Title => "Oversized outbox payload";
 

@@ -38,36 +38,29 @@ public sealed class ScenarioRunService(
                 "This scenario requires confirmDanger=true (acknowledge the risk in the dashboard).");
 
         var runId = Guid.NewGuid();
-        try
+        await using (var scope = scopeFactory.CreateAsyncScope())
         {
-            await using (var scope = scopeFactory.CreateAsyncScope())
+            var db = scope.ServiceProvider.GetRequiredService<PlaygroundDbContext>();
+            await db.Database.EnsureCreatedAsync(cancellationToken);
+            db.Runs.Add(new PlaygroundRunEntity
             {
-                var db = scope.ServiceProvider.GetRequiredService<PlaygroundDbContext>();
-                await db.Database.EnsureCreatedAsync(cancellationToken);
-                db.Runs.Add(new PlaygroundRunEntity
-                {
-                    Id = runId,
-                    ScenarioSlug = slug,
-                    State = "Running",
-                    StartedAt = time.GetUtcNow(),
-                    StepIndex = 0,
-                    CurrentStep = "execute",
-                });
-                await db.SaveChangesAsync(cancellationToken);
-            }
-
-            var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(opts.RunTimeoutSeconds, 5, 600)));
-            var executionCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token);
-
-            _ = RunInBackgroundAsync(runId, scenario, executionCts, timeoutCts);
-
-            return new ScenarioStartResult(runId, scenario.Title, null);
+                Id = runId,
+                ScenarioSlug = slug,
+                State = "Running",
+                StartedAt = time.GetUtcNow(),
+                StepIndex = 0,
+                CurrentStep = "execute",
+            });
+            await db.SaveChangesAsync(cancellationToken);
         }
-        catch
-        {
-            throw;
-        }
+
+        var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(opts.RunTimeoutSeconds, 5, 600)));
+        var executionCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token);
+
+        _ = RunInBackgroundAsync(runId, scenario, executionCts, timeoutCts);
+
+        return new ScenarioStartResult(runId, scenario.Title, null);
     }
 
     private async Task RunInBackgroundAsync(
@@ -76,7 +69,9 @@ public sealed class ScenarioRunService(
         CancellationTokenSource executionCts,
         CancellationTokenSource timeoutCts)
     {
-        _ = PollCancelRequestedAsync(runId, executionCts, timeoutCts.Token);
+        using var pollShutdown = new CancellationTokenSource();
+        using var pollLoopCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, pollShutdown.Token);
+        var pollTask = PollCancelRequestedAsync(runId, executionCts, pollLoopCts.Token);
         try
         {
             await using var scope = scopeFactory.CreateAsyncScope();
@@ -85,11 +80,13 @@ public sealed class ScenarioRunService(
             var verdict = await scenario.ExecuteAsync(ctx, executionCts.Token);
             await using var scope2 = scopeFactory.CreateAsyncScope();
             var db = scope2.ServiceProvider.GetRequiredService<PlaygroundDbContext>();
-            var row = await db.Runs.FirstAsync(r => r.Id == runId, executionCts.Token);
+            // Persist terminal state without the execution token: cooperative cancel sets executionCts
+            // cancelled while scenarios like cancel-smoke still return a normal Passed verdict.
+            var row = await db.Runs.FirstAsync(r => r.Id == runId, CancellationToken.None);
             row.State = verdict.Passed ? "Passed" : "Failed";
             row.CompletedAt = time.GetUtcNow();
             row.Detail = verdict.Reason;
-            await db.SaveChangesAsync(executionCts.Token);
+            await db.SaveChangesAsync(CancellationToken.None);
         }
         catch (OperationCanceledException)
         {
@@ -103,6 +100,16 @@ public sealed class ScenarioRunService(
         }
         finally
         {
+            await pollShutdown.CancelAsync();
+            try
+            {
+                await pollTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            }
+            catch
+            {
+                // Poll loop may observe linked-token cancellation or a disposed scope factory during host teardown.
+            }
+
             executionCts.Dispose();
             timeoutCts.Dispose();
         }
@@ -118,15 +125,22 @@ public sealed class ScenarioRunService(
             while (!stoppingToken.IsCancellationRequested && !executionCts.IsCancellationRequested)
             {
                 await Task.Delay(200, stoppingToken);
-                await using var scope = scopeFactory.CreateAsyncScope();
-                var db = scope.ServiceProvider.GetRequiredService<PlaygroundDbContext>();
-                var cancel = await db.Runs.AsNoTracking()
-                    .Where(r => r.Id == runId)
-                    .Select(r => r.CancelRequested)
-                    .FirstOrDefaultAsync(stoppingToken);
-                if (cancel)
+                try
                 {
-                    await executionCts.CancelAsync();
+                    await using var scope = scopeFactory.CreateAsyncScope();
+                    var db = scope.ServiceProvider.GetRequiredService<PlaygroundDbContext>();
+                    var cancel = await db.Runs.AsNoTracking()
+                        .Where(r => r.Id == runId)
+                        .Select(r => r.CancelRequested)
+                        .FirstOrDefaultAsync(stoppingToken);
+                    if (cancel)
+                    {
+                        await executionCts.CancelAsync();
+                        return;
+                    }
+                }
+                catch (ObjectDisposedException)
+                {
                     return;
                 }
             }

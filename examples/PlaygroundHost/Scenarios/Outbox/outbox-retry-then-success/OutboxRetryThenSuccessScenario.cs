@@ -3,13 +3,88 @@ using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Infrastructure.ScenarioRunning;
 using PlaygroundHost.Persistence;
 using PlaygroundHost.Persistence.Entities;
+using Ratatoskr;
 using Ratatoskr.Core;
+using Ratatoskr.EfCore;
+using Ratatoskr.RabbitMq.Config;
+using Ratatoskr.RabbitMq.Extensions;
 
 namespace PlaygroundHost.Scenarios.Outbox.OutboxRetryThenSuccess;
 
-public sealed class OutboxRetryThenSuccessScenario : IScenario
+public sealed class OutboxRetryThenSuccessScenario : IPlaygroundScenario
 {
-    public string Slug => "outbox-retry-then-success";
+    private const string ScenarioSlug = "outbox-retry-then-success";
+
+    public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues =>
+    [
+        new("orders", PlaygroundAmqpNames.OrdersQueue(ScenarioSlug)),
+        new("inventory", PlaygroundAmqpNames.InventoryQueue(ScenarioSlug)),
+        new("notifications", PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug)),
+    ];
+
+    public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
+    {
+        var exEvt = PlaygroundAmqpNames.EventsExchange(ScenarioSlug);
+        var exCmd = PlaygroundAmqpNames.CommandsExchange(ScenarioSlug);
+        var qOrders = PlaygroundAmqpNames.OrdersQueue(ScenarioSlug);
+        var qInv = PlaygroundAmqpNames.InventoryQueue(ScenarioSlug);
+        var qNot = PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug);
+        var internalCh = $"pg.{ScenarioSlug}.orders.internal";
+
+        bus.AddCommandPublishChannel(internalCh, c => c
+            .WithEfCore()
+            .Produces<OutboxRetryThenSuccessReserveStockInternal>());
+
+        bus.AddCommandConsumeChannel(internalCh, c => c
+            .Consumes<OutboxRetryThenSuccessReserveStockInternal>(m => m.WithHandler<OutboxRetryThenSuccessReserveStockInternalHandler>($"{ScenarioSlug}.reserve"))
+            .UseInbox<PublisherDbContext>());
+
+        bus.AddEventPublishChannel(exEvt, c => c
+            .WithRabbitMq(r => r.WithTopicExchange())
+            .Produces<OutboxRetryThenSuccessOrderPlaced>()
+            .Produces<OutboxRetryThenSuccessOrderFulfilled>()
+            .Produces<OutboxRetryThenSuccessOrderFailed>());
+
+        bus.AddCommandPublishChannel(exCmd, c => c
+            .WithRabbitMq(r => r.WithDirectExchange())
+            .Produces<OutboxRetryThenSuccessProcessOrderCommand>());
+
+        bus.AddEventConsumeChannel($"{ScenarioSlug}-orders-inbox", c => c
+            .WithRabbitMq(r => r
+                .WithTopicExchange()
+                .WithAmqpExchangeName(exEvt)
+                .WithQueueName(qOrders)
+                .WithQueueType(QueueType.Classic)
+                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
+            .Consumes<OutboxRetryThenSuccessOrderFulfilled>(m => m.WithHandler<OutboxRetryThenSuccessOrderFulfilledHandler>($"{ScenarioSlug}.fulfilled"))
+            .Consumes<OutboxRetryThenSuccessOrderFailed>(m => m.WithHandler<OutboxRetryThenSuccessOrderFailedHandler>($"{ScenarioSlug}.failed"))
+            .UseInbox<PublisherDbContext>());
+
+        bus.AddCommandConsumeChannel($"{ScenarioSlug}-inventory", c => c
+            .WithRabbitMq(r => r
+                .WithDirectExchange()
+                .WithAmqpExchangeName(exCmd)
+                .WithQueueName(qInv)
+                .WithQueueType(QueueType.Classic)
+                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
+            .Consumes<OutboxRetryThenSuccessProcessOrderCommand>(m => m.WithHandler<OutboxRetryThenSuccessProcessOrderHandler>($"{ScenarioSlug}.process"))
+            .UseInbox<ConsumerDbContext>());
+
+        bus.AddEventConsumeChannel($"{ScenarioSlug}-notifications", c => c
+            .WithRabbitMq(r => r
+                .WithTopicExchange()
+                .WithAmqpExchangeName(exEvt)
+                .WithQueueName(qNot)
+                .WithQueueType(QueueType.Classic)
+                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
+            .Consumes<OutboxRetryThenSuccessOrderPlaced>(m => m
+                .WithHandler<OutboxRetryThenSuccessOrderPlacedNotifyHandler>($"{ScenarioSlug}.notify")
+                .WithHandler<OutboxRetryThenSuccessOrderPlacedAnalyticsHandler>($"{ScenarioSlug}.analytics"))
+            .Consumes<OutboxRetryThenSuccessOrderFulfilled>(m => m.WithHandler<OutboxRetryThenSuccessOrderFulfilledNotifyHandler>($"{ScenarioSlug}.fulfilled-notify"))
+            .UseInbox<PublisherDbContext>());
+    }
+
+    public string Slug => ScenarioSlug;
 
     public string Title => "Outbox relay retries then succeeds";
 

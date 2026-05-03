@@ -3,13 +3,88 @@ using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Infrastructure.ScenarioRunning;
 using PlaygroundHost.Persistence;
 using PlaygroundHost.Persistence.Entities;
+using Ratatoskr;
 using Ratatoskr.Core;
+using Ratatoskr.EfCore;
+using Ratatoskr.RabbitMq.Config;
+using Ratatoskr.RabbitMq.Extensions;
 
 namespace PlaygroundHost.Scenarios.Outbox.OutboxPoison;
 
-public sealed class OutboxPoisonScenario : IScenario
+public sealed class OutboxPoisonScenario : IPlaygroundScenario
 {
-    public string Slug => "outbox-poison";
+    private const string ScenarioSlug = "outbox-poison";
+
+    public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues =>
+    [
+        new("orders", PlaygroundAmqpNames.OrdersQueue(ScenarioSlug)),
+        new("inventory", PlaygroundAmqpNames.InventoryQueue(ScenarioSlug)),
+        new("notifications", PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug)),
+    ];
+
+    public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
+    {
+        var exEvt = PlaygroundAmqpNames.EventsExchange(ScenarioSlug);
+        var exCmd = PlaygroundAmqpNames.CommandsExchange(ScenarioSlug);
+        var qOrders = PlaygroundAmqpNames.OrdersQueue(ScenarioSlug);
+        var qInv = PlaygroundAmqpNames.InventoryQueue(ScenarioSlug);
+        var qNot = PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug);
+        var internalCh = $"pg.{ScenarioSlug}.orders.internal";
+
+        bus.AddCommandPublishChannel(internalCh, c => c
+            .WithEfCore()
+            .Produces<OutboxPoisonReserveStockInternal>());
+
+        bus.AddCommandConsumeChannel(internalCh, c => c
+            .Consumes<OutboxPoisonReserveStockInternal>(m => m.WithHandler<OutboxPoisonReserveStockInternalHandler>($"{ScenarioSlug}.reserve"))
+            .UseInbox<PublisherDbContext>());
+
+        bus.AddEventPublishChannel(exEvt, c => c
+            .WithRabbitMq(r => r.WithTopicExchange())
+            .Produces<OutboxPoisonOrderPlaced>()
+            .Produces<OutboxPoisonOrderFulfilled>()
+            .Produces<OutboxPoisonOrderFailed>());
+
+        bus.AddCommandPublishChannel(exCmd, c => c
+            .WithRabbitMq(r => r.WithDirectExchange())
+            .Produces<OutboxPoisonProcessOrderCommand>());
+
+        bus.AddEventConsumeChannel($"{ScenarioSlug}-orders-inbox", c => c
+            .WithRabbitMq(r => r
+                .WithTopicExchange()
+                .WithAmqpExchangeName(exEvt)
+                .WithQueueName(qOrders)
+                .WithQueueType(QueueType.Classic)
+                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
+            .Consumes<OutboxPoisonOrderFulfilled>(m => m.WithHandler<OutboxPoisonOrderFulfilledHandler>($"{ScenarioSlug}.fulfilled"))
+            .Consumes<OutboxPoisonOrderFailed>(m => m.WithHandler<OutboxPoisonOrderFailedHandler>($"{ScenarioSlug}.failed"))
+            .UseInbox<PublisherDbContext>());
+
+        bus.AddCommandConsumeChannel($"{ScenarioSlug}-inventory", c => c
+            .WithRabbitMq(r => r
+                .WithDirectExchange()
+                .WithAmqpExchangeName(exCmd)
+                .WithQueueName(qInv)
+                .WithQueueType(QueueType.Classic)
+                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
+            .Consumes<OutboxPoisonProcessOrderCommand>(m => m.WithHandler<OutboxPoisonProcessOrderHandler>($"{ScenarioSlug}.process"))
+            .UseInbox<ConsumerDbContext>());
+
+        bus.AddEventConsumeChannel($"{ScenarioSlug}-notifications", c => c
+            .WithRabbitMq(r => r
+                .WithTopicExchange()
+                .WithAmqpExchangeName(exEvt)
+                .WithQueueName(qNot)
+                .WithQueueType(QueueType.Classic)
+                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
+            .Consumes<OutboxPoisonOrderPlaced>(m => m
+                .WithHandler<OutboxPoisonOrderPlacedNotifyHandler>($"{ScenarioSlug}.notify")
+                .WithHandler<OutboxPoisonOrderPlacedAnalyticsHandler>($"{ScenarioSlug}.analytics"))
+            .Consumes<OutboxPoisonOrderFulfilled>(m => m.WithHandler<OutboxPoisonOrderFulfilledNotifyHandler>($"{ScenarioSlug}.fulfilled-notify"))
+            .UseInbox<PublisherDbContext>());
+    }
+
+    public string Slug => ScenarioSlug;
 
     public string Title => "Outbox poisoned rows";
 

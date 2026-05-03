@@ -1,9 +1,16 @@
 using PlaygroundHost.Infrastructure.ScenarioRunning;
+using Ratatoskr;
 
 namespace PlaygroundHost.Scenarios.Tests.BlockingHold;
 
-public sealed class BlockingHoldScenario : IScenario
+public sealed class BlockingHoldScenario : IPlaygroundScenario
 {
+    public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues => [];
+
+    public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
+    {
+    }
+
     public string Slug => "blocking-hold";
 
     public string Title => "Blocking hold";

@@ -7,14 +7,14 @@ namespace PlaygroundHost.Infrastructure;
 public static class PlaygroundSqlMetrics
 {
     public static Task<int> CountPoisonedOutboxAsync(DbContext db, CancellationToken cancellationToken = default) =>
-        ExecuteScalarIntAsync(db, """SELECT COUNT(*) FROM "OutboxMessages" WHERE "IsPoisoned" = true""", cancellationToken);
+        ExecuteScalarIntAsync(db, """SELECT COUNT(*) FROM "OutboxMessageEntity" WHERE "IsPoisoned" = true""", cancellationToken);
 
     public static Task<int> CountPoisonedInboxAsync(DbContext db, CancellationToken cancellationToken = default) =>
         ExecuteScalarIntAsync(
             db,
             """
-            SELECT COUNT(*) FROM "InboxHandlerStatuses" s
-            INNER JOIN "InboxMessages" m ON s."MessageId" = m."Id"
+            SELECT COUNT(*) FROM "InboxHandlerStatusEntity" s
+            INNER JOIN "InboxMessageEntity" m ON s."MessageId" = m."Id"
             WHERE s."IsPoisoned" = true
             """,
             cancellationToken);
@@ -27,7 +27,7 @@ public static class PlaygroundSqlMetrics
         ExecuteScalarIntAsync(
             db,
             $"""
-            SELECT COUNT(*) FROM "OutboxMessages"
+            SELECT COUNT(*) FROM "OutboxMessageEntity"
             WHERE "IsPoisoned" = true
               AND "SerializedProperties" LIKE '%{EscapeLike(scenarioRunId)}%'
             """,
@@ -40,8 +40,8 @@ public static class PlaygroundSqlMetrics
         ExecuteScalarIntAsync(
             db,
             $"""
-            SELECT COUNT(*) FROM "InboxHandlerStatuses" s
-            INNER JOIN "InboxMessages" m ON s."MessageId" = m."Id"
+            SELECT COUNT(*) FROM "InboxHandlerStatusEntity" s
+            INNER JOIN "InboxMessageEntity" m ON s."MessageId" = m."Id"
             WHERE s."IsPoisoned" = true
               AND (m."SerializedProperties" LIKE '%{EscapeLike(scenarioRunId)}%' OR encode(m."Content", 'escape') LIKE '%{EscapeLike(scenarioRunId)}%')
             """,
