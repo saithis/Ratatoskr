@@ -76,7 +76,7 @@ public sealed class ScenarioRunService(
         {
             await using var scope = scopeFactory.CreateAsyncScope();
             var log = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger($"Scenario:{scenario.Slug}");
-            var ctx = new ScenarioExecutionContext(runId, scopeFactory, log);
+            var ctx = new ScenarioExecutionContext(runId, scope.ServiceProvider, scopeFactory, log);
             var verdict = await scenario.ExecuteAsync(ctx, executionCts.Token);
             await using var scope2 = scopeFactory.CreateAsyncScope();
             var db = scope2.ServiceProvider.GetRequiredService<PlaygroundDbContext>();

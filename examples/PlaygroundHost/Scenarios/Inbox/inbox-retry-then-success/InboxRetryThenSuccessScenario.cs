@@ -93,8 +93,7 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
-        await using var setup = context.ScopeFactory.CreateAsyncScope();
-        var sp = setup.ServiceProvider;
+        var sp = context.Services;
         var time = sp.GetRequiredService<TimeProvider>();
         var db = sp.GetRequiredService<PublisherDbContext>();
         var runId = context.ScenarioRunId;

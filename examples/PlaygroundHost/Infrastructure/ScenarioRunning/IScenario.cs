@@ -23,12 +23,19 @@ public interface IScenario
 
 public sealed class ScenarioExecutionContext(
     Guid runId,
+    IServiceProvider services,
     IServiceScopeFactory scopeFactory,
     ILogger logger)
 {
     public Guid RunId { get; } = runId;
 
     public string ScenarioRunId => RunId.ToString("D");
+
+    /// <summary>
+    /// Root <see cref="IServiceProvider"/> for this scenario run (one async scope for the whole <see cref="IScenario.ExecuteAsync"/>).
+    /// Use <see cref="ScopeFactory"/> when you need a separate scope (for example a fresh <c>DbContext</c> per poll).
+    /// </summary>
+    public IServiceProvider Services { get; } = services;
 
     public IServiceScopeFactory ScopeFactory { get; } = scopeFactory;
 

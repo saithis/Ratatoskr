@@ -48,8 +48,7 @@ public sealed class DirectConsumeDlqScenario : IPlaygroundScenario
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
-        await using var setup = context.ScopeFactory.CreateAsyncScope();
-        var sp = setup.ServiceProvider;
+        var sp = context.Services;
         var cfg = sp.GetRequiredService<IConfiguration>();
         var rabbitCs = cfg.GetConnectionString("rabbitmq")
             ?? throw new InvalidOperationException("rabbitmq connection string missing.");
