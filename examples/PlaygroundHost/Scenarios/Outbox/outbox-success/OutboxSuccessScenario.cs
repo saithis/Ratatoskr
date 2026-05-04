@@ -19,7 +19,6 @@ public sealed class OutboxSuccessScenario : IPlaygroundScenario
     [
         new("orders", PlaygroundAmqpNames.OrdersQueue(ScenarioSlug)),
         new("inventory", PlaygroundAmqpNames.InventoryQueue(ScenarioSlug)),
-        new("notifications", PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug)),
     ];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
@@ -28,20 +27,9 @@ public sealed class OutboxSuccessScenario : IPlaygroundScenario
         var exCmd = PlaygroundAmqpNames.CommandsExchange(ScenarioSlug);
         var qOrders = PlaygroundAmqpNames.OrdersQueue(ScenarioSlug);
         var qInv = PlaygroundAmqpNames.InventoryQueue(ScenarioSlug);
-        var qNot = PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug);
-        var internalCh = $"pg.{ScenarioSlug}.orders.internal";
-
-        bus.AddCommandPublishChannel(internalCh, c => c
-            .WithEfCore()
-            .Produces<ReserveStockInternal>());
-
-        bus.AddCommandConsumeChannel(internalCh, c => c
-            .Consumes<ReserveStockInternal>(m => m.WithHandler<ReserveStockInternalHandler>($"{ScenarioSlug}.reserve"))
-            .UseInbox<PublisherDbContext>());
 
         bus.AddEventPublishChannel(exEvt, c => c
             .WithRabbitMq(r => r.WithTopicExchange())
-            .Produces<OrderPlaced>()
             .Produces<OrderFulfilled>());
 
         bus.AddCommandPublishChannel(exCmd, c => c
@@ -67,18 +55,6 @@ public sealed class OutboxSuccessScenario : IPlaygroundScenario
                 .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
             .Consumes<ProcessOrderCommand>(m => m.WithHandler<ProcessOrderHandler>($"{ScenarioSlug}.process"))
             .UseInbox<ConsumerDbContext>());
-
-        bus.AddEventConsumeChannel($"{ScenarioSlug}-notifications", c => c
-            .WithRabbitMq(r => r
-                .WithTopicExchange()
-                .WithAmqpExchangeName(exEvt)
-                .WithQueueName(qNot)
-                .WithQueueType(QueueType.Classic)
-                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<OrderPlaced>(m => m
-                .WithHandler<OrderPlacedNotifyHandler>($"{ScenarioSlug}.notify")
-                .WithHandler<OrderPlacedAnalyticsHandler>($"{ScenarioSlug}.analytics"))
-            .UseInbox<PublisherDbContext>());
     }
 
     public string Slug => ScenarioSlug;
@@ -86,7 +62,7 @@ public sealed class OutboxSuccessScenario : IPlaygroundScenario
     public string Title => "Outbox happy path";
 
     public string Description =>
-        "Creates an order on the publisher database with outbox staging; consumer fulfills; publisher reaches Fulfilled.";
+        "Publisher stages ProcessOrderCommand in outbox; consumer inbox processes it and stages OrderFulfilled; publisher inbox marks the order Fulfilled.";
 
     public string Topic => "Outbox";
 
@@ -101,18 +77,8 @@ public sealed class OutboxSuccessScenario : IPlaygroundScenario
         PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
             db,
             runId,
-            new OrderPlaced(orderIdStr, runId),
-            PlaygroundMessageIds.OrderPlaced(order.Id));
-        PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
-            db,
-            runId,
             new ProcessOrderCommand(orderIdStr, runId),
             PlaygroundMessageIds.ProcessOrderCommand(order.Id));
-        PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
-            db,
-            runId,
-            new ReserveStockInternal(orderIdStr, runId),
-            PlaygroundMessageIds.ReserveStockInternal(order.Id));
         await db.SaveChangesAsync(cancellationToken);
         return order.Id;
     }
@@ -133,26 +99,11 @@ public sealed class OutboxSuccessScenario : IPlaygroundScenario
             cancellationToken);
     }
 
-    [RatatoskrMessage("outbox-success.order-placed")]
-    public sealed record OrderPlaced(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
-
     [RatatoskrMessage("outbox-success.process-order-command")]
     public sealed record ProcessOrderCommand(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
 
-    [RatatoskrMessage("outbox-success.reserve-stock-internal")]
-    public sealed record ReserveStockInternal(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
-
     [RatatoskrMessage("outbox-success.order-fulfilled")]
     public sealed record OrderFulfilled(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
-
-    public sealed class ReserveStockInternalHandler(ILogger<ReserveStockInternalHandler> logger) : IMessageHandler<ReserveStockInternal>
-    {
-        public Task HandleAsync(ReserveStockInternal message, MessageProperties properties, CancellationToken cancellationToken)
-        {
-            logger.LogInformation("ReserveStockInternal processed for order {OrderId}", message.OrderId);
-            return Task.CompletedTask;
-        }
-    }
 
     public sealed class ProcessOrderHandler(ConsumerDbContext db, ILogger<ProcessOrderHandler> _) : IMessageHandler<ProcessOrderCommand>
     {
@@ -179,17 +130,5 @@ public sealed class OutboxSuccessScenario : IPlaygroundScenario
             await db.SaveChangesAsync(cancellationToken);
             logger.LogInformation("Order {OrderId} marked Fulfilled", message.OrderId);
         }
-    }
-
-    public sealed class OrderPlacedNotifyHandler(ILogger<OrderPlacedNotifyHandler> _) : IMessageHandler<OrderPlaced>
-    {
-        public Task HandleAsync(OrderPlaced message, MessageProperties properties, CancellationToken cancellationToken) =>
-            Task.CompletedTask;
-    }
-
-    public sealed class OrderPlacedAnalyticsHandler(ILogger<OrderPlacedAnalyticsHandler> _) : IMessageHandler<OrderPlaced>
-    {
-        public Task HandleAsync(OrderPlaced message, MessageProperties properties, CancellationToken cancellationToken) =>
-            Task.CompletedTask;
     }
 }

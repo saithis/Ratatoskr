@@ -21,12 +21,10 @@ public sealed class EfcoreInternalCommandScenario : IPlaygroundScenario
 
         bus.AddCommandPublishChannel(internalCh, c => c
             .WithEfCore()
-            .Produces<ReserveStockInternal>()
-            .Produces<OutboxSibling>());
+            .Produces<ReserveStockInternal>());
 
         bus.AddCommandConsumeChannel(internalCh, c => c
             .Consumes<ReserveStockInternal>(m => m.WithHandler<ReserveStockInternalHandler>($"{ScenarioSlug}.reserve"))
-            .Consumes<OutboxSibling>(m => m.WithHandler<OutboxSiblingHandler>($"{ScenarioSlug}.sibling"))
             .UseInbox<PublisherDbContext>());
     }
 
@@ -35,7 +33,7 @@ public sealed class EfcoreInternalCommandScenario : IPlaygroundScenario
     public string Title => "EF Core internal command";
 
     public string Description =>
-        "Two internal commands are staged in the same SaveChanges as the order; activity should show EF Core transport handling for ReserveStockInternal.";
+        "Two ReserveStockInternal rows are staged in the same SaveChanges as the order; EF Core transport delivers both; activity should show handling for ReserveStockInternal.";
 
     public string Topic => "Other";
 
@@ -55,8 +53,8 @@ public sealed class EfcoreInternalCommandScenario : IPlaygroundScenario
         PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
             db,
             runId,
-            new OutboxSibling(orderIdStr, runId),
-            $"{order.Id:D}:efcore-sibling");
+            new ReserveStockInternal(orderIdStr, runId),
+            $"{order.Id:D}:efcore-reserve-second");
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -67,7 +65,7 @@ public sealed class EfcoreInternalCommandScenario : IPlaygroundScenario
         var recorder = context.GetRequired<PlaygroundActivityRecorder>();
         var runId = context.ScenarioRunId;
         await StageOrderAsync(db, time, runId, cancellationToken);
-        context.StepsCompleted.Add("staged_with_internal_pair");
+        context.StepsCompleted.Add("staged_two_internal_same_save");
 
         await Task.Delay(ScenarioTiming.EfCoreActivitySettleDelay, cancellationToken);
         var entries = recorder.GetEntriesForScenarioRun(runId);
@@ -84,23 +82,11 @@ public sealed class EfcoreInternalCommandScenario : IPlaygroundScenario
     [RatatoskrMessage("efcore-internal-command.reserve-stock-internal")]
     public sealed record ReserveStockInternal(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
 
-    [RatatoskrMessage("efcore-internal-command.outbox-sibling")]
-    public sealed record OutboxSibling(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
-
     public sealed class ReserveStockInternalHandler(ILogger<ReserveStockInternalHandler> logger) : IMessageHandler<ReserveStockInternal>
     {
         public Task HandleAsync(ReserveStockInternal message, MessageProperties properties, CancellationToken cancellationToken)
         {
             logger.LogInformation("ReserveStockInternal processed for order {OrderId}", message.OrderId);
-            return Task.CompletedTask;
-        }
-    }
-
-    public sealed class OutboxSiblingHandler(ILogger<OutboxSiblingHandler> logger) : IMessageHandler<OutboxSibling>
-    {
-        public Task HandleAsync(OutboxSibling message, MessageProperties properties, CancellationToken cancellationToken)
-        {
-            logger.LogInformation("OutboxSibling processed for order {OrderId}", message.OrderId);
             return Task.CompletedTask;
         }
     }

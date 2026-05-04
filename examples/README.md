@@ -40,7 +40,8 @@ Scenarios marked **dangerous** in the catalog require `POST .../run?confirmDange
 
 | Feature | Where |
 |---|---|
-| Outbox (multi-message one transaction) | Scenario `outbox-success` and related slugs under `examples/PlaygroundHost/Scenarios/` |
+| Outbox (publisher stages command; consumer returns outcome event) | Scenarios `outbox-success`, `outbox-retry-then-success` |
+| Outbox (multi-message one transaction) | Scenario `efcore-internal-command` (two internal rows in one `SaveChanges`) |
 | Outbox transport failure until poison | Scenario `outbox-retry-then-success`, `outbox-poison` (run-scoped outbox send registry) |
 | Outbox max message size | `WithMaxMessageSize` on publisher outbox; scenario `oversized-payload-rolls-back` |
 | EF Core internal channel | Scenario `efcore-internal-command` |
