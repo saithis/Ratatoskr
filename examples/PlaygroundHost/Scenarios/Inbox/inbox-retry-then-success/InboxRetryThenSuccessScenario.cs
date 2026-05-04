@@ -43,7 +43,7 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
                 .WithAmqpExchangeName(exEvt)
                 .WithQueueName(qOrders)
                 .WithQueueType(QueueType.Classic)
-                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
+                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(1)))
             .Consumes<OrderFulfilled>(m => m.WithHandler<OrderFulfilledHandler>($"{ScenarioSlug}.fulfilled"))
             .UseInbox<PublisherDbContext>());
 
@@ -53,7 +53,7 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
                 .WithAmqpExchangeName(exCmd)
                 .WithQueueName(qInv)
                 .WithQueueType(QueueType.Classic)
-                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
+                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(1)))
             .Consumes<ProcessOrderCommand>(m => m.WithHandler<ProcessOrderHandler>($"{ScenarioSlug}.process"))
             .UseInbox<ConsumerDbContext>());
     }

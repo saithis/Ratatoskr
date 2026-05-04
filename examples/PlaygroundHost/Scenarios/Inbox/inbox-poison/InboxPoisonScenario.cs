@@ -1,8 +1,6 @@
-using Microsoft.EntityFrameworkCore;
 using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Infrastructure.ScenarioRunning;
 using PlaygroundHost.Persistence;
-using PlaygroundHost.Persistence.Entities;
 using Ratatoskr;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
@@ -33,7 +31,7 @@ public sealed class InboxPoisonScenario : IPlaygroundScenario
                 .WithAmqpExchangeName(exCmd)
                 .WithQueueName(qInv)
                 .WithQueueType(QueueType.Classic)
-                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
+                .WithRetry(maxRetries: 2, delay: TimeSpan.FromSeconds(2)))
             .Consumes<ProcessOrderCommand>(m => m.WithHandler<ProcessOrderHandler>($"{ScenarioSlug}.process"))
             .UseInbox<ConsumerDbContext>());
     }

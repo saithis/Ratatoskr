@@ -27,9 +27,16 @@ public sealed class OutboxSendFailureRegistry
 
     public bool TryConsumeSendFailure(MessageProperties props)
     {
-        if (!props.CloudEventExtensions.TryGetValue(PlaygroundCorrelation.CloudEventsExtensionKey, out var ext) ||
-            ext is not string runId ||
-            string.IsNullOrEmpty(runId))
+        if (!props.CloudEventExtensions.TryGetValue(PlaygroundCorrelation.CloudEventsExtensionKey, out var ext))
+            return false;
+            
+        string? runId = ext as string;
+        if (runId == null && ext is System.Text.Json.JsonElement json && json.ValueKind == System.Text.Json.JsonValueKind.String)
+        {
+            runId = json.GetString();
+        }
+
+        if (string.IsNullOrEmpty(runId))
             return false;
 
         if (!_byScenarioRun.TryGetValue(runId, out var policy))

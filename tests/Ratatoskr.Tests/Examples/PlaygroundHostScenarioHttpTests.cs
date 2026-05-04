@@ -2,11 +2,9 @@ using System.Net;
 using System.Net.Http.Json;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using PlaygroundHost;
 using Ratatoskr.Tests.Fixtures;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.Examples;
 
@@ -68,6 +66,10 @@ public sealed class PlaygroundHostScenarioHttpTests(RabbitMqContainerFixture rab
                 builder.UseSetting("Playground:Enabled", "true");
                 builder.UseSetting("ASPNETCORE_ENVIRONMENT", "Development");
             });
+
+            // WebApplicationFactory.EnsureServer is not safe against concurrent first access; parallel tests can
+            // otherwise both start the deferred host and race EnsureCreated on the same databases (42P07).
+            _ = _sharedFactory.Server;
 
             return _sharedFactory;
         }
@@ -191,7 +193,7 @@ public sealed class PlaygroundHostScenarioHttpTests(RabbitMqContainerFixture rab
         var client = factory.CreateClient();
 
         var runId = await StartScenarioAsync(client, slug);
-        var status = await WaitForTerminalAsync(client, runId, 120);
+        var status = await WaitForTerminalAsync(client, runId, 20);
         status.state.Should().Be("Passed", $"slug={slug} detail={status.detail}");
     }
 

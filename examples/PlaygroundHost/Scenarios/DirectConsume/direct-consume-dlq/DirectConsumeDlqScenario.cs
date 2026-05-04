@@ -33,7 +33,7 @@ public sealed class DirectConsumeDlqScenario : IPlaygroundScenario
                 .WithAmqpExchangeName(exEvt)
                 .WithQueueName(qNot)
                 .WithQueueType(QueueType.Classic)
-                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
+                .WithRetry(maxRetries: 2, delay: TimeSpan.FromSeconds(2)))
             .Consumes<OrderPlaced>(m => m.WithHandler<AlwaysFailHandler>()));
     }
 

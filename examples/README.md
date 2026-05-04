@@ -45,7 +45,7 @@ Scenarios marked **dangerous** in the catalog require `POST .../run?confirmDange
 | Outbox max message size | `WithMaxMessageSize` on publisher outbox; scenario `oversized-payload-rolls-back` |
 | EF Core internal channel | Scenario `efcore-internal-command` |
 | Direct publish / consume | Scenarios `direct-consume-success`, `direct-consume-retry`, `direct-consume-dlq` |
-| Replay deduplication | Scenario `replay-dedups` |
+| Replay deduplication | Scenario `replay-dedups` (two `PublishDirectAsync` calls with the same id: `UseInbox` consumer runs once, `AllowConsumeWithoutInbox` consumer runs twice) |
 | Fan-out (two handlers, one queue) | Scenario `fanout-two-handlers-on-orderplaced` |
 | Inbox retries / poison | Scenarios `inbox-poison`, `inbox-retry-then-success` |
 | Business rejection path | Scenario `business-rejection` |

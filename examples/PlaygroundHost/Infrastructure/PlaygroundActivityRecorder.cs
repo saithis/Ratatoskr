@@ -64,9 +64,13 @@ public sealed class PlaygroundActivityRecorder : IMessageActivityObserver
 
     private static string? TryResolveScenarioRunId(MessageActivity activity)
     {
-        if (activity.Properties.CloudEventExtensions.TryGetValue(PlaygroundCorrelation.CloudEventsExtensionKey, out var ext) &&
-            ext is string s && s.Length > 0)
-            return s;
+        if (activity.Properties.CloudEventExtensions.TryGetValue(PlaygroundCorrelation.CloudEventsExtensionKey, out var ext))
+        {
+            if (ext is string s && s.Length > 0)
+                return s;
+            if (ext is System.Text.Json.JsonElement je && je.ValueKind == System.Text.Json.JsonValueKind.String)
+                return je.GetString();
+        }
 
         return TryFromMessageScenarioRunId(activity.Message);
     }

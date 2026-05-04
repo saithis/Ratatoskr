@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Infrastructure.ScenarioRunning;
 using PlaygroundHost.Persistence;
@@ -17,178 +16,139 @@ public sealed class ReplayDedupsScenario : IPlaygroundScenario
 
     public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues =>
     [
-        new("orders", PlaygroundAmqpNames.OrdersQueue(ScenarioSlug)),
-        new("inventory", PlaygroundAmqpNames.InventoryQueue(ScenarioSlug)),
-        new("notifications", PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug)),
+        new("inbox-dedup", PlaygroundAmqpNames.ReplayDedupInboxQueue(ScenarioSlug)),
+        new("direct-double", PlaygroundAmqpNames.ReplayDedupDirectQueue(ScenarioSlug)),
     ];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
     {
         var exEvt = PlaygroundAmqpNames.EventsExchange(ScenarioSlug);
-        var exCmd = PlaygroundAmqpNames.CommandsExchange(ScenarioSlug);
-        var qOrders = PlaygroundAmqpNames.OrdersQueue(ScenarioSlug);
-        var qInv = PlaygroundAmqpNames.InventoryQueue(ScenarioSlug);
-        var qNot = PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug);
+        var qInbox = PlaygroundAmqpNames.ReplayDedupInboxQueue(ScenarioSlug);
+        var qDirect = PlaygroundAmqpNames.ReplayDedupDirectQueue(ScenarioSlug);
 
         bus.AddEventPublishChannel(exEvt, c => c
             .WithRabbitMq(r => r.WithTopicExchange())
-            .Produces<OrderPlaced>()
-            .Produces<OrderFulfilled>());
+            .Produces<OrderPlaced>());
 
-        bus.AddCommandPublishChannel(exCmd, c => c
-            .WithRabbitMq(r => r.WithDirectExchange())
-            .Produces<ProcessOrderCommand>());
-
-        bus.AddEventConsumeChannel($"{ScenarioSlug}-orders-inbox", c => c
+        bus.AddEventConsumeChannel($"{ScenarioSlug}-inbox", c => c
             .WithRabbitMq(r => r
                 .WithTopicExchange()
                 .WithAmqpExchangeName(exEvt)
-                .WithQueueName(qOrders)
+                .WithQueueName(qInbox)
                 .WithQueueType(QueueType.Classic)
-                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<OrderFulfilled>(m => m.WithHandler<OrderFulfilledHandler>($"{ScenarioSlug}.fulfilled"))
+                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(1)))
+            .Consumes<OrderPlaced>(m => m.WithHandler<OrderPlacedInboxHandler>($"{ScenarioSlug}.inbox"))
             .UseInbox<PublisherDbContext>());
 
-        bus.AddCommandConsumeChannel($"{ScenarioSlug}-inventory", c => c
-            .WithRabbitMq(r => r
-                .WithDirectExchange()
-                .WithAmqpExchangeName(exCmd)
-                .WithQueueName(qInv)
-                .WithQueueType(QueueType.Classic)
-                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<ProcessOrderCommand>(m => m.WithHandler<ProcessOrderHandler>($"{ScenarioSlug}.process"))
-            .UseInbox<ConsumerDbContext>());
-
-        bus.AddEventConsumeChannel($"{ScenarioSlug}-notifications", c => c
+        bus.AddEventConsumeChannel($"{ScenarioSlug}-direct", c => c
             .WithRabbitMq(r => r
                 .WithTopicExchange()
                 .WithAmqpExchangeName(exEvt)
-                .WithQueueName(qNot)
+                .WithQueueName(qDirect)
                 .WithQueueType(QueueType.Classic)
-                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<OrderPlaced>(m => m
-                .WithHandler<OrderPlacedNotifyHandler>($"{ScenarioSlug}.notify")
-                .WithHandler<OrderPlacedAnalyticsHandler>($"{ScenarioSlug}.analytics"))
-            .UseInbox<PublisherDbContext>());
+                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(1)))
+            .Consumes<OrderPlaced>(m => m.WithHandler<OrderPlacedDirectHandler>())
+            .AllowConsumeWithoutInbox());
     }
 
     public string Slug => ScenarioSlug;
 
-    public string Title => "Replay (dedup vs double delivery)";
+    public string Title => "Replay (inbox dedup vs double delivery)";
 
     public string Description =>
-        "After Fulfilled, replay publishes the same CloudEvents ids; notifications may see duplicate OrderPlaced activity while inventory dedups the command inbox.";
+        "Publishes OrderPlaced twice with the same CloudEvents id: the inbox-backed consumer runs once; the direct consumer runs twice.";
 
     public string Topic => "Other";
 
-    private static async Task<Guid> StageOrderAsync(
-        PublisherDbContext db,
-        TimeProvider time,
-        string runId,
-        CancellationToken cancellationToken)
-    {
-        var order = PlaygroundScenarioStaging.AddPlacedOrderToContext(db, time, "outbox");
-        var orderIdStr = order.Id.ToString();
-        PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
-            db,
-            runId,
-            new OrderPlaced(orderIdStr, runId),
-            PlaygroundMessageIds.OrderPlaced(order.Id));
-        PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
-            db,
-            runId,
-            new ProcessOrderCommand(orderIdStr, runId),
-            PlaygroundMessageIds.ProcessOrderCommand(order.Id));
-        await db.SaveChangesAsync(cancellationToken);
-        return order.Id;
-    }
-
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
+        static bool MetricsOk(IReadOnlyList<PlaygroundActivityEntry> entries)
+        {
+            var inbox = 0;
+            var direct = 0;
+            foreach (var e in entries)
+            {
+                if (!(e.MessageType ?? "").Contains("order-placed", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (e.Stage == nameof(MessageStage.InboxDispatched) && e.IsSuccess == true)
+                    inbox++;
+                else if (e.Stage == nameof(MessageStage.Dispatched)
+                         && e.DispatchResult == nameof(DispatchResult.Success))
+                    direct++;
+            }
+
+            return inbox >= 1 && direct >= 2;
+        }
+
         var time = context.GetTimeProvider();
         var db = context.GetPublisherDb();
         var bus = context.GetRatatoskr();
         var recorder = context.GetRequired<PlaygroundActivityRecorder>();
         var runId = context.ScenarioRunId;
-        var orderId = await StageOrderAsync(db, time, runId, cancellationToken);
-        var v = await ScenarioAssertions.OrderEventuallyAsync(
-            context.ScopeFactory,
-            orderId,
-            OrderStatus.Fulfilled,
-            ScenarioTiming.OrderEventuallyLong,
-            time,
-            cancellationToken);
-        if (!v.Passed)
-            return v;
 
-        var before = recorder.GetEntriesForOrder(orderId).Count;
-        var orderIdStr = orderId.ToString();
-        var p1 = new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(orderId) };
-        var p2 = new MessageProperties { Id = PlaygroundMessageIds.ProcessOrderCommand(orderId) };
-        PlaygroundCorrelation.AttachToMessageProperties(p1, runId);
-        PlaygroundCorrelation.AttachToMessageProperties(p2, runId);
-        await bus.PublishDirectAsync(new OrderPlaced(orderIdStr, runId), p1, cancellationToken);
-        await bus.PublishDirectAsync(new ProcessOrderCommand(orderIdStr, runId), p2, cancellationToken);
-        context.StepsCompleted.Add("replay_direct_publish");
+        var order = PlaygroundScenarioStaging.AddPlacedOrderToContext(db, time, "replay-dedups");
+        await db.SaveChangesAsync(cancellationToken);
+
+        var orderIdStr = order.Id.ToString();
+        var props = new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(order.Id) };
+        PlaygroundCorrelation.AttachToMessageProperties(props, runId);
+        var evt = new OrderPlaced(orderIdStr, runId);
+
+        await bus.PublishDirectAsync(evt, props, cancellationToken);
+        await bus.PublishDirectAsync(evt, props, cancellationToken);
+        context.StepsCompleted.Add("duplicate_direct_publish");
 
         await Task.Delay(ScenarioTiming.ReplaySettleDelay, cancellationToken);
-        var entriesAfterReplay = recorder.GetEntriesForOrder(orderId).ToList();
-        var after = entriesAfterReplay.Count;
-        var nPlaced = entriesAfterReplay.Count(e =>
-            e.Stage == nameof(MessageStage.Dispatched) &&
-            e.IsSuccess == true &&
-            (e.MessageType ?? "").Contains("order-placed", StringComparison.OrdinalIgnoreCase));
-        var pass = after > before && nPlaced >= 2;
-        return pass
-            ? new ScenarioVerdict(true, details: new { rowsBefore = before, rowsAfter = after, notifDispatched = nPlaced })
-            : new ScenarioVerdict(
-                false,
-                $"Activity after replay did not match expectations (before={before}, after={after}, notifOrderPlacedDispatched={nPlaced}).");
+
+        var ok = await ScenarioAssertions.WaitUntilAsync(
+            time,
+            ScenarioTiming.PollLoopLong,
+            ScenarioTiming.OrderPollInterval,
+            async ct =>
+            {
+                ct.ThrowIfCancellationRequested();
+                return MetricsOk(recorder.GetEntriesForScenarioRun(runId));
+            },
+            cancellationToken);
+
+        if (ok)
+        {
+            var entries = recorder.GetEntriesForScenarioRun(runId);
+            return new ScenarioVerdict(
+                true,
+                details: new
+                {
+                    inboxInboxDispatched = entries.Count(e =>
+                        e.Stage == nameof(MessageStage.InboxDispatched) && e.IsSuccess == true
+                                                                 && (e.MessageType ?? "").Contains(
+                                                                     "order-placed",
+                                                                     StringComparison.OrdinalIgnoreCase)),
+                    directDispatched = entries.Count(e =>
+                        e.Stage == nameof(MessageStage.Dispatched)
+                        && e.DispatchResult == nameof(DispatchResult.Success)
+                        && (e.MessageType ?? "").Contains("order-placed", StringComparison.OrdinalIgnoreCase)),
+                });
+        }
+
+        var final = recorder.GetEntriesForScenarioRun(runId);
+        return new ScenarioVerdict(
+            false,
+            $"Expected 1+ successful inbox OrderPlaced dispatches and 2+ direct dispatches for this run; " +
+            $"inbox={final.Count(e => e.Stage == nameof(MessageStage.InboxDispatched) && e.IsSuccess == true && (e.MessageType ?? "").Contains("order-placed", StringComparison.OrdinalIgnoreCase))}, " +
+            $"direct={final.Count(e => e.Stage == nameof(MessageStage.Dispatched) && e.DispatchResult == nameof(DispatchResult.Success) && (e.MessageType ?? "").Contains("order-placed", StringComparison.OrdinalIgnoreCase))}.");
     }
 
     [RatatoskrMessage("replay-dedups.order-placed")]
     public sealed record OrderPlaced(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
 
-    [RatatoskrMessage("replay-dedups.process-order-command")]
-    public sealed record ProcessOrderCommand(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
-
-    [RatatoskrMessage("replay-dedups.order-fulfilled")]
-    public sealed record OrderFulfilled(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
-
-    public sealed class ProcessOrderHandler(ConsumerDbContext db, ILogger<ProcessOrderHandler> _) : IMessageHandler<ProcessOrderCommand>
-    {
-        public async Task HandleAsync(ProcessOrderCommand message, MessageProperties properties, CancellationToken cancellationToken)
-        {
-            var orderGuid = Guid.Parse(message.OrderId);
-            db.OutboxMessages.Add(
-                new OrderFulfilled(message.OrderId, message.ScenarioRunId),
-                new MessageProperties { Id = PlaygroundMessageIds.OrderFulfilled(orderGuid) });
-            await db.SaveChangesAsync(cancellationToken);
-        }
-    }
-
-    public sealed class OrderFulfilledHandler(PublisherDbContext db, TimeProvider time, ILogger<OrderFulfilledHandler> logger)
-        : IMessageHandler<OrderFulfilled>
-    {
-        public async Task HandleAsync(OrderFulfilled message, MessageProperties properties, CancellationToken cancellationToken)
-        {
-            var order = await db.Orders.FirstOrDefaultAsync(o => o.Id == Guid.Parse(message.OrderId), cancellationToken);
-            if (order is null) return;
-            var now = time.GetUtcNow().UtcDateTime;
-            order.Status = OrderStatus.Fulfilled;
-            order.StatusChangedAt = now;
-            await db.SaveChangesAsync(cancellationToken);
-            logger.LogInformation("Order {OrderId} marked Fulfilled", message.OrderId);
-        }
-    }
-
-    public sealed class OrderPlacedNotifyHandler(ILogger<OrderPlacedNotifyHandler> _) : IMessageHandler<OrderPlaced>
+    public sealed class OrderPlacedInboxHandler(ILogger<OrderPlacedInboxHandler> _) : IMessageHandler<OrderPlaced>
     {
         public Task HandleAsync(OrderPlaced message, MessageProperties properties, CancellationToken cancellationToken) =>
             Task.CompletedTask;
     }
 
-    public sealed class OrderPlacedAnalyticsHandler(ILogger<OrderPlacedAnalyticsHandler> _) : IMessageHandler<OrderPlaced>
+    public sealed class OrderPlacedDirectHandler(ILogger<OrderPlacedDirectHandler> _) : IMessageHandler<OrderPlaced>
     {
         public Task HandleAsync(OrderPlaced message, MessageProperties properties, CancellationToken cancellationToken) =>
             Task.CompletedTask;

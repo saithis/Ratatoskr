@@ -7,5 +7,5 @@ public sealed class PlaygroundOptions
     /// <summary>When false, playground and scenario APIs return 404 (except health).</summary>
     public bool Enabled { get; set; }
 
-    public int RunTimeoutSeconds { get; set; } = 120;
+    public int RunTimeoutSeconds { get; set; } = 30;
 }

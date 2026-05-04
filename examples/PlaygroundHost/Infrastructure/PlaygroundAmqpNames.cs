@@ -13,6 +13,10 @@ public static class PlaygroundAmqpNames
 
     public static string NotificationsQueue(string slug) => $"pg.{slug}.notifications";
 
+    public static string ReplayDedupInboxQueue(string slug) => $"pg.{slug}.replay-inbox";
+
+    public static string ReplayDedupDirectQueue(string slug) => $"pg.{slug}.replay-direct";
+
     public static string RetryQueueName(string mainQueueName) => $"{mainQueueName}.retry";
 
     public static string DlqQueueName(string mainQueueName) => $"{mainQueueName}.dlq";

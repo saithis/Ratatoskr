@@ -271,8 +271,58 @@ public class CloudEventsAmqpMapper(
             TraceState = traceState,
         };
 
+        CopyBinaryModeCloudEventExtensionsFromHeaders(incomingHeaders, props);
+
         return (incoming.Body.ToArray(), props);
     }
+
+    /// <summary>
+    /// Binary mode outgoing maps <see cref="MessageProperties.CloudEventExtensions"/> to <c>cloudEvents_*</c> AMQP headers.
+    /// Incoming must reconstruct those attributes into <see cref="MessageProperties.CloudEventExtensions"/> so inbox / observers
+    /// see custom extensions (they are not duplicated onto core <see cref="MessageProperties"/> fields).
+    /// </summary>
+    private static void CopyBinaryModeCloudEventExtensionsFromHeaders(
+        IDictionary<string, object?> incomingHeaders,
+        MessageProperties props)
+    {
+        foreach (var kv in incomingHeaders)
+        {
+            string? attrName = null;
+            if (kv.Key.StartsWith(CloudEventsAmqpConstants.HeaderPrefix, StringComparison.Ordinal))
+            {
+                attrName = kv.Key[CloudEventsAmqpConstants.HeaderPrefix.Length..];
+            }
+            else if (kv.Key.StartsWith(CloudEventsAmqpConstants.AlternativeHeaderPrefix, StringComparison.Ordinal))
+            {
+                attrName = kv.Key[CloudEventsAmqpConstants.AlternativeHeaderPrefix.Length..];
+            }
+
+            if (attrName is null)
+            {
+                continue;
+            }
+
+            if (IsBinaryModeCloudEventsAttributeMappedToMessageProperties(attrName))
+            {
+                continue;
+            }
+
+            props.CloudEventExtensions[attrName] = ConvertToString(kv.Value);
+        }
+    }
+
+    /// <summary>Attribute names that <see cref="MapBinaryModeIncoming"/> maps to <see cref="MessageProperties"/>, not to extensions.</summary>
+    private static bool IsBinaryModeCloudEventsAttributeMappedToMessageProperties(string attributeName) =>
+        attributeName.Equals(CloudEventsAmqpConstants.SpecVersionHeader, StringComparison.OrdinalIgnoreCase)
+        || attributeName.Equals(CloudEventsAmqpConstants.IdHeader, StringComparison.OrdinalIgnoreCase)
+        || attributeName.Equals(CloudEventsAmqpConstants.TypeHeader, StringComparison.OrdinalIgnoreCase)
+        || attributeName.Equals(CloudEventsAmqpConstants.SourceHeader, StringComparison.OrdinalIgnoreCase)
+        || attributeName.Equals(CloudEventsAmqpConstants.TimeHeader, StringComparison.OrdinalIgnoreCase)
+        || attributeName.Equals(CloudEventsAmqpConstants.SubjectHeader, StringComparison.OrdinalIgnoreCase)
+        || attributeName.Equals(CloudEventsAmqpConstants.DataContentTypeHeader, StringComparison.OrdinalIgnoreCase)
+        || attributeName.Equals(CloudEventsAmqpConstants.DataSchemaHeader, StringComparison.OrdinalIgnoreCase)
+        || attributeName.Equals(CloudEventsAmqpConstants.TraceParentHeader, StringComparison.OrdinalIgnoreCase)
+        || attributeName.Equals(CloudEventsAmqpConstants.TraceStateHeader, StringComparison.OrdinalIgnoreCase);
     
     private (byte[] body, MessageProperties props) MapStructuredModeIncoming(BasicDeliverEventArgs incoming)
     {

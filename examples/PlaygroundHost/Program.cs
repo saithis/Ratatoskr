@@ -55,17 +55,26 @@ builder.Services.AddRatatoskr(bus =>
     bus.AddEfCoreDurability<PublisherDbContext>(d =>
     {
         d.UseOutbox(o => o
-            .WithPollingInterval(TimeSpan.FromSeconds(2))
+            .WithPollingInterval(TimeSpan.FromMilliseconds(300))
+            .WithMaxRetries(3)
+            .WithMaxRetryDelay(TimeSpan.FromSeconds(1))
             .WithMaxMessageSize(8_192));
-        d.UseInbox(i => i.WithPollingInterval(TimeSpan.FromSeconds(2)));
+        d.UseInbox(i => i
+            .WithPollingInterval(TimeSpan.FromMilliseconds(300))
+            .WithMaxRetries(3)
+            .WithMaxRetryDelay(TimeSpan.FromSeconds(1)));
     });
 
     bus.AddEfCoreDurability<ConsumerDbContext>(d =>
     {
-        d.UseOutbox(o => o.WithPollingInterval(TimeSpan.FromSeconds(2)));
+        d.UseOutbox(o => o
+            .WithPollingInterval(TimeSpan.FromMilliseconds(300))
+            .WithMaxRetries(3)
+            .WithMaxRetryDelay(TimeSpan.FromSeconds(1)));
         d.UseInbox(o => o
-            .WithPollingInterval(TimeSpan.FromSeconds(2))
-            .WithMaxRetries(5)
+            .WithPollingInterval(TimeSpan.FromMilliseconds(300))
+            .WithMaxRetries(3)
+            .WithMaxRetryDelay(TimeSpan.FromSeconds(1))
             .WithRetention(TimeSpan.FromMinutes(30))
             .WithCleanupInterval(TimeSpan.FromMinutes(5)));
     });
@@ -164,11 +173,19 @@ app.MapGet("/api/playground/rabbit-depths", async Task<IResult> (HttpContext htt
 
 app.MapRatatoskrManagementApi("DevOnlyNoAuth");
 
-using (var scope = app.Services.CreateScope())
+await PlaygroundEnsureCreatedGate.Semaphore.WaitAsync();
+try
 {
-    await scope.ServiceProvider.GetRequiredService<PublisherDbContext>().Database.EnsureCreatedAsync();
-    await scope.ServiceProvider.GetRequiredService<ConsumerDbContext>().Database.EnsureCreatedAsync();
-    await scope.ServiceProvider.GetRequiredService<PlaygroundDbContext>().Database.EnsureCreatedAsync();
+    using (var scope = app.Services.CreateScope())
+    {
+        await scope.ServiceProvider.GetRequiredService<PublisherDbContext>().Database.EnsureCreatedAsync();
+        await scope.ServiceProvider.GetRequiredService<ConsumerDbContext>().Database.EnsureCreatedAsync();
+        await scope.ServiceProvider.GetRequiredService<PlaygroundDbContext>().Database.EnsureCreatedAsync();
+    }
+}
+finally
+{
+    PlaygroundEnsureCreatedGate.Semaphore.Release();
 }
 
 app.MapGet("/api/orders", async ([FromServices] PublisherDbContext db) =>

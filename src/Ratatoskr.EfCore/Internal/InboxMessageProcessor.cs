@@ -149,17 +149,18 @@ internal class InboxMessageProcessor<TDbContext>(
 
             Activity? deliverActivity = null;
             Exception? handlerException = null;
+            object? deliveredMessage = null;
             try
             {
                 deliverActivity = telemetry.StartDeliverActivity(props, status.HandlerKey);
 
                 var serializer = serializerResolver.GetSerializer(registration.MessageType);
-                var message = serializer.Deserialize(inboxMessage.Content, registration.MessageType)
+                deliveredMessage = serializer.Deserialize(inboxMessage.Content, registration.MessageType)
                               ?? throw new InvalidOperationException(
                                   $"Deserialized message of type '{registration.MessageType.Name}' was null.");
 
                 await handlerInvoker.InvokeAsync(
-                    registration.HandlerType, message, props,
+                    registration.HandlerType, deliveredMessage, props,
                     cancellationToken, _options.HandlerTimeout);
 
                 status.MarkAsCompleted(timeProvider);
@@ -198,6 +199,8 @@ internal class InboxMessageProcessor<TDbContext>(
                 Stage = MessageStage.InboxDispatched,
                 Properties = props,
                 SerializedBody = inboxMessage.Content,
+                Message = deliveredMessage,
+                MessageType = registration.MessageType,
                 TransportName = inboxMessage.TransportName,
                 IsSuccess = handlerException == null,
                 Exception = handlerException,

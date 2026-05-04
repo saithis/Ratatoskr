@@ -69,7 +69,7 @@ public sealed class FanoutTwoHandlersOnOrderplacedScenario : IPlaygroundScenario
     {
         static int CountSuccessfulOrderPlacedDispatches(IReadOnlyList<PlaygroundActivityEntry> entries) =>
             entries.Count(e =>
-                e.Stage == nameof(MessageStage.Dispatched) &&
+                e.Stage == nameof(MessageStage.InboxDispatched) &&
                 e.IsSuccess == true &&
                 (e.MessageType ?? "").Contains("order-placed", StringComparison.OrdinalIgnoreCase));
 
