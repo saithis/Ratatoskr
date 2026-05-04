@@ -9,6 +9,7 @@ namespace Ratatoskr.RabbitMq;
 
 internal class RabbitMqMessageSender(
     RabbitMqConnectionManager connectionManager,
+    RabbitMqTopologyManager topologyManager,
     RabbitMqOptions options,
     IRabbitMqEnvelopeMapper envelopeMapper,
     RabbitMqTelemetry telemetry,
@@ -24,6 +25,8 @@ internal class RabbitMqMessageSender(
 
     public async Task SendAsync(byte[] content, MessageProperties props, CancellationToken cancellationToken)
     {
+        await topologyManager.WaitForProvisioningAsync(cancellationToken);
+
         var channel = await connectionManager.GetOrCreateSendChannelAsync(options.UsePublisherConfirms, cancellationToken);
 
         var basicProps = new BasicProperties();
