@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using PlaygroundHost;
 using Ratatoskr.Tests.Fixtures;
@@ -10,8 +11,10 @@ using TUnit.Core;
 namespace Ratatoskr.Tests.Examples;
 
 [ClassDataSource<RabbitMqContainerFixture, PostgresContainerFixture>(Shared = [SharedType.PerTestSession, SharedType.PerTestSession])]
-public sealed class PlaygroundHostScenarioHttpTests(RabbitMqContainerFixture rabbit, PostgresContainerFixture postgres)
+public sealed class PlaygroundHostScenarioHttpTests(RabbitMqContainerFixture rabbit, PostgresContainerFixture postgres) : IAsyncDisposable
 {
+    private static WebApplicationFactory<PlaygroundHostAppMarker>? _sharedFactory;
+    private static readonly SemaphoreSlim _factoryLock = new(1, 1);
     private static async Task CreateDatabaseAsync(string maintenanceConnectionString, string databaseName)
     {
         await using var connection = new NpgsqlConnection(maintenanceConnectionString);
@@ -34,36 +37,48 @@ public sealed class PlaygroundHostScenarioHttpTests(RabbitMqContainerFixture rab
         return b.ToString();
     }
 
-    private async Task<WebApplicationFactory<PlaygroundHostAppMarker>> CreateFactoryAsync(
-        string testId,
-        IReadOnlyDictionary<string, string>? extraSettings = null)
+    private async Task<WebApplicationFactory<PlaygroundHostAppMarker>> GetOrCreateSharedFactoryAsync()
     {
-        var pubDb = $"ph_{testId}_pub";
-        var conDb = $"ph_{testId}_con";
-        var playDb = $"ph_{testId}_play";
-        var maint = MaintenanceConnectionString(postgres.ConnectionString);
-        await CreateDatabaseAsync(maint, pubDb);
-        await CreateDatabaseAsync(maint, conDb);
-        await CreateDatabaseAsync(maint, playDb);
+        if (_sharedFactory is not null) return _sharedFactory;
 
-        var pubCs = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { Database = pubDb }.ToString();
-        var conCs = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { Database = conDb }.ToString();
-        var playCs = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { Database = playDb }.ToString();
-
-        return new WebApplicationFactory<PlaygroundHostAppMarker>().WithWebHostBuilder(builder =>
+        await _factoryLock.WaitAsync();
+        try
         {
-            builder.UseSetting("ConnectionStrings:rabbitmq", rabbit.ConnectionString);
-            builder.UseSetting("ConnectionStrings:publisherdb", pubCs);
-            builder.UseSetting("ConnectionStrings:consumerdb", conCs);
-            builder.UseSetting("ConnectionStrings:playgrounddb", playCs);
-            builder.UseSetting("Playground:Enabled", "true");
-            builder.UseSetting("ASPNETCORE_ENVIRONMENT", "Development");
-            if (extraSettings is not null)
+            if (_sharedFactory is not null) return _sharedFactory;
+
+            var testId = "shared";
+            var pubDb = $"ph_{testId}_pub";
+            var conDb = $"ph_{testId}_con";
+            var playDb = $"ph_{testId}_play";
+            var maint = MaintenanceConnectionString(postgres.ConnectionString);
+            await CreateDatabaseAsync(maint, pubDb);
+            await CreateDatabaseAsync(maint, conDb);
+            await CreateDatabaseAsync(maint, playDb);
+
+            var pubCs = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { Database = pubDb }.ToString();
+            var conCs = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { Database = conDb }.ToString();
+            var playCs = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { Database = playDb }.ToString();
+
+            _sharedFactory = new WebApplicationFactory<PlaygroundHostAppMarker>().WithWebHostBuilder(builder =>
             {
-                foreach (var kv in extraSettings)
-                    builder.UseSetting(kv.Key, kv.Value);
-            }
-        });
+                builder.UseSetting("ConnectionStrings:rabbitmq", rabbit.ConnectionString);
+                builder.UseSetting("ConnectionStrings:publisherdb", pubCs);
+                builder.UseSetting("ConnectionStrings:consumerdb", conCs);
+                builder.UseSetting("ConnectionStrings:playgrounddb", playCs);
+                builder.UseSetting("Playground:Enabled", "true");
+                builder.UseSetting("ASPNETCORE_ENVIRONMENT", "Development");
+            });
+
+            return _sharedFactory;
+        }
+        finally
+        {
+            _factoryLock.Release();
+        }
+    }
+    public ValueTask DisposeAsync()
+    {
+        return ValueTask.CompletedTask;
     }
 
     private static async Task<ScenarioRunStatusDto> WaitForTerminalAsync(
@@ -100,8 +115,7 @@ public sealed class PlaygroundHostScenarioHttpTests(RabbitMqContainerFixture rab
     [Test]
     public async Task Catalog_Contains_AllScenarios()
     {
-        var testId = Guid.NewGuid().ToString("N");
-        await using var factory = await CreateFactoryAsync(testId);
+        var factory = await GetOrCreateSharedFactoryAsync();
         var client = factory.CreateClient();
 
         var catalog = await client.GetFromJsonAsync<List<ScenarioCatalogDto>>("/api/playground/scenarios");
@@ -115,8 +129,7 @@ public sealed class PlaygroundHostScenarioHttpTests(RabbitMqContainerFixture rab
     [Test]
     public async Task ConcurrentStarts_TwoOutboxSuccessRuns_BothAccepted()
     {
-        var testId = Guid.NewGuid().ToString("N");
-        await using var factory = await CreateFactoryAsync(testId);
+        var factory = await GetOrCreateSharedFactoryAsync();
         var client = factory.CreateClient();
 
         var a = client.PostAsync("/api/playground/scenarios/outbox-success/run", null);
@@ -130,11 +143,11 @@ public sealed class PlaygroundHostScenarioHttpTests(RabbitMqContainerFixture rab
     [Test]
     public async Task CancelSmoke_AfterCancel_CompletesWithPassAndCancelledDetail()
     {
-        var testId = Guid.NewGuid().ToString("N");
-        await using var factory = await CreateFactoryAsync(testId);
+        var slug = "cancel-smoke";
+        var factory = await GetOrCreateSharedFactoryAsync();
         var client = factory.CreateClient();
 
-        var runId = await StartScenarioAsync(client, "cancel-smoke");
+        var runId = await StartScenarioAsync(client, slug);
         var cancelRes = await client.PostAsync($"/api/playground/runs/{runId}/cancel", null);
         cancelRes.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -146,11 +159,11 @@ public sealed class PlaygroundHostScenarioHttpTests(RabbitMqContainerFixture rab
     [Test]
     public async Task BlockingHold_WithCancel_TerminatesAsCancelled()
     {
-        var testId = Guid.NewGuid().ToString("N");
-        await using var factory = await CreateFactoryAsync(testId);
+        var slug = "blocking-hold";
+        var factory = await GetOrCreateSharedFactoryAsync();
         var client = factory.CreateClient();
 
-        var runId = await StartScenarioAsync(client, "blocking-hold", confirmDanger: true);
+        var runId = await StartScenarioAsync(client, slug, confirmDanger: true);
         var cancelRes = await client.PostAsync($"/api/playground/runs/{runId}/cancel", null);
         cancelRes.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -174,8 +187,7 @@ public sealed class PlaygroundHostScenarioHttpTests(RabbitMqContainerFixture rab
     [Arguments("replay-dedups")]
     public async Task Scenario_EndsPassed(string slug)
     {
-        var testId = Guid.NewGuid().ToString("N");
-        await using var factory = await CreateFactoryAsync(testId);
+        var factory = await GetOrCreateSharedFactoryAsync();
         var client = factory.CreateClient();
 
         var runId = await StartScenarioAsync(client, slug);
@@ -186,11 +198,11 @@ public sealed class PlaygroundHostScenarioHttpTests(RabbitMqContainerFixture rab
     [Test]
     public async Task BlockingHold_WithoutDangerConfirm_ReturnsBadRequest()
     {
-        var testId = Guid.NewGuid().ToString("N");
-        await using var factory = await CreateFactoryAsync(testId);
+        var slug = "blocking-hold";
+        var factory = await GetOrCreateSharedFactoryAsync();
         var client = factory.CreateClient();
 
-        var runRes = await client.PostAsync("/api/playground/scenarios/blocking-hold/run", null);
+        var runRes = await client.PostAsync($"/api/playground/scenarios/{slug}/run", null);
         runRes.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
