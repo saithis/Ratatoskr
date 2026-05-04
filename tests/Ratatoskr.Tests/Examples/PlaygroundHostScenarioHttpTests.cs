@@ -78,6 +78,10 @@ public sealed class PlaygroundHostScenarioHttpTests(RabbitMqContainerFixture rab
             _factoryLock.Release();
         }
     }
+
+    private async Task<HttpClient> GetClientAsync() =>
+        (await GetOrCreateSharedFactoryAsync()).CreateClient();
+
     public ValueTask DisposeAsync()
     {
         return ValueTask.CompletedTask;
@@ -117,8 +121,7 @@ public sealed class PlaygroundHostScenarioHttpTests(RabbitMqContainerFixture rab
     [Test]
     public async Task Catalog_Contains_AllScenarios()
     {
-        var factory = await GetOrCreateSharedFactoryAsync();
-        var client = factory.CreateClient();
+        var client = await GetClientAsync();
 
         var catalog = await client.GetFromJsonAsync<List<ScenarioCatalogDto>>("/api/playground/scenarios");
         catalog.Should().NotBeNull();
@@ -131,8 +134,7 @@ public sealed class PlaygroundHostScenarioHttpTests(RabbitMqContainerFixture rab
     [Test]
     public async Task ConcurrentStarts_TwoOutboxSuccessRuns_BothAccepted()
     {
-        var factory = await GetOrCreateSharedFactoryAsync();
-        var client = factory.CreateClient();
+        var client = await GetClientAsync();
 
         var a = client.PostAsync("/api/playground/scenarios/outbox-success/run", null);
         var b = client.PostAsync("/api/playground/scenarios/outbox-success/run", null);
@@ -146,8 +148,7 @@ public sealed class PlaygroundHostScenarioHttpTests(RabbitMqContainerFixture rab
     public async Task CancelSmoke_AfterCancel_CompletesWithPassAndCancelledDetail()
     {
         var slug = "cancel-smoke";
-        var factory = await GetOrCreateSharedFactoryAsync();
-        var client = factory.CreateClient();
+        var client = await GetClientAsync();
 
         var runId = await StartScenarioAsync(client, slug);
         var cancelRes = await client.PostAsync($"/api/playground/runs/{runId}/cancel", null);
@@ -162,8 +163,7 @@ public sealed class PlaygroundHostScenarioHttpTests(RabbitMqContainerFixture rab
     public async Task BlockingHold_WithCancel_TerminatesAsCancelled()
     {
         var slug = "blocking-hold";
-        var factory = await GetOrCreateSharedFactoryAsync();
-        var client = factory.CreateClient();
+        var client = await GetClientAsync();
 
         var runId = await StartScenarioAsync(client, slug, confirmDanger: true);
         var cancelRes = await client.PostAsync($"/api/playground/runs/{runId}/cancel", null);
@@ -189,8 +189,7 @@ public sealed class PlaygroundHostScenarioHttpTests(RabbitMqContainerFixture rab
     [Arguments("replay-dedups")]
     public async Task Scenario_EndsPassed(string slug)
     {
-        var factory = await GetOrCreateSharedFactoryAsync();
-        var client = factory.CreateClient();
+        var client = await GetClientAsync();
 
         var runId = await StartScenarioAsync(client, slug);
         var status = await WaitForTerminalAsync(client, runId, 20);
@@ -201,8 +200,7 @@ public sealed class PlaygroundHostScenarioHttpTests(RabbitMqContainerFixture rab
     public async Task BlockingHold_WithoutDangerConfirm_ReturnsBadRequest()
     {
         var slug = "blocking-hold";
-        var factory = await GetOrCreateSharedFactoryAsync();
-        var client = factory.CreateClient();
+        var client = await GetClientAsync();
 
         var runRes = await client.PostAsync($"/api/playground/scenarios/{slug}/run", null);
         runRes.StatusCode.Should().Be(HttpStatusCode.BadRequest);

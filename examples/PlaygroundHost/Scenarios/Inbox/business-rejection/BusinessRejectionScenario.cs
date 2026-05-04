@@ -66,29 +66,15 @@ public sealed class BusinessRejectionScenario : IPlaygroundScenario
 
     public string Topic => "Inbox";
 
-    private static async Task<Guid> StageOrderAsync(
-        PublisherDbContext db,
-        TimeProvider time,
-        string runId,
-        CancellationToken cancellationToken)
-    {
-        var order = PlaygroundScenarioStaging.AddPlacedOrderToContext(db, time, "outbox");
-        var orderIdStr = order.Id.ToString();
-        PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
-            db,
-            runId,
-            new ProcessOrderCommand(orderIdStr, runId),
-            PlaygroundMessageIds.ProcessOrderCommand(order.Id));
-        await db.SaveChangesAsync(cancellationToken);
-        return order.Id;
-    }
-
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
         var time = context.GetTimeProvider();
         var db = context.GetPublisherDb();
         var runId = context.ScenarioRunId;
-        var orderId = await StageOrderAsync(db, time, runId, cancellationToken);
+        var orderId = await PlaygroundScenarioStaging.StageOrderWithCommandAsync(
+            db, time, runId,
+            (id, rid) => new ProcessOrderCommand(id, rid),
+            cancellationToken);
         context.StepsCompleted.Add("inventory_reject_mode");
         return await ScenarioAssertions.OrderEventuallyAsync(
             context.ScopeFactory,
@@ -120,18 +106,10 @@ public sealed class BusinessRejectionScenario : IPlaygroundScenario
         }
     }
 
-    public sealed class OrderFailedHandler(PublisherDbContext db, TimeProvider time, ILogger<OrderFailedHandler> logger)
+    public sealed class OrderFailedHandler(PublisherDbContext db, TimeProvider time, ILogger<OrderFailedHandler> _)
         : IMessageHandler<OrderFailed>
     {
-        public async Task HandleAsync(OrderFailed message, MessageProperties properties, CancellationToken cancellationToken)
-        {
-            var order = await db.Orders.FirstOrDefaultAsync(o => o.Id == Guid.Parse(message.OrderId), cancellationToken);
-            if (order is null) return;
-            var now = time.GetUtcNow().UtcDateTime;
-            order.Status = OrderStatus.Failed;
-            order.StatusChangedAt = now;
-            await db.SaveChangesAsync(cancellationToken);
-            logger.LogInformation("Order {OrderId} marked Failed", message.OrderId);
-        }
+        public Task HandleAsync(OrderFailed message, MessageProperties _, CancellationToken cancellationToken) =>
+            PlaygroundScenarioStaging.UpdateOrderStatusAsync(db, time, message.OrderId, OrderStatus.Failed, cancellationToken);
     }
 }

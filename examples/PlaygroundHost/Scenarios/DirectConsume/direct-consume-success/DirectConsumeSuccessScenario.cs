@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Infrastructure.ScenarioRunning;
 using PlaygroundHost.Persistence;
@@ -70,20 +69,10 @@ public sealed class DirectConsumeSuccessScenario : IPlaygroundScenario
     [RatatoskrMessage("direct-consume-success.direct-work")]
     public sealed record DirectWork(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
 
-    public sealed class DirectWorkHandler(
-        PublisherDbContext db,
-        TimeProvider time,
-        ILogger<DirectWorkHandler> logger) : IMessageHandler<DirectWork>
+    public sealed class DirectWorkHandler(PublisherDbContext db, TimeProvider time, ILogger<DirectWorkHandler> _)
+        : IMessageHandler<DirectWork>
     {
-        public async Task HandleAsync(DirectWork message, MessageProperties properties, CancellationToken cancellationToken)
-        {
-            var order = await db.Orders.FirstOrDefaultAsync(o => o.Id == Guid.Parse(message.OrderId), cancellationToken);
-            if (order is null) return;
-            var now = time.GetUtcNow().UtcDateTime;
-            order.Status = OrderStatus.Fulfilled;
-            order.StatusChangedAt = now;
-            await db.SaveChangesAsync(cancellationToken);
-            logger.LogInformation("Order {OrderId} marked Fulfilled", message.OrderId);
-        }
+        public Task HandleAsync(DirectWork message, MessageProperties _, CancellationToken cancellationToken) =>
+            PlaygroundScenarioStaging.UpdateOrderStatusAsync(db, time, message.OrderId, OrderStatus.Fulfilled, cancellationToken);
     }
 }

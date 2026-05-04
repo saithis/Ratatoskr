@@ -66,23 +66,6 @@ public sealed class OutboxRetryThenSuccessScenario : IPlaygroundScenario
 
     public string Topic => "Outbox";
 
-    private static async Task<Guid> StageOrderAsync(
-        PublisherDbContext db,
-        TimeProvider time,
-        string runId,
-        CancellationToken cancellationToken)
-    {
-        var order = PlaygroundScenarioStaging.AddPlacedOrderToContext(db, time, "outbox");
-        var orderIdStr = order.Id.ToString();
-        PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
-            db,
-            runId,
-            new ProcessOrderCommand(orderIdStr, runId),
-            PlaygroundMessageIds.ProcessOrderCommand(order.Id));
-        await db.SaveChangesAsync(cancellationToken);
-        return order.Id;
-    }
-
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
         var time = context.GetTimeProvider();
@@ -92,7 +75,10 @@ public sealed class OutboxRetryThenSuccessScenario : IPlaygroundScenario
         registry.Register(runId, OutboxSendFailureKind.SucceedAfterNFailures, 2);
         try
         {
-            var orderId = await StageOrderAsync(db, time, runId, cancellationToken);
+            var orderId = await PlaygroundScenarioStaging.StageOrderWithCommandAsync(
+                db, time, runId,
+                (id, rid) => new ProcessOrderCommand(id, rid),
+                cancellationToken);
             context.StepsCompleted.Add("staged_with_send_failures");
             return await ScenarioAssertions.OrderEventuallyAsync(
                 context.ScopeFactory,
@@ -126,18 +112,10 @@ public sealed class OutboxRetryThenSuccessScenario : IPlaygroundScenario
         }
     }
 
-    public sealed class OrderFulfilledHandler(PublisherDbContext db, TimeProvider time, ILogger<OrderFulfilledHandler> logger)
+    public sealed class OrderFulfilledHandler(PublisherDbContext db, TimeProvider time, ILogger<OrderFulfilledHandler> _)
         : IMessageHandler<OrderFulfilled>
     {
-        public async Task HandleAsync(OrderFulfilled message, MessageProperties properties, CancellationToken cancellationToken)
-        {
-            var order = await db.Orders.FirstOrDefaultAsync(o => o.Id == Guid.Parse(message.OrderId), cancellationToken);
-            if (order is null) return;
-            var now = time.GetUtcNow().UtcDateTime;
-            order.Status = OrderStatus.Fulfilled;
-            order.StatusChangedAt = now;
-            await db.SaveChangesAsync(cancellationToken);
-            logger.LogInformation("Order {OrderId} marked Fulfilled", message.OrderId);
-        }
+        public Task HandleAsync(OrderFulfilled message, MessageProperties _, CancellationToken cancellationToken) =>
+            PlaygroundScenarioStaging.UpdateOrderStatusAsync(db, time, message.OrderId, OrderStatus.Fulfilled, cancellationToken);
     }
 }

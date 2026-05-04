@@ -45,22 +45,6 @@ public sealed class InboxPoisonScenario : IPlaygroundScenario
 
     public string Topic => "Inbox";
 
-    private static async Task StageOrderAsync(
-        PublisherDbContext db,
-        TimeProvider time,
-        string runId,
-        CancellationToken cancellationToken)
-    {
-        var order = PlaygroundScenarioStaging.AddPlacedOrderToContext(db, time, "outbox");
-        var orderIdStr = order.Id.ToString();
-        PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
-            db,
-            runId,
-            new ProcessOrderCommand(orderIdStr, runId),
-            PlaygroundMessageIds.ProcessOrderCommand(order.Id));
-        await db.SaveChangesAsync(cancellationToken);
-    }
-
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
         var time = context.GetTimeProvider();
@@ -73,7 +57,10 @@ public sealed class InboxPoisonScenario : IPlaygroundScenario
             before = await PlaygroundSqlMetrics.CountPoisonedInboxForScenarioRunAsync(conDb, runId, cancellationToken);
         }
 
-        await StageOrderAsync(pub, time, runId, cancellationToken);
+        _ = await PlaygroundScenarioStaging.StageOrderWithCommandAsync(
+            pub, time, runId,
+            (id, rid) => new ProcessOrderCommand(id, rid),
+            cancellationToken);
         context.StepsCompleted.Add("inventory_throw_mode");
 
         return await ScenarioAssertions.IntMetricEventuallyExceedsBaselineAsync(

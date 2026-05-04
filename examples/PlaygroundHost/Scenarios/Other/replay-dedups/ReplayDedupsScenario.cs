@@ -60,27 +60,27 @@ public sealed class ReplayDedupsScenario : IPlaygroundScenario
 
     public string Topic => "Other";
 
-    public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
+    private static (int inbox, int direct) CountEntries(IReadOnlyList<PlaygroundActivityEntry> entries)
     {
-        static bool MetricsOk(IReadOnlyList<PlaygroundActivityEntry> entries)
+        var inbox = 0;
+        var direct = 0;
+        foreach (var e in entries)
         {
-            var inbox = 0;
-            var direct = 0;
-            foreach (var e in entries)
-            {
-                if (!(e.MessageType ?? "").Contains("order-placed", StringComparison.OrdinalIgnoreCase))
-                    continue;
+            if (!(e.MessageType ?? "").Contains("order-placed", StringComparison.OrdinalIgnoreCase))
+                continue;
 
-                if (e.Stage == nameof(MessageStage.InboxDispatched) && e.IsSuccess == true)
-                    inbox++;
-                else if (e.Stage == nameof(MessageStage.Dispatched)
-                         && e.DispatchResult == nameof(DispatchResult.Success))
-                    direct++;
-            }
-
-            return inbox >= 1 && direct >= 2;
+            if (e.Stage == nameof(MessageStage.InboxDispatched) && e.IsSuccess == true)
+                inbox++;
+            else if (e.Stage == nameof(MessageStage.Dispatched)
+                     && e.DispatchResult == nameof(DispatchResult.Success))
+                direct++;
         }
 
+        return (inbox, direct);
+    }
+
+    public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
+    {
         var time = context.GetTimeProvider();
         var db = context.GetPublisherDb();
         var bus = context.GetRatatoskr();
@@ -108,35 +108,19 @@ public sealed class ReplayDedupsScenario : IPlaygroundScenario
             async ct =>
             {
                 ct.ThrowIfCancellationRequested();
-                return MetricsOk(recorder.GetEntriesForScenarioRun(runId));
+                var (i, d) = CountEntries(recorder.GetEntriesForScenarioRun(runId));
+                return i >= 1 && d >= 2;
             },
             cancellationToken);
 
-        if (ok)
-        {
-            var entries = recorder.GetEntriesForScenarioRun(runId);
-            return new ScenarioVerdict(
+        var (inbox, direct) = CountEntries(recorder.GetEntriesForScenarioRun(runId));
+        return ok
+            ? new ScenarioVerdict(
                 true,
-                details: new
-                {
-                    inboxInboxDispatched = entries.Count(e =>
-                        e.Stage == nameof(MessageStage.InboxDispatched) && e.IsSuccess == true
-                                                                 && (e.MessageType ?? "").Contains(
-                                                                     "order-placed",
-                                                                     StringComparison.OrdinalIgnoreCase)),
-                    directDispatched = entries.Count(e =>
-                        e.Stage == nameof(MessageStage.Dispatched)
-                        && e.DispatchResult == nameof(DispatchResult.Success)
-                        && (e.MessageType ?? "").Contains("order-placed", StringComparison.OrdinalIgnoreCase)),
-                });
-        }
-
-        var final = recorder.GetEntriesForScenarioRun(runId);
-        return new ScenarioVerdict(
-            false,
-            $"Expected 1+ successful inbox OrderPlaced dispatches and 2+ direct dispatches for this run; " +
-            $"inbox={final.Count(e => e.Stage == nameof(MessageStage.InboxDispatched) && e.IsSuccess == true && (e.MessageType ?? "").Contains("order-placed", StringComparison.OrdinalIgnoreCase))}, " +
-            $"direct={final.Count(e => e.Stage == nameof(MessageStage.Dispatched) && e.DispatchResult == nameof(DispatchResult.Success) && (e.MessageType ?? "").Contains("order-placed", StringComparison.OrdinalIgnoreCase))}.");
+                details: new { inboxInboxDispatched = inbox, directDispatched = direct })
+            : new ScenarioVerdict(
+                false,
+                $"Expected 1+ inbox and 2+ direct dispatches (inbox={inbox}, direct={direct}).");
     }
 
     [RatatoskrMessage("replay-dedups.order-placed")]
