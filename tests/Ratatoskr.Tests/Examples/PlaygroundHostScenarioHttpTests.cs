@@ -78,7 +78,7 @@ public sealed class PlaygroundHostScenarioHttpTests(RabbitMqContainerFixture rab
             status = await client.GetFromJsonAsync<ScenarioRunStatusDto>($"/api/playground/runs/{runId}");
             if (status is { state: "Passed" or "Failed" or "Cancelled" })
                 break;
-            await Task.Delay(500);
+            await Task.Delay(250);
         }
 
         status.Should().NotBeNull();
