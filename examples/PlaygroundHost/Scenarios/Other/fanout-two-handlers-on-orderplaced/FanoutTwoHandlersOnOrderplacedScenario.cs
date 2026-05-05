@@ -49,20 +49,19 @@ public sealed class FanoutTwoHandlersOnOrderplacedScenario : IPlaygroundScenario
 
     public string Topic => "Other";
 
-    private static async Task StageOrderAsync(
-        PublisherDbContext db,
-        TimeProvider time,
+    private async Task StageOrderAsync(
+        PublisherDbContext context,
+        TimeProvider timeProvider,
         string runId,
         CancellationToken cancellationToken)
     {
-        var order = PlaygroundScenarioStaging.AddPlacedOrderToContext(db, time, "outbox");
-        var orderIdStr = order.Id.ToString();
-        PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
-            db,
+        var order = this.AddPlacedOrderToContext(context, timeProvider, "outbox");
+        this.StageCorrelatedOutboxMessage(
+            context,
             runId,
-            new OrderPlaced(orderIdStr, runId),
+            new OrderPlaced(order.Id.ToString(), runId),
             PlaygroundMessageIds.OrderPlaced(order.Id));
-        await db.SaveChangesAsync(cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
@@ -73,15 +72,13 @@ public sealed class FanoutTwoHandlersOnOrderplacedScenario : IPlaygroundScenario
                 e.IsSuccess == true &&
                 (e.MessageType ?? "").Contains("order-placed", StringComparison.OrdinalIgnoreCase));
 
-        var time = context.GetTimeProvider();
-        var db = context.GetPublisherDb();
         var recorder = context.GetRequired<PlaygroundActivityRecorder>();
         var runId = context.ScenarioRunId;
-        await StageOrderAsync(db, time, runId, cancellationToken);
+        await StageOrderAsync(context.PublisherDb, context.TimeProvider, runId, cancellationToken);
         context.StepsCompleted.Add("staged_for_fanout");
 
         var ok = await ScenarioAssertions.WaitUntilAsync(
-            time,
+            context.TimeProvider,
             ScenarioTiming.PollLoopLong,
             ScenarioTiming.OrderPollInterval,
             async ct =>

@@ -81,28 +81,23 @@ public sealed class ReplayDedupsScenario : IPlaygroundScenario
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
-        var time = context.GetTimeProvider();
-        var db = context.GetPublisherDb();
-        var bus = context.GetRatatoskr();
         var recorder = context.GetRequired<PlaygroundActivityRecorder>();
         var runId = context.ScenarioRunId;
 
-        var order = PlaygroundScenarioStaging.AddPlacedOrderToContext(db, time, "replay-dedups");
-        await db.SaveChangesAsync(cancellationToken);
+        var order = this.AddPlacedOrderToContext(context.PublisherDb, context.TimeProvider, "replay-dedups");
+        await context.PublisherDb.SaveChangesAsync(cancellationToken);
 
-        var orderIdStr = order.Id.ToString();
-        var props = new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(order.Id) };
-        PlaygroundCorrelation.AttachToMessageProperties(props, runId);
-        var evt = new OrderPlaced(orderIdStr, runId);
+        var props = this.CreateMessageProperties(context, PlaygroundMessageIds.OrderPlaced(order.Id));
+        var evt = new OrderPlaced(order.Id.ToString(), runId);
 
-        await bus.PublishDirectAsync(evt, props, cancellationToken);
-        await bus.PublishDirectAsync(evt, props, cancellationToken);
+        await context.Ratatoskr.PublishDirectAsync(evt, props, cancellationToken);
+        await context.Ratatoskr.PublishDirectAsync(evt, props, cancellationToken);
         context.StepsCompleted.Add("duplicate_direct_publish");
 
         await Task.Delay(ScenarioTiming.ReplaySettleDelay, cancellationToken);
 
         var ok = await ScenarioAssertions.WaitUntilAsync(
-            time,
+            context.TimeProvider,
             ScenarioTiming.PollLoopLong,
             ScenarioTiming.OrderPollInterval,
             async ct =>

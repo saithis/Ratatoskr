@@ -1,10 +1,9 @@
 using AwesomeAssertions;
 using PlaygroundHost.Infrastructure.ScenarioRunning;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.Examples;
 
-public sealed class ScenarioAssertionsPollTests
+public sealed class ScenarioAssertionsTests
 {
     [Test]
     public async Task WaitUntilAsync_ReturnsTrue_WhenPredicateTrueImmediately()

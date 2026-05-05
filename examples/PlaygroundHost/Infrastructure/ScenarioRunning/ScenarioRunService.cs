@@ -5,7 +5,6 @@ using PlaygroundHost.Persistence;
 namespace PlaygroundHost.Infrastructure.ScenarioRunning;
 
 public sealed class ScenarioRunService(
-    IOptions<PlaygroundOptions> options,
     IServiceScopeFactory scopeFactory,
     ILogger<ScenarioRunService> logger,
     IEnumerable<IScenario> scenarios,
@@ -39,7 +38,6 @@ public sealed class ScenarioRunService(
 
     public async Task<ScenarioStartResult> StartRunAsync(string slug, bool confirmDanger, CancellationToken cancellationToken)
     {
-        var opts = options.Value;
         if (!_bySlug.TryGetValue(slug, out var scenario))
             return new ScenarioStartResult(null, null, $"Unknown scenario '{slug}'.");
 
@@ -66,7 +64,7 @@ public sealed class ScenarioRunService(
         });
 
         var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(opts.RunTimeoutSeconds, 5, 600)));
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(30));
         var executionCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token);
 
         _ = RunInBackgroundAsync(runId, scenario, executionCts, timeoutCts);
@@ -199,21 +197,3 @@ public sealed class ScenarioRunService(
             return true;
         });
 }
-
-public sealed record ScenarioCatalogEntry(
-    string Slug,
-    string Title,
-    string Description,
-    string Topic,
-    bool RequiresDangerConfirmation,
-    string? DangerConfirmationText);
-
-public sealed record ScenarioStartResult(Guid? RunId, string? Title, string? Error);
-
-public sealed record ScenarioRunStatusDto(
-    Guid Id,
-    string ScenarioSlug,
-    string State,
-    DateTimeOffset StartedAt,
-    DateTimeOffset? CompletedAt,
-    string? Detail);

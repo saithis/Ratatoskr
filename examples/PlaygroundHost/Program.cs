@@ -23,13 +23,6 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
-builder.Services.Configure<PlaygroundOptions>(builder.Configuration.GetSection(PlaygroundOptions.SectionName));
-builder.Services.PostConfigure<PlaygroundOptions>(o =>
-{
-    if (string.Equals(Environment.GetEnvironmentVariable("RATATOSKR_EXAMPLES_PLAYGROUND"), "1", StringComparison.Ordinal))
-        o.Enabled = true;
-});
-
 var lockFileDirectory = new DirectoryInfo(Environment.CurrentDirectory);
 builder.Services.AddSingleton<IDistributedLockProvider>(_ => new FileDistributedSynchronizationProvider(lockFileDirectory));
 
@@ -137,8 +130,6 @@ app.MapGet("/api/config", (IConfiguration config) =>
 
 app.MapGet("/api/playground/rabbit-depths", async Task<IResult> (HttpContext http) =>
 {
-    if (!http.RequestServices.GetRequiredService<IOptions<PlaygroundOptions>>().Value.Enabled)
-        return TypedResults.NotFound();
     var cancellationToken = http.RequestAborted;
     var config = http.RequestServices.GetRequiredService<IConfiguration>();
     var cs = config.GetConnectionString("rabbitmq");
@@ -200,13 +191,7 @@ app.MapGet("/api/orders", async ([FromServices] PublisherDbContext db) =>
 
 var playground = app.MapGroup("/api/playground")
     .RequireCors("LocalDashboard")
-    .RequireAuthorization("DevOnlyNoAuth")
-    .AddEndpointFilter(async (EndpointFilterInvocationContext context, EndpointFilterDelegate next) =>
-    {
-        if (!context.HttpContext.RequestServices.GetRequiredService<IOptions<PlaygroundOptions>>().Value.Enabled)
-            return Results.NotFound();
-        return await next(context);
-    });
+    .RequireAuthorization("DevOnlyNoAuth");
 
 playground.MapGet("/activities", ([FromServices] PlaygroundActivityRecorder recorder, Guid? orderId, string? scenarioRunId) =>
 {

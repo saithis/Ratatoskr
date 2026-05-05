@@ -31,34 +31,32 @@ public sealed class OutboxPoisonScenario : IPlaygroundScenario
 
     public string Topic => "Outbox";
 
-    private static async Task StagePoisonProbeAsync(
-        PublisherDbContext db,
+    private async Task StagePoisonProbeAsync(
+        PublisherDbContext context,
         string runId,
         CancellationToken cancellationToken)
     {
-        PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
-            db,
+        this.StageCorrelatedOutboxMessage(
+            context,
             runId,
             new PoisonProbe(runId),
             $"outbox-poison-{runId}");
-        await db.SaveChangesAsync(cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
-        var time = context.GetTimeProvider();
-        var db = context.GetPublisherDb();
         var runId = context.ScenarioRunId;
         var registry = context.GetRequired<OutboxSendFailureRegistry>();
         registry.Register(runId, OutboxSendFailureKind.AlwaysFail, 0);
         try
         {
-            var before = await PlaygroundSqlMetrics.CountPoisonedOutboxForScenarioRunAsync(db, runId, cancellationToken);
-            await StagePoisonProbeAsync(db, runId, cancellationToken);
+            var before = await PlaygroundSqlMetrics.CountPoisonedOutboxForScenarioRunAsync(context.PublisherDb, runId, cancellationToken);
+            await StagePoisonProbeAsync(context.PublisherDb, runId, cancellationToken);
             context.StepsCompleted.Add("staged_always_fail_send");
 
             return await ScenarioAssertions.IntMetricEventuallyExceedsBaselineAsync(
-                time,
+                context.TimeProvider,
                 ScenarioTiming.PollLoopLong,
                 ScenarioTiming.PollIntervalSlow,
                 before,

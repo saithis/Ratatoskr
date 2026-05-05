@@ -68,11 +68,9 @@ public sealed class BusinessRejectionScenario : IPlaygroundScenario
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
-        var time = context.GetTimeProvider();
-        var db = context.GetPublisherDb();
         var runId = context.ScenarioRunId;
-        var orderId = await PlaygroundScenarioStaging.StageOrderWithCommandAsync(
-            db, time, runId,
+        var orderId = await this.StageOrderWithCommandAsync(
+            context.PublisherDb, context.TimeProvider, runId,
             (id, rid) => new ProcessOrderCommand(id, rid),
             cancellationToken);
         context.StepsCompleted.Add("inventory_reject_mode");
@@ -81,7 +79,7 @@ public sealed class BusinessRejectionScenario : IPlaygroundScenario
             orderId,
             OrderStatus.Failed,
             ScenarioTiming.OrderEventuallyLong,
-            time,
+            context.TimeProvider,
             cancellationToken);
     }
 
@@ -91,25 +89,25 @@ public sealed class BusinessRejectionScenario : IPlaygroundScenario
     [RatatoskrMessage("business-rejection.order-failed")]
     public sealed record OrderFailed(string OrderId, string ScenarioRunId, string Reason) : IPlaygroundCorrelatedOrderMessage;
 
-    public sealed class ProcessOrderHandler(ConsumerDbContext db, ILogger<ProcessOrderHandler> _) : IMessageHandler<ProcessOrderCommand>
+    public sealed class ProcessOrderHandler(ConsumerDbContext context, ILogger<ProcessOrderHandler> _) : IMessageHandler<ProcessOrderCommand>
     {
         public async Task HandleAsync(ProcessOrderCommand message, MessageProperties properties, CancellationToken cancellationToken)
         {
             var orderGuid = Guid.Parse(message.OrderId);
-            db.OutboxMessages.Add(
+            context.OutboxMessages.Add(
                 new OrderFailed(
                     message.OrderId,
                     message.ScenarioRunId,
                     "Simulated business rejection."),
                 new MessageProperties { Id = PlaygroundMessageIds.OrderFailed(orderGuid) });
-            await db.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
         }
     }
 
-    public sealed class OrderFailedHandler(PublisherDbContext db, TimeProvider time, ILogger<OrderFailedHandler> _)
+    public sealed class OrderFailedHandler(PublisherDbContext context, TimeProvider timeProvider, ILogger<OrderFailedHandler> _)
         : IMessageHandler<OrderFailed>
     {
         public Task HandleAsync(OrderFailed message, MessageProperties _, CancellationToken cancellationToken) =>
-            PlaygroundScenarioStaging.UpdateOrderStatusAsync(db, time, message.OrderId, OrderStatus.Failed, cancellationToken);
+            IScenarioExtensions.UpdateOrderStatusAsync(null!, context, timeProvider, message.OrderId, OrderStatus.Failed, cancellationToken);
     }
 }

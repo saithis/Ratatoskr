@@ -37,34 +37,31 @@ public sealed class EfcoreInternalCommandScenario : IPlaygroundScenario
 
     public string Topic => "Other";
 
-    private static async Task StageOrderAsync(
-        PublisherDbContext db,
-        TimeProvider time,
+    private async Task StageOrderAsync(
+        PublisherDbContext context,
+        TimeProvider timeProvider,
         string runId,
         CancellationToken cancellationToken)
     {
-        var order = PlaygroundScenarioStaging.AddPlacedOrderToContext(db, time, "outbox");
-        var orderIdStr = order.Id.ToString();
-        PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
-            db,
+        var order = this.AddPlacedOrderToContext(context, timeProvider, "outbox");
+        this.StageCorrelatedOutboxMessage(
+            context,
             runId,
-            new ReserveStockInternal(orderIdStr, runId),
+            new ReserveStockInternal(order.Id.ToString(), runId),
             PlaygroundMessageIds.ReserveStockInternal(order.Id));
-        PlaygroundScenarioStaging.StageCorrelatedOutboxMessage(
-            db,
+        this.StageCorrelatedOutboxMessage(
+            context,
             runId,
-            new ReserveStockInternal(orderIdStr, runId),
+            new ReserveStockInternal(order.Id.ToString(), runId),
             $"{order.Id:D}:efcore-reserve-second");
-        await db.SaveChangesAsync(cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
-        var time = context.GetTimeProvider();
-        var db = context.GetPublisherDb();
         var recorder = context.GetRequired<PlaygroundActivityRecorder>();
         var runId = context.ScenarioRunId;
-        await StageOrderAsync(db, time, runId, cancellationToken);
+        await StageOrderAsync(context.PublisherDb, context.TimeProvider, runId, cancellationToken);
         context.StepsCompleted.Add("staged_two_internal_same_save");
 
         await Task.Delay(ScenarioTiming.EfCoreActivitySettleDelay, cancellationToken);

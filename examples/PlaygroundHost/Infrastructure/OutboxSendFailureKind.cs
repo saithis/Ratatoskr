@@ -1,6 +1,6 @@
 namespace PlaygroundHost.Infrastructure;
 
-public enum PlaygroundOutcomeMode
+public enum OutboxSendFailureKind
 {
     Succeed,
     AlwaysFail,

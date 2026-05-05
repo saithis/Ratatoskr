@@ -3,18 +3,6 @@ using Ratatoskr.Core;
 
 namespace PlaygroundHost.Infrastructure;
 
-public sealed record PlaygroundActivityEntry(
-    DateTimeOffset Timestamp,
-    string Stage,
-    string? MessageId,
-    string? MessageType,
-    string? OrderId,
-    string? ScenarioRunId,
-    bool? IsSuccess,
-    string? Error,
-    string? TransportName,
-    string? DispatchResult);
-
 public sealed class PlaygroundActivityRecorder : IMessageActivityObserver
 {
     private const int MaxEntries = 2500;

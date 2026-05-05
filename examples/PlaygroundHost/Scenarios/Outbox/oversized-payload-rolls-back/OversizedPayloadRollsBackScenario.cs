@@ -34,19 +34,14 @@ public sealed class OversizedPayloadRollsBackScenario : IPlaygroundScenario
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
-        var time = context.GetTimeProvider();
-        var db = context.GetPublisherDb();
-        var runId = context.ScenarioRunId;
-        var order = PlaygroundScenarioStaging.AddPlacedOrderToContext(db, time, "outbox");
-        var orderIdStr = order.Id.ToString("D");
-        var mp = new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(order.Id) };
-        PlaygroundCorrelation.AttachToMessageProperties(mp, runId);
-        db.OutboxMessages.Add(
-            new OrderPlaced(orderIdStr, runId, new string('x', 50_000)),
-            mp);
+        var order = this.AddPlacedOrderToContext(context.PublisherDb, context.TimeProvider, "outbox");
+        
+        context.PublisherDb.OutboxMessages.Add(
+            new OrderPlaced(order.Id.ToString("D"), context.ScenarioRunId, new string('x', 50_000)),
+            this.CreateMessageProperties(context, PlaygroundMessageIds.OrderPlaced(order.Id)));
         try
         {
-            await db.SaveChangesAsync(cancellationToken);
+            await context.PublisherDb.SaveChangesAsync(cancellationToken);
             return new ScenarioVerdict(false, "Expected SaveChanges to fail for oversized payload.");
         }
         catch

@@ -47,8 +47,6 @@ public sealed class InboxPoisonScenario : IPlaygroundScenario
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
-        var time = context.GetTimeProvider();
-        var pub = context.GetPublisherDb();
         var runId = context.ScenarioRunId;
         int before;
         await using (var conScope = context.ScopeFactory.CreateAsyncScope())
@@ -57,14 +55,14 @@ public sealed class InboxPoisonScenario : IPlaygroundScenario
             before = await PlaygroundSqlMetrics.CountPoisonedInboxForScenarioRunAsync(conDb, runId, cancellationToken);
         }
 
-        _ = await PlaygroundScenarioStaging.StageOrderWithCommandAsync(
-            pub, time, runId,
+        _ = await this.StageOrderWithCommandAsync(
+            context.PublisherDb, context.TimeProvider, runId,
             (id, rid) => new ProcessOrderCommand(id, rid),
             cancellationToken);
         context.StepsCompleted.Add("inventory_throw_mode");
 
         return await ScenarioAssertions.IntMetricEventuallyExceedsBaselineAsync(
-            time,
+            context.TimeProvider,
             ScenarioTiming.PollLoopLong,
             ScenarioTiming.PollIntervalSlow,
             before,

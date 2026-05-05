@@ -7,9 +7,16 @@ using Ratatoskr.Core;
 namespace PlaygroundHost.Infrastructure.ScenarioRunning;
 
 /// <summary>Shared helpers for staging publisher orders and correlated outbox payloads.</summary>
-public static class PlaygroundScenarioStaging
+public static class IScenarioExtensions
 {
-    public static Order AddPlacedOrderToContext(PublisherDbContext db, TimeProvider time, string publishOrigin)
+    public static MessageProperties CreateMessageProperties(this IScenario scenario, ScenarioExecutionContext context, string messageId)
+    {
+        var mp = new MessageProperties { Id = messageId };
+        PlaygroundCorrelation.AttachToMessageProperties(mp, context.ScenarioRunId);
+        return mp;
+    }
+    
+    public static Order AddPlacedOrderToContext(this IScenario scenario, PublisherDbContext db, TimeProvider time, string publishOrigin)
     {
         var now = time.GetUtcNow().UtcDateTime;
         var order = new Order
@@ -25,6 +32,7 @@ public static class PlaygroundScenarioStaging
     }
 
     public static void StageCorrelatedOutboxMessage<TMessage>(
+        this IScenario scenario,
         PublisherDbContext db,
         string scenarioRunId,
         TMessage message,
@@ -37,14 +45,15 @@ public static class PlaygroundScenarioStaging
     }
 
     public static async Task<Guid> StageOrderWithCommandAsync<TCommand>(
+        this IScenario scenario,
         PublisherDbContext db,
         TimeProvider time,
         string runId,
         Func<string, string, TCommand> buildCommand,
         CancellationToken cancellationToken) where TCommand : notnull
     {
-        var order = AddPlacedOrderToContext(db, time, "outbox");
-        StageCorrelatedOutboxMessage(
+        var order = scenario.AddPlacedOrderToContext(db, time, "outbox");
+        scenario.StageCorrelatedOutboxMessage(
             db,
             runId,
             buildCommand(order.Id.ToString(), runId),
@@ -54,6 +63,7 @@ public static class PlaygroundScenarioStaging
     }
 
     public static async Task UpdateOrderStatusAsync(
+        this IScenario scenario,
         PublisherDbContext db,
         TimeProvider time,
         string orderId,

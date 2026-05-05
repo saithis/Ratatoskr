@@ -46,33 +46,31 @@ public sealed class DirectConsumeSuccessScenario : IPlaygroundScenario
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
-        var time = context.GetTimeProvider();
-        var db = context.GetPublisherDb();
-        var bus = context.GetRatatoskr();
-        var runId = context.ScenarioRunId;
-        var order = PlaygroundScenarioStaging.AddPlacedOrderToContext(db, time, "direct");
-        await db.SaveChangesAsync(cancellationToken);
-        var orderIdStr = order.Id.ToString();
-        var mp = new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(order.Id) };
-        PlaygroundCorrelation.AttachToMessageProperties(mp, runId);
-        await bus.PublishDirectAsync(new DirectWork(orderIdStr, runId), mp, cancellationToken);
+        var order = this.AddPlacedOrderToContext(context.PublisherDb, context.TimeProvider, "direct");
+        await context.PublisherDb.SaveChangesAsync(cancellationToken);
+        
+        await context.Ratatoskr.PublishDirectAsync(
+            new DirectWork(order.Id.ToString(), context.ScenarioRunId), 
+            this.CreateMessageProperties(context, PlaygroundMessageIds.OrderPlaced(order.Id)), 
+            cancellationToken);
         context.StepsCompleted.Add("direct_publish_one_message");
+        
         return await ScenarioAssertions.OrderEventuallyAsync(
             context.ScopeFactory,
             order.Id,
             OrderStatus.Fulfilled,
             ScenarioTiming.OrderEventuallyLong,
-            time,
+            context.TimeProvider,
             cancellationToken);
     }
 
     [RatatoskrMessage("direct-consume-success.direct-work")]
     public sealed record DirectWork(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
 
-    public sealed class DirectWorkHandler(PublisherDbContext db, TimeProvider time, ILogger<DirectWorkHandler> _)
+    public sealed class DirectWorkHandler(PublisherDbContext context, TimeProvider timeProvider, ILogger<DirectWorkHandler> _)
         : IMessageHandler<DirectWork>
     {
         public Task HandleAsync(DirectWork message, MessageProperties _, CancellationToken cancellationToken) =>
-            PlaygroundScenarioStaging.UpdateOrderStatusAsync(db, time, message.OrderId, OrderStatus.Fulfilled, cancellationToken);
+            IScenarioExtensions.UpdateOrderStatusAsync(null!, context, timeProvider, message.OrderId, OrderStatus.Fulfilled, cancellationToken);
     }
 }

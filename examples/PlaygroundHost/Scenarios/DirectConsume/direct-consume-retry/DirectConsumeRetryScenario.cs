@@ -48,23 +48,21 @@ public sealed class DirectConsumeRetryScenario : IPlaygroundScenario
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
-        var time = context.GetTimeProvider();
-        var db = context.GetPublisherDb();
-        var bus = context.GetRatatoskr();
-        var runId = context.ScenarioRunId;
-        var order = PlaygroundScenarioStaging.AddPlacedOrderToContext(db, time, "direct");
-        await db.SaveChangesAsync(cancellationToken);
-        var orderIdStr = order.Id.ToString();
-        var mp = new MessageProperties { Id = PlaygroundMessageIds.OrderPlaced(order.Id) };
-        PlaygroundCorrelation.AttachToMessageProperties(mp, runId);
-        await bus.PublishDirectAsync(new RetryDemo(orderIdStr, runId), mp, cancellationToken);
+        var order = this.AddPlacedOrderToContext(context.PublisherDb, context.TimeProvider, "direct");
+        await context.PublisherDb.SaveChangesAsync(cancellationToken);
+        
+        await context.Ratatoskr.PublishDirectAsync(
+            new RetryDemo(order.Id.ToString(), context.ScenarioRunId), 
+            this.CreateMessageProperties(context, PlaygroundMessageIds.OrderPlaced(order.Id)), 
+            cancellationToken);
         context.StepsCompleted.Add("direct_publish_one_message");
+        
         return await ScenarioAssertions.OrderEventuallyAsync(
             context.ScopeFactory,
             order.Id,
             OrderStatus.Fulfilled,
             ScenarioTiming.OrderEventuallyLong,
-            time,
+            context.TimeProvider,
             cancellationToken);
     }
 
@@ -72,8 +70,8 @@ public sealed class DirectConsumeRetryScenario : IPlaygroundScenario
     public sealed record RetryDemo(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
 
     public sealed class RetryDemoHandler(
-        PublisherDbContext db,
-        TimeProvider time,
+        PublisherDbContext context,
+        TimeProvider timeProvider,
         ILogger<RetryDemoHandler> logger) : IMessageHandler<RetryDemo>
     {
         private static readonly ConcurrentDictionary<string, int> Attempts = new();
@@ -85,12 +83,12 @@ public sealed class DirectConsumeRetryScenario : IPlaygroundScenario
             if (n <= 2)
                 throw new InvalidOperationException("Simulated Rabbit consumer failure (succeed-after-2).");
 
-            var order = await db.Orders.FirstOrDefaultAsync(o => o.Id == Guid.Parse(message.OrderId), cancellationToken);
+            var order = await context.Orders.FirstOrDefaultAsync(o => o.Id == Guid.Parse(message.OrderId), cancellationToken);
             if (order is null) return;
-            var now = time.GetUtcNow().UtcDateTime;
+            var now = timeProvider.GetUtcNow().UtcDateTime;
             order.Status = OrderStatus.Fulfilled;
             order.StatusChangedAt = now;
-            await db.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
             logger.LogInformation("Order {OrderId} marked Fulfilled after Rabbit retries", message.OrderId);
         }
     }

@@ -13,9 +13,9 @@ public sealed class OutboxSendFailureRegistry
         ArgumentException.ThrowIfNullOrWhiteSpace(scenarioRunId);
         _byScenarioRun[scenarioRunId] = kind switch
         {
-            OutboxSendFailureKind.AlwaysFail => new Policy(PlaygroundOutcomeMode.AlwaysFail, 0),
-            OutboxSendFailureKind.SucceedAfterNFailures => new Policy(PlaygroundOutcomeMode.SucceedAfterNFailures, succeedAfterFailureCount),
-            _ => new Policy(PlaygroundOutcomeMode.Succeed, 0),
+            OutboxSendFailureKind.AlwaysFail => new Policy(OutboxSendFailureKind.AlwaysFail, 0),
+            OutboxSendFailureKind.SucceedAfterNFailures => new Policy(OutboxSendFailureKind.SucceedAfterNFailures, succeedAfterFailureCount),
+            _ => new Policy(OutboxSendFailureKind.Succeed, 0),
         };
     }
 
@@ -48,10 +48,10 @@ public sealed class OutboxSendFailureRegistry
     private sealed class Policy
     {
         private readonly Lock _lock = new();
-        private PlaygroundOutcomeMode _mode;
+        private OutboxSendFailureKind _mode;
         private int _failuresRemaining;
 
-        public Policy(PlaygroundOutcomeMode mode, int failuresRemaining)
+        public Policy(OutboxSendFailureKind mode, int failuresRemaining)
         {
             _mode = mode;
             _failuresRemaining = failuresRemaining;
@@ -63,11 +63,11 @@ public sealed class OutboxSendFailureRegistry
             {
                 switch (_mode)
                 {
-                    case PlaygroundOutcomeMode.Succeed:
+                    case OutboxSendFailureKind.Succeed:
                         return false;
-                    case PlaygroundOutcomeMode.AlwaysFail:
+                    case OutboxSendFailureKind.AlwaysFail:
                         return true;
-                    case PlaygroundOutcomeMode.SucceedAfterNFailures:
+                    case OutboxSendFailureKind.SucceedAfterNFailures:
                         if (_failuresRemaining > 0)
                         {
                             _failuresRemaining--;
@@ -81,11 +81,4 @@ public sealed class OutboxSendFailureRegistry
             }
         }
     }
-}
-
-public enum OutboxSendFailureKind
-{
-    Succeed,
-    AlwaysFail,
-    SucceedAfterNFailures,
 }
