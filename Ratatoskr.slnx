@@ -1,7 +1,9 @@
 ﻿<Solution>
   <Folder Name="/examples/">
     <Project Path="examples/AppHost/AppHost.csproj" />
-    <Project Path="examples/PlaygroundApi\PlaygroundApi.csproj" />
+    <Project Path="examples/Docs/Docs.csproj" />
+    <Project Path="examples/PlaygroundHost/PlaygroundHost.csproj" />
+    <Project Path="examples/ServiceDefaults/ServiceDefaults.csproj" />
   </Folder>
   <Folder Name="/notes/">
     <File Path="notes\ideas.md" />

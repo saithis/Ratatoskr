@@ -55,14 +55,18 @@ public class RabbitMqTopologyManager(
         }
     }
 
+    private static string ResolveAmqpExchangeName(ChannelRegistration reg, RabbitMqChannelOptions channelOpts) =>
+        channelOpts.AmqpExchangeName ?? reg.ChannelName;
+
     private async Task DeclareOrValidateExchangeAsync(IChannel channel, ChannelRegistration reg, RabbitMqChannelOptions channelOpts, CancellationToken token)
     {
+        var exchangeName = ResolveAmqpExchangeName(reg, channelOpts);
         if (reg.Intent == ChannelType.EventPublish || reg.Intent == ChannelType.CommandConsume)
         {
             // We OWN the exchange -> Declare it
-            logger.LogInformation("Declaring exchange '{Exchange}' Type: {Type}", reg.ChannelName, channelOpts.ExchangeType);
+            logger.LogInformation("Declaring exchange '{Exchange}' Type: {Type}", exchangeName, channelOpts.ExchangeType);
             await channel.ExchangeDeclareAsync(
-                exchange: reg.ChannelName,
+                exchange: exchangeName,
                 type: channelOpts.ExchangeType.ToRabbitMqString(),
                 durable: channelOpts.ExchangeDurable,
                 autoDelete: channelOpts.ExchangeAutoDelete,
@@ -72,14 +76,14 @@ public class RabbitMqTopologyManager(
         else
         {
             // We EXPECT the exchange -> Validate it (Passive Declare)
-            logger.LogInformation("Validating exchange '{Exchange}' exists", reg.ChannelName);
+            logger.LogInformation("Validating exchange '{Exchange}' exists", exchangeName);
             try
             {
-                await channel.ExchangeDeclarePassiveAsync(reg.ChannelName, token);
+                await channel.ExchangeDeclarePassiveAsync(exchangeName, token);
             }
             catch (Exception ex)
             {
-                logger.LogCritical(ex, "Exchange '{Exchange}' validation failed. It must exist for intent {Intent}.", reg.ChannelName, reg.Intent);
+                logger.LogCritical(ex, "Exchange '{Exchange}' validation failed. It must exist for intent {Intent}.", exchangeName, reg.Intent);
                 throw;
             }
         }
@@ -110,6 +114,8 @@ public class RabbitMqTopologyManager(
             arguments: queueArgs,
             cancellationToken: token);
 
+        var exchangeName = ResolveAmqpExchangeName(reg, channelOpts);
+
         // Bindings
         foreach (var msg in reg.Messages)
         {
@@ -117,11 +123,11 @@ public class RabbitMqTopologyManager(
 
             string routingKey = msgOpts?.RoutingKey ?? msg.MessageTypeName;
 
-            logger.LogInformation("Binding queue '{Queue}' to exchange '{Exchange}' with key '{Key}'", queueName, reg.ChannelName, routingKey);
+            logger.LogInformation("Binding queue '{Queue}' to exchange '{Exchange}' with key '{Key}'", queueName, exchangeName, routingKey);
 
             await channel.QueueBindAsync(
                 queue: queueName,
-                exchange: reg.ChannelName,
+                exchange: exchangeName,
                 routingKey: routingKey,
                 arguments: null,
                 cancellationToken: token);

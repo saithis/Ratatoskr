@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ratatoskr Playground</title>
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/scenario.css" />
+</head>
+<body>
+  <h1>Ratatoskr Playground</h1>
+  <p class="subtitle">
+    Single-host playground: each scenario has isolated Rabbit queues and message types; run one or many concurrently, cancel in-flight runs, and inspect activity plus per-scenario queue depths.
+  </p>
+  <p class="subtitle" style="margin-top:0.35rem;">
+    <a href="http://localhost:15000" target="_blank" rel="noopener">Aspire dashboard</a> (default URL when using <code>aspire run</code>) for resource health and full distributed traces.
+  </p>
+
+  <div id="loading">Loading service configuration…</div>
+
+  <div id="app" hidden>
+    <section class="panel" style="margin-bottom:1.25rem;" aria-labelledby="sc-heading">
+      <h2 id="sc-heading">Run a scenario</h2>
+      <div class="scenario-bar">
+        <div>
+          <label for="scenario-select" class="count-label" style="display:block;margin-bottom:0.25rem;">Scenario</label>
+          <select id="scenario-select" aria-label="Scenario"></select>
+        </div>
+        <button type="button" id="btn-run-scenario" class="btn btn-primary">Run</button>
+        <span id="scenario-cancel-wrap" style="margin-left:0.5rem;"></span>
+      </div>
+      <p id="scenario-desc" class="scenario-desc"></p>
+      <div id="scenario-progress" class="progress-strip"></div>
+      <div id="scenario-run-error" class="error-msg"></div>
+      <div id="scenario-result-banner" class="result-banner" hidden></div>
+      <div id="scenario-result-grid" class="result-grid"></div>
+    </section>
+
+    <section class="panel" style="margin-bottom:1.25rem;" aria-labelledby="flow-heading">
+      <h2 id="flow-heading">Activity <span class="stale-badge" id="badge-flow" hidden>stale</span></h2>
+      <p id="flow-empty" style="color:#64748b;font-size:0.875rem;margin-bottom:0.75rem;">
+        Run a scenario to attach a correlation id; the swim lanes below follow the latest scenario run (or last known order id).
+      </p>
+      <div id="flow-body" hidden>
+        <div class="mode-tag" id="flow-status-line"></div>
+        <div class="flow-steps" id="flow-steps"></div>
+        <p style="margin-top:0.65rem;font-size:0.72rem;color:#64748b;">Message ids: <span id="flow-ids"></span></p>
+        <h3 style="margin-top:1rem;">Swim lanes (by service)</h3>
+        <div id="timeline-swimlanes"></div>
+        <label style="display:flex;align-items:center;gap:0.35rem;margin-top:0.75rem;font-size:0.78rem;color:#94a3b8;">
+          <input type="checkbox" id="toggle-raw-activities" />
+          Show raw merged activity table
+        </label>
+        <div id="raw-activity-wrap" hidden>
+          <div id="error-activities" class="error-msg"></div>
+          <div style="max-height:220px;overflow:auto;margin-top:0.35rem;">
+            <table class="activity-table" aria-label="Raw activities" style="width:100%;border-collapse:collapse;font-size:0.72rem;">
+              <thead><tr><th>Time</th><th>Service</th><th>Stage</th><th>Type</th><th>Ok</th><th>Detail</th></tr></thead>
+              <tbody id="activity-rows"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="error-flow" class="error-msg" role="alert"></div>
+      </div>
+    </section>
+
+    <details class="panel" open style="margin-bottom:1.25rem;">
+      <summary><strong>Scenario catalog</strong></summary>
+      <div style="margin-top:0.75rem;">
+        <div id="playground-services"></div>
+        <div id="playground-services-error" class="error-msg"></div>
+      </div>
+    </details>
+
+    <details class="panel" style="margin-bottom:1.25rem;">
+      <summary><strong>Advanced: diagnostics</strong> (Rabbit depths, poisoned rows)</summary>
+      <div style="margin-top:0.75rem;">
+    <section class="panel" style="margin-bottom:1.25rem;" aria-labelledby="rabbit-heading">
+      <h2 id="rabbit-heading">RabbitMQ queue depth <span class="stale-badge" id="badge-rabbit" hidden>stale</span></h2>
+      <p id="rabbit-unconfigured" style="color:#64748b;font-size:0.8rem;" hidden>Playground has no RabbitMQ connection string.</p>
+      <div id="rabbit-body" hidden>
+        <div class="rabbit-row rabbit-h"><span>Queue set</span><span>Main</span><span>Retry</span><span>DLQ</span><span>TTL</span></div>
+        <div id="rabbit-rows"></div>
+        <p id="rabbit-retry-hint" class="retry-pulse" style="color:#fbbf24;font-size:0.7rem;margin-top:0.25rem;"></p>
+      </div>
+      <div id="error-rabbit" class="error-msg"></div>
+    </section>
+
+    <div class="grid">
+      <section class="panel" id="panel-order-outbox" aria-labelledby="order-outbox-heading">
+        <div class="panel-header">
+          <div>
+            <h2 id="order-outbox-heading">Publisher outbox <span class="stale-badge" id="badge-order-outbox" hidden>stale</span></h2>
+            <div aria-live="polite"><div class="count" id="count-order-outbox">–</div><div class="count-label">poisoned messages</div></div>
+          </div>
+        </div>
+        <div id="error-order-outbox" class="error-msg" role="alert"></div>
+        <ul id="list-order-outbox" class="item-list"></ul>
+      </section>
+      <section class="panel" id="panel-order-inbox" aria-labelledby="order-inbox-heading">
+        <div class="panel-header">
+          <div>
+            <h2 id="order-inbox-heading">Publisher inbox <span class="stale-badge" id="badge-order-inbox" hidden>stale</span></h2>
+            <div aria-live="polite"><div class="count" id="count-order-inbox">–</div><div class="count-label">poisoned handlers</div></div>
+          </div>
+        </div>
+        <div id="error-order-inbox" class="error-msg" role="alert"></div>
+        <ul id="list-order-inbox" class="item-list"></ul>
+      </section>
+      <section class="panel" id="panel-inventory-inbox" aria-labelledby="inventory-inbox-heading">
+        <div class="panel-header">
+          <div>
+            <h2 id="inventory-inbox-heading">Consumer inbox <span class="stale-badge" id="badge-inventory-inbox" hidden>stale</span></h2>
+            <div aria-live="polite"><div class="count" id="count-inventory-inbox">–</div><div class="count-label">poisoned handlers</div></div>
+          </div>
+        </div>
+        <div id="error-inventory-inbox" class="error-msg" role="alert"></div>
+        <ul id="list-inventory-inbox" class="item-list"></ul>
+      </section>
+    </div>
+      </div>
+    </details>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

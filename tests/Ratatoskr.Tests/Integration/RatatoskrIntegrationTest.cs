@@ -7,14 +7,15 @@ using Medallion.Threading;
 using Medallion.Threading.FileSystem;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Ratatoskr.RabbitMq;
+using Ratatoskr.TestHost;
 
 namespace Ratatoskr.Tests.Integration;
 
 [ClassDataSource<RabbitMqContainerFixture, PostgresContainerFixture>(Shared = [SharedType.PerTestSession, SharedType.PerTestSession])]
-public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture? postgres = null) 
+public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
     : IAsyncDisposable
 {
-    private WebApplicationFactory<Program>? _factory;
+    private WebApplicationFactory<RatatoskrTestHostAppMarker>? _factory;
 
     /// <summary>
     /// Provides access to the application's root service provider.
@@ -30,7 +31,7 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
     {
         get
         {
-            var builder = new Npgsql.NpgsqlConnectionStringBuilder(postgres?.ConnectionString ?? "")
+            var builder = new Npgsql.NpgsqlConnectionStringBuilder(postgres.ConnectionString)
             {
                 Database = $"test_{TestId}",
                 MaxPoolSize = 2
@@ -42,6 +43,9 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
     public virtual async Task StartTestAsync(Action<IServiceCollection>? configure = null)
     {
         await CreateDatabaseAsync();
+        // Hosted services (e.g. EF Core metrics) query the DbContext as soon as the host starts.
+        // EnsureCreated must run before the host is built so tables exist on first poll.
+        await EnsureTestDatabaseSchemaAsync();
 
         // Custom configuration for the factory if needed
         _factory = new RatatoskrTestFactory(rabbitMq, postgres).WithWebHostBuilder(builder =>
@@ -66,8 +70,6 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
 
     private async Task CreateDatabaseAsync()
     {
-        if (postgres == null) return;
-        
         // Connect to the maintenance database (usually 'postgres' or the one from fixture) to create the new one
         await using var connection = new Npgsql.NpgsqlConnection(postgres.ConnectionString);
         await connection.OpenAsync();
@@ -75,6 +77,15 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
         await using var command = connection.CreateCommand();
         command.CommandText = $"CREATE DATABASE \"test_{TestId}\"";
         await command.ExecuteNonQueryAsync();
+    }
+
+    private async Task EnsureTestDatabaseSchemaAsync()
+    {
+        var options = new DbContextOptionsBuilder<TestDbContext>()
+            .UseNpgsql(PostgresConnectionString)
+            .Options;
+        await using var db = new TestDbContext(options);
+        await db.Database.EnsureCreatedAsync();
     }
 
     protected virtual void ConfigureServices(IServiceCollection services)
@@ -107,8 +118,6 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
 
     private async Task DropDatabaseAsync()
     {
-        if (postgres == null) return;
-
         try
         {
             // Connect to the maintenance database to drop the test database

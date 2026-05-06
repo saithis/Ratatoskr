@@ -104,6 +104,8 @@ d.UseOutbox(outbox => outbox
 
 Messages exceeding this limit cause `SaveChangesAsync` to throw, rolling back the entire transaction (including business data).
 
+**Runnable demo:** In the playground host, the publisher outbox is configured with a max message size; the server scenario `oversized-payload-rolls-back` stages an oversized `OrderPlaced` payload so `SaveChanges` fails and the order row is not persisted. See [examples/README.md](../examples/README.md#feature-coverage-where).
+
 ## Configuration
 
 ```csharp

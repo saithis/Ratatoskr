@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
-using Ratatoskr.EfCore;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Testing;
 using Ratatoskr.Tests.Fixtures;

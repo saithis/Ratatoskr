@@ -10,35 +10,22 @@
 
 ### Quick Start with .NET Aspire
 
-The easiest way to run the example application is using the .NET Aspire AppHost.
-
-First, install the Aspire workload if you haven't already:
+The easiest way to run the example application is using the .NET Aspire AppHost (Aspire CLI, not the obsolete Aspire workload).
 
 ```bash
-dotnet workload install aspire
+aspire run
 ```
 
-Then run the AppHost:
+This starts PostgreSQL (logical databases `publisherdb`, `consumerdb`, `playgrounddb`), RabbitMQ, and the **PlaygroundHost** web app, plus the Aspire dashboard (often at http://localhost:15000).
 
-```bash
-cd examples/AppHost
-dotnet run
-```
-
-This will start:
-- PostgreSQL database
-- RabbitMQ message broker
-- PlaygroundApi example application
-- Aspire Dashboard at http://localhost:15000
-
-See [examples/AppHost/README.md](examples/AppHost/README.md) for more details.
+See [examples/README.md](examples/README.md) for the full demo guide.
 
 ## Project Structure
 
 - `src/Ratatoskr` - Core library
-- `src/Ratatoskr.EfCore` - Entity Framework Core outbox pattern implementation
+- `src/Ratatoskr.EfCore` - Entity Framework Core outbox/inbox implementation
 - `src/Ratatoskr.RabbitMq` - RabbitMQ transport
-- `examples/PlaygroundApi` - Example API application
+- `examples/` - Playground (`PlaygroundHost` + AppHost)
 - `examples/AppHost` - .NET Aspire orchestration
 - `tests/Ratatoskr.Tests` - Integration and unit tests
 
@@ -47,8 +34,7 @@ See [examples/AppHost/README.md](examples/AppHost/README.md) for more details.
 The project includes comprehensive tests using TUnit and TestContainers:
 
 ```bash
-cd tests/Ratatoskr.Tests
-dotnet run
+dotnet run --project tests/Ratatoskr.Tests -- --maximum-parallel-tests 10
 ```
 
 - Integration tests with real PostgreSQL and RabbitMQ containers

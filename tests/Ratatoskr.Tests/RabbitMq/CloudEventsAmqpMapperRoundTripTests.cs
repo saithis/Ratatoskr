@@ -134,6 +134,31 @@ public class CloudEventsAmqpMapperRoundTripTests
     }
 
     [Test]
+    public void MapOutgoing_BinaryMode_CustomCloudEventsExtension_RoundTripsIntoIncomingPropertiesDictionary()
+    {
+        const string extKey = "ratatoskrplayground_scenariorun";
+        const string extVal = "00000000-0000-4000-8000-000000000042";
+        var now = new DateTimeOffset(2025, 6, 15, 12, 0, 0, TimeSpan.Zero);
+        var originalProps = new MessageProperties
+        {
+            Id = "ext-roundtrip-id",
+            Source = "/ext-source",
+            Type = "ext.roundtrip",
+            Time = now,
+            CloudEventExtensions = { [extKey] = extVal },
+        };
+        var outgoing = new BasicProperties();
+        var originalBody = Encoding.UTF8.GetBytes("{\"ok\":true}");
+
+        var mappedBody = _mapper.MapOutgoing(originalBody, originalProps, outgoing);
+        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", outgoing, mappedBody);
+        var result = _mapper.MapIncoming(incoming);
+
+        result.props.CloudEventExtensions.Should().ContainKey(extKey);
+        result.props.CloudEventExtensions[extKey].Should().Be(extVal);
+    }
+
+    [Test]
     public void MapOutgoing_BinaryMode_NullDataSchema_OmitsHeader()
     {
         // Arrange

@@ -26,6 +26,12 @@ public class RabbitMqChannelOptions
     // ── Queue / Consumer ─────────────────────────────────────────────
 
     /// <summary>
+    /// When set, passive declare / queue bind uses this exchange name instead of the Ratatoskr channel name.
+    /// Use when multiple logical consume channels share one AMQP exchange (for example separate queues on the same topic exchange).
+    /// </summary>
+    public string? AmqpExchangeName { get; private set; }
+
+    /// <summary>
     /// The name of the queue to consume from. Required for consume channels.
     /// </summary>
     public string? QueueName { get; private set; }
@@ -126,6 +132,16 @@ public class RabbitMqChannelOptions
     }
 
     // ── Fluent API: Queue ────────────────────────────────────────────
+
+    /// <summary>
+    /// Binds the consumer queue to the given AMQP exchange name instead of the Ratatoskr channel name.
+    /// </summary>
+    public RabbitMqChannelOptions WithAmqpExchangeName(string exchangeName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(exchangeName);
+        AmqpExchangeName = exchangeName;
+        return this;
+    }
 
     /// <summary>Sets the queue name. Required for consume channels.</summary>
     public RabbitMqChannelOptions WithQueueName(string name)

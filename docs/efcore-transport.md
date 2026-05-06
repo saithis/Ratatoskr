@@ -56,6 +56,8 @@ The EF Core transport has no in-memory channel, no consumer loop, and no polling
 
 When the outbox and inbox use the same `DbContext`, Ratatoskr optimizes by writing inbox entries in the **same database transaction** as your business data. No outbox row is created — the inbox processor picks up the entries directly.
 
+**Runnable demo:** In the playground host, scenario `efcore-internal-command` publishes and consumes an internal command on the EF Core channel using `WithEfCore()` and stages it in the same `SaveChanges` as the cross-service outbox messages for that scenario. See [examples/README.md](../examples/README.md#feature-coverage-where).
+
 ```csharp
 // Business data + message in one transaction
 db.OutboxMessages.Add(new OrderPlaced(orderId, email, total));

@@ -1,0 +1,21 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: system-ui, sans-serif;
+  background: #0f172a;
+  color: #e2e8f0;
+  min-height: 100vh;
+  padding: 1.25rem 1.5rem 2rem;
+}
+h1 { font-size: 1.5rem; font-weight: 700; color: #f8fafc; margin-bottom: 0.25rem; }
+h2 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.75rem;
+}
+h3 { font-size: 0.95rem; font-weight: 600; color: #cbd5e1; margin-bottom: 0.5rem; }
+p.subtitle { color: #64748b; margin-bottom: 1.25rem; font-size: 0.9rem; max-width: 72ch; }
+code { font-family: ui-monospace, monospace; font-size: 0.85em; color: #cbd5e1; }
+#loading { color: #64748b; text-align: center; padding: 3rem 0; }
