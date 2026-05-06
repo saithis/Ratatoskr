@@ -26,5 +26,6 @@
         <InternalsVisibleTo Include="Ratatoskr.Tests" />
         <InternalsVisibleTo Include="Ratatoskr.RabbitMq" />
         <InternalsVisibleTo Include="Ratatoskr.EfCore" />
+        <InternalsVisibleTo Include="Ratatoskr.UI" />
     </ItemGroup>
 </Project>

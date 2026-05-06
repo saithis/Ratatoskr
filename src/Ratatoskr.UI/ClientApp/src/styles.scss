@@ -1,0 +1,46 @@
+@use '@angular/material' as mat;
+
+:root {
+  --rat-primary: #6366f1;
+  --rat-primary-dark: #4f46e5;
+  --rat-surface: #ffffff;
+  --rat-background: #f8fafc;
+  --rat-text: #1e293b;
+  --rat-text-muted: #64748b;
+  --rat-border: #e2e8f0;
+  --rat-danger: #ef4444;
+  --rat-success: #22c55e;
+  --rat-warning: #f59e0b;
+}
+
+.dark-theme {
+  --rat-surface: #1e293b;
+  --rat-background: #0f172a;
+  --rat-text: #f1f5f9;
+  --rat-text-muted: #94a3b8;
+  --rat-border: #334155;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  font-family: 'Roboto', sans-serif;
+  background: var(--rat-background);
+  color: var(--rat-text);
+}
+
+.rat-page {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.rat-card {
+  background: var(--rat-surface);
+  border: 1px solid var(--rat-border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.rat-status-healthy { color: var(--rat-success); }
+.rat-status-unhealthy { color: var(--rat-danger); }
