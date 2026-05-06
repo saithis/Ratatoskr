@@ -1,15 +1,11 @@
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Infrastructure.ScenarioRunning;
-using PlaygroundHost.Persistence;
-using PlaygroundHost.Persistence.Entities;
 using Ratatoskr;
 using Ratatoskr.Core;
 using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 
-namespace PlaygroundHost.Scenarios.DirectConsume.DirectConsumeDlq;
+namespace PlaygroundHost.Scenarios.DirectConsume;
 
 public sealed class DirectConsumeDlqScenario : IPlaygroundScenario
 {

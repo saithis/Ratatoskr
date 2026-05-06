@@ -2,12 +2,10 @@ using Microsoft.EntityFrameworkCore;
 using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Infrastructure.ScenarioRunning;
 using PlaygroundHost.Persistence;
-using PlaygroundHost.Persistence.Entities;
 using Ratatoskr;
-using Ratatoskr.Core;
 using Ratatoskr.RabbitMq.Extensions;
 
-namespace PlaygroundHost.Scenarios.Outbox.OversizedPayloadRollsBack;
+namespace PlaygroundHost.Scenarios.Outbox;
 
 public sealed class OversizedPayloadRollsBackScenario : IPlaygroundScenario
 {

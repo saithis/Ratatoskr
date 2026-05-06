@@ -7,7 +7,7 @@ using Ratatoskr.EfCore;
 using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 
-namespace PlaygroundHost.Scenarios.Inbox.InboxPoison;
+namespace PlaygroundHost.Scenarios.Inbox;
 
 public sealed class InboxPoisonScenario : IPlaygroundScenario
 {

@@ -1,13 +1,11 @@
-using Microsoft.EntityFrameworkCore;
 using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Infrastructure.ScenarioRunning;
 using PlaygroundHost.Persistence;
-using PlaygroundHost.Persistence.Entities;
 using Ratatoskr;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 
-namespace PlaygroundHost.Scenarios.Other.EfcoreInternalCommand;
+namespace PlaygroundHost.Scenarios.Other;
 
 public sealed class EfcoreInternalCommandScenario : IPlaygroundScenario
 {

@@ -9,7 +9,7 @@ using Ratatoskr.Core;
 using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 
-namespace PlaygroundHost.Scenarios.DirectConsume.DirectConsumeRetry;
+namespace PlaygroundHost.Scenarios.DirectConsume;
 
 public sealed class DirectConsumeRetryScenario : IPlaygroundScenario
 {

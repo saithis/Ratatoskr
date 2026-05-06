@@ -1,11 +1,10 @@
-using Microsoft.Extensions.DependencyInjection;
 using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Infrastructure.ScenarioRunning;
 using PlaygroundHost.Persistence;
 using Ratatoskr;
 using Ratatoskr.RabbitMq.Extensions;
 
-namespace PlaygroundHost.Scenarios.Outbox.OutboxPoison;
+namespace PlaygroundHost.Scenarios.Outbox;
 
 /// <summary>Forces publisher outbox sends to fail until the staged message becomes poisoned for this run.</summary>
 public sealed class OutboxPoisonScenario : IPlaygroundScenario

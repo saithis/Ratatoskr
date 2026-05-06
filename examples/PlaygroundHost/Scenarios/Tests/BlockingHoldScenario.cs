@@ -1,7 +1,7 @@
 using PlaygroundHost.Infrastructure.ScenarioRunning;
 using Ratatoskr;
 
-namespace PlaygroundHost.Scenarios.Tests.BlockingHold;
+namespace PlaygroundHost.Scenarios.Tests;
 
 public sealed class BlockingHoldScenario : IPlaygroundScenario
 {

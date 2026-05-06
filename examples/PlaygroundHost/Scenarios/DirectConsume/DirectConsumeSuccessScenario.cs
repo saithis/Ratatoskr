@@ -7,7 +7,7 @@ using Ratatoskr.Core;
 using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 
-namespace PlaygroundHost.Scenarios.DirectConsume.DirectConsumeSuccess;
+namespace PlaygroundHost.Scenarios.DirectConsume;
 
 public sealed class DirectConsumeSuccessScenario : IPlaygroundScenario
 {

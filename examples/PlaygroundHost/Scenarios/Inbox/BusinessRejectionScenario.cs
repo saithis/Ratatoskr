@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-using Microsoft.EntityFrameworkCore;
 using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Infrastructure.ScenarioRunning;
 using PlaygroundHost.Persistence;
@@ -10,11 +8,11 @@ using Ratatoskr.EfCore;
 using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 
-namespace PlaygroundHost.Scenarios.Inbox.InboxRetryThenSuccess;
+namespace PlaygroundHost.Scenarios.Inbox;
 
-public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
+public sealed class BusinessRejectionScenario : IPlaygroundScenario
 {
-    private const string ScenarioSlug = "inbox-retry-then-success";
+    private const string ScenarioSlug = "business-rejection";
 
     public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues =>
     [
@@ -31,7 +29,7 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
 
         bus.AddEventPublishChannel(exEvt, c => c
             .WithRabbitMq(r => r.WithTopicExchange())
-            .Produces<OrderFulfilled>());
+            .Produces<OrderFailed>());
 
         bus.AddCommandPublishChannel(exCmd, c => c
             .WithRabbitMq(r => r.WithDirectExchange())
@@ -43,8 +41,8 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
                 .WithAmqpExchangeName(exEvt)
                 .WithQueueName(qOrders)
                 .WithQueueType(QueueType.Classic)
-                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(1)))
-            .Consumes<OrderFulfilled>(m => m.WithHandler<OrderFulfilledHandler>($"{ScenarioSlug}.fulfilled"))
+                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
+            .Consumes<OrderFailed>(m => m.WithHandler<OrderFailedHandler>($"{ScenarioSlug}.failed"))
             .UseInbox<PublisherDbContext>());
 
         bus.AddCommandConsumeChannel($"{ScenarioSlug}-inventory", c => c
@@ -53,17 +51,17 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
                 .WithAmqpExchangeName(exCmd)
                 .WithQueueName(qInv)
                 .WithQueueType(QueueType.Classic)
-                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(1)))
+                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
             .Consumes<ProcessOrderCommand>(m => m.WithHandler<ProcessOrderHandler>($"{ScenarioSlug}.process"))
             .UseInbox<ConsumerDbContext>());
     }
 
     public string Slug => ScenarioSlug;
 
-    public string Title => "Inventory inbox retry then success";
+    public string Title => "Business rejection (OrderFailed)";
 
     public string Description =>
-        "ProcessOrderCommand fails twice then succeeds; order reaches Fulfilled.";
+        "Inventory reject mode stages OrderFailed; publisher marks the order Failed.";
 
     public string Topic => "Inbox";
 
@@ -74,44 +72,41 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
             context.PublisherDb, context.TimeProvider, runId,
             (id, rid) => new ProcessOrderCommand(id, rid),
             cancellationToken);
-        context.StepsCompleted.Add("inventory_succeed_after_two_failures");
+        context.StepsCompleted.Add("inventory_reject_mode");
         return await ScenarioAssertions.OrderEventuallyAsync(
             context.ScopeFactory,
             orderId,
-            OrderStatus.Fulfilled,
+            OrderStatus.Failed,
             ScenarioTiming.OrderEventuallyLong,
             context.TimeProvider,
             cancellationToken);
     }
 
-    [RatatoskrMessage("inbox-retry-then-success.process-order-command")]
+    [RatatoskrMessage("business-rejection.process-order-command")]
     public sealed record ProcessOrderCommand(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
 
-    [RatatoskrMessage("inbox-retry-then-success.order-fulfilled")]
-    public sealed record OrderFulfilled(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
+    [RatatoskrMessage("business-rejection.order-failed")]
+    public sealed record OrderFailed(string OrderId, string ScenarioRunId, string Reason) : IPlaygroundCorrelatedOrderMessage;
 
     public sealed class ProcessOrderHandler(ConsumerDbContext context, ILogger<ProcessOrderHandler> _) : IMessageHandler<ProcessOrderCommand>
     {
-        private static readonly ConcurrentDictionary<string, int> DeliveryAttempts = new();
-
         public async Task HandleAsync(ProcessOrderCommand message, MessageProperties properties, CancellationToken cancellationToken)
         {
-            var key = properties.Id ?? message.OrderId;
-            var n = DeliveryAttempts.AddOrUpdate(key, 1, (_, old) => old + 1);
-            if (n <= 2)
-                throw new InvalidOperationException("Simulated consumer failure (succeed-after-2).");
             var orderGuid = Guid.Parse(message.OrderId);
             context.OutboxMessages.Add(
-                new OrderFulfilled(message.OrderId, message.ScenarioRunId),
-                new MessageProperties { Id = PlaygroundMessageIds.OrderFulfilled(orderGuid) });
+                new OrderFailed(
+                    message.OrderId,
+                    message.ScenarioRunId,
+                    "Simulated business rejection."),
+                new MessageProperties { Id = PlaygroundMessageIds.OrderFailed(orderGuid) });
             await context.SaveChangesAsync(cancellationToken);
         }
     }
 
-    public sealed class OrderFulfilledHandler(PublisherDbContext context, TimeProvider timeProvider, ILogger<OrderFulfilledHandler> _)
-        : IMessageHandler<OrderFulfilled>
+    public sealed class OrderFailedHandler(PublisherDbContext context, TimeProvider timeProvider, ILogger<OrderFailedHandler> _)
+        : IMessageHandler<OrderFailed>
     {
-        public Task HandleAsync(OrderFulfilled message, MessageProperties _, CancellationToken cancellationToken) =>
-            IScenarioExtensions.UpdateOrderStatusAsync(null!, context, timeProvider, message.OrderId, OrderStatus.Fulfilled, cancellationToken);
+        public Task HandleAsync(OrderFailed message, MessageProperties _, CancellationToken cancellationToken) =>
+            IScenarioExtensions.UpdateOrderStatusAsync(null!, context, timeProvider, message.OrderId, OrderStatus.Failed, cancellationToken);
     }
 }

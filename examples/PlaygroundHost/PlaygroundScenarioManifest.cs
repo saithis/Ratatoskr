@@ -1,20 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using PlaygroundHost.Infrastructure.ScenarioRunning;
-using PlaygroundHost.Scenarios.DirectConsume.DirectConsumeDlq;
-using PlaygroundHost.Scenarios.DirectConsume.DirectConsumeRetry;
-using PlaygroundHost.Scenarios.DirectConsume.DirectConsumeSuccess;
-using PlaygroundHost.Scenarios.Inbox.BusinessRejection;
-using PlaygroundHost.Scenarios.Inbox.InboxPoison;
-using PlaygroundHost.Scenarios.Inbox.InboxRetryThenSuccess;
-using PlaygroundHost.Scenarios.Other.EfcoreInternalCommand;
-using PlaygroundHost.Scenarios.Other.FanoutTwoHandlersOnOrderplaced;
-using PlaygroundHost.Scenarios.Other.ReplayDedups;
-using PlaygroundHost.Scenarios.Outbox.OutboxPoison;
-using PlaygroundHost.Scenarios.Outbox.OutboxRetryThenSuccess;
-using PlaygroundHost.Scenarios.Outbox.OutboxSuccess;
-using PlaygroundHost.Scenarios.Outbox.OversizedPayloadRollsBack;
-using PlaygroundHost.Scenarios.Tests.BlockingHold;
-using PlaygroundHost.Scenarios.Tests.CancelSmoke;
+using PlaygroundHost.Scenarios.DirectConsume;
+using PlaygroundHost.Scenarios.Inbox;
+using PlaygroundHost.Scenarios.Other;
+using PlaygroundHost.Scenarios.Outbox;
+using PlaygroundHost.Scenarios.Tests;
 using Ratatoskr;
 
 namespace PlaygroundHost;

@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Infrastructure.ScenarioRunning;
 using PlaygroundHost.Persistence;
@@ -9,7 +8,7 @@ using Ratatoskr.EfCore;
 using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 
-namespace PlaygroundHost.Scenarios.Outbox.OutboxRetryThenSuccess;
+namespace PlaygroundHost.Scenarios.Outbox;
 
 public sealed class OutboxRetryThenSuccessScenario : IPlaygroundScenario
 {

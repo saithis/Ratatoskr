@@ -1,15 +1,13 @@
-using Microsoft.EntityFrameworkCore;
 using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Infrastructure.ScenarioRunning;
 using PlaygroundHost.Persistence;
-using PlaygroundHost.Persistence.Entities;
 using Ratatoskr;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 
-namespace PlaygroundHost.Scenarios.Other.FanoutTwoHandlersOnOrderplaced;
+namespace PlaygroundHost.Scenarios.Other;
 
 public sealed class FanoutTwoHandlersOnOrderplacedScenario : IPlaygroundScenario
 {

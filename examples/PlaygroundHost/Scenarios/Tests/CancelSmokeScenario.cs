@@ -1,7 +1,7 @@
 using PlaygroundHost.Infrastructure.ScenarioRunning;
 using Ratatoskr;
 
-namespace PlaygroundHost.Scenarios.Tests.CancelSmoke;
+namespace PlaygroundHost.Scenarios.Tests;
 
 public sealed class CancelSmokeScenario : IPlaygroundScenario
 {
