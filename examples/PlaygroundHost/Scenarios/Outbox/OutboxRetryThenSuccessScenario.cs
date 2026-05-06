@@ -13,33 +13,32 @@ namespace PlaygroundHost.Scenarios.Outbox;
 public sealed class OutboxRetryThenSuccessScenario : IPlaygroundScenario
 {
     private const string ScenarioSlug = "outbox-retry-then-success";
+    private static string EventsExchangeName { get; } = PlaygroundAmqpNames.ExchangeName(ScenarioSlug, "events");
+    private static string CommandsExchangeName { get; } = PlaygroundAmqpNames.ExchangeName(ScenarioSlug, "commands");
+    private static string OrdersQueueName { get; } = PlaygroundAmqpNames.QueueName(ScenarioSlug, "orders");
+    private static string InventoryQueueName { get; } = PlaygroundAmqpNames.QueueName(ScenarioSlug, "inventory");
 
     public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues =>
     [
-        new("orders", PlaygroundAmqpNames.OrdersQueue(ScenarioSlug)),
-        new("inventory", PlaygroundAmqpNames.InventoryQueue(ScenarioSlug)),
+        new("orders", OrdersQueueName),
+        new("inventory", InventoryQueueName),
     ];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
     {
-        var exEvt = PlaygroundAmqpNames.EventsExchange(ScenarioSlug);
-        var exCmd = PlaygroundAmqpNames.CommandsExchange(ScenarioSlug);
-        var qOrders = PlaygroundAmqpNames.OrdersQueue(ScenarioSlug);
-        var qInv = PlaygroundAmqpNames.InventoryQueue(ScenarioSlug);
-
-        bus.AddEventPublishChannel(exEvt, c => c
+        bus.AddEventPublishChannel(EventsExchangeName, c => c
             .WithRabbitMq(r => r.WithTopicExchange())
             .Produces<OrderFulfilled>());
 
-        bus.AddCommandPublishChannel(exCmd, c => c
+        bus.AddCommandPublishChannel(CommandsExchangeName, c => c
             .WithRabbitMq(r => r.WithDirectExchange())
             .Produces<ProcessOrderCommand>());
 
         bus.AddEventConsumeChannel($"{ScenarioSlug}-orders-inbox", c => c
             .WithRabbitMq(r => r
                 .WithTopicExchange()
-                .WithAmqpExchangeName(exEvt)
-                .WithQueueName(qOrders)
+                .WithAmqpExchangeName(EventsExchangeName)
+                .WithQueueName(OrdersQueueName)
                 .WithQueueType(QueueType.Classic)
                 .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
             .Consumes<OrderFulfilled>(m => m.WithHandler<OrderFulfilledHandler>($"{ScenarioSlug}.fulfilled"))
@@ -48,8 +47,8 @@ public sealed class OutboxRetryThenSuccessScenario : IPlaygroundScenario
         bus.AddCommandConsumeChannel($"{ScenarioSlug}-inventory", c => c
             .WithRabbitMq(r => r
                 .WithDirectExchange()
-                .WithAmqpExchangeName(exCmd)
-                .WithQueueName(qInv)
+                .WithAmqpExchangeName(CommandsExchangeName)
+                .WithQueueName(InventoryQueueName)
                 .WithQueueType(QueueType.Classic)
                 .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
             .Consumes<ProcessOrderCommand>(m => m.WithHandler<ProcessOrderHandler>($"{ScenarioSlug}.process"))
@@ -97,7 +96,7 @@ public sealed class OutboxRetryThenSuccessScenario : IPlaygroundScenario
     [RatatoskrMessage("outbox-retry-then-success.order-fulfilled")]
     public sealed record OrderFulfilled(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
 
-    public sealed class ProcessOrderHandler(ConsumerDbContext context, ILogger<ProcessOrderHandler> _) : IMessageHandler<ProcessOrderCommand>
+    public sealed class ProcessOrderHandler(ConsumerDbContext context) : IMessageHandler<ProcessOrderCommand>
     {
         public async Task HandleAsync(ProcessOrderCommand message, MessageProperties properties, CancellationToken cancellationToken)
         {
@@ -109,7 +108,7 @@ public sealed class OutboxRetryThenSuccessScenario : IPlaygroundScenario
         }
     }
 
-    public sealed class OrderFulfilledHandler(PublisherDbContext context, TimeProvider timeProvider, ILogger<OrderFulfilledHandler> _)
+    public sealed class OrderFulfilledHandler(PublisherDbContext context, TimeProvider timeProvider)
         : IMessageHandler<OrderFulfilled>
     {
         public Task HandleAsync(OrderFulfilled message, MessageProperties _, CancellationToken cancellationToken) =>

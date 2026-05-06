@@ -119,19 +119,15 @@ public sealed class InboxDedupsScenario : IPlaygroundScenario
     [RatatoskrMessage(MessageType)]
     public sealed record OrderPlaced(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
 
-    public sealed class OrderPlacedInboxHandler(ILogger<OrderPlacedInboxHandler> _) : IMessageHandler<OrderPlaced>
+    public sealed class OrderPlacedInboxHandler : IMessageHandler<OrderPlaced>
     {
-        public Task HandleAsync(OrderPlaced message, MessageProperties properties, CancellationToken cancellationToken)
-        {
-            return Task.CompletedTask;
-        }
+        public Task HandleAsync(OrderPlaced message, MessageProperties properties, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
 
-    public sealed class OrderPlacedDirectHandler(ILogger<OrderPlacedDirectHandler> _) : IMessageHandler<OrderPlaced>
+    public sealed class OrderPlacedDirectHandler : IMessageHandler<OrderPlaced>
     {
-        public Task HandleAsync(OrderPlaced message, MessageProperties properties, CancellationToken cancellationToken)
-        {
-            return Task.CompletedTask;
-        }
+        public Task HandleAsync(OrderPlaced message, MessageProperties properties, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
 }

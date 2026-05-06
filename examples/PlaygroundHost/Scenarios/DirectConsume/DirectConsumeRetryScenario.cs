@@ -14,26 +14,25 @@ namespace PlaygroundHost.Scenarios.DirectConsume;
 public sealed class DirectConsumeRetryScenario : IPlaygroundScenario
 {
     private const string ScenarioSlug = "direct-consume-retry";
+    private static string ExchangeName { get; } = PlaygroundAmqpNames.ExchangeName(ScenarioSlug, "events");
+    private static string QueueName { get; } = PlaygroundAmqpNames.QueueName(ScenarioSlug, "notifications");
 
     public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues =>
-        [new("work", PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug))];
+        [new("work", QueueName)];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
     {
-        var exEvt = PlaygroundAmqpNames.EventsExchange(ScenarioSlug);
-        var qWork = PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug);
-
-        bus.AddEventPublishChannel(exEvt, c => c
+        bus.AddEventPublishChannel(ExchangeName, c => c
             .WithRabbitMq(r => r.WithTopicExchange())
             .Produces<RetryDemo>());
 
         bus.AddEventConsumeChannel($"{ScenarioSlug}-work", c => c
             .WithRabbitMq(r => r
                 .WithTopicExchange()
-                .WithAmqpExchangeName(exEvt)
-                .WithQueueName(qWork)
+                .WithAmqpExchangeName(ExchangeName)
+                .WithQueueName(QueueName)
                 .WithQueueType(QueueType.Classic)
-                .WithRetry(maxRetries: 2, delay: TimeSpan.FromSeconds(2)))
+                .WithRetry(maxRetries: 2, delay: TimeSpan.FromSeconds(1)))
             .Consumes<RetryDemo>(m => m.WithHandler<RetryDemoHandler>()));
     }
 

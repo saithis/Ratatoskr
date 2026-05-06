@@ -22,7 +22,7 @@ public sealed class BlockingHoldScenario : IPlaygroundScenario
 
     public bool RequiresDangerConfirmation => true;
 
-    public string? DangerConfirmationText =>
+    public string DangerConfirmationText =>
         "This scenario blocks for about 25 seconds unless you cancel the run.";
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)

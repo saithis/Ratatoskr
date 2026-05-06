@@ -12,24 +12,23 @@ namespace PlaygroundHost.Scenarios.Inbox;
 public sealed class InboxPoisonScenario : IPlaygroundScenario
 {
     private const string ScenarioSlug = "inbox-poison";
+    private static string CommandsExchangeName { get; } = PlaygroundAmqpNames.ExchangeName(ScenarioSlug, "commands");
+    private static string InventoryQueueName { get; } = PlaygroundAmqpNames.QueueName(ScenarioSlug, "inventory");
 
     public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues =>
-        [new("inventory", PlaygroundAmqpNames.InventoryQueue(ScenarioSlug))];
+        [new("inventory", InventoryQueueName)];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
     {
-        var exCmd = PlaygroundAmqpNames.CommandsExchange(ScenarioSlug);
-        var qInv = PlaygroundAmqpNames.InventoryQueue(ScenarioSlug);
-
-        bus.AddCommandPublishChannel(exCmd, c => c
+        bus.AddCommandPublishChannel(CommandsExchangeName, c => c
             .WithRabbitMq(r => r.WithDirectExchange())
             .Produces<ProcessOrderCommand>());
 
         bus.AddCommandConsumeChannel($"{ScenarioSlug}-inventory", c => c
             .WithRabbitMq(r => r
                 .WithDirectExchange()
-                .WithAmqpExchangeName(exCmd)
-                .WithQueueName(qInv)
+                .WithAmqpExchangeName(CommandsExchangeName)
+                .WithQueueName(InventoryQueueName)
                 .WithQueueType(QueueType.Classic)
                 .WithRetry(maxRetries: 2, delay: TimeSpan.FromSeconds(2)))
             .Consumes<ProcessOrderCommand>(m => m.WithHandler<ProcessOrderHandler>($"{ScenarioSlug}.process"))
@@ -79,7 +78,7 @@ public sealed class InboxPoisonScenario : IPlaygroundScenario
     [RatatoskrMessage("inbox-poison.process-order-command")]
     public sealed record ProcessOrderCommand(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
 
-    public sealed class ProcessOrderHandler(ILogger<ProcessOrderHandler> _) : IMessageHandler<ProcessOrderCommand>
+    public sealed class ProcessOrderHandler : IMessageHandler<ProcessOrderCommand>
     {
         public Task HandleAsync(ProcessOrderCommand message, MessageProperties properties, CancellationToken cancellationToken) =>
             Task.FromException(new InvalidOperationException("Simulated inventory inbox failure (poison scenario)."));

@@ -6,17 +6,16 @@ using Ratatoskr.RabbitMq.Extensions;
 
 namespace PlaygroundHost.Scenarios.Outbox;
 
-/// <summary>Forces publisher outbox sends to fail until the staged message becomes poisoned for this run.</summary>
 public sealed class OutboxPoisonScenario : IPlaygroundScenario
 {
     private const string ScenarioSlug = "outbox-poison";
+    private static string ExchangeName { get; } = PlaygroundAmqpNames.ExchangeName(ScenarioSlug, "events");
 
     public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues => [];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
     {
-        var exEvt = PlaygroundAmqpNames.EventsExchange(ScenarioSlug);
-        bus.AddEventPublishChannel(exEvt, c => c
+        bus.AddEventPublishChannel(ExchangeName, c => c
             .WithRabbitMq(r => r.WithTopicExchange())
             .Produces<PoisonProbe>());
     }

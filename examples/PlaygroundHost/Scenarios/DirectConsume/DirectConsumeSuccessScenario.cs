@@ -12,24 +12,23 @@ namespace PlaygroundHost.Scenarios.DirectConsume;
 public sealed class DirectConsumeSuccessScenario : IPlaygroundScenario
 {
     private const string ScenarioSlug = "direct-consume-success";
+    private static string ExchangeName { get; } = PlaygroundAmqpNames.ExchangeName(ScenarioSlug, "events");
+    private static string QueueName { get; } = PlaygroundAmqpNames.QueueName(ScenarioSlug, "notifications");
 
     public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues =>
-        [new("work", PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug))];
+        [new("work", QueueName)];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
     {
-        var exEvt = PlaygroundAmqpNames.EventsExchange(ScenarioSlug);
-        var qWork = PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug);
-
-        bus.AddEventPublishChannel(exEvt, c => c
+        bus.AddEventPublishChannel(ExchangeName, c => c
             .WithRabbitMq(r => r.WithTopicExchange())
             .Produces<DirectWork>());
 
         bus.AddEventConsumeChannel($"{ScenarioSlug}-work", c => c
             .WithRabbitMq(r => r
                 .WithTopicExchange()
-                .WithAmqpExchangeName(exEvt)
-                .WithQueueName(qWork)
+                .WithAmqpExchangeName(ExchangeName)
+                .WithQueueName(QueueName)
                 .WithQueueType(QueueType.Classic)
                 .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
             .Consumes<DirectWork>(m => m.WithHandler<DirectWorkHandler>()));
@@ -67,7 +66,7 @@ public sealed class DirectConsumeSuccessScenario : IPlaygroundScenario
     [RatatoskrMessage("direct-consume-success.direct-work")]
     public sealed record DirectWork(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
 
-    public sealed class DirectWorkHandler(PublisherDbContext context, TimeProvider timeProvider, ILogger<DirectWorkHandler> _)
+    public sealed class DirectWorkHandler(PublisherDbContext context, TimeProvider timeProvider)
         : IMessageHandler<DirectWork>
     {
         public Task HandleAsync(DirectWork message, MessageProperties _, CancellationToken cancellationToken) =>

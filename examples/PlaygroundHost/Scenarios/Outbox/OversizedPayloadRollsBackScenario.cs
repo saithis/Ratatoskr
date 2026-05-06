@@ -10,13 +10,13 @@ namespace PlaygroundHost.Scenarios.Outbox;
 public sealed class OversizedPayloadRollsBackScenario : IPlaygroundScenario
 {
     private const string ScenarioSlug = "oversized-payload-rolls-back";
+    private static string ExchangeName { get; } = PlaygroundAmqpNames.ExchangeName(ScenarioSlug, "events");
 
     public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues => [];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
     {
-        var exEvt = PlaygroundAmqpNames.EventsExchange(ScenarioSlug);
-        bus.AddEventPublishChannel(exEvt, c => c
+        bus.AddEventPublishChannel(ExchangeName, c => c
             .WithRabbitMq(r => r.WithTopicExchange())
             .Produces<OrderPlaced>());
     }

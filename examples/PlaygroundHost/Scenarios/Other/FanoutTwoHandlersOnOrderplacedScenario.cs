@@ -12,24 +12,23 @@ namespace PlaygroundHost.Scenarios.Other;
 public sealed class FanoutTwoHandlersOnOrderplacedScenario : IPlaygroundScenario
 {
     private const string ScenarioSlug = "fanout-two-handlers-on-orderplaced";
+    private static string ExchangeName { get; } = PlaygroundAmqpNames.ExchangeName(ScenarioSlug, "events");
+    private static string QueueName { get; } = PlaygroundAmqpNames.QueueName(ScenarioSlug, "notifications");
 
     public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues =>
-        [new("notifications", PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug))];
+        [new("notifications", QueueName)];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
     {
-        var exEvt = PlaygroundAmqpNames.EventsExchange(ScenarioSlug);
-        var qNot = PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug);
-
-        bus.AddEventPublishChannel(exEvt, c => c
+        bus.AddEventPublishChannel(ExchangeName, c => c
             .WithRabbitMq(r => r.WithTopicExchange())
             .Produces<OrderPlaced>());
 
         bus.AddEventConsumeChannel($"{ScenarioSlug}-notifications", c => c
             .WithRabbitMq(r => r
                 .WithTopicExchange()
-                .WithAmqpExchangeName(exEvt)
-                .WithQueueName(qNot)
+                .WithAmqpExchangeName(ExchangeName)
+                .WithQueueName(QueueName)
                 .WithQueueType(QueueType.Classic)
                 .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
             .Consumes<OrderPlaced>(m => m
@@ -102,13 +101,13 @@ public sealed class FanoutTwoHandlersOnOrderplacedScenario : IPlaygroundScenario
     [RatatoskrMessage("fanout-two-handlers-on-orderplaced.order-placed")]
     public sealed record OrderPlaced(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
 
-    public sealed class OrderPlacedNotifyHandler(ILogger<OrderPlacedNotifyHandler> _) : IMessageHandler<OrderPlaced>
+    public sealed class OrderPlacedNotifyHandler : IMessageHandler<OrderPlaced>
     {
         public Task HandleAsync(OrderPlaced message, MessageProperties properties, CancellationToken cancellationToken) =>
             Task.CompletedTask;
     }
 
-    public sealed class OrderPlacedAnalyticsHandler(ILogger<OrderPlacedAnalyticsHandler> _) : IMessageHandler<OrderPlaced>
+    public sealed class OrderPlacedAnalyticsHandler : IMessageHandler<OrderPlaced>
     {
         public Task HandleAsync(OrderPlaced message, MessageProperties properties, CancellationToken cancellationToken) =>
             Task.CompletedTask;

@@ -10,18 +10,17 @@ namespace PlaygroundHost.Scenarios.Other;
 public sealed class EfcoreInternalCommandScenario : IPlaygroundScenario
 {
     private const string ScenarioSlug = "efcore-internal-command";
+    private static string InternalCommandChannel { get; } = $"pg.{ScenarioSlug}.orders.internal";
 
     public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues => [];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
     {
-        var internalCh = $"pg.{ScenarioSlug}.orders.internal";
-
-        bus.AddCommandPublishChannel(internalCh, c => c
+        bus.AddCommandPublishChannel(InternalCommandChannel, c => c
             .WithEfCore()
             .Produces<ReserveStockInternal>());
 
-        bus.AddCommandConsumeChannel(internalCh, c => c
+        bus.AddCommandConsumeChannel(InternalCommandChannel, c => c
             .Consumes<ReserveStockInternal>(m => m.WithHandler<ReserveStockInternalHandler>($"{ScenarioSlug}.reserve"))
             .UseInbox<PublisherDbContext>());
     }
