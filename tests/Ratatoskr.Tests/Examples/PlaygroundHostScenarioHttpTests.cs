@@ -180,13 +180,13 @@ public sealed class PlaygroundHostScenarioHttpTests(RabbitMqContainerFixture rab
     [Arguments("oversized-payload-rolls-back")]
     [Arguments("inbox-retry-then-success")]
     [Arguments("inbox-poison")]
+    [Arguments("inbox-dedups")]
     [Arguments("business-rejection")]
     [Arguments("direct-consume-success")]
     [Arguments("direct-consume-retry")]
     [Arguments("direct-consume-dlq")]
     [Arguments("fanout-two-handlers-on-orderplaced")]
     [Arguments("efcore-internal-command")]
-    [Arguments("replay-dedups")]
     public async Task Scenario_EndsPassed(string slug)
     {
         var client = await GetClientAsync();

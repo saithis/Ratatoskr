@@ -35,6 +35,20 @@ public sealed class ScenarioExecutionContext(
     private IRatatoskr? _ratatoskr;
     public IRatatoskr Ratatoskr => _ratatoskr ??= Services.GetRequiredService<IRatatoskr>();
 
+    public string RabbitMqConnectionString
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(field))
+            {
+                var cfg = GetRequired<IConfiguration>();
+                field = cfg.GetConnectionString("rabbitmq")
+                        ?? throw new InvalidOperationException("rabbitmq connection string missing.");
+            }
+            return field;
+        }
+    }
+
     public T GetRequired<T>()
         where T : notnull
     {

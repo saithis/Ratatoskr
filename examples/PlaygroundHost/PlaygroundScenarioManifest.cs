@@ -34,7 +34,7 @@ internal static class PlaygroundScenarioManifest
         Entry<DirectConsumeDlqScenario>(),
         Entry<FanoutTwoHandlersOnOrderplacedScenario>(),
         Entry<EfcoreInternalCommandScenario>(),
-        Entry<ReplayDedupsScenario>(),
+        Entry<InboxDedupsScenario>(),
         Entry<BlockingHoldScenario>(),
         Entry<CancelSmokeScenario>(),
     ];

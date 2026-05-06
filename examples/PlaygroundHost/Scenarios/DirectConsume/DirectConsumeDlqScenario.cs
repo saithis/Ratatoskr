@@ -44,11 +44,8 @@ public sealed class DirectConsumeDlqScenario : IPlaygroundScenario
 
     public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
     {
-        var cfg = context.GetRequired<IConfiguration>();
-        var rabbitCs = cfg.GetConnectionString("rabbitmq")
-            ?? throw new InvalidOperationException("rabbitmq connection string missing.");
         var mainQ = PlaygroundAmqpNames.NotificationsQueue(ScenarioSlug);
-        var d0 = await RabbitDlqDepthReader.GetDlqCountAsync(rabbitCs, mainQ, cancellationToken);
+        var d0 = await RabbitDlqDepthReader.GetDlqCountAsync(context.RabbitMqConnectionString, mainQ, cancellationToken);
 
         var order = this.AddPlacedOrderToContext(context.PublisherDb, context.TimeProvider, "direct");
         await context.PublisherDb.SaveChangesAsync(cancellationToken);
@@ -60,7 +57,7 @@ public sealed class DirectConsumeDlqScenario : IPlaygroundScenario
         context.StepsCompleted.Add("direct_publish_always_fail");
 
         return await ScenarioAssertions.DlqDepthEventuallyExceedsBaselineAsync(
-            rabbitCs,
+            context.RabbitMqConnectionString,
             mainQ,
             d0,
             context.TimeProvider,
