@@ -28,5 +28,9 @@ public interface IAsyncApiTransportBindingProvider
     /// <summary>
     /// Called for each message to add transport-specific message bindings.
     /// </summary>
-    void ConfigureMessage(MessageRegistration message, ChannelRegistration channel, AsyncApiMessage asyncApiMessage);
+    void ConfigureMessage(
+        MessageRegistration message,
+        ChannelRegistration channel,
+        AsyncApiMessage asyncApiMessage
+    );
 }

@@ -6,7 +6,8 @@ namespace Ratatoskr.EfCore.Internal;
 /// Per-DbContext wrapper for <see cref="InboxOptions"/>.
 /// Allows multiple DbContext types to each have their own inbox configuration.
 /// </summary>
-internal class InboxOptionsHolder<TDbContext>(InboxOptions options) where TDbContext : DbContext
+internal class InboxOptionsHolder<TDbContext>(InboxOptions options)
+    where TDbContext : DbContext
 {
     public InboxOptions Options => options;
 }

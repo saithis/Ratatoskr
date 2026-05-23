@@ -6,7 +6,10 @@ namespace Ratatoskr.AsyncApi.Extensions;
 
 public static class AsyncApiMessageBuilderExtensions
 {
-    public static MessageBuilder WithAsyncApi(this MessageBuilder builder, Action<AsyncApiMessageOptions> configure)
+    public static MessageBuilder WithAsyncApi(
+        this MessageBuilder builder,
+        Action<AsyncApiMessageOptions> configure
+    )
     {
         ArgumentNullException.ThrowIfNull(configure);
         var opts = new AsyncApiMessageOptions();
@@ -15,6 +18,7 @@ public static class AsyncApiMessageBuilderExtensions
         return builder;
     }
 
-    internal static AsyncApiMessageOptions? GetAsyncApiMessageOptions(this MessageRegistration registration)
-        => registration.GetExtension<AsyncApiMessageOptions>();
+    internal static AsyncApiMessageOptions? GetAsyncApiMessageOptions(
+        this MessageRegistration registration
+    ) => registration.GetExtension<AsyncApiMessageOptions>();
 }

@@ -16,22 +16,29 @@ internal static class ContextHealthEndpoint
     private static Results<Ok<ContextHealthResponse>, ProblemHttpResult> Handle(
         string contextName,
         EfCoreManagementDbContextLookup lookup,
-        EfCoreMetricsState metricsState)
+        EfCoreMetricsState metricsState
+    )
     {
-        if (ManagementDbContextResolver.EnsureContext(lookup, contextName, out var dbContext) is { } resolveError)
+        if (
+            ManagementDbContextResolver.EnsureContext(lookup, contextName, out var dbContext) is
+            { } resolveError
+        )
             return resolveError;
 
         var descriptor = lookup.Find(contextName)!;
         metricsState.TryGetValue(dbContext.GetType(), out var metrics);
 
-        return TypedResults.Ok(new ContextHealthResponse(
-            descriptor.DbContextName,
-            metrics.PoisonedOutboxCount,
-            metrics.PoisonedInboxCount,
-            metrics.PendingOutboxCount,
-            metrics.PendingInboxCount,
-            descriptor.LastOutboxProcessingAt,
-            descriptor.LastInboxProcessingAt));
+        return TypedResults.Ok(
+            new ContextHealthResponse(
+                descriptor.DbContextName,
+                metrics.PoisonedOutboxCount,
+                metrics.PoisonedInboxCount,
+                metrics.PendingOutboxCount,
+                metrics.PendingInboxCount,
+                descriptor.LastOutboxProcessingAt,
+                descriptor.LastInboxProcessingAt
+            )
+        );
     }
 
     internal record ContextHealthResponse(
@@ -41,5 +48,6 @@ internal static class ContextHealthEndpoint
         long PendingOutboxCount,
         long PendingInboxCount,
         DateTimeOffset? LastOutboxProcessedAt,
-        DateTimeOffset? LastInboxProcessedAt);
+        DateTimeOffset? LastInboxProcessedAt
+    );
 }

@@ -22,7 +22,7 @@ internal static class DatabaseProviderHelper
         {
             PostgresProvider => "\"ProcessedAt\" IS NULL AND \"IsPoisoned\" = false",
             SqlServerProvider => "[ProcessedAt] IS NULL AND [IsPoisoned] = 0",
-            _ => null
+            _ => null,
         };
     }
 
@@ -36,7 +36,7 @@ internal static class DatabaseProviderHelper
         {
             PostgresProvider => "\"CompletedAt\" IS NULL AND \"IsPoisoned\" = false",
             SqlServerProvider => "[CompletedAt] IS NULL AND [IsPoisoned] = 0",
-            _ => null
+            _ => null,
         };
     }
 }

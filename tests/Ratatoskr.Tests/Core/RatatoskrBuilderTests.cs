@@ -1,8 +1,8 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
-using Ratatoskr.Tests.Fixtures;
 using Ratatoskr;
 using Ratatoskr.Core;
+using Ratatoskr.Tests.Fixtures;
 using TUnit.Core;
 
 namespace Ratatoskr.Tests.Core;
@@ -15,10 +15,10 @@ public class RatatoskrBuilderTests
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        
+
         // Act
-        builder.AddEventConsumeChannel("test-channel", _ => {});
-        
+        builder.AddEventConsumeChannel("test-channel", _ => { });
+
         // Assert
         var channel = builder.ChannelRegistry.GetConsumeChannel("test-channel");
         channel.Should().NotBeNull();
@@ -31,10 +31,10 @@ public class RatatoskrBuilderTests
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        
+
         // Act
-        builder.AddEventPublishChannel("pub-channel", _ => {});
-        
+        builder.AddEventPublishChannel("pub-channel", _ => { });
+
         // Assert
         var channel = builder.ChannelRegistry.GetPublishChannel("pub-channel");
         channel.Should().NotBeNull();
@@ -49,8 +49,10 @@ public class RatatoskrBuilderTests
         var builder = new RatatoskrBuilder(services);
 
         // Act
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
+        );
 
         // Assert
         var channel = builder.ChannelRegistry.GetConsumeChannel("test-channel");
@@ -66,10 +68,10 @@ public class RatatoskrBuilderTests
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        
+
         // Act
         builder.AddEventPublishChannel("pub-channel", c => c.Produces<TestEvent>());
-        
+
         // Assert
         var channel = builder.ChannelRegistry.GetPublishChannel("pub-channel");
         channel.Should().NotBeNull();
@@ -85,8 +87,10 @@ public class RatatoskrBuilderTests
         var builder = new RatatoskrBuilder(services);
 
         // Act
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
+        );
         var provider = services.BuildServiceProvider();
 
         // Assert - Can resolve as concrete type
@@ -105,8 +109,13 @@ public class RatatoskrBuilderTests
         var builder = new RatatoskrBuilder(services);
 
         // Act
-        builder.AddEventPublishChannel("pub-channel", c => c
-            .Produces<TestEvent>(m => m.WithDataSchema("https://schemas.example.com/test-event/v1.json")));
+        builder.AddEventPublishChannel(
+            "pub-channel",
+            c =>
+                c.Produces<TestEvent>(m =>
+                    m.WithDataSchema("https://schemas.example.com/test-event/v1.json")
+                )
+        );
 
         // Assert
         var channel = builder.ChannelRegistry.GetPublishChannel("pub-channel");
@@ -138,8 +147,13 @@ public class RatatoskrBuilderTests
         var builder = new RatatoskrBuilder(services);
 
         // Act
-        builder.AddEventPublishChannel("pub-channel", c => c
-            .Produces<EventWithSchema>(m => m.WithDataSchema("https://override.example.com/v2.json")));
+        builder.AddEventPublishChannel(
+            "pub-channel",
+            c =>
+                c.Produces<EventWithSchema>(m =>
+                    m.WithDataSchema("https://override.example.com/v2.json")
+                )
+        );
 
         // Assert
         var channel = builder.ChannelRegistry.GetPublishChannel("pub-channel");
@@ -155,8 +169,10 @@ public class RatatoskrBuilderTests
         var builder = new RatatoskrBuilder(services);
 
         // Act
-        builder.AddEventPublishChannel("pub-channel", c => c
-            .Produces<TestEvent>(m => m.WithSerializer<TestEventPipeMessageSerializer>()));
+        builder.AddEventPublishChannel(
+            "pub-channel",
+            c => c.Produces<TestEvent>(m => m.WithSerializer<TestEventPipeMessageSerializer>())
+        );
 
         // Assert
         var channel = builder.ChannelRegistry.GetPublishChannel("pub-channel");
@@ -173,9 +189,14 @@ public class RatatoskrBuilderTests
         services.AddRatatoskr(bus =>
         {
             bus.AddEventPublishChannel("pub-a", c => c.Produces<TestEvent>());
-            bus.AddEventConsumeChannel("con-a", c => c
-                .Consumes<TestEvent>(h => h.WithHandler<TestEventHandler>(),
-                    m => m.WithSerializer<TestEventPipeMessageSerializer>()));
+            bus.AddEventConsumeChannel(
+                "con-a",
+                c =>
+                    c.Consumes<TestEvent>(
+                        h => h.WithHandler<TestEventHandler>(),
+                        m => m.WithSerializer<TestEventPipeMessageSerializer>()
+                    )
+            );
         });
         using var provider = services.BuildServiceProvider();
 
@@ -183,7 +204,8 @@ public class RatatoskrBuilderTests
         var act = () => provider.GetRequiredService<IMessageSerializerResolver>();
 
         // Assert
-        act.Should().Throw<InvalidOperationException>()
+        act.Should()
+            .Throw<InvalidOperationException>()
             .WithMessage("*mixes default and explicit serializer registrations*");
     }
 
@@ -194,8 +216,10 @@ public class RatatoskrBuilderTests
         var services = new ServiceCollection();
         services.AddRatatoskr(bus =>
         {
-            bus.AddEventPublishChannel("pub-a", c => c
-                .Produces<TestEvent>(m => m.WithSerializer<TestEventPipeMessageSerializer>()));
+            bus.AddEventPublishChannel(
+                "pub-a",
+                c => c.Produces<TestEvent>(m => m.WithSerializer<TestEventPipeMessageSerializer>())
+            );
         });
         using var provider = services.BuildServiceProvider();
 
@@ -203,10 +227,14 @@ public class RatatoskrBuilderTests
         var act = () => provider.GetRequiredService<IMessageSerializerResolver>();
 
         // Assert
-        act.Should().Throw<InvalidOperationException>()
+        act.Should()
+            .Throw<InvalidOperationException>()
             .WithMessage("*Register it as its concrete type*");
     }
 
-    [RatatoskrMessage("event.with.schema", DataSchema = "https://schemas.example.com/event-with-schema/v1.json")]
+    [RatatoskrMessage(
+        "event.with.schema",
+        DataSchema = "https://schemas.example.com/event-with-schema/v1.json"
+    )]
     private record EventWithSchema;
 }

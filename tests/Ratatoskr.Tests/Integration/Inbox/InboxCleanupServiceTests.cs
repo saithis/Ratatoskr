@@ -13,10 +13,14 @@ using TUnit.Core;
 
 namespace Ratatoskr.Tests.Integration.Inbox;
 
-public class InboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
-    : InboxTestBase(rabbitMq, postgres)
+public class InboxCleanupServiceTests(
+    RabbitMqContainerFixture rabbitMq,
+    PostgresContainerFixture postgres
+) : InboxTestBase(rabbitMq, postgres)
 {
-    private readonly FakeTimeProvider _timeProvider = new(new DateTimeOffset(2025, 6, 1, 12, 0, 0, TimeSpan.Zero));
+    private readonly FakeTimeProvider _timeProvider = new(
+        new DateTimeOffset(2025, 6, 1, 12, 0, 0, TimeSpan.Zero)
+    );
 
     private InboxCleanupService<TestDbContext> CreateCleanupService(InboxOptions options) =>
         new(
@@ -24,20 +28,28 @@ public class InboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgre
             new InboxOptionsHolder<TestDbContext>(options),
             Services.GetRequiredService<IDistributedLockProvider>(),
             _timeProvider,
-            Services.GetRequiredService<ILogger<InboxCleanupService<TestDbContext>>>());
+            Services.GetRequiredService<ILogger<InboxCleanupService<TestDbContext>>>()
+        );
 
     private async Task SetupAsync()
     {
         await StartTestAsync(services =>
         {
-            services.AddDbContext<TestDbContext>((_, options) =>
-                options.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (_, options) => options.UseNpgsql(PostgresConnectionString)
+            );
         });
         await InitializeDatabase();
     }
 
     private InboxMessageEntity CreateInboxMessage(string id) =>
-        InboxMessageEntity.Create(id, "rabbitmq", "test"u8.ToArray(), new MessageProperties { Type = "test" }, _timeProvider);
+        InboxMessageEntity.Create(
+            id,
+            "rabbitmq",
+            "test"u8.ToArray(),
+            new MessageProperties { Type = "test" },
+            _timeProvider
+        );
 
     [Test]
     public async Task Cleanup_DeletesCompletedHandlerStatusesOlderThanRetention()
@@ -79,7 +91,9 @@ public class InboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgre
         var service = CreateCleanupService(options);
 
         // Act
-        var (handlerStatuses, orphanedMessages) = await service.CleanupAsync(CancellationToken.None);
+        var (handlerStatuses, orphanedMessages) = await service.CleanupAsync(
+            CancellationToken.None
+        );
 
         // Assert
         handlerStatuses.Should().Be(1);
@@ -111,7 +125,11 @@ public class InboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgre
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var message = CreateInboxMessage("msg-poisoned");
             db.Set<InboxMessageEntity>().Add(message);
-            var status = InboxHandlerStatusEntity.Create("msg-poisoned", "handler-a", _timeProvider);
+            var status = InboxHandlerStatusEntity.Create(
+                "msg-poisoned",
+                "handler-a",
+                _timeProvider
+            );
             status.MarkAsPoisoned("test failure", _timeProvider);
             db.Set<InboxHandlerStatusEntity>().Add(status);
             await db.SaveChangesAsync();
@@ -124,7 +142,9 @@ public class InboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgre
         var service = CreateCleanupService(options);
 
         // Act
-        var (handlerStatuses, orphanedMessages) = await service.CleanupAsync(CancellationToken.None);
+        var (handlerStatuses, orphanedMessages) = await service.CleanupAsync(
+            CancellationToken.None
+        );
 
         // Assert
         handlerStatuses.Should().Be(0);
@@ -154,7 +174,9 @@ public class InboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgre
         var service = CreateCleanupService(options);
 
         // Act
-        var (handlerStatuses, orphanedMessages) = await service.CleanupAsync(CancellationToken.None);
+        var (handlerStatuses, orphanedMessages) = await service.CleanupAsync(
+            CancellationToken.None
+        );
 
         // Assert
         handlerStatuses.Should().Be(0);
@@ -225,7 +247,9 @@ public class InboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgre
         var service = CreateCleanupService(options);
 
         // Act
-        var (handlerStatuses, orphanedMessages) = await service.CleanupAsync(CancellationToken.None);
+        var (handlerStatuses, orphanedMessages) = await service.CleanupAsync(
+            CancellationToken.None
+        );
 
         // Assert
         handlerStatuses.Should().Be(2);
@@ -253,7 +277,11 @@ public class InboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgre
             {
                 var message = CreateInboxMessage($"msg-{i}");
                 db.Set<InboxMessageEntity>().Add(message);
-                var status = InboxHandlerStatusEntity.Create($"msg-{i}", "handler-a", _timeProvider);
+                var status = InboxHandlerStatusEntity.Create(
+                    $"msg-{i}",
+                    "handler-a",
+                    _timeProvider
+                );
                 status.MarkAsProcessing(_timeProvider);
                 status.MarkAsCompleted(_timeProvider);
                 db.Set<InboxHandlerStatusEntity>().Add(status);
@@ -265,11 +293,17 @@ public class InboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgre
         _timeProvider.Advance(TimeSpan.FromDays(10));
 
         // Use batch size of 2 — should still delete all 5 in multiple batches
-        var options = new InboxOptions { RetentionPeriod = TimeSpan.FromDays(1), CleanupBatchSize = 2 };
+        var options = new InboxOptions
+        {
+            RetentionPeriod = TimeSpan.FromDays(1),
+            CleanupBatchSize = 2,
+        };
         var service = CreateCleanupService(options);
 
         // Act
-        var (handlerStatuses, orphanedMessages) = await service.CleanupAsync(CancellationToken.None);
+        var (handlerStatuses, orphanedMessages) = await service.CleanupAsync(
+            CancellationToken.None
+        );
 
         // Assert
         handlerStatuses.Should().Be(5);
@@ -324,7 +358,11 @@ public class InboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgre
 
         // Batch size 1 forces 3 loop iterations — deterministic ordering prevents
         // non-deterministic Take() from causing repeated work or skipped rows
-        var options = new InboxOptions { RetentionPeriod = TimeSpan.FromDays(1), CleanupBatchSize = 1 };
+        var options = new InboxOptions
+        {
+            RetentionPeriod = TimeSpan.FromDays(1),
+            CleanupBatchSize = 1,
+        };
         var service = CreateCleanupService(options);
 
         // Act
@@ -354,12 +392,20 @@ public class InboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgre
             var message = CreateInboxMessage("msg-partial");
             db.Set<InboxMessageEntity>().Add(message);
 
-            var completedStatus = InboxHandlerStatusEntity.Create("msg-partial", "handler-a", _timeProvider);
+            var completedStatus = InboxHandlerStatusEntity.Create(
+                "msg-partial",
+                "handler-a",
+                _timeProvider
+            );
             completedStatus.MarkAsProcessing(_timeProvider);
             completedStatus.MarkAsCompleted(_timeProvider);
             db.Set<InboxHandlerStatusEntity>().Add(completedStatus);
 
-            var pendingStatus = InboxHandlerStatusEntity.Create("msg-partial", "handler-b", _timeProvider);
+            var pendingStatus = InboxHandlerStatusEntity.Create(
+                "msg-partial",
+                "handler-b",
+                _timeProvider
+            );
             db.Set<InboxHandlerStatusEntity>().Add(pendingStatus);
 
             await db.SaveChangesAsync();
@@ -372,7 +418,9 @@ public class InboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgre
         var service = CreateCleanupService(options);
 
         // Act
-        var (handlerStatuses, orphanedMessages) = await service.CleanupAsync(CancellationToken.None);
+        var (handlerStatuses, orphanedMessages) = await service.CleanupAsync(
+            CancellationToken.None
+        );
 
         // Assert
         handlerStatuses.Should().Be(1); // Only completed status deleted
@@ -402,18 +450,22 @@ public class InboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgre
             if (instrument.Meter.Name == RatatoskrDiagnostics.MeterName)
                 meterListener.EnableMeasurementEvents(instrument);
         };
-        listener.SetMeasurementEventCallback<long>((instrument, measurement, _, _) =>
-        {
-            if (instrument.Name == "ratatoskr.inbox.cleanup.status.count")
-                Interlocked.Add(ref statusCleanupCount, measurement);
-            if (instrument.Name == "ratatoskr.inbox.cleanup.message.count")
-                Interlocked.Add(ref messageCleanupCount, measurement);
-        });
-        listener.SetMeasurementEventCallback<double>((instrument, measurement, _, _) =>
-        {
-            if (instrument.Name == "ratatoskr.inbox.cleanup.duration")
-                cleanupDuration = measurement;
-        });
+        listener.SetMeasurementEventCallback<long>(
+            (instrument, measurement, _, _) =>
+            {
+                if (instrument.Name == "ratatoskr.inbox.cleanup.status.count")
+                    Interlocked.Add(ref statusCleanupCount, measurement);
+                if (instrument.Name == "ratatoskr.inbox.cleanup.message.count")
+                    Interlocked.Add(ref messageCleanupCount, measurement);
+            }
+        );
+        listener.SetMeasurementEventCallback<double>(
+            (instrument, measurement, _, _) =>
+            {
+                if (instrument.Name == "ratatoskr.inbox.cleanup.duration")
+                    cleanupDuration = measurement;
+            }
+        );
         listener.Start();
 
         // Insert a message with a completed handler status
@@ -455,7 +507,11 @@ public class InboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgre
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var message = CreateInboxMessage("msg-lock-test");
             db.Set<InboxMessageEntity>().Add(message);
-            var status = InboxHandlerStatusEntity.Create("msg-lock-test", "handler-a", _timeProvider);
+            var status = InboxHandlerStatusEntity.Create(
+                "msg-lock-test",
+                "handler-a",
+                _timeProvider
+            );
             status.MarkAsProcessing(_timeProvider);
             status.MarkAsCompleted(_timeProvider);
             db.Set<InboxHandlerStatusEntity>().Add(status);
@@ -491,7 +547,11 @@ public class InboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgre
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var message = CreateInboxMessage("msg-lock-skip");
             db.Set<InboxMessageEntity>().Add(message);
-            var status = InboxHandlerStatusEntity.Create("msg-lock-skip", "handler-a", _timeProvider);
+            var status = InboxHandlerStatusEntity.Create(
+                "msg-lock-skip",
+                "handler-a",
+                _timeProvider
+            );
             status.MarkAsProcessing(_timeProvider);
             status.MarkAsCompleted(_timeProvider);
             db.Set<InboxHandlerStatusEntity>().Add(status);

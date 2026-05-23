@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
-
   <ItemGroup>
     <ProjectReference Include="..\..\src\Ratatoskr\Ratatoskr.csproj" />
   </ItemGroup>
@@ -11,5 +10,4 @@
     <IsPackable>false</IsPackable>
     <WarnOnPackingNonPackableProject>false</WarnOnPackingNonPackableProject>
   </PropertyGroup>
-
 </Project>

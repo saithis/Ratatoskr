@@ -10,8 +10,8 @@ internal class OutboxProcessor<TDbContext>(
     IDistributedLockProvider distributedLockProvider,
     TimeProvider timeProvider,
     OutboxOptionsHolder<TDbContext> optionsHolder,
-    ILogger<OutboxProcessor<TDbContext>> logger)
-    : PollingBackgroundService(distributedLockProvider, timeProvider, logger)
+    ILogger<OutboxProcessor<TDbContext>> logger
+) : PollingBackgroundService(distributedLockProvider, timeProvider, logger)
     where TDbContext : DbContext, IOutboxDbContext
 {
     private readonly OutboxOptions _options = optionsHolder.Options;
@@ -27,12 +27,15 @@ internal class OutboxProcessor<TDbContext>(
         while (true)
         {
             using var batchScope = serviceScopeFactory.CreateScope();
-            var processor = batchScope.ServiceProvider.GetRequiredService<OutboxMessageProcessor<TDbContext>>();
+            var processor = batchScope.ServiceProvider.GetRequiredService<
+                OutboxMessageProcessor<TDbContext>
+            >();
 
             logger.LogDebug("Checking outbox for unsent messages");
             var processedCount = await processor.ProcessBatchAsync(
                 includeStuckMessageDetection: true,
-                cancellationToken);
+                cancellationToken
+            );
 
             if (processedCount == 0)
                 return;

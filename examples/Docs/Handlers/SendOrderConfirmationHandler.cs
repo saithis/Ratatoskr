@@ -7,11 +7,17 @@ namespace Docs.Handlers;
 public class SendOrderConfirmationHandler(ILogger<SendOrderConfirmationHandler> logger)
     : IMessageHandler<SendOrderConfirmation>
 {
-    public Task HandleAsync(SendOrderConfirmation message, MessageProperties properties,
-        CancellationToken cancellationToken)
+    public Task HandleAsync(
+        SendOrderConfirmation message,
+        MessageProperties properties,
+        CancellationToken cancellationToken
+    )
     {
-        logger.LogInformation("Sending order confirmation for {OrderId} to {Email}",
-            message.OrderId, message.CustomerEmail);
+        logger.LogInformation(
+            "Sending order confirmation for {OrderId} to {Email}",
+            message.OrderId,
+            message.CustomerEmail
+        );
         return Task.CompletedTask;
     }
 }

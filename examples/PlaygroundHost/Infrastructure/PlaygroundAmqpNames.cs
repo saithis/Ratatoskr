@@ -6,8 +6,9 @@ namespace PlaygroundHost.Infrastructure;
 public static class PlaygroundAmqpNames
 {
     public static string ExchangeName(string slug, string purpose) => $"pg.{slug}.{purpose}";
+
     public static string QueueName(string slug, string purpose) => $"pg.{slug}.{purpose}";
-    
+
     public static string RetryQueueName(string mainQueueName) => $"{mainQueueName}.retry";
 
     public static string DlqQueueName(string mainQueueName) => $"{mainQueueName}.dlq";

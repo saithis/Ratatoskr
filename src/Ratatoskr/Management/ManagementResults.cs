@@ -12,19 +12,22 @@ internal static class ManagementResults
             statusCode: StatusCodes.Status404NotFound,
             title: "Not found",
             detail: detail,
-            type: ProblemTypeBase + "not-found");
+            type: ProblemTypeBase + "not-found"
+        );
 
     internal static ProblemHttpResult BadRequest(string detail) =>
         TypedResults.Problem(
             statusCode: StatusCodes.Status400BadRequest,
             title: "Bad request",
             detail: detail,
-            type: ProblemTypeBase + "bad-request");
+            type: ProblemTypeBase + "bad-request"
+        );
 
     internal static ProblemHttpResult Conflict(string detail) =>
         TypedResults.Problem(
             statusCode: StatusCodes.Status409Conflict,
             title: "Conflict",
             detail: detail,
-            type: ProblemTypeBase + "conflict");
+            type: ProblemTypeBase + "conflict"
+        );
 }

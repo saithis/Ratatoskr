@@ -5,7 +5,8 @@ namespace Ratatoskr.EfCore.Internal;
 
 internal sealed class ConsumeChannelInboxWarningHostedService(
     ConsumeChannelInboxPolicyAggregator policyAggregator,
-    ILogger<ConsumeChannelInboxWarningHostedService> logger) : IHostedService
+    ILogger<ConsumeChannelInboxWarningHostedService> logger
+) : IHostedService
 {
     public Task StartAsync(CancellationToken cancellationToken)
     {

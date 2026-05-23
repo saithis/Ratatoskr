@@ -6,22 +6,30 @@ namespace Ratatoskr.Core;
 /// <summary>
 /// Default implementation that enriches MessageProperties with metadata from the ChannelRegistry.
 /// </summary>
-public class MessagePropertiesEnricher(ChannelRegistry registry, CloudEventsOptions options, TimeProvider timeProvider, IEnumerable<ITransportMessageMetadataEnricher> transportEnrichers) : IMessagePropertiesEnricher
+public class MessagePropertiesEnricher(
+    ChannelRegistry registry,
+    CloudEventsOptions options,
+    TimeProvider timeProvider,
+    IEnumerable<ITransportMessageMetadataEnricher> transportEnrichers
+) : IMessagePropertiesEnricher
 {
-    private readonly Dictionary<string, ITransportMessageMetadataEnricher> _enrichersByTransport = transportEnrichers.ToDictionary(e => e.TransportName);
-    public MessageProperties Enrich<TMessage>(MessageProperties? properties) where TMessage : notnull
+    private readonly Dictionary<string, ITransportMessageMetadataEnricher> _enrichersByTransport =
+        transportEnrichers.ToDictionary(e => e.TransportName);
+
+    public MessageProperties Enrich<TMessage>(MessageProperties? properties)
+        where TMessage : notnull
     {
         return Enrich(typeof(TMessage), properties);
     }
-    
+
     public MessageProperties Enrich(Type messageType, MessageProperties? properties)
     {
         properties ??= new MessageProperties();
-        
+
         properties.Id ??= Guid.NewGuid().ToString();
         properties.Time ??= timeProvider.GetUtcNow();
         properties.Source ??= options.DefaultSource;
-        
+
         var activity = System.Diagnostics.Activity.Current;
         if (activity != null)
         {
@@ -31,10 +39,10 @@ public class MessagePropertiesEnricher(ChannelRegistry registry, CloudEventsOpti
                 properties.TraceState = activity.TraceStateString;
             }
         }
-        
+
         // Query registry for type info
         var publishInfo = registry.GetPublishInformation(messageType);
-        
+
         // Enrich Type if not already set
         if (string.IsNullOrEmpty(properties.Type))
         {

@@ -10,8 +10,12 @@ internal sealed class RabbitMqEndpointConfigurator : IRatatoskrEndpointConfigura
 {
     public void MapEndpoints(IEndpointRouteBuilder group)
     {
-        group.MapGet("/rabbitmq/health",
-            ([FromServices] RabbitMqConnectionManager conn, [FromServices] RabbitMqConsumer consumer) =>
-                TypedResults.Ok(new RabbitMqHealthDto(conn.IsConnected, consumer.IsHealthy, null)));
+        group.MapGet(
+            "/rabbitmq/health",
+            (
+                [FromServices] RabbitMqConnectionManager conn,
+                [FromServices] RabbitMqConsumer consumer
+            ) => TypedResults.Ok(new RabbitMqHealthDto(conn.IsConnected, consumer.IsHealthy, null))
+        );
     }
 }

@@ -15,14 +15,16 @@ public static class RabbitMqMessagePropertiesExtensions
             return props;
         }
 
-        public string? GetExchange() => props.TransportMetadata.GetValueOrDefault(ExchangeExtensionKey);
-        
+        public string? GetExchange() =>
+            props.TransportMetadata.GetValueOrDefault(ExchangeExtensionKey);
+
         public MessageProperties SetRoutingKey(string routingKey)
         {
             props.TransportMetadata[RoutingKeyExtensionKey] = routingKey;
             return props;
         }
-        
-        public string? GetRoutingKey() => props.TransportMetadata.GetValueOrDefault(RoutingKeyExtensionKey);
+
+        public string? GetRoutingKey() =>
+            props.TransportMetadata.GetValueOrDefault(RoutingKeyExtensionKey);
     }
 }

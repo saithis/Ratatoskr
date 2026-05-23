@@ -9,7 +9,10 @@ public class ChannelRegistry
     // O(1) lookup indexes — populated by Freeze()
     private Dictionary<Type, PublishInformation>? _publishByType;
     private Dictionary<string, PublishInformation>? _publishByTypeName;
-    private Dictionary<string, List<(ChannelRegistration Channel, MessageRegistration Message)>>? _consumeByTypeName;
+    private Dictionary<
+        string,
+        List<(ChannelRegistration Channel, MessageRegistration Message)>
+    >? _consumeByTypeName;
 
     public void Register(ChannelRegistration channel)
     {
@@ -19,10 +22,13 @@ public class ChannelRegistry
         }
 
         var registry = channel.Intent is ChannelType.EventPublish or ChannelType.CommandPublish
-            ? _publishChannels : _consumeChannels;
+            ? _publishChannels
+            : _consumeChannels;
         if (!registry.TryAdd(channel.ChannelName, channel))
         {
-             throw new InvalidOperationException($"Channel '{channel.ChannelName}' is already registered.");
+            throw new InvalidOperationException(
+                $"Channel '{channel.ChannelName}' is already registered."
+            );
         }
     }
 
@@ -39,8 +45,11 @@ public class ChannelRegistry
     }
 
     public IEnumerable<ChannelRegistration> GetConsumeChannels() => _consumeChannels.Values;
+
     public IEnumerable<ChannelRegistration> GetPublishChannels() => _publishChannels.Values;
-    public IEnumerable<ChannelRegistration> GetAllChannels() => _publishChannels.Values.Concat(_consumeChannels.Values);
+
+    public IEnumerable<ChannelRegistration> GetAllChannels() =>
+        _publishChannels.Values.Concat(_consumeChannels.Values);
 
     public void Freeze()
     {
@@ -68,7 +77,10 @@ public class ChannelRegistry
         _publishByTypeName = publishByTypeName;
 
         // Build registry-level O(1) consume-by-type-name index
-        var consumeByTypeName = new Dictionary<string, List<(ChannelRegistration, MessageRegistration)>>(StringComparer.Ordinal);
+        var consumeByTypeName = new Dictionary<
+            string,
+            List<(ChannelRegistration, MessageRegistration)>
+        >(StringComparer.Ordinal);
         foreach (var channel in _consumeChannels.Values)
         {
             foreach (var msg in channel.Messages)
@@ -89,8 +101,9 @@ public class ChannelRegistry
         if (_publishByType != null)
             return _publishByType.GetValueOrDefault(messageType)?.Channel;
 
-        return _publishChannels.Values
-            .FirstOrDefault(c => c.Messages.Any(m => m.MessageType == messageType));
+        return _publishChannels.Values.FirstOrDefault(c =>
+            c.Messages.Any(m => m.MessageType == messageType)
+        );
     }
 
     public ChannelRegistration? FindPublishChannelForTypeName(string messageTypeName)
@@ -98,30 +111,37 @@ public class ChannelRegistry
         if (_publishByTypeName != null)
             return _publishByTypeName.GetValueOrDefault(messageTypeName)?.Channel;
 
-        return _publishChannels.Values
-            .FirstOrDefault(c => c.Messages.Any(m => m.MessageTypeName == messageTypeName));
+        return _publishChannels.Values.FirstOrDefault(c =>
+            c.Messages.Any(m => m.MessageTypeName == messageTypeName)
+        );
     }
 
-    public IEnumerable<(ChannelRegistration Channel, MessageRegistration Message)> FindConsumeChannelsForType(string typeName)
+    public IEnumerable<(
+        ChannelRegistration Channel,
+        MessageRegistration Message
+    )> FindConsumeChannelsForType(string typeName)
     {
         if (_consumeByTypeName != null)
         {
             return _consumeByTypeName.GetValueOrDefault(typeName)
-                   ?? (IEnumerable<(ChannelRegistration, MessageRegistration)>)[];
+                ?? (IEnumerable<(ChannelRegistration, MessageRegistration)>)[];
         }
 
         return FindConsumeChannelsForTypeSlow(typeName);
     }
 
-    private IEnumerable<(ChannelRegistration Channel, MessageRegistration Message)> FindConsumeChannelsForTypeSlow(string typeName)
+    private IEnumerable<(
+        ChannelRegistration Channel,
+        MessageRegistration Message
+    )> FindConsumeChannelsForTypeSlow(string typeName)
     {
         foreach (var channel in _consumeChannels.Values)
         {
-             var msg = channel.Messages.FirstOrDefault(m => m.MessageTypeName == typeName);
-             if (msg != null)
-             {
-                 yield return (channel, msg);
-             }
+            var msg = channel.Messages.FirstOrDefault(m => m.MessageTypeName == typeName);
+            if (msg != null)
+            {
+                yield return (channel, msg);
+            }
         }
     }
 
@@ -132,15 +152,11 @@ public class ChannelRegistry
 
         var channel = FindPublishChannelForMessage(messageType);
         var message = channel?.GetMessage(messageType);
-        if (channel == null || message == null) return null;
-        return new PublishInformation
-        {
-            Channel =  channel,
-            Message = message,
-        };
+        if (channel == null || message == null)
+            return null;
+        return new PublishInformation { Channel = channel, Message = message };
     }
 }
-
 
 public class PublishInformation
 {

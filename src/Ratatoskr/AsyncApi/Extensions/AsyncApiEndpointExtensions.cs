@@ -23,26 +23,34 @@ public static class AsyncApiEndpointExtensions
     /// <param name="routePattern">The URL path for the AsyncAPI document. Defaults to <c>/asyncapi.json</c>.</param>
     public static IEndpointRouteBuilder MapAsyncApi(
         this IEndpointRouteBuilder endpoints,
-        string routePattern = "/asyncapi.json")
+        string routePattern = "/asyncapi.json"
+    )
     {
         string? cachedJson = null;
         var syncLock = new object();
 
-        endpoints.MapGet(routePattern, (AsyncApiDocumentGenerator generator) =>
-        {
-            if (cachedJson is null)
-            {
-                lock (syncLock)
+        endpoints
+            .MapGet(
+                routePattern,
+                (AsyncApiDocumentGenerator generator) =>
                 {
-                    cachedJson ??= JsonSerializer.Serialize(generator.Generate(), _serializerOptions);
-                }
-            }
+                    if (cachedJson is null)
+                    {
+                        lock (syncLock)
+                        {
+                            cachedJson ??= JsonSerializer.Serialize(
+                                generator.Generate(),
+                                _serializerOptions
+                            );
+                        }
+                    }
 
-            return Results.Content(cachedJson, "application/json");
-        })
-        .WithName("asyncapi")
-        .WithDisplayName("AsyncAPI Document")
-        .ExcludeFromDescription(); // exclude from Swagger UI if present
+                    return Results.Content(cachedJson, "application/json");
+                }
+            )
+            .WithName("asyncapi")
+            .WithDisplayName("AsyncAPI Document")
+            .ExcludeFromDescription(); // exclude from Swagger UI if present
 
         return endpoints;
     }

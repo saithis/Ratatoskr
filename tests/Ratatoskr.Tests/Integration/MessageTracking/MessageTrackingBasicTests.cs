@@ -14,7 +14,8 @@ namespace Ratatoskr.Tests.Integration.MessageTracking;
 
 public class MessageTrackingBasicTests(
     RabbitMqContainerFixture rabbitMq,
-    PostgresContainerFixture postgres) : MessageTrackingTestBase(rabbitMq, postgres)
+    PostgresContainerFixture postgres
+) : MessageTrackingTestBase(rabbitMq, postgres)
 {
     [Test]
     public async Task Tracking_PublishDirect_CapturesPublishedAndSent()
@@ -25,9 +26,10 @@ public class MessageTrackingBasicTests(
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-                bus.AddEventPublishChannel(ExchangeName, c => c
-                    .WithRabbitMq(r => r.WithTopicExchange())
-                    .Produces<TestEvent>());
+                bus.AddEventPublishChannel(
+                    ExchangeName,
+                    c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<TestEvent>()
+                );
             });
             services.AddRatatoskrTesting();
         });
@@ -43,7 +45,10 @@ public class MessageTrackingBasicTests(
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             var props = new MessageProperties();
             props.SetRoutingKey(DefaultRoutingKey);
-            await bus.PublishDirectAsync(new TestEvent { Id = "track-pub-1", Data = "tracked publish" }, props);
+            await bus.PublishDirectAsync(
+                new TestEvent { Id = "track-pub-1", Data = "tracked publish" },
+                props
+            );
         });
 
         // Assert - Published stage
@@ -80,7 +85,9 @@ public class MessageTrackingBasicTests(
         await InScopeAsync(async ctx =>
         {
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
-            await bus.PublishDirectAsync(new TestEvent { Id = "track-cons-1", Data = "tracked consume" });
+            await bus.PublishDirectAsync(
+                new TestEvent { Id = "track-cons-1", Data = "tracked consume" }
+            );
         });
 
         // Assert - Dispatched stage
@@ -143,18 +150,27 @@ public class MessageTrackingBasicTests(
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-                bus.AddCommandConsumeChannel(QueueName, c => c
-                    .WithRabbitMq(o => o.WithQueueName(QueueName).WithAutoAck(false).WithTransientQueue()
-                        .WithQueueType(QueueType.Classic))
-                    .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+                bus.AddCommandConsumeChannel(
+                    QueueName,
+                    c =>
+                        c.WithRabbitMq(o =>
+                                o.WithQueueName(QueueName)
+                                    .WithAutoAck(false)
+                                    .WithTransientQueue()
+                                    .WithQueueType(QueueType.Classic)
+                            )
+                            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
+                );
                 bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox());
             });
 
-            services.AddDbContext<TestDbContext>((sp, options) =>
-            {
-                options.UseNpgsql(PostgresConnectionString);
-                options.RegisterOutbox<TestDbContext>(sp);
-            });
+            services.AddDbContext<TestDbContext>(
+                (sp, options) =>
+                {
+                    options.UseNpgsql(PostgresConnectionString);
+                    options.RegisterOutbox<TestDbContext>(sp);
+                }
+            );
             services.AddRatatoskrTesting();
         });
 
@@ -168,8 +184,10 @@ public class MessageTrackingBasicTests(
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var props = new MessageProperties().SetExchange(QueueName);
             props.Transports.Add(RabbitMqConstants.TransportName);
-            dbContext.OutboxMessages.Add(new TestEvent { Id = "outbox-track-1", Data = "outbox tracked" },
-                props);
+            dbContext.OutboxMessages.Add(
+                new TestEvent { Id = "outbox-track-1", Data = "outbox tracked" },
+                props
+            );
             await dbContext.SaveChangesAsync();
         });
 
@@ -241,17 +259,24 @@ public class MessageTrackingBasicTests(
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-                bus.AddCommandPublishChannel(QueueName, c => c
-                    .WithRabbitMq(r => r.WithTopicExchange())
-                    .Produces<TestEvent>());
-                bus.AddCommandConsumeChannel(QueueName, c => c
-                    .WithRabbitMq(o => o
-                        .WithQueueName(QueueName)
-                        .WithAutoAck(false)
-                        .WithRetry(r => r.WithMaxRetries(1).WithDelay(TimeSpan.FromMilliseconds(50)))
-                        .WithTransientQueue()
-                        .WithQueueType(QueueType.Classic))
-                    .Consumes<TestEvent>(m => m.WithHandler<ThrowingTestEventHandler>()));
+                bus.AddCommandPublishChannel(
+                    QueueName,
+                    c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<TestEvent>()
+                );
+                bus.AddCommandConsumeChannel(
+                    QueueName,
+                    c =>
+                        c.WithRabbitMq(o =>
+                                o.WithQueueName(QueueName)
+                                    .WithAutoAck(false)
+                                    .WithRetry(r =>
+                                        r.WithMaxRetries(1).WithDelay(TimeSpan.FromMilliseconds(50))
+                                    )
+                                    .WithTransientQueue()
+                                    .WithQueueType(QueueType.Classic)
+                            )
+                            .Consumes<TestEvent>(m => m.WithHandler<ThrowingTestEventHandler>())
+                );
             });
             services.AddRatatoskrTesting();
         });
@@ -296,7 +321,9 @@ public class MessageTrackingBasicTests(
             {
                 using var scope = Services.CreateScope();
                 var bus = scope.ServiceProvider.GetRequiredService<IRatatoskr>();
-                await bus.PublishDirectAsync(new TestEvent { Id = "action-1", Data = "action based" });
+                await bus.PublishDirectAsync(
+                    new TestEvent { Id = "action-1", Data = "action based" }
+                );
             });
 
         // Assert - the wait already completed, so Dispatched is guaranteed populated

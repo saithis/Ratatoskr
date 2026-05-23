@@ -22,10 +22,14 @@ internal static class GetInboxMessageHandlersEndpoint
         string messageId,
         EfCoreManagementDbContextLookup lookup,
         ILoggerFactory loggerFactory,
-        CancellationToken ct)
+        CancellationToken ct
+    )
     {
         var logger = loggerFactory.CreateLogger(typeof(GetInboxMessageHandlersEndpoint).FullName!);
-        if (ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is { } resolveError)
+        if (
+            ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
+            { } resolveError
+        )
             return resolveError;
 
         var msg = await db.Set<InboxMessageEntity>()
@@ -40,12 +44,22 @@ internal static class GetInboxMessageHandlersEndpoint
             .ToListAsync(ct);
 
         var msgType = msg.GetProperties().Type ?? "(unknown)";
-        var summaries = handlers.Select(h => new InboxHandlerStatusSummary(
-            h.Id, h.HandlerKey, h.ErrorCount, h.RequeuedCount,
-            string.IsNullOrEmpty(h.LastError) ? null : h.LastError,
-            h.IsPoisoned, h.CompletedAt.HasValue, contextName)).ToList();
+        var summaries = handlers
+            .Select(h => new InboxHandlerStatusSummary(
+                h.Id,
+                h.HandlerKey,
+                h.ErrorCount,
+                h.RequeuedCount,
+                string.IsNullOrEmpty(h.LastError) ? null : h.LastError,
+                h.IsPoisoned,
+                h.CompletedAt.HasValue,
+                contextName
+            ))
+            .ToList();
 
-        return TypedResults.Ok(new InboxMessageHandlers(messageId, msgType, msg.ReceivedAt, summaries));
+        return TypedResults.Ok(
+            new InboxMessageHandlers(messageId, msgType, msg.ReceivedAt, summaries)
+        );
     }
 
     internal record InboxHandlerStatusSummary(
@@ -56,11 +70,13 @@ internal static class GetInboxMessageHandlersEndpoint
         string? LastError,
         bool IsPoisoned,
         bool IsCompleted,
-        string DbContext);
+        string DbContext
+    );
 
     internal record InboxMessageHandlers(
         string MessageId,
         string MessageType,
         DateTimeOffset ReceivedAt,
-        List<InboxHandlerStatusSummary> Handlers);
+        List<InboxHandlerStatusSummary> Handlers
+    );
 }

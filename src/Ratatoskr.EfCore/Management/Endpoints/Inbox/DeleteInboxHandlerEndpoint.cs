@@ -20,16 +20,22 @@ internal static class DeleteInboxHandlerEndpoint
         string contextName,
         Guid handlerStatusId,
         EfCoreManagementDbContextLookup lookup,
-        CancellationToken ct)
+        CancellationToken ct
+    )
     {
-        if (ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is { } resolveError)
+        if (
+            ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
+            { } resolveError
+        )
             return resolveError;
 
         var entity = await db.Set<InboxHandlerStatusEntity>()
             .SingleOrDefaultAsync(x => x.Id == handlerStatusId, ct);
 
         if (entity is null)
-            return ManagementResults.NotFound($"Inbox handler status '{handlerStatusId}' was not found.");
+            return ManagementResults.NotFound(
+                $"Inbox handler status '{handlerStatusId}' was not found."
+            );
         if (!entity.IsPoisoned)
             return ManagementResults.BadRequest("Handler status is not poisoned.");
 
@@ -46,15 +52,19 @@ internal static class DeleteInboxHandlerEndpoint
         catch (DbUpdateConcurrencyException)
         {
             await tx.RollbackAsync(ct);
-            return ManagementResults.Conflict("Handler status was modified by another operation; retry.");
+            return ManagementResults.Conflict(
+                "Handler status was modified by another operation; retry."
+            );
         }
 
         // Orphan-cleanup is expressed as a single SQL statement with a NOT EXISTS guard so the
         // parent is only deleted when no other handler rows reference it at delete time —
         // tighter than a separate COUNT + remove which had a TOCTOU hole for concurrent inserts.
         await db.Set<InboxMessageEntity>()
-            .Where(m => m.Id == messageId
-                        && !db.Set<InboxHandlerStatusEntity>().Any(h => h.MessageId == m.Id))
+            .Where(m =>
+                m.Id == messageId
+                && !db.Set<InboxHandlerStatusEntity>().Any(h => h.MessageId == m.Id)
+            )
             .ExecuteDeleteAsync(ct);
 
         await tx.CommitAsync(ct);

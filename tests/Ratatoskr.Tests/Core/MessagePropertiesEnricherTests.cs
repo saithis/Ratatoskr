@@ -10,7 +10,10 @@ namespace Ratatoskr.Tests.Core;
 public class MessagePropertiesEnricherTests
 {
     private readonly ChannelRegistry _registry = new();
-    private readonly CloudEventsOptions _cloudEventsOptions = new() { DefaultSource = "/test-service" };
+    private readonly CloudEventsOptions _cloudEventsOptions = new()
+    {
+        DefaultSource = "/test-service",
+    };
     private readonly FakeTimeProvider _timeProvider = new();
     private readonly NoOpTransportEnricher _transportEnricher = new();
 
@@ -222,7 +225,10 @@ public class MessagePropertiesEnricherTests
     {
         // Arrange
         var channel = new ChannelRegistration("test.exchange", ChannelType.EventPublish);
-        var msgReg = new MessageRegistration(typeof(TestEvent), "test.event") { DataSchema = "https://schemas.example.com/v1.json" };
+        var msgReg = new MessageRegistration(typeof(TestEvent), "test.event")
+        {
+            DataSchema = "https://schemas.example.com/v1.json",
+        };
         channel.Messages.Add(msgReg);
         _registry.Register(channel);
         var enricher = CreateEnricher();
@@ -239,11 +245,17 @@ public class MessagePropertiesEnricherTests
     {
         // Arrange
         var channel = new ChannelRegistration("test.exchange", ChannelType.EventPublish);
-        var msgReg = new MessageRegistration(typeof(TestEvent), "test.event") { DataSchema = "https://schemas.example.com/v1.json" };
+        var msgReg = new MessageRegistration(typeof(TestEvent), "test.event")
+        {
+            DataSchema = "https://schemas.example.com/v1.json",
+        };
         channel.Messages.Add(msgReg);
         _registry.Register(channel);
         var enricher = CreateEnricher();
-        var properties = new MessageProperties { DataSchema = "https://custom.example.com/v2.json" };
+        var properties = new MessageProperties
+        {
+            DataSchema = "https://custom.example.com/v2.json",
+        };
 
         // Act
         var result = enricher.Enrich<TestEvent>(properties);
@@ -278,7 +290,10 @@ public class MessagePropertiesEnricherTests
         result.DataSchema.Should().BeNull();
     }
 
-    [RatatoskrMessage("event.with.schema", DataSchema = "https://schemas.example.com/event-with-schema/v1.json")]
+    [RatatoskrMessage(
+        "event.with.schema",
+        DataSchema = "https://schemas.example.com/event-with-schema/v1.json"
+    )]
     private record EventWithDataSchema;
 
     private class NoOpTransportEnricher : ITransportMessageMetadataEnricher

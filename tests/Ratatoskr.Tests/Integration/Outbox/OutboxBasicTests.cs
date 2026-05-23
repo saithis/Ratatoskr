@@ -5,10 +5,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.EfCore.Internal;
+using Ratatoskr.RabbitMq;
 using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Tests.Fixtures;
-using Ratatoskr.RabbitMq;
 using TUnit.Core;
 
 namespace Ratatoskr.Tests.Integration.Outbox;
@@ -25,17 +25,20 @@ public class OutboxBasicTests(RabbitMqContainerFixture rabbitMq, PostgresContain
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-                bus.AddEventPublishChannel(ExchangeName, c => c
-                    .WithRabbitMq(r => r.WithTopicExchange())
-                    .Produces<TestEvent>());
+                bus.AddEventPublishChannel(
+                    ExchangeName,
+                    c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<TestEvent>()
+                );
                 bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox());
             });
 
-            services.AddDbContext<TestDbContext>((sp, options) =>
-            {
-                options.UseNpgsql(PostgresConnectionString);
-                options.RegisterOutbox<TestDbContext>(sp);
-            });
+            services.AddDbContext<TestDbContext>(
+                (sp, options) =>
+                {
+                    options.UseNpgsql(PostgresConnectionString);
+                    options.RegisterOutbox<TestDbContext>(sp);
+                }
+            );
         });
 
         await EnsureQueueBoundAsync(QueueName, ExchangeName, DefaultRoutingKey);
@@ -46,10 +49,14 @@ public class OutboxBasicTests(RabbitMqContainerFixture rabbitMq, PostgresContain
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
 
-            dbContext.TestEntities.Add(new TestEntity { Name = "Outbox Test", CreatedAt = DateTimeOffset.UtcNow });
+            dbContext.TestEntities.Add(
+                new TestEntity { Name = "Outbox Test", CreatedAt = DateTimeOffset.UtcNow }
+            );
 
-            dbContext.OutboxMessages.Add(new TestEvent { Id = "outbox-1", Data = "committed" },
-                new MessageProperties().SetRoutingKey(DefaultRoutingKey));
+            dbContext.OutboxMessages.Add(
+                new TestEvent { Id = "outbox-1", Data = "committed" },
+                new MessageProperties().SetRoutingKey(DefaultRoutingKey)
+            );
 
             await dbContext.SaveChangesAsync();
         });
@@ -72,18 +79,27 @@ public class OutboxBasicTests(RabbitMqContainerFixture rabbitMq, PostgresContain
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-                bus.AddCommandConsumeChannel(QueueName, c => c
-                    .WithRabbitMq(o => o.WithQueueName(QueueName).WithAutoAck(false).WithTransientQueue()
-                        .WithQueueType(QueueType.Classic))
-                    .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+                bus.AddCommandConsumeChannel(
+                    QueueName,
+                    c =>
+                        c.WithRabbitMq(o =>
+                                o.WithQueueName(QueueName)
+                                    .WithAutoAck(false)
+                                    .WithTransientQueue()
+                                    .WithQueueType(QueueType.Classic)
+                            )
+                            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
+                );
                 bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox());
             });
 
-            services.AddDbContext<TestDbContext>((sp, options) =>
-            {
-                options.UseNpgsql(PostgresConnectionString);
-                options.RegisterOutbox<TestDbContext>(sp);
-            });
+            services.AddDbContext<TestDbContext>(
+                (sp, options) =>
+                {
+                    options.UseNpgsql(PostgresConnectionString);
+                    options.RegisterOutbox<TestDbContext>(sp);
+                }
+            );
         });
 
         await InitializeDatabase();
@@ -95,14 +111,21 @@ public class OutboxBasicTests(RabbitMqContainerFixture rabbitMq, PostgresContain
 
             var props = new MessageProperties().SetRoutingKey(QueueName);
             props.Transports.Add(RabbitMqConstants.TransportName);
-            dbContext.OutboxMessages.Add(new TestEvent { Id = "e2e-1", Data = "outbox->consumer" },
-                props);
+            dbContext.OutboxMessages.Add(
+                new TestEvent { Id = "e2e-1", Data = "outbox->consumer" },
+                props
+            );
 
             await dbContext.SaveChangesAsync();
         });
 
         // Assert
-        await WaitForConditionAsync(() => handler.HandledMessages.Count > 0 && handler.HandledMessages.Any(m => m.Id == "e2e-1"), TimeSpan.FromSeconds(10));
+        await WaitForConditionAsync(
+            () =>
+                handler.HandledMessages.Count > 0
+                && handler.HandledMessages.Any(m => m.Id == "e2e-1"),
+            TimeSpan.FromSeconds(10)
+        );
 
         handler.HandledMessages.Should().Contain(m => m.Id == "e2e-1");
     }
@@ -116,17 +139,20 @@ public class OutboxBasicTests(RabbitMqContainerFixture rabbitMq, PostgresContain
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-                bus.AddEventPublishChannel(ExchangeName, c => c
-                    .WithRabbitMq(r => r.WithTopicExchange())
-                    .Produces<TestEvent>());
+                bus.AddEventPublishChannel(
+                    ExchangeName,
+                    c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<TestEvent>()
+                );
                 bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox());
             });
 
-            services.AddDbContext<TestDbContext>((sp, options) =>
-            {
-                options.UseNpgsql(PostgresConnectionString);
-                options.RegisterOutbox<TestDbContext>(sp);
-            });
+            services.AddDbContext<TestDbContext>(
+                (sp, options) =>
+                {
+                    options.UseNpgsql(PostgresConnectionString);
+                    options.RegisterOutbox<TestDbContext>(sp);
+                }
+            );
         });
 
         await InitializeDatabase();
@@ -136,11 +162,7 @@ public class OutboxBasicTests(RabbitMqContainerFixture rabbitMq, PostgresContain
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
 
-            var entity = new TestEntity
-            {
-                Name = "Test Entity",
-                CreatedAt = DateTimeOffset.UtcNow
-            };
+            var entity = new TestEntity { Name = "Test Entity", CreatedAt = DateTimeOffset.UtcNow };
             dbContext.TestEntities.Add(entity);
 
             dbContext.OutboxMessages.Add(new TestEvent { Data = "event for entity" });
@@ -171,17 +193,20 @@ public class OutboxBasicTests(RabbitMqContainerFixture rabbitMq, PostgresContain
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-                bus.AddEventPublishChannel(ExchangeName, c => c
-                    .WithRabbitMq(r => r.WithTopicExchange())
-                    .Produces<TestEvent>());
+                bus.AddEventPublishChannel(
+                    ExchangeName,
+                    c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<TestEvent>()
+                );
                 bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox());
             });
 
-            services.AddDbContext<TestDbContext>((sp, options) =>
-            {
-                options.UseNpgsql(PostgresConnectionString);
-                options.RegisterOutbox<TestDbContext>(sp);
-            });
+            services.AddDbContext<TestDbContext>(
+                (sp, options) =>
+                {
+                    options.UseNpgsql(PostgresConnectionString);
+                    options.RegisterOutbox<TestDbContext>(sp);
+                }
+            );
         });
 
         await InitializeDatabase();

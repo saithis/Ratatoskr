@@ -19,20 +19,25 @@ public static class HealthCheckExtensions
         string? name = null,
         HealthStatus? failureStatus = default,
         IEnumerable<string>? tags = default,
-        TimeSpan? unhealthyThreshold = null)
+        TimeSpan? unhealthyThreshold = null
+    )
         where TDbContext : DbContext, IOutboxDbContext
     {
         var checkName = name ?? $"ratatoskr-outbox-{typeof(TDbContext).Name}";
         var tagList = NormalizeTags(tags);
 
-        return builder.Add(new HealthCheckRegistration(
-            checkName,
-            sp => new ProcessorHealthCheck<OutboxProcessor<TDbContext>>(
-                sp.GetRequiredService<OutboxProcessor<TDbContext>>(),
-                sp.GetService<TimeProvider>() ?? TimeProvider.System,
-                unhealthyThreshold ?? TimeSpan.FromMinutes(2)),
-            failureStatus,
-            tagList));
+        return builder.Add(
+            new HealthCheckRegistration(
+                checkName,
+                sp => new ProcessorHealthCheck<OutboxProcessor<TDbContext>>(
+                    sp.GetRequiredService<OutboxProcessor<TDbContext>>(),
+                    sp.GetService<TimeProvider>() ?? TimeProvider.System,
+                    unhealthyThreshold ?? TimeSpan.FromMinutes(2)
+                ),
+                failureStatus,
+                tagList
+            )
+        );
     }
 
     /// <summary>
@@ -44,20 +49,25 @@ public static class HealthCheckExtensions
         string? name = null,
         HealthStatus? failureStatus = default,
         IEnumerable<string>? tags = default,
-        TimeSpan? unhealthyThreshold = null)
+        TimeSpan? unhealthyThreshold = null
+    )
         where TDbContext : DbContext, IInboxDbContext
     {
         var checkName = name ?? $"ratatoskr-inbox-{typeof(TDbContext).Name}";
         var tagList = NormalizeTags(tags);
 
-        return builder.Add(new HealthCheckRegistration(
-            checkName,
-            sp => new ProcessorHealthCheck<InboxProcessor<TDbContext>>(
-                sp.GetRequiredService<InboxProcessor<TDbContext>>(),
-                sp.GetService<TimeProvider>() ?? TimeProvider.System,
-                unhealthyThreshold ?? TimeSpan.FromMinutes(2)),
-            failureStatus,
-            tagList));
+        return builder.Add(
+            new HealthCheckRegistration(
+                checkName,
+                sp => new ProcessorHealthCheck<InboxProcessor<TDbContext>>(
+                    sp.GetRequiredService<InboxProcessor<TDbContext>>(),
+                    sp.GetService<TimeProvider>() ?? TimeProvider.System,
+                    unhealthyThreshold ?? TimeSpan.FromMinutes(2)
+                ),
+                failureStatus,
+                tagList
+            )
+        );
     }
 
     private static List<string> NormalizeTags(IEnumerable<string>? tags)

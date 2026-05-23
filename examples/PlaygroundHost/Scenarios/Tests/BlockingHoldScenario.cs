@@ -7,9 +7,7 @@ public sealed class BlockingHoldScenario : IPlaygroundScenario
 {
     public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues => [];
 
-    public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
-    {
-    }
+    public static void RegisterRatatoskrTopology(RatatoskrBuilder bus) { }
 
     public string Slug => "blocking-hold";
 
@@ -25,7 +23,10 @@ public sealed class BlockingHoldScenario : IPlaygroundScenario
     public string DangerConfirmationText =>
         "This scenario blocks for about 25 seconds unless you cancel the run.";
 
-    public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
+    public async Task<ScenarioVerdict> ExecuteAsync(
+        ScenarioExecutionContext context,
+        CancellationToken cancellationToken
+    )
     {
         await Task.Delay(TimeSpan.FromSeconds(25), cancellationToken);
         return new ScenarioVerdict(true);

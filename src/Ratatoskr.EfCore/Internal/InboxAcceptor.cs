@@ -17,8 +17,8 @@ internal class InboxAcceptor<TDbContext>(
     InboxProcessor<TDbContext> inboxProcessor,
     TimeProvider timeProvider,
     IEnumerable<IMessageActivityObserver> observers,
-    ILogger<InboxAcceptor<TDbContext>> logger)
-    : IEfCoreInboxAcceptor
+    ILogger<InboxAcceptor<TDbContext>> logger
+) : IEfCoreInboxAcceptor
     where TDbContext : DbContext, IInboxDbContext
 {
     private readonly IMessageActivityObserver[] _observers = observers.ToArray();
@@ -30,7 +30,8 @@ internal class InboxAcceptor<TDbContext>(
         MessageProperties properties,
         string transportName,
         string channelName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         // Check if this channel's inbox DbContext matches our TDbContext
         var channel = channelRegistry.GetConsumeChannel(channelName);
@@ -49,17 +50,31 @@ internal class InboxAcceptor<TDbContext>(
         if (msgReg == null)
             return InboxAcceptOutcome.NoHandlers;
 
-        var inboxHandlers = channelHandlerRegistry.GetInboxHandlers(channelName, msgReg.MessageType);
+        var inboxHandlers = channelHandlerRegistry.GetInboxHandlers(
+            channelName,
+            msgReg.MessageType
+        );
         if (inboxHandlers.Count == 0)
             return InboxAcceptOutcome.NoHandlers;
 
         if (string.IsNullOrWhiteSpace(properties.Id))
         {
-            logger.LogError("Cannot persist to inbox: message has no Id. Type: '{Type}'", properties.Type);
-            throw new InvalidOperationException("Messages must have a non-empty Id for inbox deduplication.");
+            logger.LogError(
+                "Cannot persist to inbox: message has no Id. Type: '{Type}'",
+                properties.Type
+            );
+            throw new InvalidOperationException(
+                "Messages must have a non-empty Id for inbox deduplication."
+            );
         }
 
-        var inboxMessage = InboxMessageEntity.Create(properties.Id, transportName, body, properties, timeProvider);
+        var inboxMessage = InboxMessageEntity.Create(
+            properties.Id,
+            transportName,
+            body,
+            properties,
+            timeProvider
+        );
 
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<TDbContext>();
@@ -70,38 +85,56 @@ internal class InboxAcceptor<TDbContext>(
 
         foreach (var handler in inboxHandlers)
         {
-            dbContext.Set<InboxHandlerStatusEntity>().Add(
-                InboxHandlerStatusEntity.Create(properties.Id, handler.InboxKey!, timeProvider));
+            dbContext
+                .Set<InboxHandlerStatusEntity>()
+                .Add(
+                    InboxHandlerStatusEntity.Create(properties.Id, handler.InboxKey!, timeProvider)
+                );
         }
 
         try
         {
             await dbContext.SaveChangesAsync(cancellationToken);
-            logger.LogDebug("Accepted new inbox message '{MessageId}' of type '{Type}'", properties.Id, properties.Type);
+            logger.LogDebug(
+                "Accepted new inbox message '{MessageId}' of type '{Type}'",
+                properties.Id,
+                properties.Type
+            );
         }
         catch (DbUpdateException ex) when (DbExceptionHelper.IsUniqueConstraintViolation(ex))
         {
             // Message already exists — fall back to adding only missing handler statuses
             dbContext.ChangeTracker.Clear();
 
-            var existingKeys = await dbContext.Set<InboxHandlerStatusEntity>()
+            var existingKeys = await dbContext
+                .Set<InboxHandlerStatusEntity>()
                 .Where(s => s.MessageId == properties.Id)
                 .Select(s => s.HandlerKey)
                 .ToHashSetAsync(cancellationToken);
 
-            var newHandlers = inboxHandlers.Where(h => !existingKeys.Contains(h.InboxKey!)).ToList();
+            var newHandlers = inboxHandlers
+                .Where(h => !existingKeys.Contains(h.InboxKey!))
+                .ToList();
             if (newHandlers.Count == 0)
             {
                 logger.LogDebug(
                     "Inbox entries for message '{MessageId}' already exist (duplicate delivery). Ignoring.",
-                    properties.Id);
+                    properties.Id
+                );
                 return InboxAcceptOutcome.Duplicate;
             }
 
             foreach (var handler in newHandlers)
             {
-                dbContext.Set<InboxHandlerStatusEntity>().Add(
-                    InboxHandlerStatusEntity.Create(properties.Id, handler.InboxKey!, timeProvider));
+                dbContext
+                    .Set<InboxHandlerStatusEntity>()
+                    .Add(
+                        InboxHandlerStatusEntity.Create(
+                            properties.Id,
+                            handler.InboxKey!,
+                            timeProvider
+                        )
+                    );
             }
 
             try
@@ -109,29 +142,38 @@ internal class InboxAcceptor<TDbContext>(
                 await dbContext.SaveChangesAsync(cancellationToken);
                 logger.LogDebug(
                     "Inbox message '{MessageId}' already existed, added {Count} new handler status(es)",
-                    properties.Id, newHandlers.Count);
+                    properties.Id,
+                    newHandlers.Count
+                );
             }
             catch (DbUpdateException ex2) when (DbExceptionHelper.IsUniqueConstraintViolation(ex2))
             {
                 dbContext.ChangeTracker.Clear();
                 logger.LogDebug(
                     "Inbox handler statuses for message '{MessageId}' were already inserted by a concurrent instance. Ignoring.",
-                    properties.Id);
+                    properties.Id
+                );
                 return InboxAcceptOutcome.Duplicate;
             }
         }
 
-        logger.LogDebug("Persisted inbox entries for message '{MessageId}', {HandlerCount} handler(s)",
-            properties.Id, inboxHandlers.Count);
+        logger.LogDebug(
+            "Persisted inbox entries for message '{MessageId}', {HandlerCount} handler(s)",
+            properties.Id,
+            inboxHandlers.Count
+        );
 
-        await _observers.NotifyAsync(new MessageActivity
-        {
-            Stage = MessageStage.InboxQueued,
-            Properties = properties,
-            SerializedBody = body,
-            TransportName = transportName,
-            Timestamp = timeProvider.GetUtcNow(),
-        }, logger);
+        await _observers.NotifyAsync(
+            new MessageActivity
+            {
+                Stage = MessageStage.InboxQueued,
+                Properties = properties,
+                SerializedBody = body,
+                TransportName = transportName,
+                Timestamp = timeProvider.GetUtcNow(),
+            },
+            logger
+        );
 
         await inboxProcessor.TriggerAsync(cancellationToken);
 

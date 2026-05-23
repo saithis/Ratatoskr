@@ -10,43 +10,43 @@ public class OutboxOptions
     /// Default: 60 seconds.
     /// </summary>
     public TimeSpan PollingInterval { get; set; } = TimeSpan.FromSeconds(60);
-    
+
     /// <summary>
     /// How long to wait before restarting after a crash.
     /// Default: 5 seconds.
     /// </summary>
     public TimeSpan RestartDelay { get; set; } = TimeSpan.FromSeconds(5);
-    
+
     /// <summary>
     /// Maximum time to wait when acquiring the distributed lock.
     /// Default: 60 seconds.
     /// </summary>
     public TimeSpan LockAcquireTimeout { get; set; } = TimeSpan.FromSeconds(60);
-    
+
     /// <summary>
     /// Number of messages to process in each batch.
     /// Default: 100.
     /// </summary>
     public int BatchSize { get; set; } = 100;
-    
+
     /// <summary>
     /// Maximum number of retry attempts before marking a message as poisoned.
     /// Default: 5.
     /// </summary>
     public int MaxRetries { get; set; } = 5;
-    
+
     /// <summary>
     /// How long a message can be in "processing" state before it's considered stuck.
     /// Default: 5 minutes.
     /// </summary>
     public TimeSpan StuckMessageThreshold { get; set; } = TimeSpan.FromMinutes(5);
-    
+
     /// <summary>
     /// Maximum backoff delay between retries.
     /// Default: 5 minutes.
     /// </summary>
     public TimeSpan MaxRetryDelay { get; set; } = TimeSpan.FromMinutes(5);
-    
+
     internal const string DefaultLockName = "OutboxProcessor";
 
     /// <summary>

@@ -10,8 +10,10 @@ using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Inbox;
 
-public class InboxScopeAndIsolationTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
-    : InboxTestBase(rabbitMq, postgres)
+public class InboxScopeAndIsolationTests(
+    RabbitMqContainerFixture rabbitMq,
+    PostgresContainerFixture postgres
+) : InboxTestBase(rabbitMq, postgres)
 {
     [Test]
     public async Task Inbox_HandlerScopeIsolation_HandlersDoNotShareDbContext()
@@ -22,17 +24,25 @@ public class InboxScopeAndIsolationTests(RabbitMqContainerFixture rabbitMq, Post
             services.AddSingleton(tracker);
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel("test-events", c => c.WithEfCore().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("test-events", c => c
-                    .Consumes<TestEvent>(m => m
-                        .WithHandler<ChangeTrackerPollutingHandler>("polluting-handler")
-                        .WithHandler<ChangeTrackerCheckingHandler>("checking-handler"))
-                    .UseInbox<TestDbContext>());
+                bus.AddEventPublishChannel(
+                    "test-events",
+                    c => c.WithEfCore().Produces<TestEvent>()
+                );
+                bus.AddEventConsumeChannel(
+                    "test-events",
+                    c =>
+                        c.Consumes<TestEvent>(m =>
+                                m.WithHandler<ChangeTrackerPollutingHandler>("polluting-handler")
+                                    .WithHandler<ChangeTrackerCheckingHandler>("checking-handler")
+                            )
+                            .UseInbox<TestDbContext>()
+                );
                 bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox());
             });
 
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
         });
 
         await InitializeDatabase();
@@ -42,16 +52,22 @@ public class InboxScopeAndIsolationTests(RabbitMqContainerFixture rabbitMq, Post
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             await bus.PublishDirectAsync(
                 new TestEvent { Id = "scope-isolation-1" },
-                new MessageProperties { Id = "scope-isolation-1" });
+                new MessageProperties { Id = "scope-isolation-1" }
+            );
         });
 
         await tracker.WaitForBothHandlersAsync(TimeSpan.FromSeconds(10));
 
         tracker.DbContextIds.Should().HaveCount(2, "both handlers should have run");
-        tracker.DbContextIds.Values.Distinct().Should().HaveCount(2,
-            "each handler should receive its own DbContext instance");
-        tracker.CheckingHandlerSawChanges.Should().BeFalse(
-            "handlers should have isolated DI scopes — ChangeTrackerCheckingHandler should not see ChangeTrackerPollutingHandler's tracked entities");
+        tracker
+            .DbContextIds.Values.Distinct()
+            .Should()
+            .HaveCount(2, "each handler should receive its own DbContext instance");
+        tracker
+            .CheckingHandlerSawChanges.Should()
+            .BeFalse(
+                "handlers should have isolated DI scopes — ChangeTrackerCheckingHandler should not see ChangeTrackerPollutingHandler's tracked entities"
+            );
     }
 
     [Test]
@@ -64,17 +80,27 @@ public class InboxScopeAndIsolationTests(RabbitMqContainerFixture rabbitMq, Post
             services.AddSingleton<TimeProvider>(fakeTime);
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c
-                    .Consumes<TestEvent>(m => m
-                        .WithHandler<InboxHandlerA>("a-succeeds")
-                        .WithHandler<AlwaysFailingHandler>("b-fails"))
-                    .UseInbox<TestDbContext>());
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox => inbox.WithoutBackgroundProcessing()));
+                bus.AddEventPublishChannel(
+                    "inbox-events",
+                    c => c.WithEfCore().Produces<TestEvent>()
+                );
+                bus.AddEventConsumeChannel(
+                    "inbox-events",
+                    c =>
+                        c.Consumes<TestEvent>(m =>
+                                m.WithHandler<InboxHandlerA>("a-succeeds")
+                                    .WithHandler<AlwaysFailingHandler>("b-fails")
+                            )
+                            .UseInbox<TestDbContext>()
+                );
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseInbox(inbox => inbox.WithoutBackgroundProcessing())
+                );
             });
 
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
         });
 
         await InitializeDatabase();
@@ -84,7 +110,8 @@ public class InboxScopeAndIsolationTests(RabbitMqContainerFixture rabbitMq, Post
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             await bus.PublishDirectAsync(
                 new TestEvent { Id = "business-persist-1" },
-                new MessageProperties { Id = "persist-1" });
+                new MessageProperties { Id = "persist-1" }
+            );
         });
 
         await WaitForInboxEntriesAsync(2);
@@ -106,7 +133,8 @@ public class InboxScopeAndIsolationTests(RabbitMqContainerFixture rabbitMq, Post
         });
     }
 
-    private class ChangeTrackerPollutingHandler(TestDbContext db, ScopeIsolationTracker tracker) : IMessageHandler<TestEvent>
+    private class ChangeTrackerPollutingHandler(TestDbContext db, ScopeIsolationTracker tracker)
+        : IMessageHandler<TestEvent>
     {
         public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
         {
@@ -116,7 +144,8 @@ public class InboxScopeAndIsolationTests(RabbitMqContainerFixture rabbitMq, Post
         }
     }
 
-    private class ChangeTrackerCheckingHandler(TestDbContext db, ScopeIsolationTracker tracker) : IMessageHandler<TestEvent>
+    private class ChangeTrackerCheckingHandler(TestDbContext db, ScopeIsolationTracker tracker)
+        : IMessageHandler<TestEvent>
     {
         public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
         {

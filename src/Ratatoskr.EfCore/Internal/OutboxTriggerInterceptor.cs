@@ -16,8 +16,9 @@ internal class OutboxTriggerInterceptor<TDbContext>(
     OutboxOptionsHolder<TDbContext> optionsHolder,
     TimeProvider timeProvider,
     ILogger<OutboxTriggerInterceptor<TDbContext>> logger,
-    IProcessorTrigger? inboxProcessorTrigger = null)
-    : SaveChangesInterceptor where TDbContext : DbContext, IOutboxDbContext
+    IProcessorTrigger? inboxProcessorTrigger = null
+) : SaveChangesInterceptor
+    where TDbContext : DbContext, IOutboxDbContext
 {
     private readonly OutboxOptions _options = optionsHolder.Options;
     private readonly IMessageActivityObserver[] _observers = observers.ToArray();
@@ -69,50 +70,69 @@ internal class OutboxTriggerInterceptor<TDbContext>(
             var serializedMessage = serializer.Serialize(item.Message);
             enrichedProperties.ContentType = serializer.ContentType;
 
-            if (_options.MaxMessageSize.HasValue && serializedMessage.Length > _options.MaxMessageSize.Value)
+            if (
+                _options.MaxMessageSize.HasValue
+                && serializedMessage.Length > _options.MaxMessageSize.Value
+            )
             {
                 throw new InvalidOperationException(
-                    $"Serialized message of type '{item.Message.GetType().Name}' is {serializedMessage.Length} bytes, " +
-                    $"which exceeds the configured maximum of {_options.MaxMessageSize.Value} bytes.");
+                    $"Serialized message of type '{item.Message.GetType().Name}' is {serializedMessage.Length} bytes, "
+                        + $"which exceeds the configured maximum of {_options.MaxMessageSize.Value} bytes."
+                );
             }
 
             if (enrichedProperties.Transports.Count == 0)
             {
-                logger.LogError("No transports found for message '{MessageType}'", item.Message.GetType());
-                throw new InvalidOperationException($"No transports found for message '{item.Message.GetType()}'.");
+                logger.LogError(
+                    "No transports found for message '{MessageType}'",
+                    item.Message.GetType()
+                );
+                throw new InvalidOperationException(
+                    $"No transports found for message '{item.Message.GetType()}'."
+                );
             }
 
             // For EF Core transport with same-DbContext inbox: write inbox entries directly
             // in this transaction and skip the outbox entry (no need to round-trip through OutboxProcessor).
             // An outbox entry is still needed if there are cross-DbContext channels.
             var skipEfCoreOutbox = false;
-            if (enrichedProperties.Transports.Contains(EfCoreTransportConstants.TransportName)
+            if (
+                enrichedProperties.Transports.Contains(EfCoreTransportConstants.TransportName)
                 && context is IInboxDbContext
-                && enrichedProperties.Type != null)
+                && enrichedProperties.Type != null
+            )
             {
                 var (sameDbCreated, hasCrossDbChannels) = CreateSameTransactionInboxEntries(
-                    context, flags, enrichedProperties, serializedMessage);
+                    context,
+                    flags,
+                    enrichedProperties,
+                    serializedMessage
+                );
                 skipEfCoreOutbox = sameDbCreated && !hasCrossDbChannels;
 
                 if (sameDbCreated && hasCrossDbChannels)
                 {
                     logger.LogWarning(
-                        "Message '{MessageId}' targets both same-DbContext and cross-DbContext inbox channels. " +
-                        "Same-DbContext entries were created in this transaction; an outbox entry will also be created " +
-                        "for cross-DbContext delivery. The inbox acceptor will deduplicate on delivery.",
-                        enrichedProperties.Id);
+                        "Message '{MessageId}' targets both same-DbContext and cross-DbContext inbox channels. "
+                            + "Same-DbContext entries were created in this transaction; an outbox entry will also be created "
+                            + "for cross-DbContext delivery. The inbox acceptor will deduplicate on delivery.",
+                        enrichedProperties.Id
+                    );
                 }
 
                 if (sameDbCreated)
                 {
-                    await _observers.NotifyAsync(new MessageActivity
-                    {
-                        Stage = MessageStage.InboxQueued,
-                        Properties = enrichedProperties,
-                        SerializedBody = serializedMessage,
-                        TransportName = EfCoreTransportConstants.TransportName,
-                        Timestamp = timeProvider.GetUtcNow(),
-                    }, logger);
+                    await _observers.NotifyAsync(
+                        new MessageActivity
+                        {
+                            Stage = MessageStage.InboxQueued,
+                            Properties = enrichedProperties,
+                            SerializedBody = serializedMessage,
+                            TransportName = EfCoreTransportConstants.TransportName,
+                            Timestamp = timeProvider.GetUtcNow(),
+                        },
+                        logger
+                    );
                 }
             }
 
@@ -123,20 +143,28 @@ internal class OutboxTriggerInterceptor<TDbContext>(
                 if (transport == EfCoreTransportConstants.TransportName && skipEfCoreOutbox)
                     continue;
 
-                var outboxMessage = OutboxMessageEntity.Create(serializedMessage, enrichedProperties, timeProvider, transport);
+                var outboxMessage = OutboxMessageEntity.Create(
+                    serializedMessage,
+                    enrichedProperties,
+                    timeProvider,
+                    transport
+                );
                 context.Set<OutboxMessageEntity>().Add(outboxMessage);
                 flags.OutboxEntitiesStaged = true;
             }
 
-            await _observers.NotifyAsync(new MessageActivity
-            {
-                Stage = MessageStage.OutboxStaged,
-                Properties = enrichedProperties,
-                SerializedBody = serializedMessage,
-                Message = item.Message,
-                MessageType = item.Message.GetType(),
-                Timestamp = timeProvider.GetUtcNow(),
-            }, logger);
+            await _observers.NotifyAsync(
+                new MessageActivity
+                {
+                    Stage = MessageStage.OutboxStaged,
+                    Properties = enrichedProperties,
+                    SerializedBody = serializedMessage,
+                    Message = item.Message,
+                    MessageType = item.Message.GetType(),
+                    Timestamp = timeProvider.GetUtcNow(),
+                },
+                logger
+            );
         }
 
         return result;
@@ -153,7 +181,8 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         DbContext context,
         StagedFlags flags,
         MessageProperties enrichedProperties,
-        byte[] serializedMessage)
+        byte[] serializedMessage
+    )
     {
         // Find all consume channels for this message wire type
         var consumeChannels = channelRegistry.FindConsumeChannelsForType(enrichedProperties.Type!);
@@ -163,7 +192,8 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         foreach (var (channel, _) in consumeChannels)
         {
             var inboxConfig = channel.GetExtension<ChannelInboxConfig>();
-            if (inboxConfig == null) continue;
+            if (inboxConfig == null)
+                continue;
 
             // Track cross-DbContext channels — they still need an outbox entry
             if (inboxConfig.DbContextType != typeof(TDbContext))
@@ -173,33 +203,57 @@ internal class OutboxTriggerInterceptor<TDbContext>(
             }
 
             var msgReg = channel.GetMessage(enrichedProperties.Type!);
-            if (msgReg == null) continue;
+            if (msgReg == null)
+                continue;
 
-            var inboxHandlers = channelHandlerRegistry.GetInboxHandlers(channel.ChannelName, msgReg.MessageType);
-            if (inboxHandlers.Count == 0) continue;
+            var inboxHandlers = channelHandlerRegistry.GetInboxHandlers(
+                channel.ChannelName,
+                msgReg.MessageType
+            );
+            if (inboxHandlers.Count == 0)
+                continue;
 
             if (string.IsNullOrWhiteSpace(enrichedProperties.Id))
                 throw new InvalidOperationException(
-                    $"Inbox requires a non-empty message id for '{enrichedProperties.Type}'.");
+                    $"Inbox requires a non-empty message id for '{enrichedProperties.Type}'."
+                );
 
             if (!inboxEntriesCreated)
             {
-                context.Set<InboxMessageEntity>().Add(
-                    InboxMessageEntity.Create(enrichedProperties.Id, EfCoreTransportConstants.TransportName,
-                        serializedMessage, enrichedProperties, timeProvider));
+                context
+                    .Set<InboxMessageEntity>()
+                    .Add(
+                        InboxMessageEntity.Create(
+                            enrichedProperties.Id,
+                            EfCoreTransportConstants.TransportName,
+                            serializedMessage,
+                            enrichedProperties,
+                            timeProvider
+                        )
+                    );
                 inboxEntriesCreated = true;
                 flags.InboxEntitiesStaged = true;
             }
 
             foreach (var handler in inboxHandlers)
             {
-                context.Set<InboxHandlerStatusEntity>().Add(
-                    InboxHandlerStatusEntity.Create(enrichedProperties.Id, handler.InboxKey!, timeProvider));
+                context
+                    .Set<InboxHandlerStatusEntity>()
+                    .Add(
+                        InboxHandlerStatusEntity.Create(
+                            enrichedProperties.Id,
+                            handler.InboxKey!,
+                            timeProvider
+                        )
+                    );
             }
 
             logger.LogDebug(
                 "Created inbox entries for message '{MessageId}' on channel '{Channel}' with {HandlerCount} handler(s) in outbox transaction",
-                enrichedProperties.Id, channel.ChannelName, inboxHandlers.Count);
+                enrichedProperties.Id,
+                channel.ChannelName,
+                inboxHandlers.Count
+            );
         }
 
         return (inboxEntriesCreated, hasCrossDbChannels);
@@ -218,7 +272,10 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         if (eventData.EntitiesSavedCount == 0)
             return result;
 
-        if (eventData.Context != null && _perContextFlags.TryGetValue(eventData.Context, out var flags))
+        if (
+            eventData.Context != null
+            && _perContextFlags.TryGetValue(eventData.Context, out var flags)
+        )
         {
             if (flags.OutboxEntitiesStaged)
             {
@@ -236,7 +293,8 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         return result;
     }
 
-    private static void DetachAddedEntities<TEntity>(DbContext context) where TEntity : class
+    private static void DetachAddedEntities<TEntity>(DbContext context)
+        where TEntity : class
     {
         foreach (var entry in context.ChangeTracker.Entries<TEntity>().ToList())
         {

@@ -7,21 +7,29 @@ using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Outbox;
 
-public abstract class OutboxTestBase(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
-    : RatatoskrIntegrationTest(rabbitMq, postgres)
+public abstract class OutboxTestBase(
+    RabbitMqContainerFixture rabbitMq,
+    PostgresContainerFixture postgres
+) : RatatoskrIntegrationTest(rabbitMq, postgres)
 {
     protected string ExchangeName => $"outbox-test-{TestId}";
     protected string QueueName => $"outbox-queue-{TestId}";
     protected string DefaultRoutingKey => "test.event";
 
-    protected async Task<BasicGetResult?> WaitForMessageAsync(string queueName, TimeSpan? timeout = null)
+    protected async Task<BasicGetResult?> WaitForMessageAsync(
+        string queueName,
+        TimeSpan? timeout = null
+    )
     {
         BasicGetResult? result = null;
-        await WaitForConditionAsync(async () =>
-        {
-            result = await GetMessageAsync(queueName);
-            return result != null;
-        }, timeout ?? TimeSpan.FromSeconds(10));
+        await WaitForConditionAsync(
+            async () =>
+            {
+                result = await GetMessageAsync(queueName);
+                return result != null;
+            },
+            timeout ?? TimeSpan.FromSeconds(10)
+        );
         return result;
     }
 
@@ -32,10 +40,16 @@ public abstract class OutboxTestBase(RabbitMqContainerFixture rabbitMq, Postgres
         while (true)
         {
             using var scope = serviceProvider.CreateScope();
-            var processor = scope.ServiceProvider.GetRequiredService<OutboxMessageProcessor<TDbContext>>();
-            var batchProcessed = await processor.ProcessBatchAsync(includeStuckMessageDetection: true, CancellationToken.None);
+            var processor = scope.ServiceProvider.GetRequiredService<
+                OutboxMessageProcessor<TDbContext>
+            >();
+            var batchProcessed = await processor.ProcessBatchAsync(
+                includeStuckMessageDetection: true,
+                CancellationToken.None
+            );
             totalProcessed += batchProcessed;
-            if (batchProcessed == 0) break;
+            if (batchProcessed == 0)
+                break;
         }
         return totalProcessed;
     }

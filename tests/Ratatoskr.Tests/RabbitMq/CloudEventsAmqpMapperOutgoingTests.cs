@@ -1,17 +1,20 @@
 using System.Text;
+using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using RabbitMQ.Client;
 using Ratatoskr.CloudEvents;
 using Ratatoskr.Core;
 using Ratatoskr.RabbitMq;
-using System.Text.Json;
 
 namespace Ratatoskr.Tests.RabbitMq;
 
 public class CloudEventsAmqpMapperOutgoingTests
 {
-    private readonly CloudEventsAmqpMapper _mapper = new(new CloudEventsOptions(), NullLogger<CloudEventsAmqpMapper>.Instance);
+    private readonly CloudEventsAmqpMapper _mapper = new(
+        new CloudEventsOptions(),
+        NullLogger<CloudEventsAmqpMapper>.Instance
+    );
 
     [Test]
     public void MapOutgoing_BinaryMode_SetsAllCloudEventHeaders()
@@ -24,7 +27,7 @@ public class CloudEventsAmqpMapperOutgoingTests
             Source = "/orders-service",
             Type = "order.created",
             Time = now,
-            Subject = "order-456"
+            Subject = "order-456",
         };
         var outgoing = new BasicProperties();
         var body = Encoding.UTF8.GetBytes("{\"orderId\":\"456\"}");
@@ -53,7 +56,7 @@ public class CloudEventsAmqpMapperOutgoingTests
             Id = "evt-123",
             Source = "/orders-service",
             Type = "order.created",
-            Time = now
+            Time = now,
         };
         var outgoing = new BasicProperties();
         var body = Encoding.UTF8.GetBytes("{}");
@@ -75,14 +78,15 @@ public class CloudEventsAmqpMapperOutgoingTests
         // Arrange
         var structuredMapper = new CloudEventsAmqpMapper(
             new CloudEventsOptions { ContentMode = CloudEventsContentMode.Structured },
-            NullLogger<CloudEventsAmqpMapper>.Instance);
+            NullLogger<CloudEventsAmqpMapper>.Instance
+        );
         var now = DateTimeOffset.UtcNow;
         var props = new MessageProperties
         {
             Id = "evt-123",
             Source = "/orders-service",
             Type = "order.created",
-            Time = now
+            Time = now,
         };
         var outgoing = new BasicProperties();
         var body = Encoding.UTF8.GetBytes("{\"orderId\":\"456\"}");
@@ -106,13 +110,14 @@ public class CloudEventsAmqpMapperOutgoingTests
         // Arrange
         var structuredMapper = new CloudEventsAmqpMapper(
             new CloudEventsOptions { ContentMode = CloudEventsContentMode.Structured },
-            NullLogger<CloudEventsAmqpMapper>.Instance);
+            NullLogger<CloudEventsAmqpMapper>.Instance
+        );
         var props = new MessageProperties
         {
             Id = "evt-123",
             Source = "/test",
             Type = "test.event",
-            Time = DateTimeOffset.UtcNow
+            Time = DateTimeOffset.UtcNow,
         };
         var outgoing = new BasicProperties();
         var body = Encoding.UTF8.GetBytes("{}");
@@ -132,7 +137,7 @@ public class CloudEventsAmqpMapperOutgoingTests
         {
             Source = "/test",
             Type = "test.event",
-            Time = DateTimeOffset.UtcNow
+            Time = DateTimeOffset.UtcNow,
         };
         var outgoing = new BasicProperties();
         var body = Encoding.UTF8.GetBytes("{}");
@@ -141,8 +146,7 @@ public class CloudEventsAmqpMapperOutgoingTests
         var act = () => _mapper.MapOutgoing(body, props, outgoing);
 
         // Assert
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*id*required*");
+        act.Should().Throw<InvalidOperationException>().WithMessage("*id*required*");
     }
 
     [Test]
@@ -153,7 +157,7 @@ public class CloudEventsAmqpMapperOutgoingTests
         {
             Id = "123",
             Type = "test.event",
-            Time = DateTimeOffset.UtcNow
+            Time = DateTimeOffset.UtcNow,
         };
         var outgoing = new BasicProperties();
         var body = Encoding.UTF8.GetBytes("{}");
@@ -162,8 +166,7 @@ public class CloudEventsAmqpMapperOutgoingTests
         var act = () => _mapper.MapOutgoing(body, props, outgoing);
 
         // Assert
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*source*required*");
+        act.Should().Throw<InvalidOperationException>().WithMessage("*source*required*");
     }
 
     [Test]
@@ -174,7 +177,7 @@ public class CloudEventsAmqpMapperOutgoingTests
         {
             Id = "123",
             Source = "/test",
-            Time = DateTimeOffset.UtcNow
+            Time = DateTimeOffset.UtcNow,
         };
         var outgoing = new BasicProperties();
         var body = Encoding.UTF8.GetBytes("{}");
@@ -183,8 +186,7 @@ public class CloudEventsAmqpMapperOutgoingTests
         var act = () => _mapper.MapOutgoing(body, props, outgoing);
 
         // Assert
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*type*required*");
+        act.Should().Throw<InvalidOperationException>().WithMessage("*type*required*");
     }
 
     [Test]
@@ -195,7 +197,7 @@ public class CloudEventsAmqpMapperOutgoingTests
         {
             Id = "123",
             Source = "/test",
-            Type = "test.event"
+            Type = "test.event",
         };
         var outgoing = new BasicProperties();
         var body = Encoding.UTF8.GetBytes("{}");
@@ -204,8 +206,7 @@ public class CloudEventsAmqpMapperOutgoingTests
         var act = () => _mapper.MapOutgoing(body, props, outgoing);
 
         // Assert
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*time*required*");
+        act.Should().Throw<InvalidOperationException>().WithMessage("*time*required*");
     }
 
     [Test]
@@ -220,7 +221,7 @@ public class CloudEventsAmqpMapperOutgoingTests
             Type = "test.event",
             Time = DateTimeOffset.UtcNow,
             TraceParent = "00-traceid-spanid-01",
-            TraceState = "vendor=value"
+            TraceState = "vendor=value",
         };
         var outgoing = new BasicProperties();
         var body = Encoding.UTF8.GetBytes("{}");
@@ -242,7 +243,8 @@ public class CloudEventsAmqpMapperOutgoingTests
     {
         var structuredMapper = new CloudEventsAmqpMapper(
             new CloudEventsOptions { ContentMode = CloudEventsContentMode.Structured },
-            NullLogger<CloudEventsAmqpMapper>.Instance);
+            NullLogger<CloudEventsAmqpMapper>.Instance
+        );
         var props = new MessageProperties
         {
             Id = "123",
@@ -250,7 +252,7 @@ public class CloudEventsAmqpMapperOutgoingTests
             Type = "test.event",
             Time = DateTimeOffset.UtcNow,
             TraceParent = "00-struct-traceparent-01",
-            TraceState = "struct=true"
+            TraceState = "struct=true",
         };
         var outgoing = new BasicProperties();
         var body = Encoding.UTF8.GetBytes("{}");
@@ -275,7 +277,7 @@ public class CloudEventsAmqpMapperOutgoingTests
             Source = "/test",
             Type = "test.event",
             Time = DateTimeOffset.UtcNow,
-            Headers = { { "x-custom-header", "custom-value" } }
+            Headers = { { "x-custom-header", "custom-value" } },
         };
         var outgoing = new BasicProperties();
         var body = Encoding.UTF8.GetBytes("{}");
@@ -302,8 +304,8 @@ public class CloudEventsAmqpMapperOutgoingTests
             {
                 { "cloudEvents_custom", "should-be-filtered" },
                 { "cloudEvents:custom", "should-also-be-filtered" },
-                { "x-normal-header", "should-be-included" }
-            }
+                { "x-normal-header", "should-be-included" },
+            },
         };
         var outgoing = new BasicProperties();
         var body = Encoding.UTF8.GetBytes("{}");
@@ -315,8 +317,8 @@ public class CloudEventsAmqpMapperOutgoingTests
         outgoing.Headers.Should().ContainKey("x-normal-header");
         // The cloudEvents-prefixed user headers should not appear as-is
         // (they would conflict with the protocol-level cloudEvents_ headers)
-        var userCustomHeaders = outgoing.Headers.Keys
-            .Where(k => k == "cloudEvents_custom" || k == "cloudEvents:custom")
+        var userCustomHeaders = outgoing
+            .Headers.Keys.Where(k => k == "cloudEvents_custom" || k == "cloudEvents:custom")
             .ToList();
         userCustomHeaders.Should().BeEmpty();
     }
@@ -331,11 +333,7 @@ public class CloudEventsAmqpMapperOutgoingTests
             Source = "/test",
             Type = "test.event",
             Time = DateTimeOffset.UtcNow,
-            TransportMetadata =
-            {
-                { "retry-count", "1" },
-                { "original-exchange", "test-ex" }
-            }
+            TransportMetadata = { { "retry-count", "1" }, { "original-exchange", "test-ex" } },
         };
 
         var outgoing = new BasicProperties();
@@ -357,7 +355,8 @@ public class CloudEventsAmqpMapperOutgoingTests
         // Arrange
         var mapper = new CloudEventsAmqpMapper(
             new CloudEventsOptions { ContentMode = CloudEventsContentMode.Structured },
-            NullLogger<CloudEventsAmqpMapper>.Instance);
+            NullLogger<CloudEventsAmqpMapper>.Instance
+        );
 
         var props = new MessageProperties
         {
@@ -365,11 +364,7 @@ public class CloudEventsAmqpMapperOutgoingTests
             Source = "/test",
             Type = "test.event",
             Time = DateTimeOffset.UtcNow,
-            TransportMetadata =
-            {
-                { "retry-count", "1" },
-                { "original-exchange", "test-ex" }
-            }
+            TransportMetadata = { { "retry-count", "1" }, { "original-exchange", "test-ex" } },
         };
 
         var outgoing = new BasicProperties();

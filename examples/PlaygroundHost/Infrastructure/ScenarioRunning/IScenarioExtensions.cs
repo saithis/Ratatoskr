@@ -9,14 +9,23 @@ namespace PlaygroundHost.Infrastructure.ScenarioRunning;
 /// <summary>Shared helpers for staging publisher orders and correlated outbox payloads.</summary>
 public static class IScenarioExtensions
 {
-    public static MessageProperties CreateMessageProperties(this IScenario scenario, ScenarioExecutionContext context, string messageId)
+    public static MessageProperties CreateMessageProperties(
+        this IScenario scenario,
+        ScenarioExecutionContext context,
+        string messageId
+    )
     {
         var mp = new MessageProperties { Id = messageId };
         PlaygroundCorrelation.AttachToMessageProperties(mp, context.ScenarioRunId);
         return mp;
     }
-    
-    public static Order AddPlacedOrderToContext(this IScenario scenario, PublisherDbContext db, TimeProvider time, string publishOrigin)
+
+    public static Order AddPlacedOrderToContext(
+        this IScenario scenario,
+        PublisherDbContext db,
+        TimeProvider time,
+        string publishOrigin
+    )
     {
         var now = time.GetUtcNow().UtcDateTime;
         var order = new Order
@@ -36,7 +45,8 @@ public static class IScenarioExtensions
         PublisherDbContext db,
         string scenarioRunId,
         TMessage message,
-        string cloudEventsMessageId)
+        string cloudEventsMessageId
+    )
         where TMessage : notnull
     {
         var props = new MessageProperties { Id = cloudEventsMessageId };
@@ -50,14 +60,17 @@ public static class IScenarioExtensions
         TimeProvider time,
         string runId,
         Func<string, string, TCommand> buildCommand,
-        CancellationToken cancellationToken) where TCommand : notnull
+        CancellationToken cancellationToken
+    )
+        where TCommand : notnull
     {
         var order = scenario.AddPlacedOrderToContext(db, time, "outbox");
         scenario.StageCorrelatedOutboxMessage(
             db,
             runId,
             buildCommand(order.Id.ToString(), runId),
-            PlaygroundMessageIds.ProcessOrderCommand(order.Id));
+            PlaygroundMessageIds.ProcessOrderCommand(order.Id)
+        );
         await db.SaveChangesAsync(cancellationToken);
         return order.Id;
     }
@@ -68,11 +81,15 @@ public static class IScenarioExtensions
         TimeProvider time,
         string orderId,
         OrderStatus status,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var order = await db.Orders.FirstOrDefaultAsync(
-            o => o.Id == Guid.Parse(orderId), cancellationToken);
-        if (order is null) return;
+            o => o.Id == Guid.Parse(orderId),
+            cancellationToken
+        );
+        if (order is null)
+            return;
         order.Status = status;
         order.StatusChangedAt = time.GetUtcNow().UtcDateTime;
         await db.SaveChangesAsync(cancellationToken);

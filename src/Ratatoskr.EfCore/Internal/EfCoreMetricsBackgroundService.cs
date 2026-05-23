@@ -10,7 +10,8 @@ internal class EfCoreMetricsBackgroundService<TDbContext>(
     TimeProvider timeProvider,
     EfCoreMetricsState state,
     EfCoreMetricsSettings<TDbContext> settings,
-    ILogger<EfCoreMetricsBackgroundService<TDbContext>> logger) : BackgroundService
+    ILogger<EfCoreMetricsBackgroundService<TDbContext>> logger
+) : BackgroundService
     where TDbContext : DbContext, IInboxDbContext, IOutboxDbContext
 {
     private readonly string _contextName = typeof(TDbContext).FullName ?? typeof(TDbContext).Name;
@@ -27,7 +28,8 @@ internal class EfCoreMetricsBackgroundService<TDbContext>(
             }
             catch (Exception ex)
             {
-                if (stoppingToken.IsCancellationRequested) break;
+                if (stoppingToken.IsCancellationRequested)
+                    break;
                 logger.LogError(ex, "Error updating EF Core metrics for {DbContext}", _contextName);
             }
 
@@ -62,7 +64,8 @@ internal class EfCoreMetricsBackgroundService<TDbContext>(
                     var n = await db.Set<OutboxMessageEntity>()
                         .CountAsync(x => x.ProcessedAt == null && !x.IsPoisoned, ct);
                     return (long)n;
-                });
+                }
+            );
 
             poisonedOutbox = await CountAsync(
                 dbContext,
@@ -72,7 +75,8 @@ internal class EfCoreMetricsBackgroundService<TDbContext>(
                     var n = await db.Set<OutboxMessageEntity>()
                         .CountAsync(x => x.ProcessedAt == null && x.IsPoisoned, ct);
                     return (long)n;
-                });
+                }
+            );
         }
 
         if (hasInbox)
@@ -85,7 +89,8 @@ internal class EfCoreMetricsBackgroundService<TDbContext>(
                     var n = await db.Set<InboxHandlerStatusEntity>()
                         .CountAsync(x => x.CompletedAt == null && !x.IsPoisoned, ct);
                     return (long)n;
-                });
+                }
+            );
 
             poisonedInbox = await CountAsync(
                 dbContext,
@@ -95,17 +100,24 @@ internal class EfCoreMetricsBackgroundService<TDbContext>(
                     var n = await db.Set<InboxHandlerStatusEntity>()
                         .CountAsync(x => x.CompletedAt == null && x.IsPoisoned, ct);
                     return (long)n;
-                });
+                }
+            );
         }
 
-        var snapshot = new DbContextMetrics(pendingOutbox, poisonedOutbox, pendingInbox, poisonedInbox);
+        var snapshot = new DbContextMetrics(
+            pendingOutbox,
+            poisonedOutbox,
+            pendingInbox,
+            poisonedInbox
+        );
         state.ContextMetrics.AddOrUpdate(_contextName, snapshot, (_, _) => snapshot);
     }
 
     private async Task<long> CountAsync(
         TDbContext dbContext,
         CancellationToken stoppingToken,
-        Func<TDbContext, CancellationToken, Task<long>> count)
+        Func<TDbContext, CancellationToken, Task<long>> count
+    )
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         cts.CancelAfter(settings.QueryTimeout);

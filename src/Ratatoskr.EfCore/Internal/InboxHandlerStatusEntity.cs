@@ -51,7 +51,11 @@ internal class InboxHandlerStatusEntity
 
     private InboxHandlerStatusEntity() { }
 
-    public static InboxHandlerStatusEntity Create(string messageId, string handlerKey, TimeProvider timeProvider)
+    public static InboxHandlerStatusEntity Create(
+        string messageId,
+        string handlerKey,
+        TimeProvider timeProvider
+    )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
         ArgumentException.ThrowIfNullOrWhiteSpace(handlerKey);
@@ -77,7 +81,12 @@ internal class InboxHandlerStatusEntity
         Version++;
     }
 
-    public void MarkAsFailed(string error, TimeProvider timeProvider, int maxRetries, TimeSpan maxRetryDelay)
+    public void MarkAsFailed(
+        string error,
+        TimeProvider timeProvider,
+        int maxRetries,
+        TimeSpan maxRetryDelay
+    )
     {
         ErrorCount++;
         LastError = error.Length > 2000 ? error[..2000] : error;
@@ -91,7 +100,9 @@ internal class InboxHandlerStatusEntity
         }
         else
         {
-            NextAttemptAt = timeProvider.GetUtcNow().Add(BackoffCalculator.CalculateDelay(ErrorCount, maxRetryDelay));
+            NextAttemptAt = timeProvider
+                .GetUtcNow()
+                .Add(BackoffCalculator.CalculateDelay(ErrorCount, maxRetryDelay));
         }
     }
 

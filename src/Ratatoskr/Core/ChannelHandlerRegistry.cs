@@ -8,8 +8,14 @@ namespace Ratatoskr.Core;
 /// </summary>
 public class ChannelHandlerRegistry
 {
-    private readonly Dictionary<(string ChannelName, Type MessageType), ChannelHandlerRegistration[]> _fireAndForget = new();
-    private readonly Dictionary<(string ChannelName, Type MessageType), ChannelHandlerRegistration[]> _inbox = new();
+    private readonly Dictionary<
+        (string ChannelName, Type MessageType),
+        ChannelHandlerRegistration[]
+    > _fireAndForget = new();
+    private readonly Dictionary<
+        (string ChannelName, Type MessageType),
+        ChannelHandlerRegistration[]
+    > _inbox = new();
     private readonly Dictionary<string, ChannelHandlerRegistration[]> _inboxByChannel = new();
     private readonly Dictionary<string, ChannelHandlerRegistration> _inboxByKey = new();
 
@@ -30,7 +36,8 @@ public class ChannelHandlerRegistry
             foreach (var message in channel.Messages)
             {
                 var handlerRegs = message.GetExtension<MessageHandlerRegistrations>();
-                if (handlerRegs == null) continue;
+                if (handlerRegs == null)
+                    continue;
 
                 foreach (var handler in handlerRegs.Handlers)
                 {
@@ -41,15 +48,29 @@ public class ChannelHandlerRegistry
 
                         if (handler.InboxKey != null)
                         {
-                            ValidateAndAddKey(inboxByKey, handler.InboxKey, handler, channel.ChannelName);
+                            ValidateAndAddKey(
+                                inboxByKey,
+                                handler.InboxKey,
+                                handler,
+                                channel.ChannelName
+                            );
 
                             foreach (var legacyKey in handler.LegacyKeys)
-                                ValidateAndAddKey(inboxByKey, legacyKey, handler, channel.ChannelName);
+                                ValidateAndAddKey(
+                                    inboxByKey,
+                                    legacyKey,
+                                    handler,
+                                    channel.ChannelName
+                                );
                         }
                     }
                     else
                     {
-                        AddToList(fireAndForget, (channel.ChannelName, handler.MessageType), handler);
+                        AddToList(
+                            fireAndForget,
+                            (channel.ChannelName, handler.MessageType),
+                            handler
+                        );
                     }
                 }
             }
@@ -73,20 +94,26 @@ public class ChannelHandlerRegistry
         Dictionary<string, ChannelHandlerRegistration> dict,
         string key,
         ChannelHandlerRegistration handler,
-        string channelName)
+        string channelName
+    )
     {
         if (dict.TryGetValue(key, out var existing))
             throw new InvalidOperationException(
-                $"Duplicate inbox handler key '{key}' registered on channel '{channelName}' " +
-                $"for handler '{handler.HandlerType.Name}'. " +
-                $"Key is already used by handler '{existing.HandlerType.Name}'. " +
-                $"Inbox handler keys must be globally unique because the inbox processor " +
-                $"looks up handlers by key across all channels and DbContexts.");
+                $"Duplicate inbox handler key '{key}' registered on channel '{channelName}' "
+                    + $"for handler '{handler.HandlerType.Name}'. "
+                    + $"Key is already used by handler '{existing.HandlerType.Name}'. "
+                    + $"Inbox handler keys must be globally unique because the inbox processor "
+                    + $"looks up handlers by key across all channels and DbContexts."
+            );
 
         dict[key] = handler;
     }
 
-    private static void AddToList<TKey>(Dictionary<TKey, List<ChannelHandlerRegistration>> dict, TKey key, ChannelHandlerRegistration handler)
+    private static void AddToList<TKey>(
+        Dictionary<TKey, List<ChannelHandlerRegistration>> dict,
+        TKey key,
+        ChannelHandlerRegistration handler
+    )
         where TKey : notnull
     {
         if (!dict.TryGetValue(key, out var list))
@@ -100,7 +127,10 @@ public class ChannelHandlerRegistry
     /// <summary>
     /// Returns fire-and-forget handler types for a specific channel and message type.
     /// </summary>
-    public IReadOnlyList<ChannelHandlerRegistration> GetFireAndForgetHandlers(string channelName, Type messageType) =>
+    public IReadOnlyList<ChannelHandlerRegistration> GetFireAndForgetHandlers(
+        string channelName,
+        Type messageType
+    ) =>
         _fireAndForget.TryGetValue((channelName, messageType), out var list)
             ? list
             : Array.Empty<ChannelHandlerRegistration>();
@@ -116,7 +146,10 @@ public class ChannelHandlerRegistry
     /// <summary>
     /// Returns inbox handler registrations for a specific channel and message type.
     /// </summary>
-    public IReadOnlyList<ChannelHandlerRegistration> GetInboxHandlers(string channelName, Type messageType) =>
+    public IReadOnlyList<ChannelHandlerRegistration> GetInboxHandlers(
+        string channelName,
+        Type messageType
+    ) =>
         _inbox.TryGetValue((channelName, messageType), out var list)
             ? list
             : Array.Empty<ChannelHandlerRegistration>();

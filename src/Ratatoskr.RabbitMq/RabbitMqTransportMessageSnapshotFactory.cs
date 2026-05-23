@@ -16,7 +16,11 @@ internal static class RabbitMqTransportMessageSnapshotFactory
     /// Used at the Sent stage to capture the wire format.
     /// </summary>
     public static TransportMessageSnapshot FromBasicProperties(
-        IReadOnlyBasicProperties props, byte[] body, string exchange, string routingKey)
+        IReadOnlyBasicProperties props,
+        byte[] body,
+        string exchange,
+        string routingKey
+    )
     {
         var headers = BuildHeaders(props);
 
@@ -29,9 +33,9 @@ internal static class RabbitMqTransportMessageSnapshotFactory
         return new TransportMessageSnapshot
         {
             TransportName = RabbitMqConstants.TransportName,
-            Body = body, 
-            Headers = headers, 
-            Metadata = metadata
+            Body = body,
+            Headers = headers,
+            Metadata = metadata,
         };
     }
 
@@ -53,9 +57,9 @@ internal static class RabbitMqTransportMessageSnapshotFactory
         return new TransportMessageSnapshot
         {
             TransportName = RabbitMqConstants.TransportName,
-            Body = ea.Body.ToArray(), 
-            Headers = headers, 
-            Metadata = metadata
+            Body = ea.Body.ToArray(),
+            Headers = headers,
+            Metadata = metadata,
         };
     }
 
@@ -94,11 +98,12 @@ internal static class RabbitMqTransportMessageSnapshotFactory
     /// Converts byte arrays (common in AMQP) to UTF-8 strings when they contain valid UTF-8.
     /// Returns the original byte[] for non-UTF-8 binary data.
     /// </summary>
-    private static object? NormalizeValue(object? value) => value switch
-    {
-        byte[] bytes => TryDecodeUtf8(bytes),
-        _ => value
-    };
+    private static object? NormalizeValue(object? value) =>
+        value switch
+        {
+            byte[] bytes => TryDecodeUtf8(bytes),
+            _ => value,
+        };
 
     private static object TryDecodeUtf8(byte[] bytes)
     {

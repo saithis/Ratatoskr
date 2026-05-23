@@ -18,7 +18,8 @@ public class MessageBuilder(MessageRegistration message)
         return this;
     }
 
-    public MessageBuilder WithSerializer<TSerializer>() where TSerializer : class, IMessageSerializer
+    public MessageBuilder WithSerializer<TSerializer>()
+        where TSerializer : class, IMessageSerializer
     {
         message.SerializerType = typeof(TSerializer);
         return this;

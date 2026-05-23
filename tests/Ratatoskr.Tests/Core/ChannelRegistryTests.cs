@@ -20,9 +20,9 @@ public class ChannelRegistryTests
         var builder = new RatatoskrBuilder(services);
 
         // Act
-        builder.AddEventPublishChannel("local.events", cfg => cfg
-            .Produces<TestEvent>()
-            .WithRabbitMq(o => o.WithTopicExchange())
+        builder.AddEventPublishChannel(
+            "local.events",
+            cfg => cfg.Produces<TestEvent>().WithRabbitMq(o => o.WithTopicExchange())
         );
 
         // Assert
@@ -44,7 +44,7 @@ public class ChannelRegistryTests
 
         // Act
         var typeName = "test.event"; // Matches [RatatoskrMessage("test.event")] in TestMessages.cs
-        
+
         var channel = builder.ChannelRegistry.FindPublishChannelForTypeName(typeName);
 
         // Assert
@@ -59,10 +59,13 @@ public class ChannelRegistryTests
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
 
-        builder.AddCommandConsumeChannel("orders.commands", cfg => cfg
-            .Consumes<TestEvent>(
-                m => m.WithHandler<TestEventHandler>(),
-                msg => msg.WithRoutingKey("cmd.test"))
+        builder.AddCommandConsumeChannel(
+            "orders.commands",
+            cfg =>
+                cfg.Consumes<TestEvent>(
+                    m => m.WithHandler<TestEventHandler>(),
+                    msg => msg.WithRoutingKey("cmd.test")
+                )
         );
 
         // Act
@@ -83,11 +86,11 @@ public class ChannelRegistryTests
         registry.Freeze();
 
         // Act
-        var act = () => registry.Register(new ChannelRegistration("new.channel", ChannelType.EventPublish));
+        var act = () =>
+            registry.Register(new ChannelRegistration("new.channel", ChannelType.EventPublish));
 
         // Assert
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*frozen*");
+        act.Should().Throw<InvalidOperationException>().WithMessage("*frozen*");
     }
 
     [Test]
@@ -164,11 +167,13 @@ public class ChannelRegistryTests
         registry.Register(new ChannelRegistration("duplicate.channel", ChannelType.EventPublish));
 
         // Act
-        var act = () => registry.Register(new ChannelRegistration("duplicate.channel", ChannelType.EventPublish));
+        var act = () =>
+            registry.Register(
+                new ChannelRegistration("duplicate.channel", ChannelType.EventPublish)
+            );
 
         // Assert
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*already registered*");
+        act.Should().Throw<InvalidOperationException>().WithMessage("*already registered*");
     }
 
     [Test]

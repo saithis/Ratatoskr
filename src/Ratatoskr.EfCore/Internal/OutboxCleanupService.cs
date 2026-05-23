@@ -13,7 +13,8 @@ internal class OutboxCleanupService<TDbContext>(
     OutboxOptionsHolder<TDbContext> optionsHolder,
     IDistributedLockProvider distributedLockProvider,
     TimeProvider timeProvider,
-    ILogger<OutboxCleanupService<TDbContext>> logger) : BackgroundService
+    ILogger<OutboxCleanupService<TDbContext>> logger
+) : BackgroundService
     where TDbContext : DbContext, IOutboxDbContext
 {
     private readonly OutboxOptions _options = optionsHolder.Options;
@@ -42,13 +43,18 @@ internal class OutboxCleanupService<TDbContext>(
     internal async Task<bool> TryCleanupWithLockAsync(CancellationToken cancellationToken)
     {
         await using var dLock = await distributedLockProvider.TryAcquireLockAsync(
-            _options.CleanupLockName, TimeSpan.Zero, cancellationToken);
+            _options.CleanupLockName,
+            TimeSpan.Zero,
+            cancellationToken
+        );
 
         if (dLock == null)
         {
             logger.LogDebug("OutboxCleanupService skipped — another instance holds the lock");
-            RatatoskrDiagnostics.LockAcquisitionFailure.Add(1,
-                new TagList { { "processor", "OutboxCleanupService" } });
+            RatatoskrDiagnostics.LockAcquisitionFailure.Add(
+                1,
+                new TagList { { "processor", "OutboxCleanupService" } }
+            );
             return false;
         }
 
@@ -68,10 +74,9 @@ internal class OutboxCleanupService<TDbContext>(
             using var scope = serviceScopeFactory.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<TDbContext>();
 
-            deleted = await dbContext.Set<OutboxMessageEntity>()
-                .Where(x => x.ProcessedAt != null
-                          && !x.IsPoisoned
-                          && x.ProcessedAt < cutoff)
+            deleted = await dbContext
+                .Set<OutboxMessageEntity>()
+                .Where(x => x.ProcessedAt != null && !x.IsPoisoned && x.ProcessedAt < cutoff)
                 .OrderBy(x => x.ProcessedAt)
                 .Take(_options.CleanupBatchSize)
                 .ExecuteDeleteAsync(cancellationToken);
@@ -82,9 +87,14 @@ internal class OutboxCleanupService<TDbContext>(
             totalDeleted += deleted;
         } while (deleted == _options.CleanupBatchSize);
 
-        RatatoskrDiagnostics.OutboxCleanupDuration.Record(Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds);
+        RatatoskrDiagnostics.OutboxCleanupDuration.Record(
+            Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds
+        );
         if (totalDeleted > 0)
-            logger.LogInformation("OutboxCleanupService deleted {Count} processed message(s)", totalDeleted);
+            logger.LogInformation(
+                "OutboxCleanupService deleted {Count} processed message(s)",
+                totalDeleted
+            );
 
         return totalDeleted;
     }

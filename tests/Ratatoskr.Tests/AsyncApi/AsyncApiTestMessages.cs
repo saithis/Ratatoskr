@@ -7,7 +7,11 @@ namespace Ratatoskr.Tests.AsyncApi;
 
 // A publish message with attribute-driven metadata
 [RatatoskrMessage("api-key.revoked")]
-[AsyncApiMessage(Version = "1.0.0", Title = "API Key Revoked", Description = "An API key has been revoked.")]
+[AsyncApiMessage(
+    Version = "1.0.0",
+    Title = "API Key Revoked",
+    Description = "An API key has been revoked."
+)]
 public record ApiKeyRevokedEvent
 {
     [Required]
@@ -52,5 +56,8 @@ public record RoleAssignment
     public string? TargetId { get; init; }
 }
 
-public enum AssignmentLevel { Global, Tenant }
-
+public enum AssignmentLevel
+{
+    Global,
+    Tenant,
+}

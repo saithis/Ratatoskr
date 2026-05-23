@@ -53,8 +53,12 @@ public class TestEntity
 public class TestEventHandler : IMessageHandler<TestEvent>
 {
     public List<TestEvent> HandledMessages { get; } = new();
-    
-    public Task HandleAsync(TestEvent message, MessageProperties context, CancellationToken cancellationToken)
+
+    public Task HandleAsync(
+        TestEvent message,
+        MessageProperties context,
+        CancellationToken cancellationToken
+    )
     {
         HandledMessages.Add(message);
         return Task.CompletedTask;
@@ -64,8 +68,12 @@ public class TestEventHandler : IMessageHandler<TestEvent>
 public class SecondTestEventHandler : IMessageHandler<TestEvent>
 {
     public List<TestEvent> HandledMessages { get; } = new();
-    
-    public Task HandleAsync(TestEvent message, MessageProperties context, CancellationToken cancellationToken)
+
+    public Task HandleAsync(
+        TestEvent message,
+        MessageProperties context,
+        CancellationToken cancellationToken
+    )
     {
         HandledMessages.Add(message);
         return Task.CompletedTask;
@@ -75,7 +83,12 @@ public class SecondTestEventHandler : IMessageHandler<TestEvent>
 public class ThrowingTestEventHandler : IMessageHandler<TestEvent>
 {
     public List<TestEvent> ReceivedMessages { get; } = new();
-    public Task HandleAsync(TestEvent message, MessageProperties context, CancellationToken cancellationToken)
+
+    public Task HandleAsync(
+        TestEvent message,
+        MessageProperties context,
+        CancellationToken cancellationToken
+    )
     {
         ReceivedMessages.Add(message);
         throw new InvalidOperationException("Handler failed intentionally");
@@ -87,8 +100,11 @@ public class ThrowingTestEventHandler : IMessageHandler<TestEvent>
 /// </summary>
 public class NoOpTestEventHandler : IMessageHandler<TestEvent>
 {
-    public Task HandleAsync(TestEvent message, MessageProperties context, CancellationToken cancellationToken)
-        => Task.CompletedTask;
+    public Task HandleAsync(
+        TestEvent message,
+        MessageProperties context,
+        CancellationToken cancellationToken
+    ) => Task.CompletedTask;
 }
 
 /// <summary>
@@ -113,10 +129,16 @@ public class ScopedServiceIdCollector
 /// Handler that resolves ScopedService from DI to verify scope isolation.
 /// Each dispatch should get a different ScopedService instance.
 /// </summary>
-public class ScopedServiceTestHandler(ScopedService scopedService, ScopedServiceIdCollector collector)
-    : IMessageHandler<TestEvent>
+public class ScopedServiceTestHandler(
+    ScopedService scopedService,
+    ScopedServiceIdCollector collector
+) : IMessageHandler<TestEvent>
 {
-    public Task HandleAsync(TestEvent message, MessageProperties context, CancellationToken cancellationToken)
+    public Task HandleAsync(
+        TestEvent message,
+        MessageProperties context,
+        CancellationToken cancellationToken
+    )
     {
         collector.ServiceIds.Add(scopedService.Id);
         return Task.CompletedTask;
@@ -128,7 +150,11 @@ public class ScopedServiceTestHandler(ScopedService scopedService, ScopedService
 /// </summary>
 public class CancellationAwareTestHandler : IMessageHandler<TestEvent>
 {
-    public Task HandleAsync(TestEvent message, MessageProperties context, CancellationToken cancellationToken)
+    public Task HandleAsync(
+        TestEvent message,
+        MessageProperties context,
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
         return Task.CompletedTask;
@@ -142,10 +168,13 @@ public class ContextCapturingHandler : IMessageHandler<TestEvent>
 {
     public MessageProperties? CapturedContext { get; private set; }
 
-    public Task HandleAsync(TestEvent message, MessageProperties context, CancellationToken cancellationToken)
+    public Task HandleAsync(
+        TestEvent message,
+        MessageProperties context,
+        CancellationToken cancellationToken
+    )
     {
         CapturedContext = context;
         return Task.CompletedTask;
     }
 }
-

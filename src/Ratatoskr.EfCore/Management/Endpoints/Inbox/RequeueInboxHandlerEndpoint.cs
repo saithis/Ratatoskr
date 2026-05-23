@@ -20,16 +20,24 @@ internal static class RequeueInboxHandlerEndpoint
         string contextName,
         Guid handlerStatusId,
         EfCoreManagementDbContextLookup lookup,
-        CancellationToken ct)
+        CancellationToken ct
+    )
     {
-        if (ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is { } resolveError)
+        if (
+            ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
+            { } resolveError
+        )
             return resolveError;
 
         var entity = await db.Set<InboxHandlerStatusEntity>()
             .SingleOrDefaultAsync(x => x.Id == handlerStatusId, ct);
 
-        if (entity is null) return ManagementResults.NotFound($"Inbox handler status '{handlerStatusId}' was not found.");
-        if (!entity.IsPoisoned) return ManagementResults.BadRequest("Handler status is not poisoned.");
+        if (entity is null)
+            return ManagementResults.NotFound(
+                $"Inbox handler status '{handlerStatusId}' was not found."
+            );
+        if (!entity.IsPoisoned)
+            return ManagementResults.BadRequest("Handler status is not poisoned.");
 
         entity.Requeue();
 
@@ -40,7 +48,9 @@ internal static class RequeueInboxHandlerEndpoint
         }
         catch (DbUpdateConcurrencyException)
         {
-            return ManagementResults.Conflict("Handler status was modified by another operation; retry.");
+            return ManagementResults.Conflict(
+                "Handler status was modified by another operation; retry."
+            );
         }
     }
 }

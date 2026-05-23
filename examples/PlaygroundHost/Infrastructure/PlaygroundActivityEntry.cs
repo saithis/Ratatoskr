@@ -10,4 +10,5 @@ public sealed record PlaygroundActivityEntry(
     bool? IsSuccess,
     string? Error,
     string? TransportName,
-    string? DispatchResult);
+    string? DispatchResult
+);

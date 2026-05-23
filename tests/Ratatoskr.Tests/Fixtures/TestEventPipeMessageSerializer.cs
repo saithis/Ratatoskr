@@ -11,10 +11,15 @@ public sealed class TestEventPipeMessageSerializer : IMessageSerializer
     {
         if (message is not TestEvent testEvent)
             throw new InvalidOperationException(
-                $"This serializer supports '{nameof(TestEvent)}' only.");
+                $"This serializer supports '{nameof(TestEvent)}' only."
+            );
 
-        var encodedId = Convert.ToBase64String(Encoding.UTF8.GetBytes(testEvent.Id ?? string.Empty));
-        var encodedData = Convert.ToBase64String(Encoding.UTF8.GetBytes(testEvent.Data ?? string.Empty));
+        var encodedId = Convert.ToBase64String(
+            Encoding.UTF8.GetBytes(testEvent.Id ?? string.Empty)
+        );
+        var encodedData = Convert.ToBase64String(
+            Encoding.UTF8.GetBytes(testEvent.Data ?? string.Empty)
+        );
         return Encoding.UTF8.GetBytes($"{encodedId}:{encodedData}");
     }
 
@@ -22,7 +27,8 @@ public sealed class TestEventPipeMessageSerializer : IMessageSerializer
     {
         if (targetType != typeof(TestEvent))
             throw new InvalidOperationException(
-                $"This serializer supports '{nameof(TestEvent)}' only.");
+                $"This serializer supports '{nameof(TestEvent)}' only."
+            );
 
         return Deserialize<TestEvent>(body);
     }
@@ -31,7 +37,8 @@ public sealed class TestEventPipeMessageSerializer : IMessageSerializer
     {
         if (typeof(TMessage) != typeof(TestEvent))
             throw new InvalidOperationException(
-                $"This serializer supports '{nameof(TestEvent)}' only.");
+                $"This serializer supports '{nameof(TestEvent)}' only."
+            );
 
         var payload = Encoding.UTF8.GetString(body);
         var parts = payload.Split(':', 2);

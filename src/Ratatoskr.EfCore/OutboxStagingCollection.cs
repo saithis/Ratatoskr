@@ -17,14 +17,12 @@ public class OutboxStagingCollection
     /// <typeparam name="TMessage">The message type (must be registered in configuration)</typeparam>
     /// <param name="message">The message to send</param>
     /// <param name="properties">Optional message properties</param>
-    public void Add<TMessage>(TMessage message, MessageProperties? properties = null) 
+    public void Add<TMessage>(TMessage message, MessageProperties? properties = null)
         where TMessage : notnull
     {
-        StagedItems.Add(new Item
-        {
-            Message = message,
-            Properties = properties ?? new MessageProperties()
-        });
+        StagedItems.Add(
+            new Item { Message = message, Properties = properties ?? new MessageProperties() }
+        );
     }
 
     /// <summary>
@@ -33,12 +31,10 @@ public class OutboxStagingCollection
     public void Add(object message, MessageProperties? properties = null)
     {
         ArgumentNullException.ThrowIfNull(message);
-        
-        StagedItems.Add(new Item
-        {
-            Message = message,
-            Properties = properties ?? new MessageProperties()
-        });
+
+        StagedItems.Add(
+            new Item { Message = message, Properties = properties ?? new MessageProperties() }
+        );
     }
 
     /// <summary>

@@ -14,8 +14,10 @@ namespace Ratatoskr.Tests.Integration;
 /// Integration tests for multi-DbContext inbox/outbox support.
 /// Each DbContext gets its own database, inbox processor, and outbox processor.
 /// </summary>
-public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
-    : RatatoskrIntegrationTest(rabbitMq, postgres)
+public class MultiDbContextTests(
+    RabbitMqContainerFixture rabbitMq,
+    PostgresContainerFixture postgres
+) : RatatoskrIntegrationTest(rabbitMq, postgres)
 {
     /// <summary>
     /// Connection string for the second database, used by SecondTestDbContext.
@@ -27,7 +29,7 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
             var builder = new Npgsql.NpgsqlConnectionStringBuilder(postgres.ConnectionString)
             {
                 Database = $"test_{TestId}_second",
-                MaxPoolSize = 2
+                MaxPoolSize = 2,
             };
             return builder.ToString();
         }
@@ -60,24 +62,43 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         {
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel("shared-events", c => c.WithEfCore().Produces<TestEvent>());
+                bus.AddEventPublishChannel(
+                    "shared-events",
+                    c => c.WithEfCore().Produces<TestEvent>()
+                );
 
-                bus.AddEventConsumeChannel("channel-a", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<HandlerForDbContext1>("ctx1-handler"))
-                    .UseInbox<TestDbContext>());
+                bus.AddEventConsumeChannel(
+                    "channel-a",
+                    c =>
+                        c.Consumes<TestEvent>(m =>
+                                m.WithHandler<HandlerForDbContext1>("ctx1-handler")
+                            )
+                            .UseInbox<TestDbContext>()
+                );
 
-                bus.AddEventConsumeChannel("channel-b", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<HandlerForDbContext2>("ctx2-handler"))
-                    .UseInbox<SecondTestDbContext>());
+                bus.AddEventConsumeChannel(
+                    "channel-b",
+                    c =>
+                        c.Consumes<TestEvent>(m =>
+                                m.WithHandler<HandlerForDbContext2>("ctx2-handler")
+                            )
+                            .UseInbox<SecondTestDbContext>()
+                );
 
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(i => i.WithoutBackgroundProcessing()));
-                bus.AddEfCoreDurability<SecondTestDbContext>(d => d.UseInbox(i => i.WithoutBackgroundProcessing()));
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseInbox(i => i.WithoutBackgroundProcessing())
+                );
+                bus.AddEfCoreDurability<SecondTestDbContext>(d =>
+                    d.UseInbox(i => i.WithoutBackgroundProcessing())
+                );
             });
 
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
-            services.AddDbContext<SecondTestDbContext>((sp, opts) =>
-                opts.UseNpgsql(SecondPostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
+            services.AddDbContext<SecondTestDbContext>(
+                (sp, opts) => opts.UseNpgsql(SecondPostgresConnectionString)
+            );
         });
 
         await InitializeBothDatabasesAsync();
@@ -88,7 +109,8 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             await bus.PublishDirectAsync(
                 new TestEvent { Id = "multi-db-1", Data = "test" },
-                new MessageProperties { Id = "multi-db-msg-1" });
+                new MessageProperties { Id = "multi-db-msg-1" }
+            );
         });
 
         // Wait for inbox entries to appear in both databases
@@ -97,9 +119,11 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
 
         // Process inbox for each DbContext separately
         await InScopeAsync(async ctx =>
-            await ProcessInboxAsync<TestDbContext>(ctx.ServiceProvider));
+            await ProcessInboxAsync<TestDbContext>(ctx.ServiceProvider)
+        );
         await InScopeAsync(async ctx =>
-            await ProcessInboxAsync<SecondTestDbContext>(ctx.ServiceProvider));
+            await ProcessInboxAsync<SecondTestDbContext>(ctx.ServiceProvider)
+        );
 
         // Assert: Each database has exactly one handler status, marked as completed
         await InScopeAsync(async ctx =>
@@ -129,24 +153,43 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         {
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel("shared-events", c => c.WithEfCore().Produces<TestEvent>());
+                bus.AddEventPublishChannel(
+                    "shared-events",
+                    c => c.WithEfCore().Produces<TestEvent>()
+                );
 
-                bus.AddEventConsumeChannel("channel-a", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<HandlerForDbContext1>("ctx1-handler"))
-                    .UseInbox<TestDbContext>());
+                bus.AddEventConsumeChannel(
+                    "channel-a",
+                    c =>
+                        c.Consumes<TestEvent>(m =>
+                                m.WithHandler<HandlerForDbContext1>("ctx1-handler")
+                            )
+                            .UseInbox<TestDbContext>()
+                );
 
-                bus.AddEventConsumeChannel("channel-b", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<HandlerForDbContext2>("ctx2-handler"))
-                    .UseInbox<SecondTestDbContext>());
+                bus.AddEventConsumeChannel(
+                    "channel-b",
+                    c =>
+                        c.Consumes<TestEvent>(m =>
+                                m.WithHandler<HandlerForDbContext2>("ctx2-handler")
+                            )
+                            .UseInbox<SecondTestDbContext>()
+                );
 
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(i => i.WithoutBackgroundProcessing()));
-                bus.AddEfCoreDurability<SecondTestDbContext>(d => d.UseInbox(i => i.WithoutBackgroundProcessing()));
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseInbox(i => i.WithoutBackgroundProcessing())
+                );
+                bus.AddEfCoreDurability<SecondTestDbContext>(d =>
+                    d.UseInbox(i => i.WithoutBackgroundProcessing())
+                );
             });
 
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
-            services.AddDbContext<SecondTestDbContext>((sp, opts) =>
-                opts.UseNpgsql(SecondPostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
+            services.AddDbContext<SecondTestDbContext>(
+                (sp, opts) => opts.UseNpgsql(SecondPostgresConnectionString)
+            );
         });
 
         await InitializeBothDatabasesAsync();
@@ -157,7 +200,8 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             await bus.PublishDirectAsync(
                 new TestEvent { Id = "isolation-1", Data = "test" },
-                new MessageProperties { Id = "isolation-msg-1" });
+                new MessageProperties { Id = "isolation-msg-1" }
+            );
         });
 
         await WaitForInboxEntriesAsync<TestDbContext>(1);
@@ -165,7 +209,8 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
 
         // Only process the first DbContext's inbox
         await InScopeAsync(async ctx =>
-            await ProcessInboxAsync<TestDbContext>(ctx.ServiceProvider));
+            await ProcessInboxAsync<TestDbContext>(ctx.ServiceProvider)
+        );
 
         // Assert: First DbContext's handler is completed
         await InScopeAsync(async ctx =>
@@ -180,7 +225,9 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         {
             var db = ctx.ServiceProvider.GetRequiredService<SecondTestDbContext>();
             var status = await db.Set<InboxHandlerStatusEntity>().SingleAsync();
-            status.CompletedAt.Should().BeNull("second DbContext's handler should NOT have been processed");
+            status
+                .CompletedAt.Should()
+                .BeNull("second DbContext's handler should NOT have been processed");
         });
     }
 
@@ -192,28 +239,45 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         {
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel("shared-events", c => c.WithEfCore().Produces<TestEvent>());
+                bus.AddEventPublishChannel(
+                    "shared-events",
+                    c => c.WithEfCore().Produces<TestEvent>()
+                );
 
-                bus.AddEventConsumeChannel("channel-a", c => c
-                    .Consumes<TestEvent>(m => m
-                        .WithHandler<HandlerForDbContext1>("ctx1-handler-a")
-                        .WithHandler<HandlerForDbContext1B>("ctx1-handler-b"))
-                    .UseInbox<TestDbContext>());
+                bus.AddEventConsumeChannel(
+                    "channel-a",
+                    c =>
+                        c.Consumes<TestEvent>(m =>
+                                m.WithHandler<HandlerForDbContext1>("ctx1-handler-a")
+                                    .WithHandler<HandlerForDbContext1B>("ctx1-handler-b")
+                            )
+                            .UseInbox<TestDbContext>()
+                );
 
-                bus.AddEventConsumeChannel("channel-b", c => c
-                    .Consumes<TestEvent>(m => m
-                        .WithHandler<HandlerForDbContext2>("ctx2-handler-a")
-                        .WithHandler<HandlerForDbContext2B>("ctx2-handler-b"))
-                    .UseInbox<SecondTestDbContext>());
+                bus.AddEventConsumeChannel(
+                    "channel-b",
+                    c =>
+                        c.Consumes<TestEvent>(m =>
+                                m.WithHandler<HandlerForDbContext2>("ctx2-handler-a")
+                                    .WithHandler<HandlerForDbContext2B>("ctx2-handler-b")
+                            )
+                            .UseInbox<SecondTestDbContext>()
+                );
 
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(i => i.WithoutBackgroundProcessing()));
-                bus.AddEfCoreDurability<SecondTestDbContext>(d => d.UseInbox(i => i.WithoutBackgroundProcessing()));
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseInbox(i => i.WithoutBackgroundProcessing())
+                );
+                bus.AddEfCoreDurability<SecondTestDbContext>(d =>
+                    d.UseInbox(i => i.WithoutBackgroundProcessing())
+                );
             });
 
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
-            services.AddDbContext<SecondTestDbContext>((sp, opts) =>
-                opts.UseNpgsql(SecondPostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
+            services.AddDbContext<SecondTestDbContext>(
+                (sp, opts) => opts.UseNpgsql(SecondPostgresConnectionString)
+            );
         });
 
         await InitializeBothDatabasesAsync();
@@ -223,7 +287,8 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             await bus.PublishDirectAsync(
                 new TestEvent { Id = "multi-handler-1", Data = "test" },
-                new MessageProperties { Id = "multi-handler-msg-1" });
+                new MessageProperties { Id = "multi-handler-msg-1" }
+            );
         });
 
         await WaitForInboxEntriesAsync<TestDbContext>(2);
@@ -231,16 +296,19 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
 
         // Process both
         await InScopeAsync(async ctx =>
-            await ProcessInboxAsync<TestDbContext>(ctx.ServiceProvider));
+            await ProcessInboxAsync<TestDbContext>(ctx.ServiceProvider)
+        );
         await InScopeAsync(async ctx =>
-            await ProcessInboxAsync<SecondTestDbContext>(ctx.ServiceProvider));
+            await ProcessInboxAsync<SecondTestDbContext>(ctx.ServiceProvider)
+        );
 
         // Assert: Each database has exactly 2 completed handlers
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var statuses = await db.Set<InboxHandlerStatusEntity>()
-                .OrderBy(s => s.HandlerKey).ToListAsync();
+                .OrderBy(s => s.HandlerKey)
+                .ToListAsync();
             statuses.Should().HaveCount(2);
             statuses[0].HandlerKey.Should().Be("ctx1-handler-a");
             statuses[1].HandlerKey.Should().Be("ctx1-handler-b");
@@ -251,7 +319,8 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         {
             var db = ctx.ServiceProvider.GetRequiredService<SecondTestDbContext>();
             var statuses = await db.Set<InboxHandlerStatusEntity>()
-                .OrderBy(s => s.HandlerKey).ToListAsync();
+                .OrderBy(s => s.HandlerKey)
+                .ToListAsync();
             statuses.Should().HaveCount(2);
             statuses[0].HandlerKey.Should().Be("ctx2-handler-a");
             statuses[1].HandlerKey.Should().Be("ctx2-handler-b");
@@ -268,7 +337,10 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         {
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel("outbox-events", c => c.WithEfCore().Produces<TestEvent>());
+                bus.AddEventPublishChannel(
+                    "outbox-events",
+                    c => c.WithEfCore().Produces<TestEvent>()
+                );
             });
 
             // Manually register outbox components for both DbContexts (without hosted services)
@@ -276,28 +348,41 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
             services.AddSingleton<EfCoreTelemetry>();
             services.AddSingleton<IMessageSender, EfCoreMessageSender>();
 
-            services.AddSingleton(new OutboxOptionsHolder<TestDbContext>(new OutboxOptions
-                { LockName = $"OutboxProcessor_{nameof(TestDbContext)}" }));
+            services.AddSingleton(
+                new OutboxOptionsHolder<TestDbContext>(
+                    new OutboxOptions { LockName = $"OutboxProcessor_{nameof(TestDbContext)}" }
+                )
+            );
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
 
-            services.AddSingleton(new OutboxOptionsHolder<SecondTestDbContext>(new OutboxOptions
-                { LockName = $"OutboxProcessor_{nameof(SecondTestDbContext)}" }));
+            services.AddSingleton(
+                new OutboxOptionsHolder<SecondTestDbContext>(
+                    new OutboxOptions
+                    {
+                        LockName = $"OutboxProcessor_{nameof(SecondTestDbContext)}",
+                    }
+                )
+            );
             services.AddSingleton<OutboxTriggerInterceptor<SecondTestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<SecondTestDbContext>>();
             services.AddSingleton<OutboxProcessor<SecondTestDbContext>>();
 
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-            {
-                opts.UseNpgsql(PostgresConnectionString);
-                opts.RegisterOutbox<TestDbContext>(sp);
-            });
-            services.AddDbContext<SecondTestDbContext>((sp, opts) =>
-            {
-                opts.UseNpgsql(SecondPostgresConnectionString);
-                opts.RegisterOutbox<SecondTestDbContext>(sp);
-            });
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) =>
+                {
+                    opts.UseNpgsql(PostgresConnectionString);
+                    opts.RegisterOutbox<TestDbContext>(sp);
+                }
+            );
+            services.AddDbContext<SecondTestDbContext>(
+                (sp, opts) =>
+                {
+                    opts.UseNpgsql(SecondPostgresConnectionString);
+                    opts.RegisterOutbox<SecondTestDbContext>(sp);
+                }
+            );
         });
 
         await InitializeBothDatabasesAsync();
@@ -319,14 +404,17 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
 
         // Process only the first DbContext's outbox
         await InScopeAsync(async ctx =>
-            await ProcessOutboxAsync<TestDbContext>(ctx.ServiceProvider));
+            await ProcessOutboxAsync<TestDbContext>(ctx.ServiceProvider)
+        );
 
         // Assert: First DbContext's message is processed
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var entity = await db.Set<OutboxMessageEntity>().SingleAsync();
-            entity.ProcessedAt.Should().NotBeNull("first DbContext's outbox message should be processed");
+            entity
+                .ProcessedAt.Should()
+                .NotBeNull("first DbContext's outbox message should be processed");
         });
 
         // Assert: Second DbContext's message is still pending
@@ -334,19 +422,24 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         {
             var db = ctx.ServiceProvider.GetRequiredService<SecondTestDbContext>();
             var entity = await db.Set<OutboxMessageEntity>().SingleAsync();
-            entity.ProcessedAt.Should().BeNull("second DbContext's outbox message should NOT be processed yet");
+            entity
+                .ProcessedAt.Should()
+                .BeNull("second DbContext's outbox message should NOT be processed yet");
         });
 
         // Now process the second DbContext's outbox
         await InScopeAsync(async ctx =>
-            await ProcessOutboxAsync<SecondTestDbContext>(ctx.ServiceProvider));
+            await ProcessOutboxAsync<SecondTestDbContext>(ctx.ServiceProvider)
+        );
 
         // Assert: Second DbContext's message is now processed too
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<SecondTestDbContext>();
             var entity = await db.Set<OutboxMessageEntity>().SingleAsync();
-            entity.ProcessedAt.Should().NotBeNull("second DbContext's outbox message should now be processed");
+            entity
+                .ProcessedAt.Should()
+                .NotBeNull("second DbContext's outbox message should now be processed");
         });
     }
 
@@ -358,27 +451,49 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         {
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel("shared-events", c => c.WithEfCore().Produces<TestEvent>());
+                bus.AddEventPublishChannel(
+                    "shared-events",
+                    c => c.WithEfCore().Produces<TestEvent>()
+                );
 
-                bus.AddEventConsumeChannel("channel-a", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<HandlerForDbContext1>("ctx1-handler"))
-                    .UseInbox<TestDbContext>());
+                bus.AddEventConsumeChannel(
+                    "channel-a",
+                    c =>
+                        c.Consumes<TestEvent>(m =>
+                                m.WithHandler<HandlerForDbContext1>("ctx1-handler")
+                            )
+                            .UseInbox<TestDbContext>()
+                );
 
-                bus.AddEventConsumeChannel("channel-b", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<HandlerForDbContext2>("ctx2-handler"))
-                    .UseInbox<SecondTestDbContext>());
+                bus.AddEventConsumeChannel(
+                    "channel-b",
+                    c =>
+                        c.Consumes<TestEvent>(m =>
+                                m.WithHandler<HandlerForDbContext2>("ctx2-handler")
+                            )
+                            .UseInbox<SecondTestDbContext>()
+                );
 
-                bus.AddEfCoreDurability<TestDbContext>(d => { d.UseInbox(i => i.WithoutBackgroundProcessing()); d.UseOutbox(); });
-                bus.AddEfCoreDurability<SecondTestDbContext>(d => d.UseInbox(i => i.WithoutBackgroundProcessing()));
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                {
+                    d.UseInbox(i => i.WithoutBackgroundProcessing());
+                    d.UseOutbox();
+                });
+                bus.AddEfCoreDurability<SecondTestDbContext>(d =>
+                    d.UseInbox(i => i.WithoutBackgroundProcessing())
+                );
             });
 
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-            {
-                opts.UseNpgsql(PostgresConnectionString);
-                opts.RegisterOutbox<TestDbContext>(sp);
-            });
-            services.AddDbContext<SecondTestDbContext>((sp, opts) =>
-                opts.UseNpgsql(SecondPostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) =>
+                {
+                    opts.UseNpgsql(PostgresConnectionString);
+                    opts.RegisterOutbox<TestDbContext>(sp);
+                }
+            );
+            services.AddDbContext<SecondTestDbContext>(
+                (sp, opts) => opts.UseNpgsql(SecondPostgresConnectionString)
+            );
         });
 
         await InitializeBothDatabasesAsync();
@@ -398,9 +513,11 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
 
         // Process both inboxes
         await InScopeAsync(async ctx =>
-            await ProcessInboxAsync<TestDbContext>(ctx.ServiceProvider));
+            await ProcessInboxAsync<TestDbContext>(ctx.ServiceProvider)
+        );
         await InScopeAsync(async ctx =>
-            await ProcessInboxAsync<SecondTestDbContext>(ctx.ServiceProvider));
+            await ProcessInboxAsync<SecondTestDbContext>(ctx.ServiceProvider)
+        );
 
         // Assert: Both handlers completed
         await InScopeAsync(async ctx =>
@@ -428,24 +545,43 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         {
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel("shared-events", c => c.WithEfCore().Produces<TestEvent>());
+                bus.AddEventPublishChannel(
+                    "shared-events",
+                    c => c.WithEfCore().Produces<TestEvent>()
+                );
 
-                bus.AddEventConsumeChannel("channel-a", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<HandlerForDbContext1>("ctx1-handler"))
-                    .UseInbox<TestDbContext>());
+                bus.AddEventConsumeChannel(
+                    "channel-a",
+                    c =>
+                        c.Consumes<TestEvent>(m =>
+                                m.WithHandler<HandlerForDbContext1>("ctx1-handler")
+                            )
+                            .UseInbox<TestDbContext>()
+                );
 
-                bus.AddEventConsumeChannel("channel-b", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<HandlerForDbContext2>("ctx2-handler"))
-                    .UseInbox<SecondTestDbContext>());
+                bus.AddEventConsumeChannel(
+                    "channel-b",
+                    c =>
+                        c.Consumes<TestEvent>(m =>
+                                m.WithHandler<HandlerForDbContext2>("ctx2-handler")
+                            )
+                            .UseInbox<SecondTestDbContext>()
+                );
 
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(i => i.WithoutBackgroundProcessing()));
-                bus.AddEfCoreDurability<SecondTestDbContext>(d => d.UseInbox(i => i.WithoutBackgroundProcessing()));
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseInbox(i => i.WithoutBackgroundProcessing())
+                );
+                bus.AddEfCoreDurability<SecondTestDbContext>(d =>
+                    d.UseInbox(i => i.WithoutBackgroundProcessing())
+                );
             });
 
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
-            services.AddDbContext<SecondTestDbContext>((sp, opts) =>
-                opts.UseNpgsql(SecondPostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
+            services.AddDbContext<SecondTestDbContext>(
+                (sp, opts) => opts.UseNpgsql(SecondPostgresConnectionString)
+            );
         });
 
         await InitializeBothDatabasesAsync();
@@ -459,7 +595,8 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
                 var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
                 await bus.PublishDirectAsync(
                     new TestEvent { Id = $"concurrent-{index}", Data = $"data-{index}" },
-                    new MessageProperties { Id = $"concurrent-msg-{index}" });
+                    new MessageProperties { Id = $"concurrent-msg-{index}" }
+                );
             });
         }
 
@@ -470,12 +607,14 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         var task1 = Task.Run(async () =>
         {
             await InScopeAsync(async ctx =>
-                await ProcessInboxAsync<TestDbContext>(ctx.ServiceProvider));
+                await ProcessInboxAsync<TestDbContext>(ctx.ServiceProvider)
+            );
         });
         var task2 = Task.Run(async () =>
         {
             await InScopeAsync(async ctx =>
-                await ProcessInboxAsync<SecondTestDbContext>(ctx.ServiceProvider));
+                await ProcessInboxAsync<SecondTestDbContext>(ctx.ServiceProvider)
+            );
         });
 
         await Task.WhenAll(task1, task2);
@@ -514,18 +653,23 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         });
     }
 
-    private async Task WaitForInboxEntriesAsync<TDbContext>(int expectedCount, TimeSpan? timeout = null)
+    private async Task WaitForInboxEntriesAsync<TDbContext>(
+        int expectedCount,
+        TimeSpan? timeout = null
+    )
         where TDbContext : DbContext, IInboxDbContext
     {
         await WaitForConditionAsync(
-            async () => await InScopeAsync(async ctx =>
-            {
-                var db = ctx.ServiceProvider.GetRequiredService<TDbContext>();
-                var count = await db.Set<InboxHandlerStatusEntity>().CountAsync();
-                return count >= expectedCount;
-            }),
+            async () =>
+                await InScopeAsync(async ctx =>
+                {
+                    var db = ctx.ServiceProvider.GetRequiredService<TDbContext>();
+                    var count = await db.Set<InboxHandlerStatusEntity>().CountAsync();
+                    return count >= expectedCount;
+                }),
             timeout ?? TimeSpan.FromSeconds(10),
-            $"Expected {expectedCount} inbox handler status entries in {typeof(TDbContext).Name} within timeout");
+            $"Expected {expectedCount} inbox handler status entries in {typeof(TDbContext).Name} within timeout"
+        );
     }
 
     private async Task<int> ProcessInboxAsync<TDbContext>(IServiceProvider serviceProvider)
@@ -535,10 +679,13 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         while (true)
         {
             using var scope = serviceProvider.CreateScope();
-            var processor = scope.ServiceProvider.GetRequiredService<InboxMessageProcessor<TDbContext>>();
+            var processor = scope.ServiceProvider.GetRequiredService<
+                InboxMessageProcessor<TDbContext>
+            >();
             var count = await processor.ProcessBatchAsync(true, CancellationToken.None);
             total += count;
-            if (count == 0) break;
+            if (count == 0)
+                break;
         }
         return total;
     }
@@ -550,10 +697,13 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         while (true)
         {
             using var scope = serviceProvider.CreateScope();
-            var processor = scope.ServiceProvider.GetRequiredService<OutboxMessageProcessor<TDbContext>>();
+            var processor = scope.ServiceProvider.GetRequiredService<
+                OutboxMessageProcessor<TDbContext>
+            >();
             var count = await processor.ProcessBatchAsync(true, CancellationToken.None);
             total += count;
-            if (count == 0) break;
+            if (count == 0)
+                break;
         }
         return total;
     }
@@ -564,26 +714,26 @@ public class MultiDbContextTests(RabbitMqContainerFixture rabbitMq, PostgresCont
 
     private class HandlerForDbContext1 : IMessageHandler<TestEvent>
     {
-        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
-            => Task.CompletedTask;
+        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct) =>
+            Task.CompletedTask;
     }
 
     private class HandlerForDbContext1B : IMessageHandler<TestEvent>
     {
-        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
-            => Task.CompletedTask;
+        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct) =>
+            Task.CompletedTask;
     }
 
     private class HandlerForDbContext2 : IMessageHandler<TestEvent>
     {
-        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
-            => Task.CompletedTask;
+        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct) =>
+            Task.CompletedTask;
     }
 
     private class HandlerForDbContext2B : IMessageHandler<TestEvent>
     {
-        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
-            => Task.CompletedTask;
+        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct) =>
+            Task.CompletedTask;
     }
 
     #endregion

@@ -76,17 +76,20 @@ public class TrackedMessage
     /// Gets the deserialized message as the specified type.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown if the message is not available or not of the expected type.</exception>
-    public T GetMessage<T>() where T : notnull
+    public T GetMessage<T>()
+        where T : notnull
     {
         if (Activity.Message == null)
             throw new InvalidOperationException(
-                $"Message object is not available at the {Stage} stage. " +
-                "Deserialized messages are available at Published, OutboxStaged, and Dispatched stages.");
+                $"Message object is not available at the {Stage} stage. "
+                    + "Deserialized messages are available at Published, OutboxStaged, and Dispatched stages."
+            );
 
         if (Activity.Message is T typed)
             return typed;
 
         throw new InvalidOperationException(
-            $"Message is of type {Activity.Message.GetType().Name}, not {typeof(T).Name}.");
+            $"Message is of type {Activity.Message.GetType().Name}, not {typeof(T).Name}."
+        );
     }
 }

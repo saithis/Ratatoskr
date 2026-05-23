@@ -4,7 +4,10 @@ using Ratatoskr.EfCore;
 
 namespace PlaygroundHost.Persistence;
 
-public class PublisherDbContext(DbContextOptions<PublisherDbContext> options) : DbContext(options), IOutboxDbContext, IInboxDbContext
+public class PublisherDbContext(DbContextOptions<PublisherDbContext> options)
+    : DbContext(options),
+        IOutboxDbContext,
+        IInboxDbContext
 {
     public DbSet<Order> Orders { get; set; } = null!;
     public OutboxStagingCollection OutboxMessages { get; } = new();

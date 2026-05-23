@@ -39,9 +39,10 @@ internal static class EfCoreConfigurationValidator
                 if (inboxConfig == null)
                 {
                     throw new InvalidOperationException(
-                        $"Channel '{consumeChannel.ChannelName}' receives messages of type '{message.MessageTypeName}' " +
-                        $"from the EF Core transport but does not have UseInbox<TDbContext>() configured. " +
-                        $"The EF Core transport requires inbox for message delivery.");
+                        $"Channel '{consumeChannel.ChannelName}' receives messages of type '{message.MessageTypeName}' "
+                            + $"from the EF Core transport but does not have UseInbox<TDbContext>() configured. "
+                            + $"The EF Core transport requires inbox for message delivery."
+                    );
                 }
             }
         }

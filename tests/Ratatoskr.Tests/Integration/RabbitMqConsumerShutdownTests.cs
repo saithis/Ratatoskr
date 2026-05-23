@@ -18,11 +18,17 @@ file sealed class DrainGateTestEventHandler : IMessageHandler<TestEvent>
 
     public bool HasEntered => Volatile.Read(ref _entered) != 0;
 
-    private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _release = new(
+        TaskCreationOptions.RunContinuationsAsynchronously
+    );
 
     public void Release() => _release.TrySetResult();
 
-    public async Task HandleAsync(TestEvent message, MessageProperties context, CancellationToken cancellationToken)
+    public async Task HandleAsync(
+        TestEvent message,
+        MessageProperties context,
+        CancellationToken cancellationToken
+    )
     {
         Interlocked.Exchange(ref _entered, 1);
         await _release.Task;
@@ -35,7 +41,9 @@ file sealed class ConcurrentTrackingTestEventHandler : IMessageHandler<TestEvent
     private int _currentConcurrency;
     private int _maxConcurrency;
     private int _processed;
-    private readonly TaskCompletionSource _processedAll = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _processedAll = new(
+        TaskCreationOptions.RunContinuationsAsynchronously
+    );
 
     public ConcurrentTrackingTestEventHandler(int targetCount)
     {
@@ -49,7 +57,11 @@ file sealed class ConcurrentTrackingTestEventHandler : IMessageHandler<TestEvent
         return _processedAll.Task.WaitAsync(timeout);
     }
 
-    public async Task HandleAsync(TestEvent message, MessageProperties context, CancellationToken cancellationToken)
+    public async Task HandleAsync(
+        TestEvent message,
+        MessageProperties context,
+        CancellationToken cancellationToken
+    )
     {
         var nowConcurrent = Interlocked.Increment(ref _currentConcurrency);
         UpdateMaxConcurrency(nowConcurrent);
@@ -78,7 +90,10 @@ file sealed class ConcurrentTrackingTestEventHandler : IMessageHandler<TestEvent
                 return;
             }
 
-            if (Interlocked.CompareExchange(ref _maxConcurrency, nowConcurrent, snapshot) == snapshot)
+            if (
+                Interlocked.CompareExchange(ref _maxConcurrency, nowConcurrent, snapshot)
+                == snapshot
+            )
             {
                 return;
             }
@@ -94,15 +109,24 @@ file sealed class ConcurrentAckStressEventHandler : IMessageHandler<TestEvent>
 {
     private readonly int _total;
     private int _arrived;
-    private readonly TaskCompletionSource _allArrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _allArrived = new(
+        TaskCreationOptions.RunContinuationsAsynchronously
+    );
     private int _processed;
-    private readonly TaskCompletionSource _processedAll = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _processedAll = new(
+        TaskCreationOptions.RunContinuationsAsynchronously
+    );
 
     public ConcurrentAckStressEventHandler(int total) => _total = total;
 
-    public Task WaitUntilAllProcessedAsync(TimeSpan timeout) => _processedAll.Task.WaitAsync(timeout);
+    public Task WaitUntilAllProcessedAsync(TimeSpan timeout) =>
+        _processedAll.Task.WaitAsync(timeout);
 
-    public async Task HandleAsync(TestEvent message, MessageProperties context, CancellationToken cancellationToken)
+    public async Task HandleAsync(
+        TestEvent message,
+        MessageProperties context,
+        CancellationToken cancellationToken
+    )
     {
         if (Interlocked.Increment(ref _arrived) >= _total)
             _allArrived.TrySetResult();
@@ -117,22 +141,36 @@ file sealed class ConcurrentAckStressEventHandler : IMessageHandler<TestEvent>
 file sealed class BackpressureTestEventHandler : IMessageHandler<TestEvent>
 {
     private int _activeCount;
-    private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _release = new(
+        TaskCreationOptions.RunContinuationsAsynchronously
+    );
 
     public int ActiveCount => Volatile.Read(ref _activeCount);
+
     public void Release() => _release.TrySetResult();
 
-    public async Task HandleAsync(TestEvent message, MessageProperties context, CancellationToken cancellationToken)
+    public async Task HandleAsync(
+        TestEvent message,
+        MessageProperties context,
+        CancellationToken cancellationToken
+    )
     {
         Interlocked.Increment(ref _activeCount);
-        try { await _release.Task.WaitAsync(cancellationToken); }
-        finally { Interlocked.Decrement(ref _activeCount); }
+        try
+        {
+            await _release.Task.WaitAsync(cancellationToken);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _activeCount);
+        }
     }
 }
 
 public class RabbitMqConsumerShutdownTests(
     RabbitMqContainerFixture rabbitMq,
-    PostgresContainerFixture postgres) : RatatoskrIntegrationTest(rabbitMq, postgres)
+    PostgresContainerFixture postgres
+) : RatatoskrIntegrationTest(rabbitMq, postgres)
 {
     private string QueueName => $"shutdown-drain-{TestId}";
     private string ConcurrencyQueueName => $"shutdown-concurrency-{TestId}";
@@ -154,20 +192,35 @@ public class RabbitMqConsumerShutdownTests(
                     o.ConnectionString = new Uri(RabbitMqConnectionString);
                     o.ShutdownDrainTimeout = TimeSpan.FromSeconds(30);
                 });
-                bus.AddCommandConsumeChannel(QueueName, c =>
-                {
-                    c.WithRabbitMq(o => o.WithQueueName(QueueName).WithAutoAck(false).WithTransientQueue()
-                        .WithQueueType(QueueType.Classic));
-                    c.Consumes<TestEvent>(m => m.WithHandler<DrainGateTestEventHandler>());
-                });
+                bus.AddCommandConsumeChannel(
+                    QueueName,
+                    c =>
+                    {
+                        c.WithRabbitMq(o =>
+                            o.WithQueueName(QueueName)
+                                .WithAutoAck(false)
+                                .WithTransientQueue()
+                                .WithQueueType(QueueType.Classic)
+                        );
+                        c.Consumes<TestEvent>(m => m.WithHandler<DrainGateTestEventHandler>());
+                    }
+                );
             });
         });
 
         var host = Services.GetRequiredService<IHost>();
 
-        await PublishToRabbitMqAsync(exchange: "", routingKey: QueueName, new TestEvent { Id = "drain", Data = "x" });
+        await PublishToRabbitMqAsync(
+            exchange: "",
+            routingKey: QueueName,
+            new TestEvent { Id = "drain", Data = "x" }
+        );
 
-        await WaitForConditionAsync(() => handler.HasEntered, TimeSpan.FromSeconds(10), "Handler should start processing");
+        await WaitForConditionAsync(
+            () => handler.HasEntered,
+            TimeSpan.FromSeconds(10),
+            "Handler should start processing"
+        );
 
         var stopTask = host.StopAsync(CancellationToken.None);
         await Task.Delay(50);
@@ -175,7 +228,9 @@ public class RabbitMqConsumerShutdownTests(
 
         await stopTask.WaitAsync(TimeSpan.FromSeconds(60));
 
-        (await GetMessageCountAsync(QueueName)).Should().Be(0, "message should be acked after graceful drain, not left unacked on the queue");
+        (await GetMessageCountAsync(QueueName))
+            .Should()
+            .Be(0, "message should be acked after graceful drain, not left unacked on the queue");
     }
 
     [Test]
@@ -190,36 +245,51 @@ public class RabbitMqConsumerShutdownTests(
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-                bus.AddCommandConsumeChannel(ConcurrencyQueueName, c =>
-                {
-                    c.WithRabbitMq(o => o
-                        .WithQueueName(ConcurrencyQueueName)
-                        .WithAutoAck(false)
-                        .WithPrefetch(6)
-                        .WithConcurrencyLimit(3)
-                        .WithTransientQueue()
-                        .WithQueueType(QueueType.Classic));
-                    c.Consumes<TestEvent>(m => m.WithHandler<ConcurrentTrackingTestEventHandler>());
-                });
+                bus.AddCommandConsumeChannel(
+                    ConcurrencyQueueName,
+                    c =>
+                    {
+                        c.WithRabbitMq(o =>
+                            o.WithQueueName(ConcurrencyQueueName)
+                                .WithAutoAck(false)
+                                .WithPrefetch(6)
+                                .WithConcurrencyLimit(3)
+                                .WithTransientQueue()
+                                .WithQueueType(QueueType.Classic)
+                        );
+                        c.Consumes<TestEvent>(m =>
+                            m.WithHandler<ConcurrentTrackingTestEventHandler>()
+                        );
+                    }
+                );
             });
         });
 
         for (var i = 0; i < totalMessages; i++)
         {
-            await PublishToRabbitMqAsync(exchange: "", routingKey: ConcurrencyQueueName, new TestEvent { Id = $"c-{i}", Data = "x" });
+            await PublishToRabbitMqAsync(
+                exchange: "",
+                routingKey: ConcurrencyQueueName,
+                new TestEvent { Id = $"c-{i}", Data = "x" }
+            );
         }
 
         await handler.WaitUntilProcessedAsync(TimeSpan.FromSeconds(20));
 
-        handler.MaxConcurrency.Should().BeGreaterThan(1, "handlers should run concurrently when ConcurrencyLimit > 1");
-        handler.MaxConcurrency.Should().BeLessThanOrEqualTo(3, "concurrency should be capped by ConcurrencyLimit");
+        handler
+            .MaxConcurrency.Should()
+            .BeGreaterThan(1, "handlers should run concurrently when ConcurrencyLimit > 1");
+        handler
+            .MaxConcurrency.Should()
+            .BeLessThanOrEqualTo(3, "concurrency should be capped by ConcurrencyLimit");
 
         // WaitUntilProcessedAsync fires when the handler returns, but BasicAckAsync runs
         // after that in RabbitMqConsumer. Poll until the broker confirms all acks.
         await WaitForConditionAsync(
             async () => (await GetMessageCountAsync(ConcurrencyQueueName)) == 0,
             TimeSpan.FromSeconds(10),
-            "All messages should be acked on the queue");
+            "All messages should be acked on the queue"
+        );
     }
 
     [Test]
@@ -234,37 +304,48 @@ public class RabbitMqConsumerShutdownTests(
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-                bus.AddCommandConsumeChannel(BackpressureQueueName, c =>
-                {
-                    c.WithRabbitMq(o => o
-                        .WithQueueName(BackpressureQueueName)
-                        .WithAutoAck(false)
-                        .WithPrefetch(concurrencyLimit)
-                        .WithConcurrencyLimit(concurrencyLimit)
-                        .WithTransientQueue()
-                        .WithQueueType(QueueType.Classic));
-                    c.Consumes<TestEvent>(m => m.WithHandler<BackpressureTestEventHandler>());
-                });
+                bus.AddCommandConsumeChannel(
+                    BackpressureQueueName,
+                    c =>
+                    {
+                        c.WithRabbitMq(o =>
+                            o.WithQueueName(BackpressureQueueName)
+                                .WithAutoAck(false)
+                                .WithPrefetch(concurrencyLimit)
+                                .WithConcurrencyLimit(concurrencyLimit)
+                                .WithTransientQueue()
+                                .WithQueueType(QueueType.Classic)
+                        );
+                        c.Consumes<TestEvent>(m => m.WithHandler<BackpressureTestEventHandler>());
+                    }
+                );
             });
         });
 
         for (var i = 0; i < 4; i++)
-            await PublishToRabbitMqAsync(exchange: "", routingKey: BackpressureQueueName, new TestEvent { Id = $"bp-{i}", Data = "x" });
+            await PublishToRabbitMqAsync(
+                exchange: "",
+                routingKey: BackpressureQueueName,
+                new TestEvent { Id = $"bp-{i}", Data = "x" }
+            );
 
         await WaitForConditionAsync(
             () => handler.ActiveCount == concurrencyLimit,
             TimeSpan.FromSeconds(10),
-            $"Expected {concurrencyLimit} handlers running concurrently");
+            $"Expected {concurrencyLimit} handlers running concurrently"
+        );
 
-        (await GetMessageCountAsync(BackpressureQueueName)).Should().Be(2,
-            "messages beyond prefetch should remain in the queue, not accumulate in memory");
+        (await GetMessageCountAsync(BackpressureQueueName))
+            .Should()
+            .Be(2, "messages beyond prefetch should remain in the queue, not accumulate in memory");
 
         handler.Release();
 
         await WaitForConditionAsync(
             async () => (await GetMessageCountAsync(BackpressureQueueName)) == 0,
             TimeSpan.FromSeconds(10),
-            "All messages should be acked after handlers are released");
+            "All messages should be acked after handlers are released"
+        );
     }
 
     [Test]
@@ -279,29 +360,40 @@ public class RabbitMqConsumerShutdownTests(
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-                bus.AddCommandConsumeChannel(AckStressQueueName, c =>
-                {
-                    c.WithRabbitMq(o => o
-                        .WithQueueName(AckStressQueueName)
-                        .WithAutoAck(false)
-                        .WithPrefetch(totalMessages)
-                        .WithConcurrencyLimit(totalMessages)
-                        .WithTransientQueue()
-                        .WithQueueType(QueueType.Classic));
-                    c.Consumes<TestEvent>(m => m.WithHandler<ConcurrentAckStressEventHandler>());
-                });
+                bus.AddCommandConsumeChannel(
+                    AckStressQueueName,
+                    c =>
+                    {
+                        c.WithRabbitMq(o =>
+                            o.WithQueueName(AckStressQueueName)
+                                .WithAutoAck(false)
+                                .WithPrefetch(totalMessages)
+                                .WithConcurrencyLimit(totalMessages)
+                                .WithTransientQueue()
+                                .WithQueueType(QueueType.Classic)
+                        );
+                        c.Consumes<TestEvent>(m =>
+                            m.WithHandler<ConcurrentAckStressEventHandler>()
+                        );
+                    }
+                );
             });
         });
 
         for (var i = 0; i < totalMessages; i++)
-            await PublishToRabbitMqAsync(exchange: "", routingKey: AckStressQueueName, new TestEvent { Id = $"ack-{i}", Data = "x" });
+            await PublishToRabbitMqAsync(
+                exchange: "",
+                routingKey: AckStressQueueName,
+                new TestEvent { Id = $"ack-{i}", Data = "x" }
+            );
 
         await handler.WaitUntilAllProcessedAsync(TimeSpan.FromSeconds(20));
 
         await WaitForConditionAsync(
             async () => (await GetMessageCountAsync(AckStressQueueName)) == 0,
             TimeSpan.FromSeconds(10),
-            "All messages should be acked when handlers complete simultaneously");
+            "All messages should be acked when handlers complete simultaneously"
+        );
     }
 
     [Test]
@@ -322,20 +414,28 @@ public class RabbitMqConsumerShutdownTests(
         var sender = Services.GetRequiredService<IMessageSender>();
         var body = "{}"u8.ToArray();
 
-        var tasks = Enumerable.Range(0, messageCount)
-            .Select(_ => sender.SendAsync(body, new MessageProperties
-            {
-                Id = Guid.NewGuid().ToString(),
-                Type = "test.event",
-                Source = "/test",
-                Time =  DateTimeOffset.UtcNow,
-            }.SetRoutingKey(PublishStressQueueName), CancellationToken.None));
+        var tasks = Enumerable
+            .Range(0, messageCount)
+            .Select(_ =>
+                sender.SendAsync(
+                    body,
+                    new MessageProperties
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        Type = "test.event",
+                        Source = "/test",
+                        Time = DateTimeOffset.UtcNow,
+                    }.SetRoutingKey(PublishStressQueueName),
+                    CancellationToken.None
+                )
+            );
 
         await Task.WhenAll(tasks);
 
         await WaitForConditionAsync(
             async () => (await GetMessageCountAsync(PublishStressQueueName)) == messageCount,
             TimeSpan.FromSeconds(10),
-            "All concurrently published messages should arrive in the queue");
+            "All concurrently published messages should arrive in the queue"
+        );
     }
 }

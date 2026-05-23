@@ -7,29 +7,29 @@ namespace Ratatoskr.EfCore.Internal;
 internal class OutboxMessageEntity : BaseMessageEntity
 {
     public Guid Id { get; private set; }
-    
+
     public required DateTimeOffset CreatedAt { get; init; }
-    
+
     public DateTimeOffset? ProcessedAt { get; private set; }
 
     public short ErrorCount { get; private set; }
 
-    [MaxLength(2000)] 
+    [MaxLength(2000)]
     public string Error { get; private set; } = string.Empty;
-    
+
     public DateTimeOffset? FailedAt { get; private set; }
-    
+
     /// <summary>
     /// When the message should next be attempted. Null means ready to process.
     /// Used for exponential backoff.
     /// </summary>
     public DateTimeOffset? NextAttemptAt { get; private set; }
-    
+
     /// <summary>
     /// True if the message has permanently failed and should not be retried.
     /// </summary>
     public bool IsPoisoned { get; private set; }
-    
+
     /// <summary>
     /// When this message was picked up for processing. Used to detect stuck messages.
     /// </summary>
@@ -46,12 +46,21 @@ internal class OutboxMessageEntity : BaseMessageEntity
     /// </summary>
     public int RequeuedCount { get; private set; }
 
-    private OutboxMessageEntity(){}
-    public static OutboxMessageEntity Create(byte[] message, MessageProperties props, TimeProvider timeProvider, string transportName)
+    private OutboxMessageEntity() { }
+
+    public static OutboxMessageEntity Create(
+        byte[] message,
+        MessageProperties props,
+        TimeProvider timeProvider,
+        string transportName
+    )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(transportName);
         if (transportName.Length > 50)
-            throw new ArgumentOutOfRangeException(nameof(transportName), "TransportName must be 50 characters or fewer.");
+            throw new ArgumentOutOfRangeException(
+                nameof(transportName),
+                "TransportName must be 50 characters or fewer."
+            );
         return new OutboxMessageEntity
         {
             Id = Guid.CreateVersion7(),
@@ -75,7 +84,12 @@ internal class OutboxMessageEntity : BaseMessageEntity
         Version++;
     }
 
-    public void PublishFailed(string error, TimeProvider timeProvider, int maxRetries, TimeSpan maxRetryDelay)
+    public void PublishFailed(
+        string error,
+        TimeProvider timeProvider,
+        int maxRetries,
+        TimeSpan maxRetryDelay
+    )
     {
         ErrorCount++;
         Error = error.Length > 2000 ? error[..2000] : error;
@@ -90,10 +104,12 @@ internal class OutboxMessageEntity : BaseMessageEntity
         }
         else
         {
-            NextAttemptAt = timeProvider.GetUtcNow().Add(BackoffCalculator.CalculateDelay(ErrorCount, maxRetryDelay));
+            NextAttemptAt = timeProvider
+                .GetUtcNow()
+                .Add(BackoffCalculator.CalculateDelay(ErrorCount, maxRetryDelay));
         }
     }
-    
+
     /// <summary>
     /// Clears the poisoned state so the outbox processor will retry the message.
     /// Increments <see cref="RequeuedCount"/> and resets the error counters.

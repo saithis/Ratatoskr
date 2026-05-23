@@ -8,12 +8,12 @@ public class ChannelRegistration(string channelName, ChannelType intent)
     private readonly Dictionary<Type, object> _extensions = new();
 
     /// <summary>Gets a typed extension object, or null if not set.</summary>
-    public T? GetExtension<T>() where T : class =>
-        _extensions.TryGetValue(typeof(T), out var value) ? (T)value : null;
+    public T? GetExtension<T>()
+        where T : class => _extensions.TryGetValue(typeof(T), out var value) ? (T)value : null;
 
     /// <summary>Sets a typed extension object.</summary>
-    public void SetExtension<T>(T value) where T : class =>
-        _extensions[typeof(T)] = value;
+    public void SetExtension<T>(T value)
+        where T : class => _extensions[typeof(T)] = value;
 
     public HashSet<string> Transports { get; } = new(StringComparer.OrdinalIgnoreCase);
 
@@ -21,7 +21,8 @@ public class ChannelRegistration(string channelName, ChannelType intent)
 
     // O(1) lookup indexes — populated by ChannelRegistry.Freeze()
     internal Dictionary<Type, MessageRegistration> MessagesByType { get; } = new();
-    internal Dictionary<string, MessageRegistration> MessagesByTypeName { get; } = new(StringComparer.Ordinal);
+    internal Dictionary<string, MessageRegistration> MessagesByTypeName { get; } =
+        new(StringComparer.Ordinal);
 
     internal void BuildLookups()
     {

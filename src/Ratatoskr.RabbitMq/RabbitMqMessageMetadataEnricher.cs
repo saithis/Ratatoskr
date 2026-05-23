@@ -11,6 +11,8 @@ public class RabbitMqMessageMetadataEnricher : ITransportMessageMetadataEnricher
     {
         var messageOptions = publishInformation.Message.GetRabbitMqOptions();
         properties.SetExchange(publishInformation.Channel.ChannelName);
-        properties.SetRoutingKey(messageOptions?.RoutingKey ?? publishInformation.Message.MessageTypeName);
+        properties.SetRoutingKey(
+            messageOptions?.RoutingKey ?? publishInformation.Message.MessageTypeName
+        );
     }
 }

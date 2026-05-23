@@ -9,8 +9,10 @@ using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Inbox;
 
-public class InboxCancellationAndTimeoutTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
-    : InboxTestBase(rabbitMq, postgres)
+public class InboxCancellationAndTimeoutTests(
+    RabbitMqContainerFixture rabbitMq,
+    PostgresContainerFixture postgres
+) : InboxTestBase(rabbitMq, postgres)
 {
     [Test]
     public async Task Inbox_CancellationToken_PropagatedToHandler()
@@ -23,15 +25,24 @@ public class InboxCancellationAndTimeoutTests(RabbitMqContainerFixture rabbitMq,
             services.AddSingleton(coordination);
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<CancellableHandler>("cancellable"))
-                    .UseInbox<TestDbContext>());
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox => inbox.WithoutBackgroundProcessing()));
+                bus.AddEventPublishChannel(
+                    "inbox-events",
+                    c => c.WithEfCore().Produces<TestEvent>()
+                );
+                bus.AddEventConsumeChannel(
+                    "inbox-events",
+                    c =>
+                        c.Consumes<TestEvent>(m => m.WithHandler<CancellableHandler>("cancellable"))
+                            .UseInbox<TestDbContext>()
+                );
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseInbox(inbox => inbox.WithoutBackgroundProcessing())
+                );
             });
 
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
         });
 
         await InitializeDatabase();
@@ -41,7 +52,8 @@ public class InboxCancellationAndTimeoutTests(RabbitMqContainerFixture rabbitMq,
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             await bus.PublishDirectAsync(
                 new TestEvent { Id = "business-cancel-1" },
-                new MessageProperties { Id = "cancel-1" });
+                new MessageProperties { Id = "cancel-1" }
+            );
         });
 
         await WaitForInboxEntriesAsync(1);
@@ -52,7 +64,9 @@ public class InboxCancellationAndTimeoutTests(RabbitMqContainerFixture rabbitMq,
         using var cts = new CancellationTokenSource();
         var processTask = InScopeAsync(async ctx =>
         {
-            var processor = ctx.ServiceProvider.GetRequiredService<InboxMessageProcessor<TestDbContext>>();
+            var processor = ctx.ServiceProvider.GetRequiredService<
+                InboxMessageProcessor<TestDbContext>
+            >();
             await processor.ProcessBatchAsync(false, cts.Token);
         });
 
@@ -86,15 +100,24 @@ public class InboxCancellationAndTimeoutTests(RabbitMqContainerFixture rabbitMq,
             services.AddSingleton(coordination);
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<CancellableHandler>("cancellable"))
-                    .UseInbox<TestDbContext>());
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox => inbox.WithoutBackgroundProcessing()));
+                bus.AddEventPublishChannel(
+                    "inbox-events",
+                    c => c.WithEfCore().Produces<TestEvent>()
+                );
+                bus.AddEventConsumeChannel(
+                    "inbox-events",
+                    c =>
+                        c.Consumes<TestEvent>(m => m.WithHandler<CancellableHandler>("cancellable"))
+                            .UseInbox<TestDbContext>()
+                );
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseInbox(inbox => inbox.WithoutBackgroundProcessing())
+                );
             });
 
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
         });
 
         await InitializeDatabase();
@@ -104,14 +127,17 @@ public class InboxCancellationAndTimeoutTests(RabbitMqContainerFixture rabbitMq,
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             await bus.PublishDirectAsync(
                 new TestEvent { Id = "business-cancel-1" },
-                new MessageProperties { Id = "cancel-1" });
+                new MessageProperties { Id = "cancel-1" }
+            );
         });
 
         await WaitForInboxEntriesAsync(1);
 
         var processTask = InScopeAsync(async ctx =>
         {
-            var processor = ctx.ServiceProvider.GetRequiredService<InboxMessageProcessor<TestDbContext>>();
+            var processor = ctx.ServiceProvider.GetRequiredService<
+                InboxMessageProcessor<TestDbContext>
+            >();
             await processor.ProcessBatchAsync(false, cts.Token);
         });
 
@@ -127,7 +153,9 @@ public class InboxCancellationAndTimeoutTests(RabbitMqContainerFixture rabbitMq,
             status.ErrorCount.Should().Be(0, "cancellation should not count as a handler failure");
             status.IsPoisoned.Should().BeFalse("cancellation should not poison the handler");
             status.CompletedAt.Should().BeNull("handler was interrupted");
-            status.ProcessingStartedAt.Should().NotBeNull("status should remain in processing state for stuck detection");
+            status
+                .ProcessingStartedAt.Should()
+                .NotBeNull("status should remain in processing state for stuck detection");
         });
     }
 
@@ -138,19 +166,28 @@ public class InboxCancellationAndTimeoutTests(RabbitMqContainerFixture rabbitMq,
         {
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<SlowHandler>("slow-handler"))
-                    .UseInbox<TestDbContext>());
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox =>
+                bus.AddEventPublishChannel(
+                    "inbox-events",
+                    c => c.WithEfCore().Produces<TestEvent>()
+                );
+                bus.AddEventConsumeChannel(
+                    "inbox-events",
+                    c =>
+                        c.Consumes<TestEvent>(m => m.WithHandler<SlowHandler>("slow-handler"))
+                            .UseInbox<TestDbContext>()
+                );
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseInbox(inbox =>
                     {
                         inbox.WithHandlerTimeout(TimeSpan.FromMilliseconds(100));
                         inbox.WithoutBackgroundProcessing();
-                    }));
+                    })
+                );
             });
 
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
         });
 
         await InitializeDatabase();
@@ -160,7 +197,8 @@ public class InboxCancellationAndTimeoutTests(RabbitMqContainerFixture rabbitMq,
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             await bus.PublishDirectAsync(
                 new TestEvent { Id = "business-timeout-1" },
-                new MessageProperties { Id = "timeout-1" });
+                new MessageProperties { Id = "timeout-1" }
+            );
         });
 
         await WaitForInboxEntriesAsync(1);
@@ -171,7 +209,9 @@ public class InboxCancellationAndTimeoutTests(RabbitMqContainerFixture rabbitMq,
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var status = await db.Set<InboxHandlerStatusEntity>().SingleAsync();
-            status.CompletedAt.Should().BeNull("handler timed out and should not be marked as completed");
+            status
+                .CompletedAt.Should()
+                .BeNull("handler timed out and should not be marked as completed");
             status.ErrorCount.Should().Be(1);
             status.IsPoisoned.Should().BeFalse();
         });
@@ -187,20 +227,29 @@ public class InboxCancellationAndTimeoutTests(RabbitMqContainerFixture rabbitMq,
             services.AddSingleton<TimeProvider>(fakeTime);
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<SlowHandler>("slow-handler"))
-                    .UseInbox<TestDbContext>());
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox =>
+                bus.AddEventPublishChannel(
+                    "inbox-events",
+                    c => c.WithEfCore().Produces<TestEvent>()
+                );
+                bus.AddEventConsumeChannel(
+                    "inbox-events",
+                    c =>
+                        c.Consumes<TestEvent>(m => m.WithHandler<SlowHandler>("slow-handler"))
+                            .UseInbox<TestDbContext>()
+                );
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseInbox(inbox =>
                     {
                         inbox.WithHandlerTimeout(TimeSpan.FromMilliseconds(100));
                         inbox.WithMaxRetries(2);
                         inbox.WithoutBackgroundProcessing();
-                    }));
+                    })
+                );
             });
 
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
         });
 
         await InitializeDatabase();
@@ -210,7 +259,8 @@ public class InboxCancellationAndTimeoutTests(RabbitMqContainerFixture rabbitMq,
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             await bus.PublishDirectAsync(
                 new TestEvent { Id = "business-timeout-poison-1" },
-                new MessageProperties { Id = "timeout-poison-1" });
+                new MessageProperties { Id = "timeout-poison-1" }
+            );
         });
 
         await WaitForInboxEntriesAsync(1);
@@ -237,9 +287,14 @@ public class InboxCancellationAndTimeoutTests(RabbitMqContainerFixture rabbitMq,
         public SemaphoreSlim HandlerGate { get; } = new(0, 1);
     }
 
-    private class CancellableHandler(CancellableHandlerCoordination coordination) : IMessageHandler<TestEvent>
+    private class CancellableHandler(CancellableHandlerCoordination coordination)
+        : IMessageHandler<TestEvent>
     {
-        public async Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
+        public async Task HandleAsync(
+            TestEvent message,
+            MessageProperties props,
+            CancellationToken ct
+        )
         {
             coordination.HandlerStarted.Release();
             await coordination.HandlerGate.WaitAsync(ct);
@@ -249,7 +304,11 @@ public class InboxCancellationAndTimeoutTests(RabbitMqContainerFixture rabbitMq,
 
     private class SlowHandler : IMessageHandler<TestEvent>
     {
-        public async Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
+        public async Task HandleAsync(
+            TestEvent message,
+            MessageProperties props,
+            CancellationToken ct
+        )
         {
             await Task.Delay(Timeout.Infinite, ct);
         }

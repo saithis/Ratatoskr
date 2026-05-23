@@ -18,7 +18,7 @@ public interface IRabbitMqEnvelopeMapper
     /// <param name="outgoing">RabbitMQ properties to populate.</param>
     /// <returns>The message body to send.</returns>
     byte[] MapOutgoing(byte[] serializedData, MessageProperties props, BasicProperties outgoing);
-    
+
     /// <summary>
     /// Maps incoming RabbitMQ message to MessageProperties.
     /// Returns the body to deserialize (extracted from envelope for structured mode).

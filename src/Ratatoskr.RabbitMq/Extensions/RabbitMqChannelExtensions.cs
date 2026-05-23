@@ -8,9 +8,11 @@ public static class RabbitMqChannelExtensions
 {
     extension(ChannelRegistration registration)
     {
-        public bool IsRabbitMqChannel() => registration.GetExtension<RabbitMqChannelOptions>() != null;
+        public bool IsRabbitMqChannel() =>
+            registration.GetExtension<RabbitMqChannelOptions>() != null;
 
-        public RabbitMqChannelOptions? GetRabbitMqChannelOptions() => registration.GetExtension<RabbitMqChannelOptions>();
+        public RabbitMqChannelOptions? GetRabbitMqChannelOptions() =>
+            registration.GetExtension<RabbitMqChannelOptions>();
     }
 
     extension(PublishChannelBuilder builder)

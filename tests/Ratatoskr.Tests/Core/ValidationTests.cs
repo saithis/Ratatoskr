@@ -17,10 +17,14 @@ public class ValidationTests
         var builder = new RatatoskrBuilder(services);
 
         // Act & Assert
-        var act = () => builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>((Action<MessageConsumptionBuilder<TestEvent>>)(m => { })));
+        var act = () =>
+            builder.AddEventConsumeChannel(
+                "test-channel",
+                c => c.Consumes<TestEvent>((Action<MessageConsumptionBuilder<TestEvent>>)(m => { }))
+            );
 
-        act.Should().Throw<InvalidOperationException>()
+        act.Should()
+            .Throw<InvalidOperationException>()
             .WithMessage("*Consumes<TestEvent>() requires at least one handler*");
     }
 
@@ -32,8 +36,11 @@ public class ValidationTests
         var builder = new RatatoskrBuilder(services);
 
         // Act & Assert
-        var act = () => builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+        var act = () =>
+            builder.AddEventConsumeChannel(
+                "test-channel",
+                c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
+            );
 
         act.Should().NotThrow();
     }
@@ -46,10 +53,15 @@ public class ValidationTests
         var builder = new RatatoskrBuilder(services);
 
         // Act & Assert
-        var act = () => builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(
-                m => m.WithHandler<TestEventHandler>(),
-                msg => msg.WithType("custom.type")));
+        var act = () =>
+            builder.AddEventConsumeChannel(
+                "test-channel",
+                c =>
+                    c.Consumes<TestEvent>(
+                        m => m.WithHandler<TestEventHandler>(),
+                        msg => msg.WithType("custom.type")
+                    )
+            );
 
         act.Should().NotThrow();
     }
@@ -61,13 +73,20 @@ public class ValidationTests
         var services = new ServiceCollection();
 
         // Act & Assert - AddRatatoskr calls ChannelHandlerRegistry.Build internally
-        var act = () => services.AddRatatoskr(r => r
-            .AddEventConsumeChannel("test-channel", c => c
-                .Consumes<TestEvent>(m => m
-                    .WithHandler<TestEventHandler>("same-key")
-                    .WithHandler<SecondTestEventHandler>("same-key"))));
+        var act = () =>
+            services.AddRatatoskr(r =>
+                r.AddEventConsumeChannel(
+                    "test-channel",
+                    c =>
+                        c.Consumes<TestEvent>(m =>
+                            m.WithHandler<TestEventHandler>("same-key")
+                                .WithHandler<SecondTestEventHandler>("same-key")
+                        )
+                )
+            );
 
-        act.Should().Throw<InvalidOperationException>()
+        act.Should()
+            .Throw<InvalidOperationException>()
             .WithMessage("*Duplicate inbox handler key*same-key*");
     }
 
@@ -78,15 +97,24 @@ public class ValidationTests
         var services = new ServiceCollection();
 
         // Act & Assert
-        var act = () => services.AddRatatoskr(r =>
-        {
-            r.AddEventConsumeChannel("channel-a", c => c
-                .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("shared-key")));
-            r.AddEventConsumeChannel("channel-b", c => c
-                .Consumes<OrderCreatedEvent>(m => m.WithHandler<NoOpOrderCreatedHandler>("shared-key")));
-        });
+        var act = () =>
+            services.AddRatatoskr(r =>
+            {
+                r.AddEventConsumeChannel(
+                    "channel-a",
+                    c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("shared-key"))
+                );
+                r.AddEventConsumeChannel(
+                    "channel-b",
+                    c =>
+                        c.Consumes<OrderCreatedEvent>(m =>
+                            m.WithHandler<NoOpOrderCreatedHandler>("shared-key")
+                        )
+                );
+            });
 
-        act.Should().Throw<InvalidOperationException>()
+        act.Should()
+            .Throw<InvalidOperationException>()
             .WithMessage("*Duplicate inbox handler key*shared-key*");
     }
 
@@ -96,8 +124,10 @@ public class ValidationTests
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("stable-key")));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("stable-key"))
+        );
 
         // Act
         var registry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
@@ -116,8 +146,10 @@ public class ValidationTests
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
+        );
 
         // Act
         var registry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
@@ -129,15 +161,17 @@ public class ValidationTests
         fafHandlers[0].InboxKey.Should().BeNull();
         registry.GetInboxHandlers("test-channel").Should().BeEmpty();
     }
+
     [Test]
     public void WithHandler_FireAndForget_RegistersAsFireAndForget()
     {
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m
-                .WithHandler<TestEventHandler>()));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
+        );
 
         // Act
         var registry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
@@ -155,10 +189,14 @@ public class ValidationTests
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("channel-a", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
-        builder.AddEventConsumeChannel("channel-b", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+        builder.AddEventConsumeChannel(
+            "channel-a",
+            c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
+        );
+        builder.AddEventConsumeChannel(
+            "channel-b",
+            c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
+        );
 
         // Act
         var registry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
@@ -174,14 +212,18 @@ public class ValidationTests
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("channel-a", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
-        builder.AddEventConsumeChannel("channel-b", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+        builder.AddEventConsumeChannel(
+            "channel-a",
+            c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
+        );
+        builder.AddEventConsumeChannel(
+            "channel-b",
+            c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
+        );
 
         // Assert - handler is resolvable (TryAddScoped ensures single registration)
         services.Should().ContainSingle(d => d.ServiceType == typeof(TestEventHandler));
-        
+
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
         scope.ServiceProvider.GetServices<TestEventHandler>().Should().ContainSingle();
@@ -193,6 +235,9 @@ public class ValidationTests
 /// </summary>
 file class NoOpOrderCreatedHandler : IMessageHandler<OrderCreatedEvent>
 {
-    public Task HandleAsync(OrderCreatedEvent message, MessageProperties context, CancellationToken cancellationToken)
-        => Task.CompletedTask;
+    public Task HandleAsync(
+        OrderCreatedEvent message,
+        MessageProperties context,
+        CancellationToken cancellationToken
+    ) => Task.CompletedTask;
 }

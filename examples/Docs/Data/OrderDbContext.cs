@@ -5,7 +5,9 @@ namespace Docs.Data;
 
 #region OrderDbContext
 public class OrderDbContext(DbContextOptions<OrderDbContext> options)
-    : DbContext(options), IOutboxDbContext, IInboxDbContext
+    : DbContext(options),
+        IOutboxDbContext,
+        IInboxDbContext
 {
     public OutboxStagingCollection OutboxMessages { get; } = new();
 

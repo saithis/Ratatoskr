@@ -15,5 +15,6 @@ internal interface IEfCoreInboxAcceptor
         MessageProperties properties,
         string transportName,
         string channelName,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken
+    );
 }

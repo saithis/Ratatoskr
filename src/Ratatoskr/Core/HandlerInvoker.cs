@@ -17,7 +17,8 @@ public class HandlerInvoker(IServiceScopeFactory scopeFactory)
         object message,
         MessageProperties properties,
         CancellationToken cancellationToken,
-        TimeSpan? timeout = null)
+        TimeSpan? timeout = null
+    )
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var handler = scope.ServiceProvider.GetRequiredService(handlerType);
@@ -25,7 +26,9 @@ public class HandlerInvoker(IServiceScopeFactory scopeFactory)
 
         if (timeout.HasValue)
         {
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken
+            );
             timeoutCts.CancelAfter(timeout.Value);
             await invoke(handler, message, properties, timeoutCts.Token);
         }

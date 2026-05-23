@@ -10,24 +10,24 @@ public static class CloudEventsAmqpConstants
     /// CloudEvents specification version.
     /// </summary>
     public const string SpecVersion = "1.0";
-    
+
     /// <summary>
     /// Content type for structured mode.
     /// </summary>
     public const string JsonContentType = "application/cloudevents+json";
-    
+
     /// <summary>
     /// Header prefix for CloudEvents attributes in binary content mode.
     /// Uses underscore separator (JMS 2.0 compatible, preferred by Wolverine).
     /// </summary>
     public const string HeaderPrefix = "cloudEvents_";
-    
+
     /// <summary>
     /// Alternative header prefix using colon separator.
     /// Supported for incoming messages (per AMQP binding spec).
     /// </summary>
     public const string AlternativeHeaderPrefix = "cloudEvents:";
-    
+
     // CloudEvents attribute header names (with underscore separator)
     public const string SpecVersionHeader = "specversion";
     public const string IdHeader = "id";
@@ -37,7 +37,7 @@ public static class CloudEventsAmqpConstants
     public const string SubjectHeader = "subject";
     public const string DataContentTypeHeader = "datacontenttype";
     public const string DataSchemaHeader = "dataschema";
-    
+
     /// <summary>
     /// Trace propagation header (W3C Trace Context).
     /// </summary>

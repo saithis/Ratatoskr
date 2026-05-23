@@ -19,12 +19,16 @@ internal class OutboxTelemetry
         var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
             "create outbox",
             ActivityKind.Producer,
-            parentContext);
+            parentContext
+        );
 
         if (activity != null)
         {
             activity.SetTag(MessagingSemanticConventions.OperationName, "create");
-            activity.SetTag(MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeCreate);
+            activity.SetTag(
+                MessagingSemanticConventions.OperationType,
+                MessagingSemanticConventions.OperationTypeCreate
+            );
             activity.SetTag(MessagingSemanticConventions.System, "ratatoskr");
             activity.SetTag(MessagingSemanticConventions.MessageId, props.Id);
         }
@@ -39,7 +43,10 @@ internal class OutboxTelemetry
 
     public void RecordProcessed(bool success)
     {
-        RatatoskrDiagnostics.OutboxProcessCount.Add(1, new TagList { { "status", success ? "success" : "failure" } });
+        RatatoskrDiagnostics.OutboxProcessCount.Add(
+            1,
+            new TagList { { "status", success ? "success" : "failure" } }
+        );
     }
 
     public void RecordPoisoned()
@@ -49,6 +56,8 @@ internal class OutboxTelemetry
 
     public void RecordBatchDuration(long startTimestamp)
     {
-        RatatoskrDiagnostics.OutboxProcessDuration.Record(Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds);
+        RatatoskrDiagnostics.OutboxProcessDuration.Record(
+            Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds
+        );
     }
 }

@@ -4,7 +4,8 @@ namespace Ratatoskr.Core;
 /// Handles messages of a specific type.
 /// </summary>
 /// <typeparam name="TMessage">The message type to handle</typeparam>
-public interface IMessageHandler<in TMessage> where TMessage : notnull
+public interface IMessageHandler<in TMessage>
+    where TMessage : notnull
 {
     /// <summary>
     /// Handles the message.
@@ -12,5 +13,9 @@ public interface IMessageHandler<in TMessage> where TMessage : notnull
     /// <param name="message">The deserialized message</param>
     /// <param name="properties">Context about the message delivery</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    Task HandleAsync(TMessage message, MessageProperties properties, CancellationToken cancellationToken);
+    Task HandleAsync(
+        TMessage message,
+        MessageProperties properties,
+        CancellationToken cancellationToken
+    );
 }

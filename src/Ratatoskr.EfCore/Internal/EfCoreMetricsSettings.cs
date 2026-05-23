@@ -5,9 +5,8 @@ namespace Ratatoskr.EfCore.Internal;
 /// </summary>
 internal sealed class EfCoreMetricsSettings<TDbContext>
 {
-    public static EfCoreMetricsSettings<TDbContext> Default { get; } = new(
-        TimeSpan.FromSeconds(30),
-        TimeSpan.FromSeconds(5));
+    public static EfCoreMetricsSettings<TDbContext> Default { get; } =
+        new(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(5));
 
     public TimeSpan PollingInterval { get; }
     public TimeSpan QueryTimeout { get; }

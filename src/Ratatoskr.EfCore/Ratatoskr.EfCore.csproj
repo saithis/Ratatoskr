@@ -1,37 +1,36 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Entity Framework Core integration for Ratatoskr CloudEventBus.</Description>
+    <PackageTags>cloudevents;eventbus;efcore;entityframework</PackageTags>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
 
-    <PropertyGroup>
-        <Description>Entity Framework Core integration for Ratatoskr CloudEventBus.</Description>
-        <PackageTags>cloudevents;eventbus;efcore;entityframework</PackageTags>
-        <IsPackable>true</IsPackable>
-    </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
-    <ItemGroup>
-        <None Include="README.md" Pack="true" PackagePath="\"/>
-    </ItemGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
 
-    <ItemGroup>
-      <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="DistributedLock.Core" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+    <PackageReference Include="MinVer">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
 
-    <ItemGroup>
-      <PackageReference Include="DistributedLock.Core" />
-      <PackageReference Include="Microsoft.EntityFrameworkCore" />
-      <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
-      <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
-      <PackageReference Include="Microsoft.Extensions.Options" />
-      <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
-      <PackageReference Include="MinVer">
-        <PrivateAssets>all</PrivateAssets>
-        <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      </PackageReference>
-    </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Ratatoskr\Ratatoskr.csproj" />
+  </ItemGroup>
 
-    <ItemGroup>
-      <ProjectReference Include="..\Ratatoskr\Ratatoskr.csproj" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <InternalsVisibleTo Include="Ratatoskr.Tests" />
-    </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Ratatoskr.Tests" />
+  </ItemGroup>
 </Project>

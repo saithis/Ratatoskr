@@ -5,7 +5,8 @@ internal sealed class ConsumeChannelInboxPolicyAggregator
     private readonly HashSet<string> _warnings = new(StringComparer.Ordinal);
     private readonly object _sync = new();
 
-    public ConsumeChannelInboxRequirement EffectiveRequirement { get; private set; } = ConsumeChannelInboxRequirement.None;
+    public ConsumeChannelInboxRequirement EffectiveRequirement { get; private set; } =
+        ConsumeChannelInboxRequirement.None;
 
     public int WarningCount
     {

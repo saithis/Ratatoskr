@@ -15,33 +15,49 @@ internal class RabbitMqMessageSender(
     RabbitMqTelemetry telemetry,
     TimeProvider timeProvider,
     IEnumerable<IMessageActivityObserver> observers,
-    ILogger<RabbitMqMessageSender> logger)
-    : IMessageSender, IAsyncDisposable
+    ILogger<RabbitMqMessageSender> logger
+) : IMessageSender, IAsyncDisposable
 {
     private readonly IMessageActivityObserver[] _observers = observers.ToArray();
     private readonly SemaphoreSlim _publishLock = new(1, 1);
 
     public string TransportName => RabbitMqConstants.TransportName;
 
-    public async Task SendAsync(byte[] content, MessageProperties props, CancellationToken cancellationToken)
+    public async Task SendAsync(
+        byte[] content,
+        MessageProperties props,
+        CancellationToken cancellationToken
+    )
     {
         await topologyManager.WaitForProvisioningAsync(cancellationToken);
 
-        var channel = await connectionManager.GetOrCreateSendChannelAsync(options.UsePublisherConfirms, cancellationToken);
+        var channel = await connectionManager.GetOrCreateSendChannelAsync(
+            options.UsePublisherConfirms,
+            cancellationToken
+        );
 
         var basicProps = new BasicProperties();
         var exchange = props.GetExchange() ?? "";
         var routingKey = props.GetRoutingKey() ?? props.Type ?? "";
         var destination = string.IsNullOrEmpty(exchange) ? routingKey : exchange;
 
-        using var activity = telemetry.StartSendActivity(props, content.Length, destination, routingKey);
+        using var activity = telemetry.StartSendActivity(
+            props,
+            content.Length,
+            destination,
+            routingKey
+        );
 
         // Use envelope mapper to map properties and potentially wrap content
         var bodyToSend = envelopeMapper.MapOutgoing(content, props, basicProps);
 
         // Capture transport-level wire format after envelope mapping
         var transportMessage = RabbitMqTransportMessageSnapshotFactory.FromBasicProperties(
-            basicProps, bodyToSend, exchange, routingKey);
+            basicProps,
+            bodyToSend,
+            exchange,
+            routingKey
+        );
 
         var startTimestamp = Stopwatch.GetTimestamp();
         Exception? publishException = null;
@@ -55,7 +71,8 @@ internal class RabbitMqMessageSender(
                 mandatory: false,
                 basicProperties: basicProps,
                 body: bodyToSend,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken
+            );
         }
         catch (Exception ex)
         {
@@ -68,16 +85,19 @@ internal class RabbitMqMessageSender(
             _publishLock.Release();
             telemetry.RecordSent(startTimestamp, publishException, destination, routingKey);
 
-            await _observers.NotifyAsync(new MessageActivity
-            {
-                Stage = MessageStage.Sent,
-                Properties = props,
-                SerializedBody = bodyToSend,
-                TransportName = TransportName,
-                TransportMessage = transportMessage,
-                Exception = publishException,
-                Timestamp = timeProvider.GetUtcNow(),
-            }, logger);
+            await _observers.NotifyAsync(
+                new MessageActivity
+                {
+                    Stage = MessageStage.Sent,
+                    Properties = props,
+                    SerializedBody = bodyToSend,
+                    TransportName = TransportName,
+                    TransportMessage = transportMessage,
+                    Exception = publishException,
+                    Timestamp = timeProvider.GetUtcNow(),
+                },
+                logger
+            );
         }
     }
 

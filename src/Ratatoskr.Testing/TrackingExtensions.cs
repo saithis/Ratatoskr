@@ -14,7 +14,8 @@ public static class TrackingExtensions
     /// <param name="defaultTimeout">Default timeout for wait operations (default: 10 seconds)</param>
     public static MessageTrackingSession CreateTrackingSession(
         this IServiceProvider services,
-        TimeSpan? defaultTimeout = null)
+        TimeSpan? defaultTimeout = null
+    )
     {
         var tracker = services.GetRequiredService<MessageTracker>();
         return new MessageTrackingSession(tracker, defaultTimeout);
@@ -25,7 +26,8 @@ public static class TrackingExtensions
     /// </summary>
     public static MessageTrackingSession CreateTrackingSession(
         this IHost host,
-        TimeSpan? defaultTimeout = null)
+        TimeSpan? defaultTimeout = null
+    )
     {
         return host.Services.CreateTrackingSession(defaultTimeout);
     }

@@ -21,7 +21,8 @@ public static class HealthCheckExtensions
         this IHealthChecksBuilder builder,
         string name = "ratatoskr-rabbitmq",
         HealthStatus? failureStatus = default,
-        IEnumerable<string>? tags = default)
+        IEnumerable<string>? tags = default
+    )
     {
         var tagList = tags?.ToList() ?? new List<string> { "ready" };
         return builder.AddCheck<RabbitMqConsumerHealthCheck>(name, failureStatus, tagList);

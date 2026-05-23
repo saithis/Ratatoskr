@@ -9,8 +9,10 @@ using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Inbox;
 
-public class InboxDeduplicationTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
-    : InboxTestBase(rabbitMq, postgres)
+public class InboxDeduplicationTests(
+    RabbitMqContainerFixture rabbitMq,
+    PostgresContainerFixture postgres
+) : InboxTestBase(rabbitMq, postgres)
 {
     [Test]
     public async Task Inbox_Deduplication_SameMessageIdAndHandlerKey_ProcessedOnce()
@@ -22,17 +24,26 @@ public class InboxDeduplicationTests(RabbitMqContainerFixture rabbitMq, Postgres
         {
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<CountingHandler>("counting"))
-                    .UseInbox<TestDbContext>());
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox => inbox.WithoutBackgroundProcessing()));
+                bus.AddEventPublishChannel(
+                    "inbox-events",
+                    c => c.WithEfCore().Produces<TestEvent>()
+                );
+                bus.AddEventConsumeChannel(
+                    "inbox-events",
+                    c =>
+                        c.Consumes<TestEvent>(m => m.WithHandler<CountingHandler>("counting"))
+                            .UseInbox<TestDbContext>()
+                );
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseInbox(inbox => inbox.WithoutBackgroundProcessing())
+                );
             });
 
             services.AddSingleton(callCounter);
 
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
         });
 
         await InitializeDatabase();
@@ -50,7 +61,10 @@ public class InboxDeduplicationTests(RabbitMqContainerFixture rabbitMq, Postgres
         await InScopeAsync(async ctx =>
         {
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
-            await bus.PublishDirectAsync(new TestEvent { Data = "duplicate delivery" }, sharedProps);
+            await bus.PublishDirectAsync(
+                new TestEvent { Data = "duplicate delivery" },
+                sharedProps
+            );
         });
 
         // Process inbox deterministically
@@ -61,15 +75,25 @@ public class InboxDeduplicationTests(RabbitMqContainerFixture rabbitMq, Postgres
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
 
-            var messages = await db.Set<InboxMessageEntity>().Where(m => m.Id == messageId).ToListAsync();
-            messages.Should().HaveCount(1, "duplicate delivery must not insert a second InboxMessage");
+            var messages = await db.Set<InboxMessageEntity>()
+                .Where(m => m.Id == messageId)
+                .ToListAsync();
+            messages
+                .Should()
+                .HaveCount(1, "duplicate delivery must not insert a second InboxMessage");
 
-            var statuses = await db.Set<InboxHandlerStatusEntity>().Where(s => s.MessageId == messageId).ToListAsync();
-            statuses.Should().HaveCount(1, "duplicate delivery must not insert a second handler status");
+            var statuses = await db.Set<InboxHandlerStatusEntity>()
+                .Where(s => s.MessageId == messageId)
+                .ToListAsync();
+            statuses
+                .Should()
+                .HaveCount(1, "duplicate delivery must not insert a second handler status");
             statuses[0].CompletedAt.Should().NotBeNull();
         });
 
-        callCounter.Count.Should().Be(1, "handler must execute exactly once despite duplicate delivery");
+        callCounter
+            .Count.Should()
+            .Be(1, "handler must execute exactly once despite duplicate delivery");
     }
 
     [Test]
@@ -80,15 +104,24 @@ public class InboxDeduplicationTests(RabbitMqContainerFixture rabbitMq, Postgres
         {
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
-                    .UseInbox<TestDbContext>());
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox => inbox.WithoutBackgroundProcessing()));
+                bus.AddEventPublishChannel(
+                    "inbox-events",
+                    c => c.WithEfCore().Produces<TestEvent>()
+                );
+                bus.AddEventConsumeChannel(
+                    "inbox-events",
+                    c =>
+                        c.Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
+                            .UseInbox<TestDbContext>()
+                );
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseInbox(inbox => inbox.WithoutBackgroundProcessing())
+                );
             });
 
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
         });
 
         await InitializeDatabase();
@@ -106,7 +139,8 @@ public class InboxDeduplicationTests(RabbitMqContainerFixture rabbitMq, Postgres
                     barrier.SignalAndWait();
                     await bus.PublishDirectAsync(
                         new TestEvent { Id = "business-concurrent-1" },
-                        new MessageProperties { Id = sharedMessageId });
+                        new MessageProperties { Id = sharedMessageId }
+                    );
                 });
             }),
             Task.Run(async () =>
@@ -117,9 +151,11 @@ public class InboxDeduplicationTests(RabbitMqContainerFixture rabbitMq, Postgres
                     barrier.SignalAndWait();
                     await bus.PublishDirectAsync(
                         new TestEvent { Id = "business-concurrent-2" },
-                        new MessageProperties { Id = sharedMessageId });
+                        new MessageProperties { Id = sharedMessageId }
+                    );
                 });
-            }));
+            })
+        );
 
         // Process inbox deterministically
         await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
@@ -130,12 +166,18 @@ public class InboxDeduplicationTests(RabbitMqContainerFixture rabbitMq, Postgres
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
 
             var messages = await db.Set<InboxMessageEntity>()
-                .Where(m => m.Id == sharedMessageId).ToListAsync();
-            messages.Should().HaveCount(1, "concurrent publish must not create duplicate InboxMessage rows");
+                .Where(m => m.Id == sharedMessageId)
+                .ToListAsync();
+            messages
+                .Should()
+                .HaveCount(1, "concurrent publish must not create duplicate InboxMessage rows");
 
             var statuses = await db.Set<InboxHandlerStatusEntity>()
-                .Where(s => s.MessageId == sharedMessageId).ToListAsync();
-            statuses.Should().HaveCount(1, "concurrent publish must not create duplicate handler status rows");
+                .Where(s => s.MessageId == sharedMessageId)
+                .ToListAsync();
+            statuses
+                .Should()
+                .HaveCount(1, "concurrent publish must not create duplicate handler status rows");
         });
     }
 
@@ -150,15 +192,24 @@ public class InboxDeduplicationTests(RabbitMqContainerFixture rabbitMq, Postgres
             services.AddSingleton(counter);
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<CountingHandler>("counting"))
-                    .UseInbox<TestDbContext>());
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox => inbox.WithoutBackgroundProcessing()));
+                bus.AddEventPublishChannel(
+                    "inbox-events",
+                    c => c.WithEfCore().Produces<TestEvent>()
+                );
+                bus.AddEventConsumeChannel(
+                    "inbox-events",
+                    c =>
+                        c.Consumes<TestEvent>(m => m.WithHandler<CountingHandler>("counting"))
+                            .UseInbox<TestDbContext>()
+                );
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseInbox(inbox => inbox.WithoutBackgroundProcessing())
+                );
             });
 
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
         });
 
         await InitializeDatabase();
@@ -171,7 +222,8 @@ public class InboxDeduplicationTests(RabbitMqContainerFixture rabbitMq, Postgres
                 var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
                 await bus.PublishDirectAsync(
                     new TestEvent { Id = $"business-concurrent-proc-{index}" },
-                    new MessageProperties { Id = $"concurrent-proc-{index}" });
+                    new MessageProperties { Id = $"concurrent-proc-{index}" }
+                );
             });
         }
 

@@ -6,16 +6,18 @@ using Microsoft.Extensions.Time.Testing;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.EfCore.Internal;
+using Ratatoskr.RabbitMq;
 using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Tests.Fixtures;
-using Ratatoskr.RabbitMq;
 using TUnit.Core;
 
 namespace Ratatoskr.Tests.Integration.Outbox;
 
-public class OutboxProcessingTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
-    : OutboxTestBase(rabbitMq, postgres)
+public class OutboxProcessingTests(
+    RabbitMqContainerFixture rabbitMq,
+    PostgresContainerFixture postgres
+) : OutboxTestBase(rabbitMq, postgres)
 {
     [Test]
     public async Task Outbox_UsesPerMessageSerializer_ForStagedMessage()
@@ -26,17 +28,26 @@ public class OutboxProcessingTests(RabbitMqContainerFixture rabbitMq, PostgresCo
             services.AddSingleton<TestEventPipeMessageSerializer>();
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel(ExchangeName, c => c
-                    .WithEfCore()
-                    .Produces<TestEvent>(m => m.WithSerializer<TestEventPipeMessageSerializer>()));
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox(outbox => outbox.WithoutBackgroundProcessing()));
+                bus.AddEventPublishChannel(
+                    ExchangeName,
+                    c =>
+                        c.WithEfCore()
+                            .Produces<TestEvent>(m =>
+                                m.WithSerializer<TestEventPipeMessageSerializer>()
+                            )
+                );
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseOutbox(outbox => outbox.WithoutBackgroundProcessing())
+                );
             });
 
-            services.AddDbContext<TestDbContext>((sp, options) =>
-            {
-                options.UseNpgsql(PostgresConnectionString);
-                options.RegisterOutbox<TestDbContext>(sp);
-            });
+            services.AddDbContext<TestDbContext>(
+                (sp, options) =>
+                {
+                    options.UseNpgsql(PostgresConnectionString);
+                    options.RegisterOutbox<TestDbContext>(sp);
+                }
+            );
         });
 
         await InitializeDatabase();
@@ -45,7 +56,9 @@ public class OutboxProcessingTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         await InScopeAsync(async ctx =>
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            dbContext.OutboxMessages.Add(new TestEvent { Id = "outbox-pipe-1", Data = "custom-body" });
+            dbContext.OutboxMessages.Add(
+                new TestEvent { Id = "outbox-pipe-1", Data = "custom-body" }
+            );
             await dbContext.SaveChangesAsync();
         });
 
@@ -73,17 +86,22 @@ public class OutboxProcessingTests(RabbitMqContainerFixture rabbitMq, PostgresCo
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-                bus.AddEventPublishChannel(ExchangeName, c => c
-                    .WithRabbitMq(r => r.WithTopicExchange())
-                    .Produces<TestEvent>(m => m.WithRoutingKey(DefaultRoutingKey)));
+                bus.AddEventPublishChannel(
+                    ExchangeName,
+                    c =>
+                        c.WithRabbitMq(r => r.WithTopicExchange())
+                            .Produces<TestEvent>(m => m.WithRoutingKey(DefaultRoutingKey))
+                );
                 bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox());
             });
 
-            services.AddDbContext<TestDbContext>((sp, options) =>
-            {
-                options.UseNpgsql(PostgresConnectionString);
-                options.RegisterOutbox<TestDbContext>(sp);
-            });
+            services.AddDbContext<TestDbContext>(
+                (sp, options) =>
+                {
+                    options.UseNpgsql(PostgresConnectionString);
+                    options.RegisterOutbox<TestDbContext>(sp);
+                }
+            );
         });
 
         await EnsureQueueBoundAsync(QueueName, ExchangeName, DefaultRoutingKey);
@@ -102,19 +120,22 @@ public class OutboxProcessingTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         // Assert - Wait for all 3 messages to be delivered to the queue
         await WaitForConditionAsync(
             async () => await GetMessageCountAsync(QueueName) >= 3,
-            TimeSpan.FromSeconds(10));
+            TimeSpan.FromSeconds(10)
+        );
 
         // Verify all messages are marked as processed in the database
         // Note: ProcessedAt is persisted AFTER messages are sent to RabbitMQ,
         // so we need to wait for the database to be updated too.
         await WaitForConditionAsync(
-            async () => await InScopeAsync(async ctx =>
-            {
-                var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-                var entities = await dbContext.Set<OutboxMessageEntity>().ToListAsync();
-                return entities.Count == 3 && entities.All(e => e.ProcessedAt != null);
-            }),
-            TimeSpan.FromSeconds(10));
+            async () =>
+                await InScopeAsync(async ctx =>
+                {
+                    var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                    var entities = await dbContext.Set<OutboxMessageEntity>().ToListAsync();
+                    return entities.Count == 3 && entities.All(e => e.ProcessedAt != null);
+                }),
+            TimeSpan.FromSeconds(10)
+        );
     }
 
     [Test]
@@ -122,7 +143,10 @@ public class OutboxProcessingTests(RabbitMqContainerFixture rabbitMq, PostgresCo
     {
         // Arrange
         var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
-        var failingSender = new FailingMessageSender(RabbitMqConstants.TransportName, failuresBeforeSuccess: 2);
+        var failingSender = new FailingMessageSender(
+            RabbitMqConstants.TransportName,
+            failuresBeforeSuccess: 2
+        );
 
         await StartTestAsync(services =>
         {
@@ -130,9 +154,10 @@ public class OutboxProcessingTests(RabbitMqContainerFixture rabbitMq, PostgresCo
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-                bus.AddEventPublishChannel(ExchangeName, c => c
-                    .WithRabbitMq(r => r.WithTopicExchange())
-                    .Produces<TestEvent>());
+                bus.AddEventPublishChannel(
+                    ExchangeName,
+                    c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<TestEvent>()
+                );
             });
             // Register outbox processor without hosted service for manual control
             services.AddSingleton<OutboxTelemetry>();
@@ -140,11 +165,13 @@ public class OutboxProcessingTests(RabbitMqContainerFixture rabbitMq, PostgresCo
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
             services.AddSingleton(new OutboxOptionsHolder<TestDbContext>(new OutboxOptions()));
-            services.AddDbContext<TestDbContext>((sp, options) =>
-            {
-                options.UseNpgsql(PostgresConnectionString);
-                options.RegisterOutbox<TestDbContext>(sp);
-            });
+            services.AddDbContext<TestDbContext>(
+                (sp, options) =>
+                {
+                    options.UseNpgsql(PostgresConnectionString);
+                    options.RegisterOutbox<TestDbContext>(sp);
+                }
+            );
             // Override sender with failing sender - remove existing senders first
             services.RemoveAll<IMessageSender>();
             services.AddSingleton<IMessageSender>(failingSender);
@@ -230,21 +257,26 @@ public class OutboxProcessingTests(RabbitMqContainerFixture rabbitMq, PostgresCo
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-                bus.AddEventPublishChannel(ExchangeName, c => c
-                    .WithRabbitMq(r => r.WithTopicExchange())
-                    .Produces<TestEvent>());
+                bus.AddEventPublishChannel(
+                    ExchangeName,
+                    c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<TestEvent>()
+                );
             });
             // Register outbox processor without hosted service for manual control
             services.AddSingleton<OutboxTelemetry>();
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
-            services.AddSingleton(new OutboxOptionsHolder<TestDbContext>(new OutboxOptions { MaxRetries = 3 }));
-            services.AddDbContext<TestDbContext>((sp, options) =>
-            {
-                options.UseNpgsql(PostgresConnectionString);
-                options.RegisterOutbox<TestDbContext>(sp);
-            });
+            services.AddSingleton(
+                new OutboxOptionsHolder<TestDbContext>(new OutboxOptions { MaxRetries = 3 })
+            );
+            services.AddDbContext<TestDbContext>(
+                (sp, options) =>
+                {
+                    options.UseNpgsql(PostgresConnectionString);
+                    options.RegisterOutbox<TestDbContext>(sp);
+                }
+            );
             services.RemoveAll<IMessageSender>();
             services.AddSingleton<IMessageSender>(alwaysFailingSender);
         });
@@ -300,17 +332,24 @@ public class OutboxProcessingTests(RabbitMqContainerFixture rabbitMq, PostgresCo
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-                bus.AddEventPublishChannel(ExchangeName, c => c
-                    .WithRabbitMq(r => r.WithTopicExchange())
-                    .Produces<TestEvent>(m => m.WithRoutingKey(DefaultRoutingKey)));
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox(outbox => outbox.WithBatchSize(2))); // Small batch
+                bus.AddEventPublishChannel(
+                    ExchangeName,
+                    c =>
+                        c.WithRabbitMq(r => r.WithTopicExchange())
+                            .Produces<TestEvent>(m => m.WithRoutingKey(DefaultRoutingKey))
+                );
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseOutbox(outbox => outbox.WithBatchSize(2))
+                ); // Small batch
             });
 
-            services.AddDbContext<TestDbContext>((sp, options) =>
-            {
-                options.UseNpgsql(PostgresConnectionString);
-                options.RegisterOutbox<TestDbContext>(sp);
-            });
+            services.AddDbContext<TestDbContext>(
+                (sp, options) =>
+                {
+                    options.UseNpgsql(PostgresConnectionString);
+                    options.RegisterOutbox<TestDbContext>(sp);
+                }
+            );
         });
 
         await EnsureQueueBoundAsync(QueueName, ExchangeName, DefaultRoutingKey);
@@ -330,15 +369,18 @@ public class OutboxProcessingTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         // Assert - All should be processed despite small batch size
         await WaitForConditionAsync(
             async () => await GetMessageCountAsync(QueueName) >= 5,
-            TimeSpan.FromSeconds(10));
+            TimeSpan.FromSeconds(10)
+        );
 
         await WaitForConditionAsync(
-            async () => await InScopeAsync(async ctx =>
-            {
-                var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-                var entities = await dbContext.Set<OutboxMessageEntity>().ToListAsync();
-                return entities.All(e => e.ProcessedAt != null);
-            }),
-            TimeSpan.FromSeconds(10));
+            async () =>
+                await InScopeAsync(async ctx =>
+                {
+                    var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                    var entities = await dbContext.Set<OutboxMessageEntity>().ToListAsync();
+                    return entities.All(e => e.ProcessedAt != null);
+                }),
+            TimeSpan.FromSeconds(10)
+        );
     }
 }

@@ -6,8 +6,10 @@ using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Inbox;
 
-public abstract class InboxTestBase(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
-    : RatatoskrIntegrationTest(rabbitMq, postgres)
+public abstract class InboxTestBase(
+    RabbitMqContainerFixture rabbitMq,
+    PostgresContainerFixture postgres
+) : RatatoskrIntegrationTest(rabbitMq, postgres)
 {
     /// <summary>
     /// Waits for the expected number of inbox handler status entries to appear in the database.
@@ -15,55 +17,63 @@ public abstract class InboxTestBase(RabbitMqContainerFixture rabbitMq, PostgresC
     protected async Task WaitForInboxEntriesAsync(int expectedCount, TimeSpan? timeout = null)
     {
         await WaitForConditionAsync(
-            async () => await InScopeAsync(async ctx =>
-            {
-                var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-                var count = await db.Set<InboxHandlerStatusEntity>().CountAsync();
-                return count >= expectedCount;
-            }),
+            async () =>
+                await InScopeAsync(async ctx =>
+                {
+                    var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                    var count = await db.Set<InboxHandlerStatusEntity>().CountAsync();
+                    return count >= expectedCount;
+                }),
             timeout ?? TimeSpan.FromSeconds(10),
-            $"Expected {expectedCount} inbox handler status entries to appear within timeout");
+            $"Expected {expectedCount} inbox handler status entries to appear within timeout"
+        );
     }
 
     protected async Task<int> ProcessInboxAsync(
         IServiceProvider serviceProvider,
         bool includeStuckDetection = true,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var total = 0;
         while (true)
         {
             using var scope = serviceProvider.CreateScope();
-            var processor = scope.ServiceProvider.GetRequiredService<InboxMessageProcessor<TestDbContext>>();
+            var processor = scope.ServiceProvider.GetRequiredService<
+                InboxMessageProcessor<TestDbContext>
+            >();
             var count = await processor.ProcessBatchAsync(includeStuckDetection, cancellationToken);
             total += count;
-            if (count == 0) break;
+            if (count == 0)
+                break;
         }
         return total;
     }
 
     protected class InboxHandlerA : IMessageHandler<TestEvent>
     {
-        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
-            => Task.CompletedTask;
+        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct) =>
+            Task.CompletedTask;
     }
 
     protected class InboxHandlerB : IMessageHandler<TestEvent>
     {
-        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
-            => Task.CompletedTask;
+        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct) =>
+            Task.CompletedTask;
     }
 
     protected class AlwaysFailingHandler : IMessageHandler<TestEvent>
     {
-        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
-            => throw new InvalidOperationException("Handler failed intentionally");
+        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct) =>
+            throw new InvalidOperationException("Handler failed intentionally");
     }
 
     protected class InvocationCounter
     {
         private int _count;
+
         public int Increment() => Interlocked.Increment(ref _count);
+
         public int Count => _count;
     }
 

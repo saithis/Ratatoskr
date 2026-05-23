@@ -20,13 +20,16 @@ internal static class ManagementDbContextResolver
     internal static ProblemHttpResult? EnsureContext(
         EfCoreManagementDbContextLookup lookup,
         string contextName,
-        out DbContext dbContext)
+        out DbContext dbContext
+    )
     {
         var found = lookup.GetDbContext(contextName);
         if (found is null)
         {
             dbContext = null!;
-            return ManagementResults.NotFound($"No DbContext is registered under name '{contextName}'.");
+            return ManagementResults.NotFound(
+                $"No DbContext is registered under name '{contextName}'."
+            );
         }
 
         dbContext = found;
@@ -36,13 +39,17 @@ internal static class ManagementDbContextResolver
     internal static ProblemHttpResult? EnsureOutbox(
         EfCoreManagementDbContextLookup lookup,
         string contextName,
-        out DbContext dbContext)
+        out DbContext dbContext
+    )
     {
-        if (EnsureContext(lookup, contextName, out dbContext) is { } error) return error;
+        if (EnsureContext(lookup, contextName, out dbContext) is { } error)
+            return error;
         if (!dbContext.GetType().IsAssignableTo(typeof(IOutboxDbContext)))
         {
             dbContext = null!;
-            return ManagementResults.NotFound($"No outbox is registered for DbContext '{contextName}'.");
+            return ManagementResults.NotFound(
+                $"No outbox is registered for DbContext '{contextName}'."
+            );
         }
         return null;
     }
@@ -50,13 +57,17 @@ internal static class ManagementDbContextResolver
     internal static ProblemHttpResult? EnsureInbox(
         EfCoreManagementDbContextLookup lookup,
         string contextName,
-        out DbContext dbContext)
+        out DbContext dbContext
+    )
     {
-        if (EnsureContext(lookup, contextName, out dbContext) is { } error) return error;
+        if (EnsureContext(lookup, contextName, out dbContext) is { } error)
+            return error;
         if (!dbContext.GetType().IsAssignableTo(typeof(IInboxDbContext)))
         {
             dbContext = null!;
-            return ManagementResults.NotFound($"No inbox is registered for DbContext '{contextName}'.");
+            return ManagementResults.NotFound(
+                $"No inbox is registered for DbContext '{contextName}'."
+            );
         }
         return null;
     }

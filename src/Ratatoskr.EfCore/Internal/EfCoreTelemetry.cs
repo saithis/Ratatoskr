@@ -17,7 +17,8 @@ internal class EfCoreTelemetry
         var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
             "send efcore",
             ActivityKind.Client,
-            Activity.Current?.Context ?? default);
+            Activity.Current?.Context ?? default
+        );
 
         if (activity != null)
         {
@@ -25,7 +26,10 @@ internal class EfCoreTelemetry
             props.TraceState = activity.TraceStateString;
 
             activity.SetTag(MessagingSemanticConventions.OperationName, "send");
-            activity.SetTag(MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeSend);
+            activity.SetTag(
+                MessagingSemanticConventions.OperationType,
+                MessagingSemanticConventions.OperationTypeSend
+            );
             activity.SetTag(MessagingSemanticConventions.System, "efcore");
             activity.SetTag(MessagingSemanticConventions.MessageId, props.Id);
             activity.SetTag(MessagingSemanticConventions.MessageBodySize, contentLength);
@@ -45,7 +49,10 @@ internal class EfCoreTelemetry
         {
             { MessagingSemanticConventions.System, "efcore" },
             { MessagingSemanticConventions.OperationName, "send" },
-            { MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeSend },
+            {
+                MessagingSemanticConventions.OperationType,
+                MessagingSemanticConventions.OperationTypeSend
+            },
         };
 
         if (sendException != null)

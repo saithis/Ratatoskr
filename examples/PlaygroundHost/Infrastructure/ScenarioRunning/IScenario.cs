@@ -18,5 +18,8 @@ public interface IScenario
     /// <summary>Shown in the danger confirmation dialog.</summary>
     string? DangerConfirmationText => null;
 
-    Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken);
+    Task<ScenarioVerdict> ExecuteAsync(
+        ScenarioExecutionContext context,
+        CancellationToken cancellationToken
+    );
 }

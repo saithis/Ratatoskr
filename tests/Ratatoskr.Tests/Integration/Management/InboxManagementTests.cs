@@ -11,8 +11,10 @@ using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Management;
 
-public class InboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
-    : ManagementTestBase(rabbitMq, postgres)
+public class InboxManagementTests(
+    RabbitMqContainerFixture rabbitMq,
+    PostgresContainerFixture postgres
+) : ManagementTestBase(rabbitMq, postgres)
 {
     private const string BaseUrl = "/ratatoskr/api/v1/efcore/contexts/TestDbContext/inbox";
 
@@ -37,7 +39,10 @@ public class InboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCon
         await StartManagementTestAsync();
         var (_, handlerStatusId) = await SeedPoisonedInboxAsync();
 
-        var response = await HttpClient.PostAsync($"{BaseUrl}/poisoned/{handlerStatusId}/requeue", null);
+        var response = await HttpClient.PostAsync(
+            $"{BaseUrl}/poisoned/{handlerStatusId}/requeue",
+            null
+        );
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         await InScopeAsync(async ctx =>
@@ -194,7 +199,9 @@ public class InboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCon
 
         var req = new HttpRequestMessage(HttpMethod.Delete, $"{BaseUrl}/poisoned")
         {
-            Content = JsonContent.Create(new BulkDeleteInboxEndpoint.BulkDeleteInboxRequest([handlerStatusId]))
+            Content = JsonContent.Create(
+                new BulkDeleteInboxEndpoint.BulkDeleteInboxRequest([handlerStatusId])
+            ),
         };
         var response = await HttpClient.SendAsync(req);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -235,7 +242,9 @@ public class InboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCon
         // Delete only the poisoned handler
         var req = new HttpRequestMessage(HttpMethod.Delete, $"{BaseUrl}/poisoned")
         {
-            Content = JsonContent.Create(new BulkDeleteInboxEndpoint.BulkDeleteInboxRequest([poisonedHandlerStatusId]))
+            Content = JsonContent.Create(
+                new BulkDeleteInboxEndpoint.BulkDeleteInboxRequest([poisonedHandlerStatusId])
+            ),
         };
         await HttpClient.SendAsync(req);
 
@@ -266,8 +275,11 @@ public class InboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCon
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         var items = body.GetProperty("items").EnumerateArray().ToList();
         items.Should().NotBeEmpty();
-        items.Should().AllSatisfy(item =>
-            item.GetProperty("messageType").GetString().Should().Be("order.placed"));
+        items
+            .Should()
+            .AllSatisfy(item =>
+                item.GetProperty("messageType").GetString().Should().Be("order.placed")
+            );
 
         // TotalCount must reflect the filtered result
         body.GetProperty("totalCount").GetInt64().Should().Be(items.Count);

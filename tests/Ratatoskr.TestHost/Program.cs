@@ -1,5 +1,5 @@
-using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Options;
 using Ratatoskr.Management;
 
 var builder = WebApplication.CreateBuilder(args);

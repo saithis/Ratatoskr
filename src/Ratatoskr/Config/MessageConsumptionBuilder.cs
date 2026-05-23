@@ -8,7 +8,8 @@ namespace Ratatoskr.Config;
 /// Fluent builder for registering handlers within a <c>Consumes&lt;T&gt;()</c> call on a consume channel.
 /// Handlers with a stable key are inbox-managed; handlers without a key are fire-and-forget.
 /// </summary>
-public class MessageConsumptionBuilder<TMessage> where TMessage : notnull
+public class MessageConsumptionBuilder<TMessage>
+    where TMessage : notnull
 {
     private readonly IServiceCollection _services;
     internal List<ChannelHandlerRegistration> HandlerRegistrations { get; } = new();
@@ -35,7 +36,10 @@ public class MessageConsumptionBuilder<TMessage> where TMessage : notnull
     /// Legacy keys match existing inbox entries for processing but never create new entries.
     /// Requires the channel to have <c>UseInbox&lt;TDbContext&gt;()</c> configured.
     /// </summary>
-    public MessageConsumptionBuilder<TMessage> WithHandler<THandler>(string stableKey, params string[] legacyKeys)
+    public MessageConsumptionBuilder<TMessage> WithHandler<THandler>(
+        string stableKey,
+        params string[] legacyKeys
+    )
         where THandler : class, IMessageHandler<TMessage>
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(stableKey);
@@ -56,16 +60,23 @@ public class MessageConsumptionBuilder<TMessage> where TMessage : notnull
         return this;
     }
 
-    private void AddHandler<THandler>(bool isInbox, string? inboxKey, IReadOnlyList<string> legacyKeys)
+    private void AddHandler<THandler>(
+        bool isInbox,
+        string? inboxKey,
+        IReadOnlyList<string> legacyKeys
+    )
         where THandler : class, IMessageHandler<TMessage>
     {
         _services.TryAddScoped<THandler>();
 
-        HandlerRegistrations.Add(new ChannelHandlerRegistration(
-            typeof(TMessage),
-            typeof(THandler),
-            isInbox,
-            inboxKey,
-            legacyKeys));
+        HandlerRegistrations.Add(
+            new ChannelHandlerRegistration(
+                typeof(TMessage),
+                typeof(THandler),
+                isInbox,
+                inboxKey,
+                legacyKeys
+            )
+        );
     }
 }

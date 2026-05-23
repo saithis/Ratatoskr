@@ -11,15 +11,15 @@ namespace Ratatoskr.Tests.Fixtures;
 public class RabbitMqContainerFixture : IAsyncInitializer, IAsyncDisposable
 {
     private RabbitMqContainer? _container;
-    
-    public string ConnectionString => _container?.GetConnectionString() 
+
+    public string ConnectionString =>
+        _container?.GetConnectionString()
         ?? throw new InvalidOperationException("Container not initialized");
 
     public async Task InitializeAsync()
     {
-        _container = new RabbitMqBuilder("rabbitmq:4.0-alpine")
-            .Build();
-            
+        _container = new RabbitMqBuilder("rabbitmq:4.0-alpine").Build();
+
         await _container.StartAsync();
     }
 

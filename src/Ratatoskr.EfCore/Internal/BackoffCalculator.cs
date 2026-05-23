@@ -14,10 +14,15 @@ internal static class BackoffCalculator
     /// <param name="errorCount">Number of errors so far (determines backoff exponent).</param>
     /// <param name="maxRetryDelay">Maximum delay cap.</param>
     /// <param name="random">Optional Random instance for deterministic testing. Do not share across threads.</param>
-    public static TimeSpan CalculateDelay(int errorCount, TimeSpan maxRetryDelay, Random? random = null)
+    public static TimeSpan CalculateDelay(
+        int errorCount,
+        TimeSpan maxRetryDelay,
+        Random? random = null
+    )
     {
         var baseDelay = Math.Max(0, Math.Min(Math.Pow(2, errorCount), maxRetryDelay.TotalSeconds));
-        var delaySeconds = baseDelay * 0.5 + baseDelay * 0.5 * (random ?? Random.Shared).NextDouble();
+        var delaySeconds =
+            baseDelay * 0.5 + baseDelay * 0.5 * (random ?? Random.Shared).NextDouble();
         return TimeSpan.FromSeconds(delaySeconds);
     }
 }

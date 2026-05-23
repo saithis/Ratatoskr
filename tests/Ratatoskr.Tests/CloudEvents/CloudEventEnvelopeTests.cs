@@ -1,6 +1,6 @@
-using Ratatoskr.CloudEvents;
 using System.Text.Json;
 using AwesomeAssertions;
+using Ratatoskr.CloudEvents;
 
 namespace Ratatoskr.Tests.CloudEvents;
 
@@ -17,8 +17,8 @@ public class CloudEventEnvelopeTests
             Type = "test.type",
             Extensions = new Dictionary<string, object>
             {
-                { "traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" }
-            }
+                { "traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" },
+            },
         };
 
         // Act
@@ -38,10 +38,7 @@ public class CloudEventEnvelopeTests
             Id = "123",
             Source = "/test",
             Type = "test.type",
-            Extensions = new Dictionary<string, object>
-            {
-                { "traceparent", "some-value" }
-            }
+            Extensions = new Dictionary<string, object> { { "traceparent", "some-value" } },
         };
 
         // Act
@@ -61,7 +58,7 @@ public class CloudEventEnvelopeTests
             Id = "123",
             Source = "/test",
             Type = "test.type",
-            Extensions = null
+            Extensions = null,
         };
 
         // Act
@@ -76,16 +73,15 @@ public class CloudEventEnvelopeTests
     public void TryGetExtension_ReturnsTrue_WhenValueIsJsonElementAndCanDeserialize()
     {
         // Arrange
-        var json = JsonSerializer.SerializeToElement("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
+        var json = JsonSerializer.SerializeToElement(
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+        );
         var envelope = new CloudEventEnvelope
         {
             Id = "123",
             Source = "/test",
             Type = "test.type",
-            Extensions = new Dictionary<string, object>
-            {
-                { "traceparent", json }
-            }
+            Extensions = new Dictionary<string, object> { { "traceparent", json } },
         };
 
         // Act
@@ -103,16 +99,13 @@ public class CloudEventEnvelopeTests
         // Current value is a number, try to get as string (JsonElement.Deserialize<string> might throw or handle it depending on options, but usually strictly matching types)
         // Actually, let's try to get a complex object from a simple string JsonElement to force a mismatch or error that TryGetExtension catches
         var json = JsonSerializer.SerializeToElement("simple string");
-        
+
         var envelope = new CloudEventEnvelope
         {
             Id = "123",
             Source = "/test",
             Type = "test.type",
-            Extensions = new Dictionary<string, object>
-            {
-                { "traceparent", json }
-            }
+            Extensions = new Dictionary<string, object> { { "traceparent", json } },
         };
 
         // Act

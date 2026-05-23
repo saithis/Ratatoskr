@@ -12,10 +12,13 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddRatatoskr(
         this IServiceCollection services,
-        Action<RatatoskrBuilder>? configure = null)
+        Action<RatatoskrBuilder>? configure = null
+    )
     {
         if (services.Any(d => d.ServiceType == typeof(RatatoskrMarker)))
-            throw new InvalidOperationException("AddRatatoskr has already been called. It must only be called once per IServiceCollection.");
+            throw new InvalidOperationException(
+                "AddRatatoskr has already been called. It must only be called once per IServiceCollection."
+            );
         services.AddSingleton<RatatoskrMarker>();
 
         var builder = new RatatoskrBuilder(services);
@@ -45,7 +48,8 @@ public static class ServiceCollectionExtensions
 
         // Register serializer (TryAdd so users can pre-register a custom IMessageSerializer)
         services.TryAddSingleton<IMessageSerializer>(
-            new JsonMessageSerializer(builder.JsonSerializerOptions));
+            new JsonMessageSerializer(builder.JsonSerializerOptions)
+        );
         services.TryAddSingleton<IMessageSerializerResolver, MessageSerializerResolver>();
 
         services.TryAddSingleton<HandlerInvoker>();
@@ -53,7 +57,12 @@ public static class ServiceCollectionExtensions
 
         // AsyncAPI document generation
         services.AddSingleton(builder.AsyncApiOptions);
-        services.TryAddEnumerable(ServiceDescriptor.Singleton<IAsyncApiTransportBindingProvider, NullTransportBindingProvider>());
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<
+                IAsyncApiTransportBindingProvider,
+                NullTransportBindingProvider
+            >()
+        );
         services.AddSingleton<AsyncApiDocumentGenerator>();
 
         return services;
@@ -65,10 +74,20 @@ public static class ServiceCollectionExtensions
     /// </summary>
     private sealed class NullTransportBindingProvider : IAsyncApiTransportBindingProvider
     {
-        public void ConfigureServers(AsyncApiDocument document, IEnumerable<ChannelRegistration> channels) { }
+        public void ConfigureServers(
+            AsyncApiDocument document,
+            IEnumerable<ChannelRegistration> channels
+        ) { }
+
         public void ConfigureChannel(ChannelRegistration channel, AsyncApiDocument document) { }
+
         public void ConfigureOperation(ChannelRegistration channel, AsyncApiOperation operation) { }
-        public void ConfigureMessage(MessageRegistration message, ChannelRegistration channel, AsyncApiMessage asyncApiMessage) { }
+
+        public void ConfigureMessage(
+            MessageRegistration message,
+            ChannelRegistration channel,
+            AsyncApiMessage asyncApiMessage
+        ) { }
     }
 
     /// <summary>

@@ -21,12 +21,14 @@ internal class RabbitMqTelemetry(RabbitMqOptions options, TimeProvider timeProvi
         MessageProperties props,
         int contentLength,
         string destination,
-        string routingKey)
+        string routingKey
+    )
     {
         var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
             $"send {destination}",
             ActivityKind.Client,
-            Activity.Current?.Context ?? default);
+            Activity.Current?.Context ?? default
+        );
 
         if (activity != null)
         {
@@ -34,14 +36,23 @@ internal class RabbitMqTelemetry(RabbitMqOptions options, TimeProvider timeProvi
             props.TraceState = activity.TraceStateString;
 
             activity.SetTag(MessagingSemanticConventions.OperationName, "send");
-            activity.SetTag(MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeSend);
+            activity.SetTag(
+                MessagingSemanticConventions.OperationType,
+                MessagingSemanticConventions.OperationTypeSend
+            );
             activity.SetTag(MessagingSemanticConventions.System, "rabbitmq");
             activity.SetTag(MessagingSemanticConventions.DestinationName, destination);
             activity.SetTag(MessagingSemanticConventions.RabbitMqRoutingKey, routingKey);
             activity.SetTag(MessagingSemanticConventions.MessageId, props.Id);
             activity.SetTag(MessagingSemanticConventions.MessageBodySize, contentLength);
-            activity.SetTag(MessagingSemanticConventions.ServerAddress, options.ConnectionString?.Host);
-            activity.SetTag(MessagingSemanticConventions.ServerPort, options.ConnectionString?.Port);
+            activity.SetTag(
+                MessagingSemanticConventions.ServerAddress,
+                options.ConnectionString?.Host
+            );
+            activity.SetTag(
+                MessagingSemanticConventions.ServerPort,
+                options.ConnectionString?.Port
+            );
         }
 
         return activity;
@@ -54,7 +65,8 @@ internal class RabbitMqTelemetry(RabbitMqOptions options, TimeProvider timeProvi
         long startTimestamp,
         Exception? sendException,
         string destination,
-        string routingKey)
+        string routingKey
+    )
     {
         var duration = Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds;
 
@@ -62,7 +74,10 @@ internal class RabbitMqTelemetry(RabbitMqOptions options, TimeProvider timeProvi
         {
             { MessagingSemanticConventions.System, "rabbitmq" },
             { MessagingSemanticConventions.OperationName, "send" },
-            { MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeSend },
+            {
+                MessagingSemanticConventions.OperationType,
+                MessagingSemanticConventions.OperationTypeSend
+            },
             { MessagingSemanticConventions.DestinationName, destination },
             { MessagingSemanticConventions.RabbitMqRoutingKey, routingKey },
             { MessagingSemanticConventions.ServerAddress, options.ConnectionString?.Host },
@@ -87,9 +102,14 @@ internal class RabbitMqTelemetry(RabbitMqOptions options, TimeProvider timeProvi
 
     // ─── Receive-side (consumer) ───────────────────────────────────
 
-    public TagList CreateConsumeTags(BasicDeliverEventArgs ea, MessageProperties props, string queueName)
+    public TagList CreateConsumeTags(
+        BasicDeliverEventArgs ea,
+        MessageProperties props,
+        string queueName
+    )
     {
-        var (originalExchange, originalRoutingKey) = RabbitMqHeaderHelper.GetOriginalDestinationFromHeaders(ea.BasicProperties.Headers);
+        var (originalExchange, originalRoutingKey) =
+            RabbitMqHeaderHelper.GetOriginalDestinationFromHeaders(ea.BasicProperties.Headers);
         var destinationName = props.GetExchange() ?? originalExchange ?? ea.Exchange;
         var routingKey = props.GetRoutingKey() ?? originalRoutingKey ?? ea.RoutingKey;
 
@@ -98,7 +118,8 @@ internal class RabbitMqTelemetry(RabbitMqOptions options, TimeProvider timeProvi
 
     public TagList CreateConsumeFallbackTags(BasicDeliverEventArgs ea, string queueName)
     {
-        var (originalExchange, originalRoutingKey) = RabbitMqHeaderHelper.GetOriginalDestinationFromHeaders(ea.BasicProperties.Headers);
+        var (originalExchange, originalRoutingKey) =
+            RabbitMqHeaderHelper.GetOriginalDestinationFromHeaders(ea.BasicProperties.Headers);
         var destinationName = originalExchange ?? ea.Exchange;
         var routingKey = originalRoutingKey ?? ea.RoutingKey;
 
@@ -111,7 +132,10 @@ internal class RabbitMqTelemetry(RabbitMqOptions options, TimeProvider timeProvi
         {
             { MessagingSemanticConventions.System, "rabbitmq" },
             { MessagingSemanticConventions.OperationName, "process" },
-            { MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeProcess },
+            {
+                MessagingSemanticConventions.OperationType,
+                MessagingSemanticConventions.OperationTypeProcess
+            },
             { MessagingSemanticConventions.DestinationSubscriptionName, queueName },
             { MessagingSemanticConventions.DestinationName, destinationName },
             { MessagingSemanticConventions.RabbitMqRoutingKey, routingKey },
@@ -120,19 +144,29 @@ internal class RabbitMqTelemetry(RabbitMqOptions options, TimeProvider timeProvi
         };
     }
 
-    public Activity? StartConsumeActivity(MessageProperties props, TagList tags, int bodySize, ulong deliveryTag)
+    public Activity? StartConsumeActivity(
+        MessageProperties props,
+        TagList tags,
+        int bodySize,
+        ulong deliveryTag
+    )
     {
         ActivityContext.TryParse(props.TraceParent, props.TraceState, out var parentContext);
 
-        var destinationName = tags.FirstOrDefault(t => t.Key == MessagingSemanticConventions.DestinationName).Value as string;
+        var destinationName =
+            tags.FirstOrDefault(t => t.Key == MessagingSemanticConventions.DestinationName).Value
+            as string;
         var destination = string.IsNullOrEmpty(destinationName)
-            ? tags.FirstOrDefault(t => t.Key == MessagingSemanticConventions.DestinationSubscriptionName).Value as string
+            ? tags.FirstOrDefault(t =>
+                t.Key == MessagingSemanticConventions.DestinationSubscriptionName
+            ).Value as string
             : destinationName;
 
         var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
             $"process {destination}",
             ActivityKind.Consumer,
-            parentContext);
+            parentContext
+        );
 
         if (activity != null)
         {
@@ -149,7 +183,11 @@ internal class RabbitMqTelemetry(RabbitMqOptions options, TimeProvider timeProvi
         return activity;
     }
 
-    public void RecordReceived(TagList tags, DateTimeOffset? messageTime, DateTimeOffset receivedTimestamp)
+    public void RecordReceived(
+        TagList tags,
+        DateTimeOffset? messageTime,
+        DateTimeOffset receivedTimestamp
+    )
     {
         RatatoskrDiagnostics.ClientConsumedMessages.Add(1, tags);
 
@@ -160,7 +198,12 @@ internal class RabbitMqTelemetry(RabbitMqOptions options, TimeProvider timeProvi
         }
     }
 
-    public void RecordProcessed(TagList tags, long processStartTimestamp, DateTimeOffset? messageTime, string? errorType)
+    public void RecordProcessed(
+        TagList tags,
+        long processStartTimestamp,
+        DateTimeOffset? messageTime,
+        string? errorType
+    )
     {
         if (tags.Count > 0)
         {
@@ -169,7 +212,10 @@ internal class RabbitMqTelemetry(RabbitMqOptions options, TimeProvider timeProvi
                 tags.Add(MessagingSemanticConventions.ErrorType, errorType);
             }
 
-            RatatoskrDiagnostics.ProcessDuration.Record(Stopwatch.GetElapsedTime(processStartTimestamp).TotalSeconds, tags);
+            RatatoskrDiagnostics.ProcessDuration.Record(
+                Stopwatch.GetElapsedTime(processStartTimestamp).TotalSeconds,
+                tags
+            );
 
             if (messageTime.HasValue)
             {

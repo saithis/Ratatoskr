@@ -9,12 +9,14 @@ namespace Ratatoskr.EfCore.Internal;
 internal sealed class ProcessorHealthCheck<TProcessor>(
     TProcessor processor,
     TimeProvider timeProvider,
-    TimeSpan unhealthyThreshold) : IHealthCheck
+    TimeSpan unhealthyThreshold
+) : IHealthCheck
     where TProcessor : PollingBackgroundService
 {
     public Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var lastSuccess = processor.LastSuccessfulProcessingAt;
         var now = timeProvider.GetUtcNow();
@@ -22,11 +24,17 @@ internal sealed class ProcessorHealthCheck<TProcessor>(
 
         if (timeSinceLastSuccess > unhealthyThreshold)
         {
-            return Task.FromResult(HealthCheckResult.Unhealthy(
-                $"{typeof(TProcessor).Name} has not processed successfully for {timeSinceLastSuccess.TotalSeconds:F1}s (threshold: {unhealthyThreshold.TotalSeconds}s)."));
+            return Task.FromResult(
+                HealthCheckResult.Unhealthy(
+                    $"{typeof(TProcessor).Name} has not processed successfully for {timeSinceLastSuccess.TotalSeconds:F1}s (threshold: {unhealthyThreshold.TotalSeconds}s)."
+                )
+            );
         }
 
-        return Task.FromResult(HealthCheckResult.Healthy(
-            $"{typeof(TProcessor).Name} last processed successfully {timeSinceLastSuccess.TotalSeconds:F1}s ago."));
+        return Task.FromResult(
+            HealthCheckResult.Healthy(
+                $"{typeof(TProcessor).Name} last processed successfully {timeSinceLastSuccess.TotalSeconds:F1}s ago."
+            )
+        );
     }
 }

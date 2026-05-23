@@ -10,13 +10,18 @@ namespace Ratatoskr.RabbitMq.Extensions;
 
 public static class RabbitMqRatatoskrBuilderExtensions
 {
-    public static RatatoskrBuilder UseRabbitMq(this RatatoskrBuilder builder, Action<RabbitMqOptions> configure)
+    public static RatatoskrBuilder UseRabbitMq(
+        this RatatoskrBuilder builder,
+        Action<RabbitMqOptions> configure
+    )
     {
         var options = new RabbitMqOptions();
         configure.Invoke(options);
 
         // Register build-time validation for RabbitMQ channels
-        builder.AddValidator(registry => RabbitMqConfigurationValidator.Validate(registry, options));
+        builder.AddValidator(registry =>
+            RabbitMqConfigurationValidator.Validate(registry, options)
+        );
 
         // General
         builder.Services.AddSingleton(options);
@@ -26,7 +31,10 @@ public static class RabbitMqRatatoskrBuilderExtensions
         builder.Services.AddSingleton<RabbitMqTelemetry>();
 
         // Sending
-        builder.Services.AddSingleton<ITransportMessageMetadataEnricher, RabbitMqMessageMetadataEnricher>();
+        builder.Services.AddSingleton<
+            ITransportMessageMetadataEnricher,
+            RabbitMqMessageMetadataEnricher
+        >();
         builder.Services.AddSingleton<IMessageSender, RabbitMqMessageSender>();
 
         // Consuming
@@ -40,11 +48,19 @@ public static class RabbitMqRatatoskrBuilderExtensions
 
         // AsyncAPI RabbitMQ bindings
         builder.Services.TryAddEnumerable(
-            ServiceDescriptor.Singleton<IAsyncApiTransportBindingProvider, RabbitMqAsyncApiBindingProvider>());
+            ServiceDescriptor.Singleton<
+                IAsyncApiTransportBindingProvider,
+                RabbitMqAsyncApiBindingProvider
+            >()
+        );
 
         // Management API
         builder.Services.TryAddEnumerable(
-            ServiceDescriptor.Singleton<IRatatoskrEndpointConfigurator, RabbitMqEndpointConfigurator>());
+            ServiceDescriptor.Singleton<
+                IRatatoskrEndpointConfigurator,
+                RabbitMqEndpointConfigurator
+            >()
+        );
 
         return builder;
     }

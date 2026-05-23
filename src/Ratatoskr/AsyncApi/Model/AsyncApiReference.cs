@@ -18,8 +18,7 @@ public class AsyncApiReference
     public static AsyncApiReference ToChannelMessage(string channelName, string messageName) =>
         new($"#/channels/{channelName}/messages/{messageName}");
 
-    public static AsyncApiReference ToServer(string serverName) =>
-        new($"#/servers/{serverName}");
+    public static AsyncApiReference ToServer(string serverName) => new($"#/servers/{serverName}");
 
     public static AsyncApiReference ToSchema(string schemaName) =>
         new($"#/components/schemas/{schemaName}");

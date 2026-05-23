@@ -3,7 +3,11 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr.Config;
 
-public class ConsumeChannelBuilder(ChannelRegistration channel, IServiceCollection services, RatatoskrBuilder ratatoskrBuilder) : ChannelBuilder(channel)
+public class ConsumeChannelBuilder(
+    ChannelRegistration channel,
+    IServiceCollection services,
+    RatatoskrBuilder ratatoskrBuilder
+) : ChannelBuilder(channel)
 {
     /// <summary>The underlying channel registration.</summary>
     internal ChannelRegistration Channel => channel;
@@ -18,7 +22,8 @@ public class ConsumeChannelBuilder(ChannelRegistration channel, IServiceCollecti
     /// Registers a message type consumed from this channel, with handler registrations.
     /// At least one handler must be registered via <c>WithHandler</c>.
     /// </summary>
-    public ConsumeChannelBuilder Consumes<T>(Action<MessageConsumptionBuilder<T>> configure) where T : notnull
+    public ConsumeChannelBuilder Consumes<T>(Action<MessageConsumptionBuilder<T>> configure)
+        where T : notnull
     {
         AddMessage<T>(configure: null);
         var messageRegistration = channel.Messages.Last();
@@ -35,7 +40,11 @@ public class ConsumeChannelBuilder(ChannelRegistration channel, IServiceCollecti
     /// Registers a message type consumed from this channel, with handler registrations and message configuration.
     /// At least one handler must be registered via <c>WithHandler</c>.
     /// </summary>
-    public ConsumeChannelBuilder Consumes<T>(Action<MessageConsumptionBuilder<T>> configureHandlers, Action<MessageBuilder> configureMessage) where T : notnull
+    public ConsumeChannelBuilder Consumes<T>(
+        Action<MessageConsumptionBuilder<T>> configureHandlers,
+        Action<MessageBuilder> configureMessage
+    )
+        where T : notnull
     {
         AddMessage<T>(configureMessage);
         var messageRegistration = channel.Messages.Last();
@@ -48,17 +57,22 @@ public class ConsumeChannelBuilder(ChannelRegistration channel, IServiceCollecti
         return this;
     }
 
-    private static void ValidateAndSetHandlers<T>(MessageRegistration messageRegistration, MessageConsumptionBuilder<T> consumptionBuilder)
+    private static void ValidateAndSetHandlers<T>(
+        MessageRegistration messageRegistration,
+        MessageConsumptionBuilder<T> consumptionBuilder
+    )
         where T : notnull
     {
         if (consumptionBuilder.HandlerRegistrations.Count == 0)
             throw new InvalidOperationException(
-                $"Consumes<{typeof(T).Name}>() requires at least one handler. " +
-                $"Call .WithHandler<THandler>() to register a handler.");
+                $"Consumes<{typeof(T).Name}>() requires at least one handler. "
+                    + $"Call .WithHandler<THandler>() to register a handler."
+            );
 
-        messageRegistration.SetExtension(new MessageHandlerRegistrations(consumptionBuilder.HandlerRegistrations));
+        messageRegistration.SetExtension(
+            new MessageHandlerRegistrations(consumptionBuilder.HandlerRegistrations)
+        );
     }
-
 }
 
 /// <summary>

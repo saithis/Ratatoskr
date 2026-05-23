@@ -18,8 +18,10 @@ public class InboxConfigurationValidatorTests
         // Arrange - channel with fire-and-forget handlers only
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
+        );
 
         var channelRegistry = builder.ChannelRegistry;
         var handlerRegistry = ChannelHandlerRegistry.Build(channelRegistry);
@@ -41,7 +43,7 @@ public class InboxConfigurationValidatorTests
 
         var handlers = new List<ChannelHandlerRegistration>
         {
-            new(typeof(TestEvent), typeof(TestEventHandler), IsInbox: true, InboxKey: "")
+            new(typeof(TestEvent), typeof(TestEventHandler), IsInbox: true, InboxKey: ""),
         };
         messageReg.SetExtension(new MessageHandlerRegistrations(handlers));
 
@@ -51,8 +53,7 @@ public class InboxConfigurationValidatorTests
 
         // Act & Assert
         var act = () => InboxConfigurationValidator.Validate(channelRegistry, handlerRegistry);
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*empty stable key*");
+        act.Should().Throw<InvalidOperationException>().WithMessage("*empty stable key*");
     }
 
     [Test]
@@ -61,16 +62,17 @@ public class InboxConfigurationValidatorTests
         // Arrange - channel with inbox handlers but WITHOUT ChannelInboxConfig extension
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("handler-key")));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("handler-key"))
+        );
 
         var channelRegistry = builder.ChannelRegistry;
         var handlerRegistry = ChannelHandlerRegistry.Build(channelRegistry);
 
         // Act & Assert
         var act = () => InboxConfigurationValidator.Validate(channelRegistry, handlerRegistry);
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*does not have UseInbox*");
+        act.Should().Throw<InvalidOperationException>().WithMessage("*does not have UseInbox*");
     }
 
     [Test]
@@ -79,8 +81,10 @@ public class InboxConfigurationValidatorTests
         // Arrange - channel with inbox handlers AND ChannelInboxConfig extension
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("handler-key")));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("handler-key"))
+        );
 
         var channelRegistry = builder.ChannelRegistry;
 
@@ -103,19 +107,31 @@ public class InboxConfigurationValidatorTests
         var services = new ServiceCollection();
 
         // Act & Assert
-        var act = () => services.AddRatatoskr(bus =>
-        {
-            bus.AddEventConsumeChannel("channel-a", c => c
-                .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("key-a"))
-                .UseInbox<TestDbContext>());
-            bus.AddEventConsumeChannel("channel-b", c => c
-                .Consumes<OrderCreatedEvent>(m => m.WithHandler<NoOpOrderCreatedHandler>("key-b"))
-                .UseInbox<TestDbContext>());
-            bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox => inbox.WithPollingInterval(TimeSpan.FromSeconds(5))));
-        });
+        var act = () =>
+            services.AddRatatoskr(bus =>
+            {
+                bus.AddEventConsumeChannel(
+                    "channel-a",
+                    c =>
+                        c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("key-a"))
+                            .UseInbox<TestDbContext>()
+                );
+                bus.AddEventConsumeChannel(
+                    "channel-b",
+                    c =>
+                        c.Consumes<OrderCreatedEvent>(m =>
+                                m.WithHandler<NoOpOrderCreatedHandler>("key-b")
+                            )
+                            .UseInbox<TestDbContext>()
+                );
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseInbox(inbox => inbox.WithPollingInterval(TimeSpan.FromSeconds(5)))
+                );
+            });
 
         act.Should().NotThrow();
     }
+
     [Test]
     public void UseInbox_WithoutAddEfCoreDurability_ThrowsAtStartup()
     {
@@ -123,15 +139,20 @@ public class InboxConfigurationValidatorTests
         var services = new ServiceCollection();
 
         // Act & Assert
-        var act = () => services.AddRatatoskr(bus =>
-        {
-            bus.AddEventConsumeChannel("test-channel", c => c
-                .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("key"))
-                .UseInbox<TestDbContext>());
-            // Missing: bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox());
-        });
+        var act = () =>
+            services.AddRatatoskr(bus =>
+            {
+                bus.AddEventConsumeChannel(
+                    "test-channel",
+                    c =>
+                        c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("key"))
+                            .UseInbox<TestDbContext>()
+                );
+                // Missing: bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox());
+            });
 
-        act.Should().Throw<InvalidOperationException>()
+        act.Should()
+            .Throw<InvalidOperationException>()
             .WithMessage("*AddEfCoreDurability*UseInbox*");
     }
 
@@ -142,12 +163,14 @@ public class InboxConfigurationValidatorTests
         var services = new ServiceCollection();
 
         // Act & Assert
-        var act = () => services.AddRatatoskr(bus =>
-        {
-            bus.AddEfCoreDurability<TestDbContext>(d => { });
-        });
+        var act = () =>
+            services.AddRatatoskr(bus =>
+            {
+                bus.AddEfCoreDurability<TestDbContext>(d => { });
+            });
 
-        act.Should().Throw<InvalidOperationException>()
+        act.Should()
+            .Throw<InvalidOperationException>()
             .WithMessage("*requires at least UseInbox() or UseOutbox()*");
     }
 
@@ -157,16 +180,20 @@ public class InboxConfigurationValidatorTests
         // Arrange — channel has UseInbox configured but handler has no key (implicit fire-and-forget)
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .UseInbox<TestDbContext>()
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c =>
+                c.UseInbox<TestDbContext>()
+                    .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
+        );
 
         var channelRegistry = builder.ChannelRegistry;
         var handlerRegistry = ChannelHandlerRegistry.Build(channelRegistry);
 
         // Act & Assert — all handlers on inbox channels must have a stable key
         var act = () => InboxConfigurationValidator.Validate(channelRegistry, handlerRegistry);
-        act.Should().Throw<InvalidOperationException>()
+        act.Should()
+            .Throw<InvalidOperationException>()
             .WithMessage("*registered without a stable key*");
     }
 
@@ -176,12 +203,20 @@ public class InboxConfigurationValidatorTests
         // Arrange — two channels with different DbContext types, both valid
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("channel-a", c => c
-            .UseInbox<TestDbContext>()
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("key-a")));
-        builder.AddEventConsumeChannel("channel-b", c => c
-            .UseInbox<SecondTestDbContext>()
-            .Consumes<OrderCreatedEvent>(m => m.WithHandler<NoOpOrderCreatedHandler>("key-b")));
+        builder.AddEventConsumeChannel(
+            "channel-a",
+            c =>
+                c.UseInbox<TestDbContext>()
+                    .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("key-a"))
+        );
+        builder.AddEventConsumeChannel(
+            "channel-b",
+            c =>
+                c.UseInbox<SecondTestDbContext>()
+                    .Consumes<OrderCreatedEvent>(m =>
+                        m.WithHandler<NoOpOrderCreatedHandler>("key-b")
+                    )
+        );
 
         var channelRegistry = builder.ChannelRegistry;
         var handlerRegistry = ChannelHandlerRegistry.Build(channelRegistry);
@@ -197,8 +232,10 @@ public class InboxConfigurationValidatorTests
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
+        );
 
         var channelRegistry = builder.ChannelRegistry;
         var handlerRegistry = ChannelHandlerRegistry.Build(channelRegistry);
@@ -206,9 +243,13 @@ public class InboxConfigurationValidatorTests
         policyAggregator.MergeRequirement(ConsumeChannelInboxRequirement.Fail);
 
         // Act & Assert
-        var act = () => InboxConfigurationValidator.Validate(channelRegistry, handlerRegistry, policyAggregator);
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*AllowConsumeWithoutInbox()*");
+        var act = () =>
+            InboxConfigurationValidator.Validate(
+                channelRegistry,
+                handlerRegistry,
+                policyAggregator
+            );
+        act.Should().Throw<InvalidOperationException>().WithMessage("*AllowConsumeWithoutInbox()*");
     }
 
     [Test]
@@ -217,9 +258,12 @@ public class InboxConfigurationValidatorTests
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .AllowConsumeWithoutInbox()
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c =>
+                c.AllowConsumeWithoutInbox()
+                    .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
+        );
 
         var channelRegistry = builder.ChannelRegistry;
         var handlerRegistry = ChannelHandlerRegistry.Build(channelRegistry);
@@ -227,7 +271,12 @@ public class InboxConfigurationValidatorTests
         policyAggregator.MergeRequirement(ConsumeChannelInboxRequirement.Fail);
 
         // Act & Assert
-        var act = () => InboxConfigurationValidator.Validate(channelRegistry, handlerRegistry, policyAggregator);
+        var act = () =>
+            InboxConfigurationValidator.Validate(
+                channelRegistry,
+                handlerRegistry,
+                policyAggregator
+            );
         act.Should().NotThrow();
     }
 
@@ -237,8 +286,10 @@ public class InboxConfigurationValidatorTests
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
+        );
 
         var channelRegistry = builder.ChannelRegistry;
         var handlerRegistry = ChannelHandlerRegistry.Build(channelRegistry);
@@ -246,13 +297,22 @@ public class InboxConfigurationValidatorTests
         policyAggregator.MergeRequirement(ConsumeChannelInboxRequirement.Warn);
 
         // Act
-        var act = () => InboxConfigurationValidator.Validate(channelRegistry, handlerRegistry, policyAggregator);
+        var act = () =>
+            InboxConfigurationValidator.Validate(
+                channelRegistry,
+                handlerRegistry,
+                policyAggregator
+            );
 
         // Assert
         act.Should().NotThrow();
         policyAggregator.WarningCount.Should().Be(1);
-        policyAggregator.DrainWarnings().Should().ContainSingle()
-            .Which.Should().Contain("AllowConsumeWithoutInbox()");
+        policyAggregator
+            .DrainWarnings()
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("AllowConsumeWithoutInbox()");
     }
 
     [Test]
@@ -262,16 +322,23 @@ public class InboxConfigurationValidatorTests
         var services = new ServiceCollection();
 
         // Act & Assert
-        var act = () => services.AddRatatoskr(bus =>
-        {
-            bus.AddEventConsumeChannel("test-channel", c => c
-                .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
-            bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox =>
-                inbox.WithConsumeChannelInboxRequirement(ConsumeChannelInboxRequirement.Fail)));
-        });
+        var act = () =>
+            services.AddRatatoskr(bus =>
+            {
+                bus.AddEventConsumeChannel(
+                    "test-channel",
+                    c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
+                );
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseInbox(inbox =>
+                        inbox.WithConsumeChannelInboxRequirement(
+                            ConsumeChannelInboxRequirement.Fail
+                        )
+                    )
+                );
+            });
 
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*AllowConsumeWithoutInbox()*");
+        act.Should().Throw<InvalidOperationException>().WithMessage("*AllowConsumeWithoutInbox()*");
     }
 
     [Test]
@@ -281,24 +348,39 @@ public class InboxConfigurationValidatorTests
         var services = new ServiceCollection();
 
         // Act
-        var act = () => services.AddRatatoskr(bus =>
-        {
-            bus.AddEventConsumeChannel("test-channel", c => c
-                .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
-            bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox =>
-                inbox.WithConsumeChannelInboxRequirement(ConsumeChannelInboxRequirement.Warn)));
-        });
+        var act = () =>
+            services.AddRatatoskr(bus =>
+            {
+                bus.AddEventConsumeChannel(
+                    "test-channel",
+                    c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
+                );
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseInbox(inbox =>
+                        inbox.WithConsumeChannelInboxRequirement(
+                            ConsumeChannelInboxRequirement.Warn
+                        )
+                    )
+                );
+            });
 
         // Assert
         act.Should().NotThrow();
-        services.Any(d => d.ServiceType == typeof(IHostedService) &&
-                          d.ImplementationType == typeof(ConsumeChannelInboxWarningHostedService))
-            .Should().BeTrue();
+        services
+            .Any(d =>
+                d.ServiceType == typeof(IHostedService)
+                && d.ImplementationType == typeof(ConsumeChannelInboxWarningHostedService)
+            )
+            .Should()
+            .BeTrue();
     }
 }
 
 file class NoOpOrderCreatedHandler : IMessageHandler<OrderCreatedEvent>
 {
-    public Task HandleAsync(OrderCreatedEvent message, MessageProperties context, CancellationToken cancellationToken)
-        => Task.CompletedTask;
+    public Task HandleAsync(
+        OrderCreatedEvent message,
+        MessageProperties context,
+        CancellationToken cancellationToken
+    ) => Task.CompletedTask;
 }

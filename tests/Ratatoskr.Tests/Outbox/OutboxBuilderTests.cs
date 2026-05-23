@@ -7,8 +7,7 @@ namespace Ratatoskr.Tests.Outbox;
 
 public class OutboxBuilderTests
 {
-    private static OutboxBuilder<TestDbContext> CreateBuilder() =>
-        new();
+    private static OutboxBuilder<TestDbContext> CreateBuilder() => new();
 
     [Test]
     public void DefaultOptions_HaveSensibleDefaults()

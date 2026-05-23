@@ -7,10 +7,16 @@ internal sealed class MessageSerializerResolver(
     ChannelRegistry channelRegistry,
     IMessageSerializer defaultSerializer,
     IEnumerable<IMessageSerializer> serializerCandidates,
-    IServiceProvider serviceProvider) : IMessageSerializerResolver
+    IServiceProvider serviceProvider
+) : IMessageSerializerResolver
 {
     private readonly FrozenDictionary<Type, IMessageSerializer> _serializerByMessageType =
-        BuildSerializerMap(channelRegistry, defaultSerializer, serializerCandidates, serviceProvider);
+        BuildSerializerMap(
+            channelRegistry,
+            defaultSerializer,
+            serializerCandidates,
+            serviceProvider
+        );
 
     public IMessageSerializer GetSerializer(Type messageType)
     {
@@ -21,12 +27,15 @@ internal sealed class MessageSerializerResolver(
         Type serializerType,
         IMessageSerializer defaultSerializer,
         IEnumerable<IMessageSerializer> serializerCandidates,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider
+    )
     {
         if (serializerType.IsInstanceOfType(defaultSerializer))
             return defaultSerializer;
 
-        var fromRegisteredSerializer = serializerCandidates.FirstOrDefault(serializerType.IsInstanceOfType);
+        var fromRegisteredSerializer = serializerCandidates.FirstOrDefault(
+            serializerType.IsInstanceOfType
+        );
         if (fromRegisteredSerializer != null)
             return fromRegisteredSerializer;
 
@@ -35,15 +44,17 @@ internal sealed class MessageSerializerResolver(
             return typedSerializer;
 
         throw new InvalidOperationException(
-            $"Serializer '{serializerType.FullName}' is configured for one or more messages, but was not registered in DI. " +
-            $"Register it as its concrete type, for example services.AddSingleton<{serializerType.Name}>().");
+            $"Serializer '{serializerType.FullName}' is configured for one or more messages, but was not registered in DI. "
+                + $"Register it as its concrete type, for example services.AddSingleton<{serializerType.Name}>()."
+        );
     }
 
     private static FrozenDictionary<Type, IMessageSerializer> BuildSerializerMap(
         ChannelRegistry channelRegistry,
         IMessageSerializer defaultSerializer,
         IEnumerable<IMessageSerializer> serializerCandidates,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider
+    )
     {
         var serializerTypeMap = new Dictionary<Type, Type?>();
         foreach (var channel in channelRegistry.GetAllChannels())
@@ -51,7 +62,12 @@ internal sealed class MessageSerializerResolver(
             foreach (var message in channel.Messages)
             {
                 var serializerType = message.SerializerType;
-                if (!serializerTypeMap.TryGetValue(message.MessageType, out var existingSerializerType))
+                if (
+                    !serializerTypeMap.TryGetValue(
+                        message.MessageType,
+                        out var existingSerializerType
+                    )
+                )
                 {
                     serializerTypeMap[message.MessageType] = serializerType;
                     continue;
@@ -63,14 +79,16 @@ internal sealed class MessageSerializerResolver(
                 if (existingSerializerType == null || serializerType == null)
                 {
                     throw new InvalidOperationException(
-                        $"Message type '{message.MessageType.FullName}' mixes default and explicit serializer registrations. " +
-                        "Use a single serializer configuration per message type across all channels.");
+                        $"Message type '{message.MessageType.FullName}' mixes default and explicit serializer registrations. "
+                            + "Use a single serializer configuration per message type across all channels."
+                    );
                 }
 
                 throw new InvalidOperationException(
-                    $"Message type '{message.MessageType.FullName}' is configured with multiple serializers " +
-                    $"('{existingSerializerType.FullName}' and '{serializerType.FullName}'). " +
-                    "Use a single serializer per message type.");
+                    $"Message type '{message.MessageType.FullName}' is configured with multiple serializers "
+                        + $"('{existingSerializerType.FullName}' and '{serializerType.FullName}'). "
+                        + "Use a single serializer per message type."
+                );
             }
         }
 
@@ -84,7 +102,8 @@ internal sealed class MessageSerializerResolver(
                 configuredSerializerType,
                 defaultSerializer,
                 serializerCandidates,
-                serviceProvider);
+                serviceProvider
+            );
             serializerByMessageType[messageType] = serializer;
         }
 
@@ -96,7 +115,9 @@ internal sealed class MessageSerializerResolver(
         {
             // Defensive guard to preserve a clear startup failure if map keys are duplicated.
             throw new InvalidOperationException(
-                "Failed to build message serializer map due to duplicate message type registrations.", ex);
+                "Failed to build message serializer map due to duplicate message type registrations.",
+                ex
+            );
         }
     }
 }

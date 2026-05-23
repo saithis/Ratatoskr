@@ -11,7 +11,10 @@ namespace Ratatoskr.Tests.RabbitMq;
 
 public class CloudEventsAmqpMapperRoundTripTests
 {
-    private readonly CloudEventsAmqpMapper _mapper = new(new CloudEventsOptions(), NullLogger<CloudEventsAmqpMapper>.Instance);
+    private readonly CloudEventsAmqpMapper _mapper = new(
+        new CloudEventsOptions(),
+        NullLogger<CloudEventsAmqpMapper>.Instance
+    );
 
     [Test]
     public void MapOutgoing_BinaryMode_RoundTripsCorrectly()
@@ -26,7 +29,7 @@ public class CloudEventsAmqpMapperRoundTripTests
             Time = now,
             Subject = "roundtrip-subject",
             TraceParent = "00-roundtrip-trace-01",
-            TraceState = "roundtrip=true"
+            TraceState = "roundtrip=true",
         };
         var outgoing = new BasicProperties();
         var originalBody = Encoding.UTF8.GetBytes("{\"key\":\"value\"}");
@@ -54,7 +57,8 @@ public class CloudEventsAmqpMapperRoundTripTests
         // Arrange
         var structuredMapper = new CloudEventsAmqpMapper(
             new CloudEventsOptions { ContentMode = CloudEventsContentMode.Structured },
-            NullLogger<CloudEventsAmqpMapper>.Instance);
+            NullLogger<CloudEventsAmqpMapper>.Instance
+        );
         var now = new DateTimeOffset(2025, 6, 15, 12, 0, 0, TimeSpan.Zero);
         var originalProps = new MessageProperties
         {
@@ -63,7 +67,7 @@ public class CloudEventsAmqpMapperRoundTripTests
             Type = "struct.roundtrip",
             Time = now,
             TraceParent = "00-struct-trace-01",
-            TraceState = "struct=true"
+            TraceState = "struct=true",
         };
         var outgoing = new BasicProperties();
         var originalBody = Encoding.UTF8.GetBytes("{\"key\":\"value\"}");
@@ -112,7 +116,8 @@ public class CloudEventsAmqpMapperRoundTripTests
         // Arrange
         var structuredMapper = new CloudEventsAmqpMapper(
             new CloudEventsOptions { ContentMode = CloudEventsContentMode.Structured },
-            NullLogger<CloudEventsAmqpMapper>.Instance);
+            NullLogger<CloudEventsAmqpMapper>.Instance
+        );
         var originalProps = new MessageProperties
         {
             Id = "ds-struct-id",
@@ -130,7 +135,9 @@ public class CloudEventsAmqpMapperRoundTripTests
         var result = structuredMapper.MapIncoming(incoming);
 
         // Assert
-        result.props.DataSchema.Should().Be("https://schemas.example.com/events/ds.struct.type/v1.json");
+        result
+            .props.DataSchema.Should()
+            .Be("https://schemas.example.com/events/ds.struct.type/v1.json");
     }
 
     [Test]

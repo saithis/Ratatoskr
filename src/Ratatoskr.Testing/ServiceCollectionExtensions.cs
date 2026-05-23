@@ -12,7 +12,9 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddRatatoskrTesting(this IServiceCollection services)
     {
         services.AddSingleton<MessageTracker>();
-        services.AddSingleton<IMessageActivityObserver>(sp => sp.GetRequiredService<MessageTracker>());
+        services.AddSingleton<IMessageActivityObserver>(sp =>
+            sp.GetRequiredService<MessageTracker>()
+        );
         return services;
     }
 }

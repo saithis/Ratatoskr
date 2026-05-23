@@ -5,7 +5,8 @@ namespace Ratatoskr.EfCore;
 /// <summary>
 /// Builder for configuring the inbox pattern.
 /// </summary>
-public class InboxBuilder<TDbContext> where TDbContext : DbContext
+public class InboxBuilder<TDbContext>
+    where TDbContext : DbContext
 {
     internal InboxOptions Options { get; } = new();
     internal bool RegisterBackgroundService { get; private set; } = true;
@@ -15,7 +16,9 @@ public class InboxBuilder<TDbContext> where TDbContext : DbContext
     /// <summary>
     /// Requires consume channels to use inbox according to the selected policy.
     /// </summary>
-    public InboxBuilder<TDbContext> WithConsumeChannelInboxRequirement(ConsumeChannelInboxRequirement requirement)
+    public InboxBuilder<TDbContext> WithConsumeChannelInboxRequirement(
+        ConsumeChannelInboxRequirement requirement
+    )
     {
         Options.ConsumeChannelInboxRequirement = requirement;
         return this;
@@ -26,7 +29,11 @@ public class InboxBuilder<TDbContext> where TDbContext : DbContext
     /// </summary>
     public InboxBuilder<TDbContext> WithPollingInterval(TimeSpan interval)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(interval, TimeSpan.Zero, nameof(interval));
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(
+            interval,
+            TimeSpan.Zero,
+            nameof(interval)
+        );
         Options.PollingInterval = interval;
         return this;
     }
@@ -67,7 +74,11 @@ public class InboxBuilder<TDbContext> where TDbContext : DbContext
     /// </summary>
     public InboxBuilder<TDbContext> WithStuckMessageThreshold(TimeSpan threshold)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(threshold, TimeSpan.Zero, nameof(threshold));
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(
+            threshold,
+            TimeSpan.Zero,
+            nameof(threshold)
+        );
         Options.StuckMessageThreshold = threshold;
         return this;
     }
@@ -130,7 +141,11 @@ public class InboxBuilder<TDbContext> where TDbContext : DbContext
     /// </summary>
     public InboxBuilder<TDbContext> WithCleanupInterval(TimeSpan interval)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(interval, TimeSpan.Zero, nameof(interval));
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(
+            interval,
+            TimeSpan.Zero,
+            nameof(interval)
+        );
         Options.CleanupInterval = interval;
         return this;
     }

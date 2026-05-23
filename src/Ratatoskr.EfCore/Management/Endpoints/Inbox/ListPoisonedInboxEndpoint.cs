@@ -26,10 +26,14 @@ internal static class ListPoisonedInboxEndpoint
         DateTimeOffset? from = null,
         DateTimeOffset? to = null,
         string? search = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default
+    )
     {
         var logger = loggerFactory.CreateLogger(typeof(ListPoisonedInboxEndpoint).FullName!);
-        if (ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is { } resolveError)
+        if (
+            ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
+            { } resolveError
+        )
             return resolveError;
 
         pageSize = PaginationOptions.ClampPageSize(pageSize);
@@ -39,7 +43,10 @@ internal static class ListPoisonedInboxEndpoint
         {
             if (!CursorHelper.TryDecode(cursor, out var c))
             {
-                logger.LogInformation("Rejecting management list request with malformed cursor (context {ContextName}).", contextName);
+                logger.LogInformation(
+                    "Rejecting management list request with malformed cursor (context {ContextName}).",
+                    contextName
+                );
                 return ManagementResults.BadRequest("Invalid pagination cursor.");
             }
             decodedCursor = c;
@@ -51,48 +58,62 @@ internal static class ListPoisonedInboxEndpoint
             where hs.IsPoisoned
             select new { hs, msg };
 
-        if (from.HasValue) filtered = filtered.Where(x => x.msg.ReceivedAt >= from.Value);
-        if (to.HasValue) filtered = filtered.Where(x => x.msg.ReceivedAt <= to.Value);
+        if (from.HasValue)
+            filtered = filtered.Where(x => x.msg.ReceivedAt >= from.Value);
+        if (to.HasValue)
+            filtered = filtered.Where(x => x.msg.ReceivedAt <= to.Value);
         if (search is not null)
         {
             var pattern = ManagementHelpers.BuildSearchPattern(search);
-            filtered = filtered.Where(x => EF.Functions.Like(x.msg.SerializedProperties, pattern, @"\"));
+            filtered = filtered.Where(x =>
+                EF.Functions.Like(x.msg.SerializedProperties, pattern, @"\")
+            );
         }
 
         var paged = filtered;
         if (decodedCursor is { } k)
         {
             // Tuple comparison keyed on (ReceivedAt, HandlerStatusId) which matches the ORDER BY.
-            paged = paged.Where(x => x.msg.ReceivedAt > k.Time
-                                     || (x.msg.ReceivedAt == k.Time && x.hs.Id > k.Id));
+            paged = paged.Where(x =>
+                x.msg.ReceivedAt > k.Time || (x.msg.ReceivedAt == k.Time && x.hs.Id > k.Id)
+            );
         }
 
         var rows = await paged
-            .OrderBy(x => x.msg.ReceivedAt).ThenBy(x => x.hs.Id)
+            .OrderBy(x => x.msg.ReceivedAt)
+            .ThenBy(x => x.hs.Id)
             .Take(pageSize + 1)
             .Select(x => new
             {
-                x.hs.Id, x.hs.MessageId, x.hs.HandlerKey,
-                x.hs.ErrorCount, x.hs.RequeuedCount, x.hs.LastError,
-                x.msg.ReceivedAt, x.msg.SerializedProperties
+                x.hs.Id,
+                x.hs.MessageId,
+                x.hs.HandlerKey,
+                x.hs.ErrorCount,
+                x.hs.RequeuedCount,
+                x.hs.LastError,
+                x.msg.ReceivedAt,
+                x.msg.SerializedProperties,
             })
             .ToListAsync(ct);
 
         var hasNext = rows.Count > pageSize;
-        if (hasNext) rows.RemoveAt(rows.Count - 1);
+        if (hasNext)
+            rows.RemoveAt(rows.Count - 1);
 
-        var dtos = rows
-            .Select(x => new InboxPoisonedListItem(
-                x.Id, x.MessageId,
+        var dtos = rows.Select(x => new InboxPoisonedListItem(
+                x.Id,
+                x.MessageId,
                 ManagementHelpers.ExtractType(x.SerializedProperties, logger),
-                x.HandlerKey, x.ReceivedAt, x.ErrorCount, x.RequeuedCount,
+                x.HandlerKey,
+                x.ReceivedAt,
+                x.ErrorCount,
+                x.RequeuedCount,
                 string.IsNullOrEmpty(x.LastError) ? null : x.LastError,
-                contextName))
+                contextName
+            ))
             .ToList();
 
-        var nextCursor = hasNext
-            ? CursorHelper.Encode(rows[^1].ReceivedAt, rows[^1].Id)
-            : null;
+        var nextCursor = hasNext ? CursorHelper.Encode(rows[^1].ReceivedAt, rows[^1].Id) : null;
 
         var totalCount = await filtered.LongCountAsync(ct);
         return TypedResults.Ok(new InboxPoisonedListResponse(dtos, totalCount, nextCursor));
@@ -107,10 +128,12 @@ internal static class ListPoisonedInboxEndpoint
         int ErrorCount,
         int RequeuedCount,
         string? LastError,
-        string DbContext);
+        string DbContext
+    );
 
     internal record InboxPoisonedListResponse(
         List<InboxPoisonedListItem> Items,
         long TotalCount,
-        string? NextCursor);
+        string? NextCursor
+    );
 }

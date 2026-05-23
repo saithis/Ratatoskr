@@ -6,15 +6,24 @@ namespace PlaygroundHost.Infrastructure;
 /// <summary>Per scenario-run simulated failures for <see cref="IMessageSender"/> (outbox relay + PublishDirect).</summary>
 public sealed class OutboxSendFailureRegistry
 {
-    private readonly ConcurrentDictionary<string, Policy> _byScenarioRun = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, Policy> _byScenarioRun = new(
+        StringComparer.Ordinal
+    );
 
-    public void Register(string scenarioRunId, OutboxSendFailureKind kind, int succeedAfterFailureCount = 2)
+    public void Register(
+        string scenarioRunId,
+        OutboxSendFailureKind kind,
+        int succeedAfterFailureCount = 2
+    )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(scenarioRunId);
         _byScenarioRun[scenarioRunId] = kind switch
         {
             OutboxSendFailureKind.AlwaysFail => new Policy(OutboxSendFailureKind.AlwaysFail, 0),
-            OutboxSendFailureKind.SucceedAfterNFailures => new Policy(OutboxSendFailureKind.SucceedAfterNFailures, succeedAfterFailureCount),
+            OutboxSendFailureKind.SucceedAfterNFailures => new Policy(
+                OutboxSendFailureKind.SucceedAfterNFailures,
+                succeedAfterFailureCount
+            ),
             _ => new Policy(OutboxSendFailureKind.Succeed, 0),
         };
     }
@@ -27,11 +36,20 @@ public sealed class OutboxSendFailureRegistry
 
     public bool TryConsumeSendFailure(MessageProperties props)
     {
-        if (!props.CloudEventExtensions.TryGetValue(PlaygroundCorrelation.CloudEventsExtensionKey, out var ext))
+        if (
+            !props.CloudEventExtensions.TryGetValue(
+                PlaygroundCorrelation.CloudEventsExtensionKey,
+                out var ext
+            )
+        )
             return false;
-            
+
         string? runId = ext as string;
-        if (runId == null && ext is System.Text.Json.JsonElement json && json.ValueKind == System.Text.Json.JsonValueKind.String)
+        if (
+            runId == null
+            && ext is System.Text.Json.JsonElement json
+            && json.ValueKind == System.Text.Json.JsonValueKind.String
+        )
         {
             runId = json.GetString();
         }

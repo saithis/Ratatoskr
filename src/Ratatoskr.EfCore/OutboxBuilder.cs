@@ -5,7 +5,8 @@ namespace Ratatoskr.EfCore;
 /// <summary>
 /// Builder for configuring the outbox pattern.
 /// </summary>
-public class OutboxBuilder<TDbContext> where TDbContext : DbContext
+public class OutboxBuilder<TDbContext>
+    where TDbContext : DbContext
 {
     internal OutboxOptions Options { get; } = new();
     internal bool RegisterBackgroundService { get; private set; } = true;
@@ -17,7 +18,11 @@ public class OutboxBuilder<TDbContext> where TDbContext : DbContext
     /// </summary>
     public OutboxBuilder<TDbContext> WithPollingInterval(TimeSpan interval)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(interval, TimeSpan.Zero, nameof(interval));
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(
+            interval,
+            TimeSpan.Zero,
+            nameof(interval)
+        );
         Options.PollingInterval = interval;
         return this;
     }
@@ -58,7 +63,11 @@ public class OutboxBuilder<TDbContext> where TDbContext : DbContext
     /// </summary>
     public OutboxBuilder<TDbContext> WithStuckMessageThreshold(TimeSpan threshold)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(threshold, TimeSpan.Zero, nameof(threshold));
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(
+            threshold,
+            TimeSpan.Zero,
+            nameof(threshold)
+        );
         Options.StuckMessageThreshold = threshold;
         return this;
     }
@@ -144,7 +153,11 @@ public class OutboxBuilder<TDbContext> where TDbContext : DbContext
     /// </summary>
     public OutboxBuilder<TDbContext> WithCleanupInterval(TimeSpan interval)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(interval, TimeSpan.Zero, nameof(interval));
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(
+            interval,
+            TimeSpan.Zero,
+            nameof(interval)
+        );
         Options.CleanupInterval = interval;
         return this;
     }

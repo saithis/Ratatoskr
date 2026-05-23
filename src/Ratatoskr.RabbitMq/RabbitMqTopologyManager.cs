@@ -9,9 +9,12 @@ namespace Ratatoskr.RabbitMq;
 public class RabbitMqTopologyManager(
     ChannelRegistry registry,
     RabbitMqConnectionManager connectionManager,
-    ILogger<RabbitMqTopologyManager> logger)
+    ILogger<RabbitMqTopologyManager> logger
+)
 {
-    private readonly TaskCompletionSource _provisioningTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _provisioningTcs = new(
+        TaskCreationOptions.RunContinuationsAsynchronously
+    );
 
     public Task WaitForProvisioningAsync(CancellationToken cancellationToken = default)
     {
@@ -22,15 +25,23 @@ public class RabbitMqTopologyManager(
     {
         try
         {
-            await using var channel = await connectionManager.CreateChannelAsync(true, cancellationToken);
+            await using var channel = await connectionManager.CreateChannelAsync(
+                true,
+                cancellationToken
+            );
 
             var allChannels = registry.GetPublishChannels().Concat(registry.GetConsumeChannels());
 
             // Declaring channels first (EventPublish, CommandConsume own their exchange),
             // then validating channels (CommandPublish, EventConsume expect the exchange to exist).
-            foreach (var reg in allChannels.OrderBy(r => r.Intent is ChannelType.CommandPublish or ChannelType.EventConsume))
+            foreach (
+                var reg in allChannels.OrderBy(r =>
+                    r.Intent is ChannelType.CommandPublish or ChannelType.EventConsume
+                )
+            )
             {
-                if (!reg.IsRabbitMqChannel()) continue;
+                if (!reg.IsRabbitMqChannel())
+                    continue;
                 await ProvisionChannelAsync(channel, reg, cancellationToken);
             }
 
@@ -43,7 +54,11 @@ public class RabbitMqTopologyManager(
         }
     }
 
-    private async Task ProvisionChannelAsync(IChannel channel, ChannelRegistration reg, CancellationToken token)
+    private async Task ProvisionChannelAsync(
+        IChannel channel,
+        ChannelRegistration reg,
+        CancellationToken token
+    )
     {
         var channelOpts = reg.GetRabbitMqChannelOptions() ?? new RabbitMqChannelOptions();
 
@@ -55,23 +70,35 @@ public class RabbitMqTopologyManager(
         }
     }
 
-    private static string ResolveAmqpExchangeName(ChannelRegistration reg, RabbitMqChannelOptions channelOpts) =>
-        channelOpts.AmqpExchangeName ?? reg.ChannelName;
+    private static string ResolveAmqpExchangeName(
+        ChannelRegistration reg,
+        RabbitMqChannelOptions channelOpts
+    ) => channelOpts.AmqpExchangeName ?? reg.ChannelName;
 
-    private async Task DeclareOrValidateExchangeAsync(IChannel channel, ChannelRegistration reg, RabbitMqChannelOptions channelOpts, CancellationToken token)
+    private async Task DeclareOrValidateExchangeAsync(
+        IChannel channel,
+        ChannelRegistration reg,
+        RabbitMqChannelOptions channelOpts,
+        CancellationToken token
+    )
     {
         var exchangeName = ResolveAmqpExchangeName(reg, channelOpts);
         if (reg.Intent == ChannelType.EventPublish || reg.Intent == ChannelType.CommandConsume)
         {
             // We OWN the exchange -> Declare it
-            logger.LogInformation("Declaring exchange '{Exchange}' Type: {Type}", exchangeName, channelOpts.ExchangeType);
+            logger.LogInformation(
+                "Declaring exchange '{Exchange}' Type: {Type}",
+                exchangeName,
+                channelOpts.ExchangeType
+            );
             await channel.ExchangeDeclareAsync(
                 exchange: exchangeName,
                 type: channelOpts.ExchangeType.ToRabbitMqString(),
                 durable: channelOpts.ExchangeDurable,
                 autoDelete: channelOpts.ExchangeAutoDelete,
                 arguments: null,
-                cancellationToken: token);
+                cancellationToken: token
+            );
         }
         else
         {
@@ -83,17 +110,33 @@ public class RabbitMqTopologyManager(
             }
             catch (Exception ex)
             {
-                logger.LogCritical(ex, "Exchange '{Exchange}' validation failed. It must exist for intent {Intent}.", exchangeName, reg.Intent);
+                logger.LogCritical(
+                    ex,
+                    "Exchange '{Exchange}' validation failed. It must exist for intent {Intent}.",
+                    exchangeName,
+                    reg.Intent
+                );
                 throw;
             }
         }
     }
 
-    private async Task ProvisionQueueAndBindingsAsync(IChannel channel, ChannelRegistration reg, RabbitMqChannelOptions channelOpts, CancellationToken token)
+    private async Task ProvisionQueueAndBindingsAsync(
+        IChannel channel,
+        ChannelRegistration reg,
+        RabbitMqChannelOptions channelOpts,
+        CancellationToken token
+    )
     {
-        string queueName = channelOpts.QueueName ?? throw new InvalidOperationException($"Queue name must be specified for consumer channel '{reg.ChannelName}'");
+        string queueName =
+            channelOpts.QueueName
+            ?? throw new InvalidOperationException(
+                $"Queue name must be specified for consumer channel '{reg.ChannelName}'"
+            );
 
-        IDictionary<string, object?> queueArgs = new Dictionary<string, object?>(channelOpts.QueueArguments);
+        IDictionary<string, object?> queueArgs = new Dictionary<string, object?>(
+            channelOpts.QueueArguments
+        );
         if (channelOpts.QueueType == QueueType.Quorum)
         {
             queueArgs["x-queue-type"] = "quorum";
@@ -104,7 +147,11 @@ public class RabbitMqTopologyManager(
             await ProvisionRetryTopologyAsync(channel, queueName, queueArgs, channelOpts, token);
         }
 
-        logger.LogInformation("Declaring queue '{Queue}' for channel '{Channel}'", queueName, reg.ChannelName);
+        logger.LogInformation(
+            "Declaring queue '{Queue}' for channel '{Channel}'",
+            queueName,
+            reg.ChannelName
+        );
 
         await channel.QueueDeclareAsync(
             queue: queueName,
@@ -112,7 +159,8 @@ public class RabbitMqTopologyManager(
             exclusive: channelOpts.QueueExclusive,
             autoDelete: channelOpts.QueueAutoDelete,
             arguments: queueArgs,
-            cancellationToken: token);
+            cancellationToken: token
+        );
 
         var exchangeName = ResolveAmqpExchangeName(reg, channelOpts);
 
@@ -123,14 +171,20 @@ public class RabbitMqTopologyManager(
 
             string routingKey = msgOpts?.RoutingKey ?? msg.MessageTypeName;
 
-            logger.LogInformation("Binding queue '{Queue}' to exchange '{Exchange}' with key '{Key}'", queueName, exchangeName, routingKey);
+            logger.LogInformation(
+                "Binding queue '{Queue}' to exchange '{Exchange}' with key '{Key}'",
+                queueName,
+                exchangeName,
+                routingKey
+            );
 
             await channel.QueueBindAsync(
                 queue: queueName,
                 exchange: exchangeName,
                 routingKey: routingKey,
                 arguments: null,
-                cancellationToken: token);
+                cancellationToken: token
+            );
         }
     }
 
@@ -139,12 +193,18 @@ public class RabbitMqTopologyManager(
         string queueName,
         IDictionary<string, object?> mainQueueArgs,
         RabbitMqChannelOptions channelOpts,
-        CancellationToken token)
+        CancellationToken token
+    )
     {
         var dlqName = $"{queueName}{channelOpts.Retry.DeadLetterSuffix}";
         var retryQueueName = $"{queueName}{channelOpts.Retry.RetrySuffix}";
 
-        logger.LogInformation("Provisioning retry topology for queue '{Queue}' (DLQ: {Dlq}, Retry: {Retry})", queueName, dlqName, retryQueueName);
+        logger.LogInformation(
+            "Provisioning retry topology for queue '{Queue}' (DLQ: {Dlq}, Retry: {Retry})",
+            queueName,
+            dlqName,
+            retryQueueName
+        );
 
         // 1. Declare DLQ Exchange (Fanout)
         await channel.ExchangeDeclareAsync(
@@ -153,7 +213,8 @@ public class RabbitMqTopologyManager(
             durable: true,
             autoDelete: false,
             arguments: null,
-            cancellationToken: token);
+            cancellationToken: token
+        );
 
         // 2. Declare DLQ Queue
         var dlqArgs = new Dictionary<string, object?>(mainQueueArgs);
@@ -165,21 +226,23 @@ public class RabbitMqTopologyManager(
             exclusive: false,
             autoDelete: false,
             arguments: dlqArgs, // Use same type/args as main queue
-            cancellationToken: token);
+            cancellationToken: token
+        );
 
         // 3. Bind DLQ Queue to DLQ Exchange
         await channel.QueueBindAsync(
             queue: dlqName,
             exchange: dlqName,
             routingKey: "",
-            cancellationToken: token);
+            cancellationToken: token
+        );
 
         // 4. Declare Retry Queue (TTL -> Main Queue)
         var retryArgs = new Dictionary<string, object?>(mainQueueArgs)
         {
             ["x-dead-letter-exchange"] = "",
             ["x-dead-letter-routing-key"] = queueName,
-            ["x-message-ttl"] = (long)channelOpts.Retry.Delay.TotalMilliseconds
+            ["x-message-ttl"] = (long)channelOpts.Retry.Delay.TotalMilliseconds,
         };
 
         await channel.QueueDeclareAsync(
@@ -188,7 +251,8 @@ public class RabbitMqTopologyManager(
             exclusive: false,
             autoDelete: false,
             arguments: retryArgs,
-            cancellationToken: token);
+            cancellationToken: token
+        );
 
         // 5. Configure Main Queue to Dead-Letter to Retry Queue
         mainQueueArgs["x-dead-letter-exchange"] = "";

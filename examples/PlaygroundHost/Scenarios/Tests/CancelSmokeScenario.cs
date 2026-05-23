@@ -7,9 +7,7 @@ public sealed class CancelSmokeScenario : IPlaygroundScenario
 {
     public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues => [];
 
-    public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
-    {
-    }
+    public static void RegisterRatatoskrTopology(RatatoskrBuilder bus) { }
 
     public string Slug => "cancel-smoke";
 
@@ -20,7 +18,10 @@ public sealed class CancelSmokeScenario : IPlaygroundScenario
 
     public string Topic => "Tests";
 
-    public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
+    public async Task<ScenarioVerdict> ExecuteAsync(
+        ScenarioExecutionContext context,
+        CancellationToken cancellationToken
+    )
     {
         try
         {

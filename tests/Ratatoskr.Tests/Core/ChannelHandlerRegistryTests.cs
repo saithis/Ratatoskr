@@ -29,8 +29,10 @@ public class ChannelHandlerRegistryTests
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
+        );
 
         // Act
         var registry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
@@ -49,8 +51,10 @@ public class ChannelHandlerRegistryTests
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("handler-key")));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("handler-key"))
+        );
 
         // Act
         var registry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
@@ -69,8 +73,10 @@ public class ChannelHandlerRegistryTests
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("handler-key")));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("handler-key"))
+        );
 
         // Act
         var registry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
@@ -88,14 +94,19 @@ public class ChannelHandlerRegistryTests
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m
-                .WithHandler<TestEventHandler>("same-key")
-                .WithHandler<SecondTestEventHandler>("same-key")));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c =>
+                c.Consumes<TestEvent>(m =>
+                    m.WithHandler<TestEventHandler>("same-key")
+                        .WithHandler<SecondTestEventHandler>("same-key")
+                )
+        );
 
         // Act & Assert
         var act = () => ChannelHandlerRegistry.Build(builder.ChannelRegistry);
-        act.Should().Throw<InvalidOperationException>()
+        act.Should()
+            .Throw<InvalidOperationException>()
             .WithMessage("*Duplicate inbox handler key*same-key*");
     }
 
@@ -147,8 +158,10 @@ public class ChannelHandlerRegistryTests
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>()));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
+        );
 
         // Act
         var registry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
@@ -163,8 +176,10 @@ public class ChannelHandlerRegistryTests
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("handler-key")));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("handler-key"))
+        );
 
         // Act
         var registry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
@@ -179,10 +194,14 @@ public class ChannelHandlerRegistryTests
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m
-                .WithHandler<TestEventHandler>()
-                .WithHandler<SecondTestEventHandler>("inbox-key")));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c =>
+                c.Consumes<TestEvent>(m =>
+                    m.WithHandler<TestEventHandler>()
+                        .WithHandler<SecondTestEventHandler>("inbox-key")
+                )
+        );
 
         // Act
         var registry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
@@ -205,14 +224,19 @@ public class ChannelHandlerRegistryTests
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("channel-a", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("shared-key")));
-        builder.AddEventConsumeChannel("channel-b", c => c
-            .Consumes<OrderCreatedEvent>(m => m.WithHandler<NoOpOrderHandler>("shared-key")));
+        builder.AddEventConsumeChannel(
+            "channel-a",
+            c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("shared-key"))
+        );
+        builder.AddEventConsumeChannel(
+            "channel-b",
+            c => c.Consumes<OrderCreatedEvent>(m => m.WithHandler<NoOpOrderHandler>("shared-key"))
+        );
 
         // Act & Assert
         var act = () => ChannelHandlerRegistry.Build(builder.ChannelRegistry);
-        act.Should().Throw<InvalidOperationException>()
+        act.Should()
+            .Throw<InvalidOperationException>()
             .WithMessage("*Duplicate inbox handler key*shared-key*");
     }
 
@@ -222,8 +246,10 @@ public class ChannelHandlerRegistryTests
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("handler-key")));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("handler-key"))
+        );
 
         var registry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
 
@@ -242,9 +268,12 @@ public class ChannelHandlerRegistryTests
         // Arrange — two message types on the same channel, each with inbox handlers
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("key-test"))
-            .Consumes<OrderCreatedEvent>(m => m.WithHandler<NoOpOrderHandler>("key-order")));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c =>
+                c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("key-test"))
+                    .Consumes<OrderCreatedEvent>(m => m.WithHandler<NoOpOrderHandler>("key-order"))
+        );
 
         // Act
         var registry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
@@ -258,14 +287,20 @@ public class ChannelHandlerRegistryTests
         orderHandlers.Should().HaveCount(1);
         orderHandlers[0].HandlerType.Should().Be(typeof(NoOpOrderHandler));
     }
+
     [Test]
     public void Build_LegacyKey_ResolvesViaGetInboxRegistrationByKey()
     {
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("handler-v2", "handler-v1")));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c =>
+                c.Consumes<TestEvent>(m =>
+                    m.WithHandler<TestEventHandler>("handler-v2", "handler-v1")
+                )
+        );
 
         // Act
         var registry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
@@ -284,8 +319,13 @@ public class ChannelHandlerRegistryTests
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("handler-v3", "handler-v1", "handler-v2")));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c =>
+                c.Consumes<TestEvent>(m =>
+                    m.WithHandler<TestEventHandler>("handler-v3", "handler-v1", "handler-v2")
+                )
+        );
 
         // Act
         var registry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
@@ -302,14 +342,19 @@ public class ChannelHandlerRegistryTests
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m
-                .WithHandler<TestEventHandler>("handler-a")
-                .WithHandler<SecondTestEventHandler>("handler-b", "handler-a")));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c =>
+                c.Consumes<TestEvent>(m =>
+                    m.WithHandler<TestEventHandler>("handler-a")
+                        .WithHandler<SecondTestEventHandler>("handler-b", "handler-a")
+                )
+        );
 
         // Act & Assert
         var act = () => ChannelHandlerRegistry.Build(builder.ChannelRegistry);
-        act.Should().Throw<InvalidOperationException>()
+        act.Should()
+            .Throw<InvalidOperationException>()
             .WithMessage("*Duplicate inbox handler key*handler-a*");
     }
 
@@ -319,14 +364,19 @@ public class ChannelHandlerRegistryTests
         // Arrange
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m
-                .WithHandler<TestEventHandler>("handler-a", "shared-legacy")
-                .WithHandler<SecondTestEventHandler>("handler-b", "shared-legacy")));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c =>
+                c.Consumes<TestEvent>(m =>
+                    m.WithHandler<TestEventHandler>("handler-a", "shared-legacy")
+                        .WithHandler<SecondTestEventHandler>("handler-b", "shared-legacy")
+                )
+        );
 
         // Act & Assert
         var act = () => ChannelHandlerRegistry.Build(builder.ChannelRegistry);
-        act.Should().Throw<InvalidOperationException>()
+        act.Should()
+            .Throw<InvalidOperationException>()
             .WithMessage("*Duplicate inbox handler key*shared-legacy*");
     }
 
@@ -336,8 +386,13 @@ public class ChannelHandlerRegistryTests
         // Arrange — legacy keys should not cause duplicate registrations
         var services = new ServiceCollection();
         var builder = new RatatoskrBuilder(services);
-        builder.AddEventConsumeChannel("test-channel", c => c
-            .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>("handler-v2", "handler-v1")));
+        builder.AddEventConsumeChannel(
+            "test-channel",
+            c =>
+                c.Consumes<TestEvent>(m =>
+                    m.WithHandler<TestEventHandler>("handler-v2", "handler-v1")
+                )
+        );
 
         // Act
         var registry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
@@ -353,6 +408,9 @@ public class ChannelHandlerRegistryTests
 /// </summary>
 file class NoOpOrderHandler : IMessageHandler<OrderCreatedEvent>
 {
-    public Task HandleAsync(OrderCreatedEvent message, MessageProperties context, CancellationToken cancellationToken)
-        => Task.CompletedTask;
+    public Task HandleAsync(
+        OrderCreatedEvent message,
+        MessageProperties context,
+        CancellationToken cancellationToken
+    ) => Task.CompletedTask;
 }

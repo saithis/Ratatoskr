@@ -23,9 +23,13 @@ internal static class BulkRequeueInboxEndpoint
         string contextName,
         BulkRequeueInboxRequest req,
         EfCoreManagementDbContextLookup lookup,
-        CancellationToken ct)
+        CancellationToken ct
+    )
     {
-        if (ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is { } resolveError)
+        if (
+            ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
+            { } resolveError
+        )
             return resolveError;
 
         if (!BulkRequestValidator.TryValidateIds(req.Ids, out var error))
@@ -39,11 +43,16 @@ internal static class BulkRequeueInboxEndpoint
             .ToListAsync(ct);
 
         var foundIds = entities.Select(e => e.Id).ToHashSet();
-        failed.AddRange(req.Ids!
-            .Where(id => !foundIds.Contains(id))
-            .Select(id => new BulkRequeueInboxFailure(id, "Not found, not poisoned, or concurrent modification.")));
+        failed.AddRange(
+            req.Ids!.Where(id => !foundIds.Contains(id))
+                .Select(id => new BulkRequeueInboxFailure(
+                    id,
+                    "Not found, not poisoned, or concurrent modification."
+                ))
+        );
 
-        foreach (var entity in entities) entity.Requeue();
+        foreach (var entity in entities)
+            entity.Requeue();
         await SaveBatchAsync(db, entities, succeeded, failed, ct);
 
         return TypedResults.Ok(new BulkRequeueInboxResponse(succeeded, failed));
@@ -52,9 +61,13 @@ internal static class BulkRequeueInboxEndpoint
     private static async Task<Results<Ok<BulkRequeueInboxResponse>, ProblemHttpResult>> HandleAll(
         string contextName,
         EfCoreManagementDbContextLookup lookup,
-        CancellationToken ct)
+        CancellationToken ct
+    )
     {
-        if (ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is { } resolveError)
+        if (
+            ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
+            { } resolveError
+        )
             return resolveError;
 
         var succeeded = new List<Guid>();
@@ -64,13 +77,16 @@ internal static class BulkRequeueInboxEndpoint
         {
             var batch = await db.Set<InboxHandlerStatusEntity>()
                 .Where(x => x.IsPoisoned)
-                .OrderBy(x => x.CreatedAt).ThenBy(x => x.Id)
+                .OrderBy(x => x.CreatedAt)
+                .ThenBy(x => x.Id)
                 .Take(BatchSize)
                 .ToListAsync(ct);
 
-            if (batch.Count == 0) break;
+            if (batch.Count == 0)
+                break;
 
-            foreach (var entity in batch) entity.Requeue();
+            foreach (var entity in batch)
+                entity.Requeue();
             await SaveBatchAsync(db, batch, succeeded, failed, ct);
             db.ChangeTracker.Clear();
         }
@@ -83,7 +99,8 @@ internal static class BulkRequeueInboxEndpoint
         List<InboxHandlerStatusEntity> entities,
         List<Guid> succeeded,
         List<BulkRequeueInboxFailure> failed,
-        CancellationToken ct)
+        CancellationToken ct
+    )
     {
         try
         {
@@ -92,8 +109,12 @@ internal static class BulkRequeueInboxEndpoint
         }
         catch (DbUpdateConcurrencyException)
         {
-            failed.AddRange(entities.Select(e =>
-                new BulkRequeueInboxFailure(e.Id, "Concurrent modification; no rows in this batch were persisted. Retry the failed ids.")));
+            failed.AddRange(
+                entities.Select(e => new BulkRequeueInboxFailure(
+                    e.Id,
+                    "Concurrent modification; no rows in this batch were persisted. Retry the failed ids."
+                ))
+            );
         }
     }
 
@@ -101,5 +122,8 @@ internal static class BulkRequeueInboxEndpoint
 
     internal record BulkRequeueInboxFailure(Guid Id, string Reason);
 
-    internal record BulkRequeueInboxResponse(List<Guid> Succeeded, List<BulkRequeueInboxFailure> Failed);
+    internal record BulkRequeueInboxResponse(
+        List<Guid> Succeeded,
+        List<BulkRequeueInboxFailure> Failed
+    );
 }

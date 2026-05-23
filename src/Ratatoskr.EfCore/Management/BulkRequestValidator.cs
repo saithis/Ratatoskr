@@ -18,7 +18,8 @@ internal static class BulkRequestValidator
     {
         if (ids is null || ids.Count == 0)
         {
-            error = $"Provide a non-empty '{nameof(ids)}' list, or use the '/all' variant of this endpoint.";
+            error =
+                $"Provide a non-empty '{nameof(ids)}' list, or use the '/all' variant of this endpoint.";
             return false;
         }
 

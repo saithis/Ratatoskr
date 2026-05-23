@@ -16,7 +16,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 #region DistributedLock
 builder.Services.AddSingleton<IDistributedLockProvider>(
-    _ => new FileDistributedSynchronizationProvider(new DirectoryInfo(Path.GetTempPath())));
+    _ => new FileDistributedSynchronizationProvider(new DirectoryInfo(Path.GetTempPath()))
+);
 #endregion
 
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
@@ -40,38 +41,50 @@ builder.Services.AddRatatoskr(bus =>
     #endregion
 
     #region ConfigurePublishChannels
-    bus.AddEventPublishChannel("orders.events", c => c
-        .WithRabbitMq(r => r.WithTopicExchange())
-        .Produces<OrderPlaced>()
-        .Produces<PaymentCompleted>()
-        .Produces<OrderShipped>());
+    bus.AddEventPublishChannel(
+        "orders.events",
+        c =>
+            c.WithRabbitMq(r => r.WithTopicExchange())
+                .Produces<OrderPlaced>()
+                .Produces<PaymentCompleted>()
+                .Produces<OrderShipped>()
+    );
 
-    bus.AddCommandPublishChannel("orders.commands", c => c
-        .WithRabbitMq(r => r.WithDirectExchange())
-        .Produces<ProcessPayment>()
-        .Produces<ShipOrder>()
-        .Produces<SendOrderConfirmation>());
+    bus.AddCommandPublishChannel(
+        "orders.commands",
+        c =>
+            c.WithRabbitMq(r => r.WithDirectExchange())
+                .Produces<ProcessPayment>()
+                .Produces<ShipOrder>()
+                .Produces<SendOrderConfirmation>()
+    );
     #endregion
 
     #region ConfigureConsumeChannels
-    bus.AddEventConsumeChannel("orders.events", c => c
-        .WithRabbitMq(r => r
-            .WithQueueName("orders.events.subscriptions")
-            .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(30)))
-        .Consumes<OrderPlaced>(m => m.WithHandler<OrderPlacedHandler>("order-placed"))
-        .UseInbox<OrderDbContext>());
+    bus.AddEventConsumeChannel(
+        "orders.events",
+        c =>
+            c.WithRabbitMq(r =>
+                    r.WithQueueName("orders.events.subscriptions")
+                        .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(30))
+                )
+                .Consumes<OrderPlaced>(m => m.WithHandler<OrderPlacedHandler>("order-placed"))
+                .UseInbox<OrderDbContext>()
+    );
 
-    bus.AddCommandConsumeChannel("orders.commands", c => c
-        .WithRabbitMq(r => r
-            .WithDirectExchange()
-            .WithQueueName("orders.commands.queue"))
-        .Consumes<ProcessPayment>(m => m
-            .WithHandler<ProcessPaymentHandler>("process-payment"))
-        .Consumes<ShipOrder>(m => m
-            .WithHandler<ShipOrderHandler>("ship-order"))
-        .Consumes<SendOrderConfirmation>(m => m
-            .WithHandler<SendOrderConfirmationHandler>("send-confirmation"))
-        .UseInbox<OrderDbContext>());
+    bus.AddCommandConsumeChannel(
+        "orders.commands",
+        c =>
+            c.WithRabbitMq(r => r.WithDirectExchange().WithQueueName("orders.commands.queue"))
+                .Consumes<ProcessPayment>(m =>
+                    m.WithHandler<ProcessPaymentHandler>("process-payment")
+                )
+                .Consumes<ShipOrder>(m => m.WithHandler<ShipOrderHandler>("ship-order"))
+                .Consumes<SendOrderConfirmation>(m =>
+                    m.WithHandler<SendOrderConfirmationHandler>("send-confirmation")
+                )
+                .UseInbox<OrderDbContext>()
+    );
     #endregion
 
     #region ConfigureAsyncApi
@@ -93,24 +106,28 @@ builder.Services.AddRatatoskr(bus =>
 #endregion
 
 #region ConfigureDbContext
-var ordersConnectionString = builder.Configuration.GetConnectionString("OrdersDb")
+var ordersConnectionString =
+    builder.Configuration.GetConnectionString("OrdersDb")
     ?? throw new InvalidOperationException("Connection string 'OrdersDb' is not configured.");
 
-builder.Services.AddDbContext<OrderDbContext>((sp, options) =>
-{
-    options.UseNpgsql(ordersConnectionString);
-    options.RegisterOutbox<OrderDbContext>(sp);
-});
+builder.Services.AddDbContext<OrderDbContext>(
+    (sp, options) =>
+    {
+        options.UseNpgsql(ordersConnectionString);
+        options.RegisterOutbox<OrderDbContext>(sp);
+    }
+);
 #endregion
 
 #region ConfigureOpenTelemetry
-builder.Services.AddOpenTelemetry()
-    .WithTracing(tracing => tracing
-        .AddSource(RatatoskrDiagnostics.ActivitySourceName)
-        .AddAspNetCoreInstrumentation())
-    .WithMetrics(metrics => metrics
-        .AddMeter(RatatoskrDiagnostics.MeterName)
-        .AddAspNetCoreInstrumentation());
+builder
+    .Services.AddOpenTelemetry()
+    .WithTracing(tracing =>
+        tracing.AddSource(RatatoskrDiagnostics.ActivitySourceName).AddAspNetCoreInstrumentation()
+    )
+    .WithMetrics(metrics =>
+        metrics.AddMeter(RatatoskrDiagnostics.MeterName).AddAspNetCoreInstrumentation()
+    );
 #endregion
 
 var app = builder.Build();
@@ -124,20 +141,26 @@ using (var scope = app.Services.CreateScope())
 #endregion
 
 #region PublishDirectExample
-app.MapPost("/orders/direct", async (OrderPlaced order, IRatatoskr bus) =>
-{
-    await bus.PublishDirectAsync(order);
-    return TypedResults.Ok(order);
-});
+app.MapPost(
+    "/orders/direct",
+    async (OrderPlaced order, IRatatoskr bus) =>
+    {
+        await bus.PublishDirectAsync(order);
+        return TypedResults.Ok(order);
+    }
+);
 #endregion
 
 #region PublishOutboxExample
-app.MapPost("/orders", async (OrderPlaced order, OrderDbContext db) =>
-{
-    db.OutboxMessages.Add(order);
-    await db.SaveChangesAsync();
-    return TypedResults.Ok(order);
-});
+app.MapPost(
+    "/orders",
+    async (OrderPlaced order, OrderDbContext db) =>
+    {
+        db.OutboxMessages.Add(order);
+        await db.SaveChangesAsync();
+        return TypedResults.Ok(order);
+    }
+);
 #endregion
 
 #region MapAsyncApi

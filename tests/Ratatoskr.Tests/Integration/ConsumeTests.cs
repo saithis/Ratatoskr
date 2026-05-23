@@ -14,9 +14,8 @@ using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration;
 
-public class ConsumeTests(
-    RabbitMqContainerFixture rabbitMq,
-    PostgresContainerFixture postgres) : RatatoskrIntegrationTest(rabbitMq, postgres)
+public class ConsumeTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
+    : RatatoskrIntegrationTest(rabbitMq, postgres)
 {
     private string QueueName => $"cons-queue-{TestId}";
 
@@ -36,10 +35,17 @@ public class ConsumeTests(
         });
 
         // Act
-        await PublishToRabbitMqAsync(exchange: "", routingKey: QueueName, new TestEvent { Id = "123", Data = "consumed" });
+        await PublishToRabbitMqAsync(
+            exchange: "",
+            routingKey: QueueName,
+            new TestEvent { Id = "123", Data = "consumed" }
+        );
 
         // Assert
-        await WaitForConditionAsync(() => handler.HandledMessages.Count > 0, TimeSpan.FromSeconds(2));
+        await WaitForConditionAsync(
+            () => handler.HandledMessages.Count > 0,
+            TimeSpan.FromSeconds(2)
+        );
         handler.HandledMessages.Should().HaveCount(1);
         handler.HandledMessages[0].Id.Should().Be("123");
     }
@@ -57,17 +63,26 @@ public class ConsumeTests(
             services.AddSingleton<SecondTestEventHandler>(handler2);
             services.AddRatatoskr(bus =>
             {
-                ConfigureBus(bus, QueueName, c => c
-                    .WithHandler<TestEventHandler>()
-                    .WithHandler<SecondTestEventHandler>());
+                ConfigureBus(
+                    bus,
+                    QueueName,
+                    c => c.WithHandler<TestEventHandler>().WithHandler<SecondTestEventHandler>()
+                );
             });
         });
 
         // Act
-        await PublishToRabbitMqAsync(exchange: "", routingKey: QueueName, new TestEvent { Id = "multi", Data = "cast" });
+        await PublishToRabbitMqAsync(
+            exchange: "",
+            routingKey: QueueName,
+            new TestEvent { Id = "multi", Data = "cast" }
+        );
 
         // Assert
-        await WaitForConditionAsync(() => handler1.HandledMessages.Count > 0 && handler2.HandledMessages.Count > 0, TimeSpan.FromSeconds(2));
+        await WaitForConditionAsync(
+            () => handler1.HandledMessages.Count > 0 && handler2.HandledMessages.Count > 0,
+            TimeSpan.FromSeconds(2)
+        );
         handler1.HandledMessages.Should().HaveCount(1);
         handler2.HandledMessages.Should().HaveCount(1);
     }
@@ -88,10 +103,16 @@ public class ConsumeTests(
         });
 
         // Act
-        await PublishBinaryCloudEventAsync(QueueName, new TestEvent { Id = "bin-1", Data = "binary data" });
+        await PublishBinaryCloudEventAsync(
+            QueueName,
+            new TestEvent { Id = "bin-1", Data = "binary data" }
+        );
 
         // Assert
-        await WaitForConditionAsync(() => handler.HandledMessages.Count > 0, TimeSpan.FromSeconds(2));
+        await WaitForConditionAsync(
+            () => handler.HandledMessages.Count > 0,
+            TimeSpan.FromSeconds(2)
+        );
         handler.HandledMessages.Should().HaveCount(1);
         handler.HandledMessages[0].Id.Should().Be("bin-1");
     }
@@ -112,10 +133,16 @@ public class ConsumeTests(
         });
 
         // Act
-        await PublishStructuredCloudEventAsync(QueueName, new TestEvent { Id = "struct-1", Data = "structured data" });
+        await PublishStructuredCloudEventAsync(
+            QueueName,
+            new TestEvent { Id = "struct-1", Data = "structured data" }
+        );
 
         // Assert
-        await WaitForConditionAsync(() => handler.HandledMessages.Count > 0, TimeSpan.FromSeconds(2));
+        await WaitForConditionAsync(
+            () => handler.HandledMessages.Count > 0,
+            TimeSpan.FromSeconds(2)
+        );
         handler.HandledMessages.Should().HaveCount(1);
         handler.HandledMessages[0].Id.Should().Be("struct-1");
     }
@@ -132,28 +159,43 @@ public class ConsumeTests(
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-                bus.AddCommandConsumeChannel(QueueName, c =>
-                {
-                    c.WithRabbitMq(o => o.WithQueueName(QueueName).WithAutoAck(false).WithTransientQueue()
-                        .WithQueueType(QueueType.Classic));
-                    c.Consumes<TestEvent>(h => h.WithHandler<TestEventHandler>(),
-                        m => m.WithSerializer<TestEventPipeMessageSerializer>());
-                });
+                bus.AddCommandConsumeChannel(
+                    QueueName,
+                    c =>
+                    {
+                        c.WithRabbitMq(o =>
+                            o.WithQueueName(QueueName)
+                                .WithAutoAck(false)
+                                .WithTransientQueue()
+                                .WithQueueType(QueueType.Classic)
+                        );
+                        c.Consumes<TestEvent>(
+                            h => h.WithHandler<TestEventHandler>(),
+                            m => m.WithSerializer<TestEventPipeMessageSerializer>()
+                        );
+                    }
+                );
             });
         });
 
         var serializer = new TestEventPipeMessageSerializer();
-        var serializedBody = serializer.Serialize(new TestEvent { Id = "pipe-1", Data = "pipe-data" });
+        var serializedBody = serializer.Serialize(
+            new TestEvent { Id = "pipe-1", Data = "pipe-data" }
+        );
 
         // Act
         await PublishBinaryCloudEventRawAsync(
             QueueName,
             serializedBody,
             contentType: serializer.ContentType,
-            type: "test.event");
+            type: "test.event"
+        );
 
         // Assert
-        await WaitForConditionAsync(() => handler.HandledMessages.Count > 0, TimeSpan.FromSeconds(2));
+        await WaitForConditionAsync(
+            () => handler.HandledMessages.Count > 0,
+            TimeSpan.FromSeconds(2)
+        );
         handler.HandledMessages.Should().HaveCount(1);
         handler.HandledMessages[0].Id.Should().Be("pipe-1");
         handler.HandledMessages[0].Data.Should().Be("pipe-data");
@@ -171,17 +213,29 @@ public class ConsumeTests(
             services.AddSingleton<TestEventHandler>(handler);
             services.AddRatatoskr(bus =>
             {
-                ConfigureBusWithRetry(bus, QueueName, maxRetries: 1, c => c.WithHandler<TestEventHandler>());
+                ConfigureBusWithRetry(
+                    bus,
+                    QueueName,
+                    maxRetries: 1,
+                    c => c.WithHandler<TestEventHandler>()
+                );
             });
         });
 
         // Act - Send a message with an unknown event type
-        await PublishToRabbitMqAsync(exchange: "", routingKey: QueueName,
-            new TestEvent { Id = "unknown", Data = "test" }, type: "unknown.event.type");
+        await PublishToRabbitMqAsync(
+            exchange: "",
+            routingKey: QueueName,
+            new TestEvent { Id = "unknown", Data = "test" },
+            type: "unknown.event.type"
+        );
 
         // Assert - Handler should not be invoked for unknown event types
-        await WaitForConditionAsync(async () => await GetMessageCountAsync(dlqName) > 0,
-            TimeSpan.FromSeconds(5), "Unknown event message did not move to DLQ");
+        await WaitForConditionAsync(
+            async () => await GetMessageCountAsync(dlqName) > 0,
+            TimeSpan.FromSeconds(5),
+            "Unknown event message did not move to DLQ"
+        );
         handler.HandledMessages.Should().BeEmpty();
     }
 
@@ -203,26 +257,38 @@ public class ConsumeTests(
                     o.MaxInboundMessageSize = 10; // Very small limit
                 });
 
-                bus.AddCommandConsumeChannel(QueueName, c =>
-                {
-                    c.WithRabbitMq(o => o
-                        .WithQueueName(QueueName)
-                        .WithAutoAck(false)
-                        .WithRetry(r => r.WithMaxRetries(1).WithDelay(TimeSpan.FromMilliseconds(50)))
-                        .WithTransientQueue()
-                        .WithQueueType(QueueType.Classic));
-                    c.Consumes<TestEvent>(h => h.WithHandler<TestEventHandler>());
-                });
+                bus.AddCommandConsumeChannel(
+                    QueueName,
+                    c =>
+                    {
+                        c.WithRabbitMq(o =>
+                            o.WithQueueName(QueueName)
+                                .WithAutoAck(false)
+                                .WithRetry(r =>
+                                    r.WithMaxRetries(1).WithDelay(TimeSpan.FromMilliseconds(50))
+                                )
+                                .WithTransientQueue()
+                                .WithQueueType(QueueType.Classic)
+                        );
+                        c.Consumes<TestEvent>(h => h.WithHandler<TestEventHandler>());
+                    }
+                );
             });
         });
 
         // Act - Send a message with size > 10 bytes
-        await PublishToRabbitMqAsync(exchange: "", routingKey: QueueName,
-            new TestEvent { Id = "large", Data = "this is a large message" });
+        await PublishToRabbitMqAsync(
+            exchange: "",
+            routingKey: QueueName,
+            new TestEvent { Id = "large", Data = "this is a large message" }
+        );
 
         // Assert - Handler should not be invoked, message goes to DLQ
-        await WaitForConditionAsync(async () => await GetMessageCountAsync(dlqName) > 0,
-            TimeSpan.FromSeconds(5), "Oversized message did not move to DLQ");
+        await WaitForConditionAsync(
+            async () => await GetMessageCountAsync(dlqName) > 0,
+            TimeSpan.FromSeconds(5),
+            "Oversized message did not move to DLQ"
+        );
         handler.HandledMessages.Should().BeEmpty();
     }
 
@@ -237,18 +303,29 @@ public class ConsumeTests(
             services.AddSingleton<ThrowingTestEventHandler>(handler);
             services.AddRatatoskr(bus =>
             {
-                ConfigureBusWithRetry(bus, QueueName, maxRetries: 3, c => c.WithHandler<ThrowingTestEventHandler>());
+                ConfigureBusWithRetry(
+                    bus,
+                    QueueName,
+                    maxRetries: 3,
+                    c => c.WithHandler<ThrowingTestEventHandler>()
+                );
             });
         });
 
         // Act
-        await PublishToRabbitMqAsync(exchange: "", routingKey: QueueName,
-            new TestEvent { Id = "throw-1", Data = "will throw" });
+        await PublishToRabbitMqAsync(
+            exchange: "",
+            routingKey: QueueName,
+            new TestEvent { Id = "throw-1", Data = "will throw" }
+        );
 
         // Assert - Handler is invoked multiple times (message redelivered after nack)
         // This proves the message was NOT acked on the first failure
-        await WaitForConditionAsync(() => handler.ReceivedMessages.Count >= 2, TimeSpan.FromSeconds(5),
-            "Message was not redelivered after handler failure");
+        await WaitForConditionAsync(
+            () => handler.ReceivedMessages.Count >= 2,
+            TimeSpan.FromSeconds(5),
+            "Message was not redelivered after handler failure"
+        );
         handler.ReceivedMessages.Should().AllSatisfy(e => e.Id.Should().Be("throw-1"));
     }
 
@@ -264,12 +341,16 @@ public class ConsumeTests(
         {
             services.AddRatatoskr(bus =>
             {
-                ConfigureBus(bus, QueueName, c => c
-                    .WithHandler<NoOpTestEventHandler>("consume-noop"),
-                    inbox => inbox.WithoutBackgroundProcessing());
+                ConfigureBus(
+                    bus,
+                    QueueName,
+                    c => c.WithHandler<NoOpTestEventHandler>("consume-noop"),
+                    inbox => inbox.WithoutBackgroundProcessing()
+                );
             });
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
         });
 
         await InScopeAsync(async ctx =>
@@ -279,19 +360,24 @@ public class ConsumeTests(
         });
 
         // Act — publish to RabbitMQ, consumer receives and accepts to inbox
-        await PublishToRabbitMqAsync(exchange: "", routingKey: QueueName,
-            new TestEvent { Id = "inbox-rmq-1", Data = "inbox via rmq" });
+        await PublishToRabbitMqAsync(
+            exchange: "",
+            routingKey: QueueName,
+            new TestEvent { Id = "inbox-rmq-1", Data = "inbox via rmq" }
+        );
 
         // Assert — message appears in inbox DB with RabbitMQ transport name
         // Note: InboxMessageEntity.Id is MessageProperties.Id (from BasicProperties.MessageId),
         // NOT TestEvent.Id. We query for any inbox message instead.
         await WaitForConditionAsync(
-            async () => await InScopeAsync(async ctx =>
-            {
-                var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-                return await db.Set<InboxMessageEntity>().AnyAsync();
-            }),
-            TimeSpan.FromSeconds(10));
+            async () =>
+                await InScopeAsync(async ctx =>
+                {
+                    var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                    return await db.Set<InboxMessageEntity>().AnyAsync();
+                }),
+            TimeSpan.FromSeconds(10)
+        );
 
         await InScopeAsync(async ctx =>
         {
@@ -305,37 +391,57 @@ public class ConsumeTests(
         });
     }
 
-    private void ConfigureBus(RatatoskrBuilder bus, string queueName,
+    private void ConfigureBus(
+        RatatoskrBuilder bus,
+        string queueName,
         Action<MessageConsumptionBuilder<TestEvent>> configureHandler,
-        Action<InboxBuilder<TestDbContext>>? configureInbox = null)
+        Action<InboxBuilder<TestDbContext>>? configureInbox = null
+    )
     {
         bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-        bus.AddCommandConsumeChannel(queueName, c =>
-        {
-            c.WithRabbitMq(o => o.WithQueueName(queueName).WithAutoAck(false).WithTransientQueue()
-                .WithQueueType(QueueType.Classic));
-            var channel = c.Consumes<TestEvent>(configureHandler);
-            if (configureInbox != null)
-                channel.UseInbox<TestDbContext>();
-        });
+        bus.AddCommandConsumeChannel(
+            queueName,
+            c =>
+            {
+                c.WithRabbitMq(o =>
+                    o.WithQueueName(queueName)
+                        .WithAutoAck(false)
+                        .WithTransientQueue()
+                        .WithQueueType(QueueType.Classic)
+                );
+                var channel = c.Consumes<TestEvent>(configureHandler);
+                if (configureInbox != null)
+                    channel.UseInbox<TestDbContext>();
+            }
+        );
         if (configureInbox != null)
             bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(configureInbox));
     }
 
-    private void ConfigureBusWithRetry(RatatoskrBuilder bus, string queueName, int maxRetries,
-        Action<MessageConsumptionBuilder<TestEvent>> configureHandler)
+    private void ConfigureBusWithRetry(
+        RatatoskrBuilder bus,
+        string queueName,
+        int maxRetries,
+        Action<MessageConsumptionBuilder<TestEvent>> configureHandler
+    )
     {
         bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-        bus.AddCommandConsumeChannel(queueName, c =>
-        {
-            c.WithRabbitMq(o => o
-                .WithQueueName(queueName)
-                .WithAutoAck(false)
-                .WithRetry(r => r.WithMaxRetries(maxRetries).WithDelay(TimeSpan.FromMilliseconds(50)))
-                .WithTransientQueue()
-                .WithQueueType(QueueType.Classic));
-            c.Consumes<TestEvent>(configureHandler);
-        });
+        bus.AddCommandConsumeChannel(
+            queueName,
+            c =>
+            {
+                c.WithRabbitMq(o =>
+                    o.WithQueueName(queueName)
+                        .WithAutoAck(false)
+                        .WithRetry(r =>
+                            r.WithMaxRetries(maxRetries).WithDelay(TimeSpan.FromMilliseconds(50))
+                        )
+                        .WithTransientQueue()
+                        .WithQueueType(QueueType.Classic)
+                );
+                c.Consumes<TestEvent>(configureHandler);
+            }
+        );
     }
 
     private async Task PublishBinaryCloudEventAsync(string routingKey, TestEvent eventData)
@@ -346,10 +452,16 @@ public class ConsumeTests(
             routingKey,
             body,
             contentType: "application/json",
-            type: "test.event");
+            type: "test.event"
+        );
     }
 
-    private async Task PublishBinaryCloudEventRawAsync(string routingKey, byte[] body, string contentType, string type)
+    private async Task PublishBinaryCloudEventRawAsync(
+        string routingKey,
+        byte[] body,
+        string contentType,
+        string type
+    )
     {
         var factory = new ConnectionFactory { Uri = new Uri(RabbitMqConnectionString) };
         await using var connection = await factory.CreateConnectionAsync();
@@ -357,7 +469,13 @@ public class ConsumeTests(
 
         var props = CreateBinaryCloudEventProperties(contentType, type);
 
-        await channel.BasicPublishAsync(exchange: "", routingKey: routingKey, mandatory: false, basicProperties: props, body: body);
+        await channel.BasicPublishAsync(
+            exchange: "",
+            routingKey: routingKey,
+            mandatory: false,
+            basicProperties: props,
+            body: body
+        );
     }
 
     private static BasicProperties CreateBinaryCloudEventProperties(string contentType, string type)
@@ -370,8 +488,8 @@ public class ConsumeTests(
                 ["cloudEvents_specversion"] = "1.0",
                 ["cloudEvents_type"] = type,
                 ["cloudEvents_source"] = "/test",
-                ["cloudEvents_id"] = Guid.NewGuid().ToString()
-            }
+                ["cloudEvents_id"] = Guid.NewGuid().ToString(),
+            },
         };
     }
 
@@ -388,18 +506,20 @@ public class ConsumeTests(
             source = "/test",
             id = Guid.NewGuid().ToString(),
             datacontenttype = "application/json",
-            data = eventData
+            data = eventData,
         };
 
         var json = System.Text.Json.JsonSerializer.Serialize(cloudEvent);
         var body = Encoding.UTF8.GetBytes(json);
 
-        var props = new BasicProperties
-        {
-            ContentType = "application/cloudevents+json"
-        };
-        
-        await channel.BasicPublishAsync(exchange: "", routingKey: routingKey, mandatory: false, basicProperties: props, body: body);
-    }
+        var props = new BasicProperties { ContentType = "application/cloudevents+json" };
 
+        await channel.BasicPublishAsync(
+            exchange: "",
+            routingKey: routingKey,
+            mandatory: false,
+            basicProperties: props,
+            body: body
+        );
+    }
 }

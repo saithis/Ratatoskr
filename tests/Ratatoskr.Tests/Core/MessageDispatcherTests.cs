@@ -5,9 +5,9 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Ratatoskr.Config;
-using Ratatoskr.Tests.Fixtures;
 using Ratatoskr.Core;
 using Ratatoskr.Serializers.Json;
+using Ratatoskr.Tests.Fixtures;
 using TUnit.Core;
 
 namespace Ratatoskr.Tests.Core;
@@ -28,7 +28,8 @@ public class MessageDispatcherTests
             registry =>
             {
                 registry.Register(CreateTestChannel(typeof(TestEventHandler)));
-            });
+            }
+        );
 
         var testEvent = new TestEvent { Id = "123", Data = "test data" };
         var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testEvent));
@@ -40,7 +41,13 @@ public class MessageDispatcherTests
         };
 
         // Act
-        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
+        var result = await dispatcher.DispatchAsync(
+            body,
+            context,
+            CancellationToken.None,
+            "test",
+            "test"
+        );
 
         // Assert
         result.Should().Be(DispatchResult.Success);
@@ -66,8 +73,11 @@ public class MessageDispatcherTests
             },
             registry =>
             {
-                registry.Register(CreateTestChannel(typeof(TestEventHandler), typeof(SecondTestEventHandler)));
-            });
+                registry.Register(
+                    CreateTestChannel(typeof(TestEventHandler), typeof(SecondTestEventHandler))
+                );
+            }
+        );
 
         var testEvent = new TestEvent { Id = "123", Data = "test data" };
         var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testEvent));
@@ -79,7 +89,13 @@ public class MessageDispatcherTests
         };
 
         // Act
-        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
+        var result = await dispatcher.DispatchAsync(
+            body,
+            context,
+            CancellationToken.None,
+            "test",
+            "test"
+        );
 
         // Assert
         result.Should().Be(DispatchResult.Success);
@@ -109,7 +125,13 @@ public class MessageDispatcherTests
         };
 
         // Act
-        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
+        var result = await dispatcher.DispatchAsync(
+            body,
+            context,
+            CancellationToken.None,
+            "test",
+            "test"
+        );
 
         // Assert
         result.Should().Be(DispatchResult.NoHandlers);
@@ -129,7 +151,8 @@ public class MessageDispatcherTests
             registry =>
             {
                 registry.Register(CreateTestChannel(typeof(TestEventHandler)));
-            });
+            }
+        );
 
         var invalidBody = Encoding.UTF8.GetBytes("not valid json");
         var context = new MessageProperties
@@ -140,7 +163,13 @@ public class MessageDispatcherTests
         };
 
         // Act
-        var result = await dispatcher.DispatchAsync(invalidBody, context, CancellationToken.None, "test", "test");
+        var result = await dispatcher.DispatchAsync(
+            invalidBody,
+            context,
+            CancellationToken.None,
+            "test",
+            "test"
+        );
 
         // Assert
         result.Should().Be(DispatchResult.PermanentError);
@@ -161,7 +190,8 @@ public class MessageDispatcherTests
             registry =>
             {
                 registry.Register(CreateTestChannel(typeof(ThrowingTestEventHandler)));
-            });
+            }
+        );
 
         var testEvent = new TestEvent { Id = "123", Data = "test data" };
         var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testEvent));
@@ -173,7 +203,13 @@ public class MessageDispatcherTests
         };
 
         // Act
-        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
+        var result = await dispatcher.DispatchAsync(
+            body,
+            context,
+            CancellationToken.None,
+            "test",
+            "test"
+        );
 
         // Assert
         result.Should().Be(DispatchResult.RecoverableError);
@@ -196,8 +232,11 @@ public class MessageDispatcherTests
             },
             registry =>
             {
-                registry.Register(CreateTestChannel(typeof(TestEventHandler), typeof(ThrowingTestEventHandler)));
-            });
+                registry.Register(
+                    CreateTestChannel(typeof(TestEventHandler), typeof(ThrowingTestEventHandler))
+                );
+            }
+        );
 
         var testEvent = new TestEvent { Id = "123", Data = "test data" };
         var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testEvent));
@@ -209,7 +248,13 @@ public class MessageDispatcherTests
         };
 
         // Act
-        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
+        var result = await dispatcher.DispatchAsync(
+            body,
+            context,
+            CancellationToken.None,
+            "test",
+            "test"
+        );
 
         // Assert
         result.Should().Be(DispatchResult.RecoverableError);
@@ -231,7 +276,8 @@ public class MessageDispatcherTests
             registry =>
             {
                 registry.Register(CreateTestChannel(typeof(ScopedServiceTestHandler)));
-            });
+            }
+        );
 
         var testEvent = new TestEvent { Id = "123", Data = "test data" };
         var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testEvent));
@@ -265,7 +311,8 @@ public class MessageDispatcherTests
             registry =>
             {
                 registry.Register(CreateTestChannel(typeof(ContextCapturingHandler)));
-            });
+            }
+        );
 
         var testEvent = new TestEvent { Id = "123", Data = "test data" };
         var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testEvent));
@@ -305,7 +352,8 @@ public class MessageDispatcherTests
             registry =>
             {
                 registry.Register(CreateTestChannel(typeof(CancellationAwareTestHandler)));
-            });
+            }
+        );
 
         var testEvent = new TestEvent { Id = "123", Data = "test data" };
         var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testEvent));
@@ -340,7 +388,8 @@ public class MessageDispatcherTests
             registry =>
             {
                 registry.Register(CreateTestChannel(typeof(TestEventHandler)));
-            });
+            }
+        );
 
         var context = new MessageProperties
         {
@@ -350,7 +399,13 @@ public class MessageDispatcherTests
         };
 
         // Act
-        var result = await dispatcher.DispatchAsync(null!, context, CancellationToken.None, "test", "test");
+        var result = await dispatcher.DispatchAsync(
+            null!,
+            context,
+            CancellationToken.None,
+            "test",
+            "test"
+        );
 
         // Assert - null body causes deserialization failure -> PermanentError
         result.Should().Be(DispatchResult.PermanentError);
@@ -359,7 +414,8 @@ public class MessageDispatcherTests
 
     private static MessageDispatcher CreateDispatcher(
         Action<ServiceCollection> configureDi,
-        Action<ChannelRegistry> configureChannels)
+        Action<ChannelRegistry> configureChannels
+    )
     {
         var services = new ServiceCollection();
         configureDi(services);
@@ -375,7 +431,8 @@ public class MessageDispatcherTests
             channelRegistry,
             deserializer,
             [deserializer],
-            provider);
+            provider
+        );
         var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
 
         return new MessageDispatcher(
@@ -385,10 +442,13 @@ public class MessageDispatcherTests
             new HandlerInvoker(scopeFactory),
             TimeProvider.System,
             [],
-            NullLogger<MessageDispatcher>.Instance);
+            NullLogger<MessageDispatcher>.Instance
+        );
     }
 
-    private static MessageDispatcher CreateDispatcher(Action<ChannelRegistry>? configureChannels = null)
+    private static MessageDispatcher CreateDispatcher(
+        Action<ChannelRegistry>? configureChannels = null
+    )
     {
         return CreateDispatcher(_ => { }, configureChannels ?? (_ => { }));
     }
@@ -407,7 +467,8 @@ public class MessageDispatcherTests
             registry =>
             {
                 registry.Register(CreateTestChannel(typeof(TestEventHandler)));
-            });
+            }
+        );
 
         var testEvent = new TestEvent { Id = "123", Data = "test data" };
         var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testEvent));
@@ -420,7 +481,13 @@ public class MessageDispatcherTests
 
         // Act — dispatch to a channel that doesn't exist; type should be resolved via cross-channel fallback
         // but fire-and-forget handlers are looked up by the provided channelName, so no handlers will be found
-        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "unknown-channel", "test");
+        var result = await dispatcher.DispatchAsync(
+            body,
+            context,
+            CancellationToken.None,
+            "unknown-channel",
+            "test"
+        );
 
         // Assert — type was resolved (no PermanentError), but no handlers on "unknown-channel"
         result.Should().Be(DispatchResult.NoHandlers);
@@ -440,7 +507,8 @@ public class MessageDispatcherTests
             registry =>
             {
                 registry.Register(CreateTestChannel(typeof(TestEventHandler)));
-            });
+            }
+        );
 
         var testEvent = new TestEvent { Id = "123", Data = "test data" };
         var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testEvent));
@@ -452,7 +520,13 @@ public class MessageDispatcherTests
         };
 
         // Act
-        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
+        var result = await dispatcher.DispatchAsync(
+            body,
+            context,
+            CancellationToken.None,
+            "test",
+            "test"
+        );
 
         // Assert
         result.Should().Be(DispatchResult.Success);
@@ -473,7 +547,8 @@ public class MessageDispatcherTests
             registry =>
             {
                 registry.Register(CreateTestChannel(typeof(TestEventHandler)));
-            });
+            }
+        );
 
         // Use a unique message ID to avoid capturing activities from other parallel tests
         var testEvent = new TestEvent { Id = "span-ok", Data = "test data" };
@@ -489,11 +564,15 @@ public class MessageDispatcherTests
         using var listener = new ActivityListener
         {
             ShouldListenTo = source => source.Name == RatatoskrDiagnostics.ActivitySourceName,
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) =>
+                ActivitySamplingResult.AllData,
             ActivityStopped = activity =>
             {
-                if (activity.OperationName == "dispatch"
-                    && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString() == "dispatch-span-ok")
+                if (
+                    activity.OperationName == "dispatch"
+                    && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString()
+                        == "dispatch-span-ok"
+                )
                     capturedActivity = activity;
             },
         };
@@ -506,11 +585,23 @@ public class MessageDispatcherTests
         capturedActivity.Should().NotBeNull();
         capturedActivity!.OperationName.Should().Be("dispatch");
         capturedActivity.Kind.Should().Be(ActivityKind.Consumer);
-        capturedActivity.GetTagItem(MessagingSemanticConventions.MessageId).Should().Be("dispatch-span-ok");
+        capturedActivity
+            .GetTagItem(MessagingSemanticConventions.MessageId)
+            .Should()
+            .Be("dispatch-span-ok");
         capturedActivity.GetTagItem(MessagingSemanticConventions.System).Should().Be("ratatoskr");
-        capturedActivity.GetTagItem(MessagingSemanticConventions.DestinationName).Should().Be("test");
-        capturedActivity.GetTagItem(MessagingSemanticConventions.OperationName).Should().Be("dispatch");
-        capturedActivity.GetTagItem(MessagingSemanticConventions.OperationType).Should().Be(MessagingSemanticConventions.OperationTypeProcess);
+        capturedActivity
+            .GetTagItem(MessagingSemanticConventions.DestinationName)
+            .Should()
+            .Be("test");
+        capturedActivity
+            .GetTagItem(MessagingSemanticConventions.OperationName)
+            .Should()
+            .Be("dispatch");
+        capturedActivity
+            .GetTagItem(MessagingSemanticConventions.OperationType)
+            .Should()
+            .Be(MessagingSemanticConventions.OperationTypeProcess);
         capturedActivity.Status.Should().Be(ActivityStatusCode.Unset);
     }
 
@@ -528,29 +619,45 @@ public class MessageDispatcherTests
             registry =>
             {
                 registry.Register(CreateTestChannel(typeof(ThrowingTestEventHandler)));
-            });
+            }
+        );
 
         // Use a unique message ID to avoid capturing activities from other parallel tests
         var testEvent = new TestEvent { Id = "span-err", Data = "test data" };
         var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testEvent));
-        var context = new MessageProperties { Id = "dispatch-span-err", Type = "test.event", Source = "/test" };
+        var context = new MessageProperties
+        {
+            Id = "dispatch-span-err",
+            Type = "test.event",
+            Source = "/test",
+        };
 
         Activity? capturedActivity = null;
         using var listener = new ActivityListener
         {
             ShouldListenTo = source => source.Name == RatatoskrDiagnostics.ActivitySourceName,
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) =>
+                ActivitySamplingResult.AllData,
             ActivityStopped = activity =>
             {
-                if (activity.OperationName == "dispatch"
-                    && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString() == "dispatch-span-err")
+                if (
+                    activity.OperationName == "dispatch"
+                    && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString()
+                        == "dispatch-span-err"
+                )
                     capturedActivity = activity;
             },
         };
         ActivitySource.AddActivityListener(listener);
 
         // Act
-        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
+        var result = await dispatcher.DispatchAsync(
+            body,
+            context,
+            CancellationToken.None,
+            "test",
+            "test"
+        );
 
         // Assert
         result.Should().Be(DispatchResult.RecoverableError);
@@ -563,11 +670,10 @@ public class MessageDispatcherTests
     public async Task DispatchAsync_NullType_SetsActivityErrorStatus()
     {
         // Arrange
-        var dispatcher = CreateDispatcher(
-            registry =>
-            {
-                registry.Register(CreateTestChannel(typeof(TestEventHandler)));
-            });
+        var dispatcher = CreateDispatcher(registry =>
+        {
+            registry.Register(CreateTestChannel(typeof(TestEventHandler)));
+        });
 
         var body = Encoding.UTF8.GetBytes("{}");
         var messageId = $"dispatch-nulltype-{Guid.NewGuid():N}";
@@ -582,18 +688,28 @@ public class MessageDispatcherTests
         using var listener = new ActivityListener
         {
             ShouldListenTo = source => source.Name == RatatoskrDiagnostics.ActivitySourceName,
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) =>
+                ActivitySamplingResult.AllData,
             ActivityStopped = activity =>
             {
-                if (activity.OperationName == "dispatch"
-                    && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString() == messageId)
+                if (
+                    activity.OperationName == "dispatch"
+                    && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString()
+                        == messageId
+                )
                     capturedActivity = activity;
             },
         };
         ActivitySource.AddActivityListener(listener);
 
         // Act
-        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
+        var result = await dispatcher.DispatchAsync(
+            body,
+            context,
+            CancellationToken.None,
+            "test",
+            "test"
+        );
 
         // Assert
         result.Should().Be(DispatchResult.PermanentError);
@@ -606,11 +722,10 @@ public class MessageDispatcherTests
     public async Task DispatchAsync_UnknownType_SetsActivityErrorStatus()
     {
         // Arrange
-        var dispatcher = CreateDispatcher(
-            registry =>
-            {
-                registry.Register(CreateTestChannel(typeof(TestEventHandler)));
-            });
+        var dispatcher = CreateDispatcher(registry =>
+        {
+            registry.Register(CreateTestChannel(typeof(TestEventHandler)));
+        });
 
         var body = Encoding.UTF8.GetBytes("{}");
         var messageId = $"dispatch-unknowntype-{Guid.NewGuid():N}";
@@ -625,18 +740,28 @@ public class MessageDispatcherTests
         using var listener = new ActivityListener
         {
             ShouldListenTo = source => source.Name == RatatoskrDiagnostics.ActivitySourceName,
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) =>
+                ActivitySamplingResult.AllData,
             ActivityStopped = activity =>
             {
-                if (activity.OperationName == "dispatch"
-                    && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString() == messageId)
+                if (
+                    activity.OperationName == "dispatch"
+                    && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString()
+                        == messageId
+                )
                     capturedActivity = activity;
             },
         };
         ActivitySource.AddActivityListener(listener);
 
         // Act
-        var result = await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
+        var result = await dispatcher.DispatchAsync(
+            body,
+            context,
+            CancellationToken.None,
+            "test",
+            "test"
+        );
 
         // Assert
         result.Should().Be(DispatchResult.NoHandlers);
@@ -659,7 +784,8 @@ public class MessageDispatcherTests
             registry =>
             {
                 registry.Register(CreateTestChannel(typeof(TestEventHandler)));
-            });
+            }
+        );
 
         var invalidBody = Encoding.UTF8.GetBytes("not valid json");
         var messageId = $"dispatch-deserr-{Guid.NewGuid():N}";
@@ -674,18 +800,28 @@ public class MessageDispatcherTests
         using var listener = new ActivityListener
         {
             ShouldListenTo = source => source.Name == RatatoskrDiagnostics.ActivitySourceName,
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) =>
+                ActivitySamplingResult.AllData,
             ActivityStopped = activity =>
             {
-                if (activity.OperationName == "dispatch"
-                    && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString() == messageId)
+                if (
+                    activity.OperationName == "dispatch"
+                    && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString()
+                        == messageId
+                )
                     capturedActivity = activity;
             },
         };
         ActivitySource.AddActivityListener(listener);
 
         // Act
-        var result = await dispatcher.DispatchAsync(invalidBody, context, CancellationToken.None, "test", "test");
+        var result = await dispatcher.DispatchAsync(
+            invalidBody,
+            context,
+            CancellationToken.None,
+            "test",
+            "test"
+        );
 
         // Assert
         result.Should().Be(DispatchResult.PermanentError);
@@ -699,7 +835,10 @@ public class MessageDispatcherTests
         return CreateTestChannel("test", handlerTypes);
     }
 
-    private static ChannelRegistration CreateTestChannel(string channelName, params Type[] handlerTypes)
+    private static ChannelRegistration CreateTestChannel(
+        string channelName,
+        params Type[] handlerTypes
+    )
     {
         var channel = new ChannelRegistration(channelName, ChannelType.EventConsume);
         var msgReg = new MessageRegistration(typeof(TestEvent), "test.event");

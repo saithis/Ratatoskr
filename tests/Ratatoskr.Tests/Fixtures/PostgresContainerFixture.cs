@@ -10,8 +10,9 @@ namespace Ratatoskr.Tests.Fixtures;
 public class PostgresContainerFixture : IAsyncInitializer, IAsyncDisposable
 {
     private PostgreSqlContainer? _container;
-    
-    public string ConnectionString => _container?.GetConnectionString() 
+
+    public string ConnectionString =>
+        _container?.GetConnectionString()
         ?? throw new InvalidOperationException("Container not initialized");
 
     public async Task InitializeAsync()
@@ -22,7 +23,7 @@ public class PostgresContainerFixture : IAsyncInitializer, IAsyncDisposable
             .WithPassword("testpass")
             .WithCommand("-c", "max_connections=300")
             .Build();
-            
+
         await _container.StartAsync();
     }
 
