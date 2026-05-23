@@ -16,13 +16,19 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.5" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.5" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.5" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.5" />
+    <PackageVersion
+      Include="Microsoft.Extensions.DependencyInjection.Abstractions"
+      Version="10.0.5"
+    />
     <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.5" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.5" />
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.4.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
     <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.5" />
-    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.5" />
+    <PackageVersion
+      Include="Microsoft.Extensions.Options.ConfigurationExtensions"
+      Version="10.0.5"
+    />
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.4.0" />
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.4.0" />
     <PackageVersion Include="MinVer" Version="7.0.0" />
@@ -37,5 +43,11 @@
     <PackageVersion Include="Testcontainers.RabbitMq" Version="4.11.0" />
     <PackageVersion Include="TUnit" Version="1.32.0" />
     <PackageVersion Include="Verify.TUnit" Version="31.15.0" />
+    <PackageVersion Include="StyleCop.Analyzers" Version="1.2.0-beta.556" />
+    <PackageVersion Include="IDisposableAnalyzers" Version="4.0.8" />
+    <PackageVersion Include="Roslynator.Analyzers" Version="4.13.0" />
+    <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="17.13.2" />
+    <PackageVersion Include="AsyncUsageAnalyzers" Version="1.0.0-alpha003" />
+    <PackageVersion Include="Roslyn.Analyzers" Version="1.0.3.4" />
   </ItemGroup>
 </Project>

@@ -15,8 +15,46 @@
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
-  
+
   <ItemGroup>
-    <None Include="$(MSBuildThisFileDirectory)images/icon.png" Pack="true" PackagePath="\" Condition="'$(IsPackable)' == 'true' and Exists('$(MSBuildThisFileDirectory)images/icon.png')" />
+    <None
+      Include="$(MSBuildThisFileDirectory)images/icon.png"
+      Pack="true"
+      PackagePath="\"
+      Condition="'$(IsPackable)' == 'true' and Exists('$(MSBuildThisFileDirectory)images/icon.png')"
+    />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectExtension)' == '.csproj'">
+    <PackageReference
+      Include="StyleCop.Analyzers"
+      PrivateAssets="all"
+      IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive"
+    />
+    <PackageReference
+      Include="IDisposableAnalyzers"
+      PrivateAssets="all"
+      IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive"
+    />
+    <PackageReference
+      Include="Roslynator.Analyzers"
+      PrivateAssets="all"
+      IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive"
+    />
+    <PackageReference
+      Include="Microsoft.VisualStudio.Threading.Analyzers"
+      PrivateAssets="all"
+      IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive"
+    />
+    <PackageReference
+      Include="AsyncUsageAnalyzers"
+      PrivateAssets="all"
+      IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive"
+    />
+    <PackageReference
+      Include="Roslyn.Analyzers"
+      PrivateAssets="all"
+      IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive"
+    />
   </ItemGroup>
 </Project>

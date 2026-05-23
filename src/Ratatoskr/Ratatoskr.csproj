@@ -4,15 +4,12 @@
     <PackageTags>cloudevents;eventbus;messaging</PackageTags>
     <IsPackable>true</IsPackable>
   </PropertyGroup>
-
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
-
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
-
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="MinVer">
@@ -20,10 +17,36 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
   </ItemGroup>
-
   <ItemGroup>
     <InternalsVisibleTo Include="Ratatoskr.Tests" />
     <InternalsVisibleTo Include="Ratatoskr.RabbitMq" />
     <InternalsVisibleTo Include="Ratatoskr.EfCore" />
   </ItemGroup>
+  <Target
+    Name="Husky"
+    AfterTargets="Restore"
+    Condition="'$(HUSKY)' != 0"
+    Inputs="../../.config/dotnet-tools.json"
+    Outputs="../../.husky/_/install.stamp"
+  >
+    <Exec
+      Command="dotnet tool restore"
+      StandardOutputImportance="Low"
+      StandardErrorImportance="High"
+    />
+    <Exec
+      Command="dotnet husky install"
+      StandardOutputImportance="Low"
+      StandardErrorImportance="High"
+      WorkingDirectory="../.."
+    />
+    <Touch
+      Files="../../.husky/_/install.stamp"
+      AlwaysCreate="true"
+      Condition="Exists('../../.husky/_')"
+    />
+    <ItemGroup>
+      <FileWrites Include="../../.husky/_/install.stamp" />
+    </ItemGroup>
+  </Target>
 </Project>
