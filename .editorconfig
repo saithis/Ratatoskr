@@ -3213,3 +3213,41 @@ dotnet_diagnostic.SYSLIB5003.severity = error
 
 # CS9035 - should be warning or error
 dotnet_diagnostic.CS9035.severity = none
+
+# =====================================================================
+# Strict Project Configuration - Suppressing Noisy/Formatting Rules
+# =====================================================================
+
+[*.{cs,vb}]
+
+# Disable prefixing local calls with 'this.' (SA1101)
+dotnet_diagnostic.SA1101.severity = none
+
+# Disable file header requirements (SA1633)
+dotnet_diagnostic.SA1633.severity = none
+
+# Disable string localization requirements (CA1303)
+dotnet_diagnostic.CA1303.severity = none
+
+# Disable empty string.Empty enforcement (SA1122)
+dotnet_diagnostic.SA1122.severity = none
+
+# Disable pedantic XML Documentation rules (Keep CS1591 for public APIs, suppress rigid style)
+dotnet_diagnostic.SA1600.severity = none # Elements must be documented
+dotnet_diagnostic.SA1623.severity = none # Property summary must begin with 'Gets or sets'
+dotnet_diagnostic.SA1642.severity = none # Constructor summary must begin with standard text
+dotnet_diagnostic.SA1629.severity = none # Summary must end with a period
+dotnet_diagnostic.SA1611.severity = none # Parameter documentation missing
+dotnet_diagnostic.SA1615.severity = none # Return value documentation missing
+dotnet_diagnostic.SA1618.severity = none # Type parameter documentation missing
+dotnet_diagnostic.RCS1141.severity = none # Roslynator missing param doc
+dotnet_diagnostic.RCS1142.severity = none # Roslynator missing typeparam doc
+
+# Disable member ordering rules (Let formatter handle layout)
+dotnet_diagnostic.SA1201.severity = none # Element ordering
+dotnet_diagnostic.SA1202.severity = none # Access modifier ordering
+dotnet_diagnostic.SA1204.severity = none # Static/Instance ordering
+
+# Disable spacing/formatting rules to avoid conflict with CSharpier
+dotnet_diagnostic.SA1513.severity = none # Closing brace followed by blank line
+dotnet_diagnostic.SA1519.severity = none # Braces around multi-line child statements
