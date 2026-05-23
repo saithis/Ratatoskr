@@ -9,8 +9,10 @@ using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Inbox;
 
-public class InboxBatchAndEndToEndTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
-    : InboxTestBase(rabbitMq, postgres)
+public class InboxBatchAndEndToEndTests(
+    RabbitMqContainerFixture rabbitMq,
+    PostgresContainerFixture postgres
+) : InboxTestBase(rabbitMq, postgres)
 {
     [Test]
     public async Task Inbox_AccumulatedMessages_ProcessedAfterManualTrigger()
@@ -22,15 +24,24 @@ public class InboxBatchAndEndToEndTests(RabbitMqContainerFixture rabbitMq, Postg
             services.AddSingleton<TimeProvider>(fakeTime);
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
-                    .UseInbox<TestDbContext>());
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox => inbox.WithoutBackgroundProcessing()));
+                bus.AddEventPublishChannel(
+                    "inbox-events",
+                    c => c.WithEfCore().Produces<TestEvent>()
+                );
+                bus.AddEventConsumeChannel(
+                    "inbox-events",
+                    c =>
+                        c.Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
+                            .UseInbox<TestDbContext>()
+                );
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseInbox(inbox => inbox.WithoutBackgroundProcessing())
+                );
             });
 
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
         });
 
         await InitializeDatabase();
@@ -43,7 +54,8 @@ public class InboxBatchAndEndToEndTests(RabbitMqContainerFixture rabbitMq, Postg
                 var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
                 await bus.PublishDirectAsync(
                     new TestEvent { Id = $"business-accum-{i}" },
-                    new MessageProperties { Id = $"accum-{i}" });
+                    new MessageProperties { Id = $"accum-{i}" }
+                );
             });
         }
 
@@ -85,19 +97,28 @@ public class InboxBatchAndEndToEndTests(RabbitMqContainerFixture rabbitMq, Postg
             services.AddSingleton<TimeProvider>(fakeTime);
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
-                    .UseInbox<TestDbContext>());
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox =>
+                bus.AddEventPublishChannel(
+                    "inbox-events",
+                    c => c.WithEfCore().Produces<TestEvent>()
+                );
+                bus.AddEventConsumeChannel(
+                    "inbox-events",
+                    c =>
+                        c.Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
+                            .UseInbox<TestDbContext>()
+                );
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseInbox(inbox =>
                     {
                         inbox.WithBatchSize(3);
                         inbox.WithoutBackgroundProcessing();
-                    }));
+                    })
+                );
             });
 
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
         });
 
         await InitializeDatabase();
@@ -110,7 +131,8 @@ public class InboxBatchAndEndToEndTests(RabbitMqContainerFixture rabbitMq, Postg
                 var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
                 await bus.PublishDirectAsync(
                     new TestEvent { Id = $"business-batch-{i}" },
-                    new MessageProperties { Id = $"batch-{i}" });
+                    new MessageProperties { Id = $"batch-{i}" }
+                );
             });
         }
 
@@ -145,19 +167,28 @@ public class InboxBatchAndEndToEndTests(RabbitMqContainerFixture rabbitMq, Postg
             services.AddSingleton<TimeProvider>(fakeTime);
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
-                    .UseInbox<TestDbContext>());
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox =>
+                bus.AddEventPublishChannel(
+                    "inbox-events",
+                    c => c.WithEfCore().Produces<TestEvent>()
+                );
+                bus.AddEventConsumeChannel(
+                    "inbox-events",
+                    c =>
+                        c.Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
+                            .UseInbox<TestDbContext>()
+                );
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseInbox(inbox =>
                     {
                         inbox.WithStuckMessageThreshold(TimeSpan.FromMinutes(5));
                         inbox.WithoutBackgroundProcessing();
-                    }));
+                    })
+                );
             });
 
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
         });
 
         await InitializeDatabase();
@@ -176,8 +207,16 @@ public class InboxBatchAndEndToEndTests(RabbitMqContainerFixture rabbitMq, Postg
             var body = serializer.Serialize(testEvent);
             var props = new MessageProperties { Id = messageId, Type = "test.event" };
 
-            db.Set<InboxMessageEntity>().Add(
-                InboxMessageEntity.Create(messageId, EfCoreTransportConstants.TransportName, body, props, timeProvider));
+            db.Set<InboxMessageEntity>()
+                .Add(
+                    InboxMessageEntity.Create(
+                        messageId,
+                        EfCoreTransportConstants.TransportName,
+                        body,
+                        props,
+                        timeProvider
+                    )
+                );
 
             var status = InboxHandlerStatusEntity.Create(messageId, "handler-a", timeProvider);
             status.MarkAsProcessing(timeProvider); // Simulate in-progress at startTime
@@ -192,8 +231,13 @@ public class InboxBatchAndEndToEndTests(RabbitMqContainerFixture rabbitMq, Postg
         // Processing with stuck detection: too recent, should NOT be picked up
         await InScopeAsync(async ctx =>
         {
-            var processed = await ProcessInboxAsync(ctx.ServiceProvider, includeStuckDetection: true);
-            processed.Should().Be(0, "handler started only 1 minute ago — not yet considered stuck");
+            var processed = await ProcessInboxAsync(
+                ctx.ServiceProvider,
+                includeStuckDetection: true
+            );
+            processed
+                .Should()
+                .Be(0, "handler started only 1 minute ago — not yet considered stuck");
         });
 
         // Advance to 6 minutes since ProcessingStartedAt — past the 5-minute threshold
@@ -202,7 +246,10 @@ public class InboxBatchAndEndToEndTests(RabbitMqContainerFixture rabbitMq, Postg
         // Processing with stuck detection: old enough, should be picked up and completed
         await InScopeAsync(async ctx =>
         {
-            var processed = await ProcessInboxAsync(ctx.ServiceProvider, includeStuckDetection: true);
+            var processed = await ProcessInboxAsync(
+                ctx.ServiceProvider,
+                includeStuckDetection: true
+            );
             processed.Should().Be(1);
         });
 
@@ -210,7 +257,9 @@ public class InboxBatchAndEndToEndTests(RabbitMqContainerFixture rabbitMq, Postg
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var status = await db.Set<InboxHandlerStatusEntity>().SingleAsync();
-            status.CompletedAt.Should().NotBeNull("stuck handler should have been re-processed and completed");
+            status
+                .CompletedAt.Should()
+                .NotBeNull("stuck handler should have been re-processed and completed");
         });
     }
 
@@ -223,18 +272,30 @@ public class InboxBatchAndEndToEndTests(RabbitMqContainerFixture rabbitMq, Postg
         {
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("inbox-handler"))
-                    .UseInbox<TestDbContext>());
-                bus.AddEfCoreDurability<TestDbContext>(d => { d.UseInbox(); d.UseOutbox(); });
+                bus.AddEventPublishChannel(
+                    "inbox-events",
+                    c => c.WithEfCore().Produces<TestEvent>()
+                );
+                bus.AddEventConsumeChannel(
+                    "inbox-events",
+                    c =>
+                        c.Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("inbox-handler"))
+                            .UseInbox<TestDbContext>()
+                );
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                {
+                    d.UseInbox();
+                    d.UseOutbox();
+                });
             });
 
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-            {
-                opts.UseNpgsql(PostgresConnectionString);
-                opts.RegisterOutbox<TestDbContext>(sp);
-            });
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) =>
+                {
+                    opts.UseNpgsql(PostgresConnectionString);
+                    opts.RegisterOutbox<TestDbContext>(sp);
+                }
+            );
         });
 
         await InitializeDatabase();
@@ -249,14 +310,16 @@ public class InboxBatchAndEndToEndTests(RabbitMqContainerFixture rabbitMq, Postg
 
         // Wait for InboxProcessor to pick up the directly-created entries and complete the handler
         await WaitForConditionAsync(
-            async () => await InScopeAsync(async ctx =>
-            {
-                var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-                var status = await db.Set<InboxHandlerStatusEntity>()
-                    .SingleOrDefaultAsync(s => s.HandlerKey == "inbox-handler");
-                return status?.CompletedAt != null;
-            }),
-            TimeSpan.FromSeconds(20));
+            async () =>
+                await InScopeAsync(async ctx =>
+                {
+                    var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                    var status = await db.Set<InboxHandlerStatusEntity>()
+                        .SingleOrDefaultAsync(s => s.HandlerKey == "inbox-handler");
+                    return status?.CompletedAt != null;
+                }),
+            TimeSpan.FromSeconds(20)
+        );
 
         await InScopeAsync(async ctx =>
         {
@@ -264,7 +327,9 @@ public class InboxBatchAndEndToEndTests(RabbitMqContainerFixture rabbitMq, Postg
 
             // Same-DbContext optimization: no outbox entry created for efcore transport
             var outboxMessages = await db.Set<OutboxMessageEntity>().ToListAsync();
-            outboxMessages.Should().BeEmpty("same-DbContext optimization skips outbox for efcore transport");
+            outboxMessages
+                .Should()
+                .BeEmpty("same-DbContext optimization skips outbox for efcore transport");
 
             var inboxMsg = await db.Set<InboxMessageEntity>().SingleAsync();
             inboxMsg.TransportName.Should().Be("efcore");

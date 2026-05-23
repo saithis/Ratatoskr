@@ -78,7 +78,8 @@ public class RabbitMqChannelOptions
     /// <summary>
     /// Additional queue arguments passed to RabbitMQ on queue declaration.
     /// </summary>
-    public IDictionary<string, object?> QueueArguments { get; private set; } = new Dictionary<string, object?>();
+    public IDictionary<string, object?> QueueArguments { get; private set; } =
+        new Dictionary<string, object?>();
 
     // ── Retry ────────────────────────────────────────────────────────
 
@@ -163,7 +164,10 @@ public class RabbitMqChannelOptions
     {
         if (concurrencyLimit == 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(concurrencyLimit), "Concurrency limit must be greater than zero.");
+            throw new ArgumentOutOfRangeException(
+                nameof(concurrencyLimit),
+                "Concurrency limit must be greater than zero."
+            );
         }
 
         ConcurrencyLimit = concurrencyLimit;
@@ -229,7 +233,8 @@ public class RabbitMqChannelOptions
     public RabbitMqChannelOptions WithRetry(int maxRetries, TimeSpan? delay = null)
     {
         Retry.WithMaxRetries(maxRetries);
-        if (delay.HasValue) Retry.WithDelay(delay.Value);
+        if (delay.HasValue)
+            Retry.WithDelay(delay.Value);
         return this;
     }
 }

@@ -14,7 +14,10 @@ public class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposab
     /// </summary>
     public bool IsConnected => _connection is { IsOpen: true };
 
-    public async Task<IChannel> CreateChannelAsync(bool enablePublisherConfirms, CancellationToken cancellationToken = default)
+    public async Task<IChannel> CreateChannelAsync(
+        bool enablePublisherConfirms,
+        CancellationToken cancellationToken = default
+    )
     {
         var connection = await GetOrCreateConnectionAsync(cancellationToken);
 
@@ -35,7 +38,10 @@ public class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposab
     /// and automatically recreated if the previous one was closed.
     /// Callers must NOT dispose the returned channel.
     /// </summary>
-    public async Task<IChannel> GetOrCreateSendChannelAsync(bool enablePublisherConfirms, CancellationToken cancellationToken = default)
+    public async Task<IChannel> GetOrCreateSendChannelAsync(
+        bool enablePublisherConfirms,
+        CancellationToken cancellationToken = default
+    )
     {
         if (_sendChannel is { IsOpen: true })
             return _sendChannel;
@@ -60,11 +66,16 @@ public class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposab
                     publisherConfirmationsEnabled: true,
                     publisherConfirmationTrackingEnabled: true
                 );
-                _sendChannel = await connection.CreateChannelAsync(channelOptions, cancellationToken);
+                _sendChannel = await connection.CreateChannelAsync(
+                    channelOptions,
+                    cancellationToken
+                );
             }
             else
             {
-                _sendChannel = await connection.CreateChannelAsync(cancellationToken: cancellationToken);
+                _sendChannel = await connection.CreateChannelAsync(
+                    cancellationToken: cancellationToken
+                );
             }
 
             return _sendChannel;
@@ -100,7 +111,8 @@ public class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposab
     {
         if (options.ConnectionString is null)
             throw new InvalidOperationException(
-                "RabbitMQ connection string is not configured. Set RabbitMqOptions.ConnectionString.");
+                "RabbitMQ connection string is not configured. Set RabbitMqOptions.ConnectionString."
+            );
 
         return new ConnectionFactory
         {

@@ -16,12 +16,18 @@ internal class InboxTelemetry
         ActivityContext.TryParse(props.TraceParent, props.TraceState, out var parentContext);
 
         var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
-            "deliver inbox", ActivityKind.Consumer, parentContext);
+            "deliver inbox",
+            ActivityKind.Consumer,
+            parentContext
+        );
 
         if (activity != null)
         {
             activity.SetTag(MessagingSemanticConventions.OperationName, "deliver");
-            activity.SetTag(MessagingSemanticConventions.OperationType, MessagingSemanticConventions.OperationTypeProcess);
+            activity.SetTag(
+                MessagingSemanticConventions.OperationType,
+                MessagingSemanticConventions.OperationTypeProcess
+            );
             activity.SetTag(MessagingSemanticConventions.System, "ratatoskr");
             activity.SetTag(MessagingSemanticConventions.MessageId, props.Id);
             activity.SetTag("ratatoskr.inbox.handler.key", handlerKey);
@@ -37,7 +43,10 @@ internal class InboxTelemetry
 
     public void RecordDelivered(bool success)
     {
-        RatatoskrDiagnostics.InboxDeliverCount.Add(1, new TagList { { "status", success ? "success" : "failure" } });
+        RatatoskrDiagnostics.InboxDeliverCount.Add(
+            1,
+            new TagList { { "status", success ? "success" : "failure" } }
+        );
     }
 
     public void RecordPoisoned()
@@ -47,6 +56,8 @@ internal class InboxTelemetry
 
     public void RecordBatchDuration(long startTimestamp)
     {
-        RatatoskrDiagnostics.InboxProcessDuration.Record(Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds);
+        RatatoskrDiagnostics.InboxProcessDuration.Record(
+            Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds
+        );
     }
 }

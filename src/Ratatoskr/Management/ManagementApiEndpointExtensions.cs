@@ -21,26 +21,30 @@ public static class ManagementApiEndpointExtensions
     public static IEndpointRouteBuilder MapRatatoskrManagementApi(
         this IEndpointRouteBuilder endpoints,
         string policyName,
-        string basePath = DefaultBasePath)
+        string basePath = DefaultBasePath
+    )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(policyName);
         ArgumentException.ThrowIfNullOrWhiteSpace(basePath);
 
-        var configurators = endpoints.ServiceProvider
-            .GetServices<IRatatoskrEndpointConfigurator>()
+        var configurators = endpoints
+            .ServiceProvider.GetServices<IRatatoskrEndpointConfigurator>()
             .ToList();
 
         // No transport registered any management endpoints — nothing to map.
         // Safe for hosts that conditionally include Ratatoskr durability.
-        if (configurators.Count == 0) return endpoints;
+        if (configurators.Count == 0)
+            return endpoints;
 
         // Validate the policy exists at startup rather than at first request.
-        var authOptions = endpoints.ServiceProvider
-            .GetRequiredService<IOptions<AuthorizationOptions>>().Value;
+        var authOptions = endpoints
+            .ServiceProvider.GetRequiredService<IOptions<AuthorizationOptions>>()
+            .Value;
         if (authOptions.GetPolicy(policyName) is null)
             throw new InvalidOperationException(
-                $"Authorization policy '{policyName}' is not registered. " +
-                "Call services.AddAuthorization() and define the policy before calling MapRatatoskrManagementApi.");
+                $"Authorization policy '{policyName}' is not registered. "
+                    + "Call services.AddAuthorization() and define the policy before calling MapRatatoskrManagementApi."
+            );
 
         var group = endpoints
             .MapGroup(basePath)

@@ -13,7 +13,8 @@ internal static class InboxConfigurationValidator
     public static void Validate(
         ChannelRegistry channelRegistry,
         ChannelHandlerRegistry handlerRegistry,
-        ConsumeChannelInboxPolicyAggregator? policyAggregator = null)
+        ConsumeChannelInboxPolicyAggregator? policyAggregator = null
+    )
     {
         foreach (var channel in channelRegistry.GetConsumeChannels())
         {
@@ -25,9 +26,10 @@ internal static class InboxConfigurationValidator
             {
                 var firstHandler = inboxHandlers[0];
                 throw new InvalidOperationException(
-                    $"Channel '{channel.ChannelName}' has inbox handler '{firstHandler.InboxKey}' " +
-                    $"but does not have UseInbox<TDbContext>() configured. " +
-                    $"Either add UseInbox<TDbContext>() to the channel or move fire-and-forget handlers to a separate channel without UseInbox.");
+                    $"Channel '{channel.ChannelName}' has inbox handler '{firstHandler.InboxKey}' "
+                        + $"but does not have UseInbox<TDbContext>() configured. "
+                        + $"Either add UseInbox<TDbContext>() to the channel or move fire-and-forget handlers to a separate channel without UseInbox."
+                );
             }
 
             if (inboxConfig == null && inboxHandlers.Count == 0)
@@ -41,10 +43,11 @@ internal static class InboxConfigurationValidator
                     if (!handler.IsInbox)
                     {
                         throw new InvalidOperationException(
-                            $"Channel '{channel.ChannelName}' has UseInbox<TDbContext>() configured, " +
-                            $"but handler '{handler.HandlerType.Name}' was registered without a stable key. " +
-                            $"Provide a key via WithHandler<THandler>(\"key\") for inbox processing, " +
-                            $"or move fire-and-forget handlers to a separate channel without UseInbox.");
+                            $"Channel '{channel.ChannelName}' has UseInbox<TDbContext>() configured, "
+                                + $"but handler '{handler.HandlerType.Name}' was registered without a stable key. "
+                                + $"Provide a key via WithHandler<THandler>(\"key\") for inbox processing, "
+                                + $"or move fire-and-forget handlers to a separate channel without UseInbox."
+                        );
                     }
                 }
             }
@@ -57,17 +60,21 @@ internal static class InboxConfigurationValidator
         {
             if (string.IsNullOrWhiteSpace(handler.InboxKey))
                 throw new InvalidOperationException(
-                    $"Inbox handler for '{handler.HandlerType.Name}' has an empty stable key. " +
-                    $"Provide a non-empty key via Consumes<TMsg>(m => m.WithHandler<THandler>(\"key\")).");
+                    $"Inbox handler for '{handler.HandlerType.Name}' has an empty stable key. "
+                        + $"Provide a non-empty key via Consumes<TMsg>(m => m.WithHandler<THandler>(\"key\"))."
+                );
         }
     }
 
     private static void ValidateChannelInboxRequirement(
         ChannelRegistration channel,
-        ConsumeChannelInboxPolicyAggregator? policyAggregator)
+        ConsumeChannelInboxPolicyAggregator? policyAggregator
+    )
     {
-        if (policyAggregator == null ||
-            policyAggregator.EffectiveRequirement == ConsumeChannelInboxRequirement.None)
+        if (
+            policyAggregator == null
+            || policyAggregator.EffectiveRequirement == ConsumeChannelInboxRequirement.None
+        )
             return;
 
         var isOptedOut = channel.GetExtension<ConsumeChannelInboxRequirementOptOut>() != null;
@@ -75,8 +82,8 @@ internal static class InboxConfigurationValidator
             return;
 
         var message =
-            $"Channel '{channel.ChannelName}' does not have UseInbox<TDbContext>() configured. " +
-            $"Either add UseInbox<TDbContext>() to the channel or explicitly opt out with AllowConsumeWithoutInbox().";
+            $"Channel '{channel.ChannelName}' does not have UseInbox<TDbContext>() configured. "
+            + $"Either add UseInbox<TDbContext>() to the channel or explicitly opt out with AllowConsumeWithoutInbox().";
 
         if (policyAggregator.EffectiveRequirement == ConsumeChannelInboxRequirement.Fail)
             throw new InvalidOperationException(message);
@@ -85,12 +92,14 @@ internal static class InboxConfigurationValidator
     }
 
     private static IEnumerable<ChannelHandlerRegistration> GetAllHandlersForChannel(
-        ChannelRegistration channel)
+        ChannelRegistration channel
+    )
     {
         foreach (var message in channel.Messages)
         {
             var handlerRegs = message.GetExtension<MessageHandlerRegistrations>();
-            if (handlerRegs == null) continue;
+            if (handlerRegs == null)
+                continue;
 
             foreach (var handler in handlerRegs.Handlers)
                 yield return handler;

@@ -32,7 +32,8 @@ public class ActivityTracker
     /// <summary>
     /// Adds a wait condition: wait for a message of type T at the specified stage.
     /// </summary>
-    public ActivityTracker WaitForMessage<T>(MessageStage stage = MessageStage.Dispatched) where T : notnull
+    public ActivityTracker WaitForMessage<T>(MessageStage stage = MessageStage.Dispatched)
+        where T : notnull
     {
         _waitConditions.Add(new WaitCondition(typeof(T), stage));
         return this;
@@ -57,10 +58,14 @@ public class ActivityTracker
             {
                 var waitTasks = conditions.Select(wc =>
                     _tracker.WaitForAsync(
-                        a => a.Stage == wc.Stage
-                             && MessageTracker.ExtractTraceId(a.Properties.TraceParent) == session.TraceId
-                             && MessageTypeMatcher.Matches(a, wc.MessageType),
-                        _timeout));
+                        a =>
+                            a.Stage == wc.Stage
+                            && MessageTracker.ExtractTraceId(a.Properties.TraceParent)
+                                == session.TraceId
+                            && MessageTypeMatcher.Matches(a, wc.MessageType),
+                        _timeout
+                    )
+                );
 
                 await Task.WhenAll(waitTasks);
             }
@@ -80,13 +85,16 @@ public class ActivityTracker
     public async Task<MessageTrackingSession> PublishAndWaitAsync<T>(
         T message,
         MessageProperties? props = null,
-        CancellationToken cancellationToken = default) where T : notnull
+        CancellationToken cancellationToken = default
+    )
+        where T : notnull
     {
         if (_waitConditions.Count > 0)
         {
             throw new InvalidOperationException(
-                "PublishAndWaitAsync always waits for MessageStage.Dispatched and ignores WaitForMessage conditions. " +
-                "Use ExecuteAndWaitAsync to apply custom wait conditions, or remove WaitForMessage calls.");
+                "PublishAndWaitAsync always waits for MessageStage.Dispatched and ignores WaitForMessage conditions. "
+                    + "Use ExecuteAndWaitAsync to apply custom wait conditions, or remove WaitForMessage calls."
+            );
         }
 
         var session = new MessageTrackingSession(_tracker, _timeout);
@@ -97,11 +105,13 @@ public class ActivityTracker
             await bus.PublishDirectAsync(message, props, cancellationToken);
 
             await _tracker.WaitForAsync(
-                a => a.Stage == MessageStage.Dispatched
-                     && MessageTracker.ExtractTraceId(a.Properties.TraceParent) == session.TraceId
-                     && MessageTypeMatcher.Matches<T>(a),
+                a =>
+                    a.Stage == MessageStage.Dispatched
+                    && MessageTracker.ExtractTraceId(a.Properties.TraceParent) == session.TraceId
+                    && MessageTypeMatcher.Matches<T>(a),
                 _timeout,
-                cancellationToken);
+                cancellationToken
+            );
 
             return session;
         }

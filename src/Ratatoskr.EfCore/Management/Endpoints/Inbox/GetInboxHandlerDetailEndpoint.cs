@@ -23,10 +23,14 @@ internal static class GetInboxHandlerDetailEndpoint
         Guid handlerStatusId,
         EfCoreManagementDbContextLookup lookup,
         ILoggerFactory loggerFactory,
-        CancellationToken ct)
+        CancellationToken ct
+    )
     {
         var logger = loggerFactory.CreateLogger(typeof(GetInboxHandlerDetailEndpoint).FullName!);
-        if (ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is { } resolveError)
+        if (
+            ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
+            { } resolveError
+        )
             return resolveError;
 
         var result = await (
@@ -45,11 +49,22 @@ internal static class GetInboxHandlerDetailEndpoint
         var props = result.msg.GetProperties();
         var (jsonPayload, base64) = ManagementHelpers.DecodeContent(result.msg.Content, logger);
 
-        return TypedResults.Ok(new InboxHandlerDetail(
-            result.hs.Id, result.hs.MessageId, props.Type ?? "(unknown)", result.hs.HandlerKey, result.msg.ReceivedAt,
-            result.hs.ErrorCount, result.hs.RequeuedCount,
-            string.IsNullOrEmpty(result.hs.LastError) ? null : result.hs.LastError,
-            props, jsonPayload, base64, contextName));
+        return TypedResults.Ok(
+            new InboxHandlerDetail(
+                result.hs.Id,
+                result.hs.MessageId,
+                props.Type ?? "(unknown)",
+                result.hs.HandlerKey,
+                result.msg.ReceivedAt,
+                result.hs.ErrorCount,
+                result.hs.RequeuedCount,
+                string.IsNullOrEmpty(result.hs.LastError) ? null : result.hs.LastError,
+                props,
+                jsonPayload,
+                base64,
+                contextName
+            )
+        );
     }
 
     internal record InboxHandlerDetail(
@@ -64,5 +79,6 @@ internal static class GetInboxHandlerDetailEndpoint
         MessageProperties Properties,
         string? JsonPayload,
         string PayloadBase64,
-        string DbContext);
+        string DbContext
+    );
 }

@@ -16,15 +16,24 @@ public class JsonSchemaGenerator
     private static readonly HashSet<Type> _primitiveTypes = new()
     {
         typeof(bool),
-        typeof(byte), typeof(sbyte),
-        typeof(short), typeof(ushort),
-        typeof(int), typeof(uint),
-        typeof(long), typeof(ulong),
-        typeof(float), typeof(double), typeof(decimal),
+        typeof(byte),
+        typeof(sbyte),
+        typeof(short),
+        typeof(ushort),
+        typeof(int),
+        typeof(uint),
+        typeof(long),
+        typeof(ulong),
+        typeof(float),
+        typeof(double),
+        typeof(decimal),
         typeof(char),
         typeof(string),
         typeof(Guid),
-        typeof(DateTime), typeof(DateTimeOffset), typeof(DateOnly), typeof(TimeOnly),
+        typeof(DateTime),
+        typeof(DateTimeOffset),
+        typeof(DateOnly),
+        typeof(TimeOnly),
         typeof(Uri),
         typeof(object),
     };
@@ -67,8 +76,13 @@ public class JsonSchemaGenerator
 
         foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
-            if (!prop.CanRead) continue;
-            if (prop.GetCustomAttribute<JsonIgnoreAttribute>() is { Condition: JsonIgnoreCondition.Always }) continue;
+            if (!prop.CanRead)
+                continue;
+            if (
+                prop.GetCustomAttribute<JsonIgnoreAttribute>() is
+                { Condition: JsonIgnoreCondition.Always }
+            )
+                continue;
 
             var propName = GetPropertyName(prop);
             var propSchema = BuildPropertySchema(prop, components);
@@ -86,19 +100,27 @@ public class JsonSchemaGenerator
         };
     }
 
-    private JsonSchema BuildPropertySchema(PropertyInfo prop, Dictionary<string, JsonSchema> components)
+    private JsonSchema BuildPropertySchema(
+        PropertyInfo prop,
+        Dictionary<string, JsonSchema> components
+    )
     {
         var schema = BuildTypeSchema(prop.PropertyType, components, prop);
         ApplyDataAnnotations(prop, schema);
         return schema;
     }
 
-    private JsonSchema BuildTypeSchema(Type type, Dictionary<string, JsonSchema> components, PropertyInfo? propertyInfo = null)
+    private JsonSchema BuildTypeSchema(
+        Type type,
+        Dictionary<string, JsonSchema> components,
+        PropertyInfo? propertyInfo = null
+    )
     {
         var underlying = UnwrapNullable(type);
-        bool isNullable = propertyInfo != null
-            ? IsPropertyNullable(propertyInfo)
-            : underlying != type || !type.IsValueType;
+        bool isNullable =
+            propertyInfo != null
+                ? IsPropertyNullable(propertyInfo)
+                : underlying != type || !type.IsValueType;
 
         // Dictionaries (before enumerable check since Dictionary<,> implements IEnumerable<KeyValuePair<,>>)
         if (TryGetDictionaryValueType(underlying, out var valueType))
@@ -111,7 +133,10 @@ public class JsonSchemaGenerator
         }
 
         // Enumerables (except string)
-        if (underlying != typeof(string) && TryGetEnumerableElementType(underlying, out var elementType))
+        if (
+            underlying != typeof(string)
+            && TryGetEnumerableElementType(underlying, out var elementType)
+        )
         {
             var itemSchema = BuildTypeSchemaRef(elementType!, components);
             var arraySchema = new JsonSchema { Type = "array", Items = itemSchema };
@@ -150,17 +175,37 @@ public class JsonSchemaGenerator
         var schema = type switch
         {
             _ when type == typeof(bool) => new JsonSchema { Type = "boolean" },
-            _ when type == typeof(byte) || type == typeof(sbyte) => new JsonSchema { Type = "integer", Format = "int32" },
-            _ when type == typeof(short) || type == typeof(ushort) => new JsonSchema { Type = "integer", Format = "int32" },
-            _ when type == typeof(int) || type == typeof(uint) => new JsonSchema { Type = "integer", Format = "int32" },
-            _ when type == typeof(long) || type == typeof(ulong) => new JsonSchema { Type = "integer", Format = "int64" },
+            _ when type == typeof(byte) || type == typeof(sbyte) => new JsonSchema
+            {
+                Type = "integer",
+                Format = "int32",
+            },
+            _ when type == typeof(short) || type == typeof(ushort) => new JsonSchema
+            {
+                Type = "integer",
+                Format = "int32",
+            },
+            _ when type == typeof(int) || type == typeof(uint) => new JsonSchema
+            {
+                Type = "integer",
+                Format = "int32",
+            },
+            _ when type == typeof(long) || type == typeof(ulong) => new JsonSchema
+            {
+                Type = "integer",
+                Format = "int64",
+            },
             _ when type == typeof(float) => new JsonSchema { Type = "number", Format = "float" },
             _ when type == typeof(double) => new JsonSchema { Type = "number", Format = "double" },
             _ when type == typeof(decimal) => new JsonSchema { Type = "number" },
             _ when type == typeof(char) => new JsonSchema { Type = "string", MaxLength = 1 },
             _ when type == typeof(string) => new JsonSchema { Type = "string" },
             _ when type == typeof(Guid) => new JsonSchema { Type = "string", Format = "uuid" },
-            _ when type == typeof(DateTime) || type == typeof(DateTimeOffset) => new JsonSchema { Type = "string", Format = "date-time" },
+            _ when type == typeof(DateTime) || type == typeof(DateTimeOffset) => new JsonSchema
+            {
+                Type = "string",
+                Format = "date-time",
+            },
             _ when type == typeof(DateOnly) => new JsonSchema { Type = "string", Format = "date" },
             _ when type == typeof(TimeOnly) => new JsonSchema { Type = "string", Format = "time" },
             _ when type == typeof(Uri) => new JsonSchema { Type = "string", Format = "uri" },
@@ -183,7 +228,8 @@ public class JsonSchemaGenerator
         foreach (var v in values)
             enumValues.Add(Convert.ChangeType(v, underlyingType));
 
-        var format = underlyingType == typeof(long) || underlyingType == typeof(ulong) ? "int64" : "int32";
+        var format =
+            underlyingType == typeof(long) || underlyingType == typeof(ulong) ? "int64" : "int32";
 
         return new JsonSchema
         {
@@ -212,8 +258,10 @@ public class JsonSchemaGenerator
 
         if (prop.GetCustomAttribute<RangeAttribute>() is { } range)
         {
-            if (range.Minimum is not null) schema.Minimum = Convert.ToDouble(range.Minimum);
-            if (range.Maximum is not null) schema.Maximum = Convert.ToDouble(range.Maximum);
+            if (range.Minimum is not null)
+                schema.Minimum = Convert.ToDouble(range.Minimum);
+            if (range.Maximum is not null)
+                schema.Maximum = Convert.ToDouble(range.Maximum);
         }
 
         if (prop.GetCustomAttribute<EmailAddressAttribute>() != null)
@@ -231,8 +279,11 @@ public class JsonSchemaGenerator
         if (type.IsGenericType)
         {
             var def = type.GetGenericTypeDefinition();
-            if (def == typeof(Dictionary<,>) || def == typeof(IDictionary<,>) ||
-                def == typeof(IReadOnlyDictionary<,>))
+            if (
+                def == typeof(Dictionary<,>)
+                || def == typeof(IDictionary<,>)
+                || def == typeof(IReadOnlyDictionary<,>)
+            )
             {
                 valueType = type.GetGenericArguments()[1];
                 return true;
@@ -267,10 +318,16 @@ public class JsonSchemaGenerator
         if (type.IsGenericType)
         {
             var def = type.GetGenericTypeDefinition();
-            if (def == typeof(IEnumerable<>) || def == typeof(ICollection<>) ||
-                def == typeof(IList<>) || def == typeof(List<>) ||
-                def == typeof(IReadOnlyList<>) || def == typeof(IReadOnlyCollection<>) ||
-                def == typeof(HashSet<>) || def == typeof(ISet<>))
+            if (
+                def == typeof(IEnumerable<>)
+                || def == typeof(ICollection<>)
+                || def == typeof(IList<>)
+                || def == typeof(List<>)
+                || def == typeof(IReadOnlyList<>)
+                || def == typeof(IReadOnlyCollection<>)
+                || def == typeof(HashSet<>)
+                || def == typeof(ISet<>)
+            )
             {
                 elementType = type.GetGenericArguments()[0];
                 return true;
@@ -326,7 +383,8 @@ public class JsonSchemaGenerator
     private static string GetPropertyName(PropertyInfo prop)
     {
         var jsonAttr = prop.GetCustomAttribute<JsonPropertyNameAttribute>();
-        if (jsonAttr != null) return jsonAttr.Name;
+        if (jsonAttr != null)
+            return jsonAttr.Name;
 
         // camelCase by default (matches STJ default behavior)
         var name = prop.Name;

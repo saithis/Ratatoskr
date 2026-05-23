@@ -15,15 +15,20 @@ namespace Ratatoskr.RabbitMq.AsyncApi;
 /// </summary>
 public class RabbitMqAsyncApiBindingProvider(
     RabbitMqOptions rabbitMqOptions,
-    CloudEventsOptions cloudEventsOptions) : IAsyncApiTransportBindingProvider
+    CloudEventsOptions cloudEventsOptions
+) : IAsyncApiTransportBindingProvider
 {
     private const string ServerName = "rabbitmq";
 
-    public void ConfigureServers(AsyncApiDocument document, IEnumerable<ChannelRegistration> channels)
+    public void ConfigureServers(
+        AsyncApiDocument document,
+        IEnumerable<ChannelRegistration> channels
+    )
     {
         if (rabbitMqOptions.ConnectionString is null)
             throw new InvalidOperationException(
-                "RabbitMQ connection string is not configured. Set RabbitMqOptions.ConnectionString.");
+                "RabbitMQ connection string is not configured. Set RabbitMqOptions.ConnectionString."
+            );
 
         document.Servers ??= new Dictionary<string, AsyncApiServer>();
 
@@ -94,8 +99,8 @@ public class RabbitMqAsyncApiBindingProvider(
         };
 
         // Document routing keys used by messages on this channel
-        var routingKeys = channel.Messages
-            .Select(m => m.GetRabbitMqOptions()?.RoutingKey ?? m.MessageTypeName)
+        var routingKeys = channel
+            .Messages.Select(m => m.GetRabbitMqOptions()?.RoutingKey ?? m.MessageTypeName)
             .Distinct()
             .ToList();
 
@@ -110,7 +115,11 @@ public class RabbitMqAsyncApiBindingProvider(
         operation.Bindings = new OperationBindings { Amqp = binding };
     }
 
-    public void ConfigureMessage(MessageRegistration message, ChannelRegistration channel, AsyncApiMessage asyncApiMessage)
+    public void ConfigureMessage(
+        MessageRegistration message,
+        ChannelRegistration channel,
+        AsyncApiMessage asyncApiMessage
+    )
     {
         if (!channel.IsRabbitMqChannel())
             return;
@@ -143,7 +152,8 @@ public class RabbitMqAsyncApiBindingProvider(
         return new JsonSchema
         {
             Type = "object",
-            Description = "AMQP application-properties carrying CloudEvents attributes (binary content mode).",
+            Description =
+                "AMQP application-properties carrying CloudEvents attributes (binary content mode).",
             Properties = new Dictionary<string, JsonSchema>
             {
                 [$"{prefix}specversion"] = new JsonSchema
@@ -182,7 +192,8 @@ public class RabbitMqAsyncApiBindingProvider(
                 [$"{prefix}subject"] = new JsonSchema
                 {
                     Type = new[] { "string", "null" },
-                    Description = "Describes the subject of the event in the context of the event producer.",
+                    Description =
+                        "Describes the subject of the event in the context of the event producer.",
                 },
                 ["traceparent"] = new JsonSchema
                 {
@@ -202,7 +213,8 @@ public class RabbitMqAsyncApiBindingProvider(
     private void AddQueueChannel(
         ChannelRegistration channel,
         RabbitMqChannelOptions channelOpts,
-        AsyncApiDocument document)
+        AsyncApiDocument document
+    )
     {
         var queueName = channelOpts.QueueName!;
 
@@ -239,7 +251,8 @@ public class RabbitMqAsyncApiBindingProvider(
     {
         if (rabbitMqOptions.ConnectionString is null)
             throw new InvalidOperationException(
-                "RabbitMQ connection string is not configured. Set RabbitMqOptions.ConnectionString.");
+                "RabbitMQ connection string is not configured. Set RabbitMqOptions.ConnectionString."
+            );
 
         var path = rabbitMqOptions.ConnectionString.AbsolutePath.TrimStart('/');
         return string.IsNullOrEmpty(path) ? "/" : path;

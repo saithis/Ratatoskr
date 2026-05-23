@@ -21,8 +21,10 @@ namespace Ratatoskr.Tests.Integration.Management;
 /// These assertions are deliberately granular so that any regression in a single area fails
 /// exactly one test rather than bleeding across the broader list/bulk tests.
 /// </summary>
-public class ManagementCoverageTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
-    : ManagementTestBase(rabbitMq, postgres)
+public class ManagementCoverageTests(
+    RabbitMqContainerFixture rabbitMq,
+    PostgresContainerFixture postgres
+) : ManagementTestBase(rabbitMq, postgres)
 {
     private const string OutboxBaseUrl = "/ratatoskr/api/v1/efcore/contexts/TestDbContext/outbox";
     private const string InboxBaseUrl = "/ratatoskr/api/v1/efcore/contexts/TestDbContext/inbox";
@@ -34,7 +36,8 @@ public class ManagementCoverageTests(RabbitMqContainerFixture rabbitMq, Postgres
 
         const int total = 5;
         var seeded = new HashSet<Guid>();
-        for (var i = 0; i < total; i++) seeded.Add(await SeedPoisonedOutboxAsync());
+        for (var i = 0; i < total; i++)
+            seeded.Add(await SeedPoisonedOutboxAsync());
 
         var collected = new List<Guid>();
         string? cursor = null;
@@ -43,8 +46,9 @@ public class ManagementCoverageTests(RabbitMqContainerFixture rabbitMq, Postgres
         long? firstTotalCount = null;
         do
         {
-            var url = $"{OutboxBaseUrl}/poisoned?pageSize=2"
-                      + (cursor is null ? string.Empty : $"&cursor={Uri.EscapeDataString(cursor)}");
+            var url =
+                $"{OutboxBaseUrl}/poisoned?pageSize=2"
+                + (cursor is null ? string.Empty : $"&cursor={Uri.EscapeDataString(cursor)}");
             var response = await HttpClient.GetAsync(url);
             response.StatusCode.Should().Be(HttpStatusCode.OK);
             var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -53,16 +57,24 @@ public class ManagementCoverageTests(RabbitMqContainerFixture rabbitMq, Postgres
             collected.AddRange(items.Select(i => i.GetProperty("id").GetGuid()));
 
             firstTotalCount ??= body.GetProperty("totalCount").GetInt64();
-            body.GetProperty("totalCount").GetInt64().Should().Be(firstTotalCount!.Value,
-                "totalCount must reflect the full filtered set, not the remainder after the cursor");
+            body.GetProperty("totalCount")
+                .GetInt64()
+                .Should()
+                .Be(
+                    firstTotalCount!.Value,
+                    "totalCount must reflect the full filtered set, not the remainder after the cursor"
+                );
 
-            cursor = body.TryGetProperty("nextCursor", out var c) && c.ValueKind == JsonValueKind.String
-                ? c.GetString()
-                : null;
+            cursor =
+                body.TryGetProperty("nextCursor", out var c) && c.ValueKind == JsonValueKind.String
+                    ? c.GetString()
+                    : null;
         } while (cursor is not null);
 
         collected.Should().OnlyHaveUniqueItems("the keyset cursor must never replay a row");
-        collected.Should().BeEquivalentTo(seeded, "every seeded row must appear exactly once across pages");
+        collected
+            .Should()
+            .BeEquivalentTo(seeded, "every seeded row must appear exactly once across pages");
     }
 
     [Test]
@@ -70,14 +82,20 @@ public class ManagementCoverageTests(RabbitMqContainerFixture rabbitMq, Postgres
     {
         await StartManagementTestAsync();
         // Seed one more than the cap so the clamp is observable in the response.
-        for (var i = 0; i < PaginationOptions.MaxPageSize + 1; i++) await SeedPoisonedOutboxAsync();
+        for (var i = 0; i < PaginationOptions.MaxPageSize + 1; i++)
+            await SeedPoisonedOutboxAsync();
 
         var response = await HttpClient.GetAsync($"{OutboxBaseUrl}/poisoned?pageSize=10000");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        body.GetProperty("items").GetArrayLength().Should().Be(PaginationOptions.MaxPageSize,
-            "the server must clamp an oversize pageSize to MaxPageSize");
+        body.GetProperty("items")
+            .GetArrayLength()
+            .Should()
+            .Be(
+                PaginationOptions.MaxPageSize,
+                "the server must clamp an oversize pageSize to MaxPageSize"
+            );
     }
 
     [Test]
@@ -125,12 +143,16 @@ public class ManagementCoverageTests(RabbitMqContainerFixture rabbitMq, Postgres
         // "%" is a SQL LIKE wildcard; if we forgot to escape it server-side, this query would
         // match both rows above. Escaped correctly, it matches zero rows because no message
         // has the literal string "order.%" in its serialized properties.
-        var response = await HttpClient.GetAsync($"{OutboxBaseUrl}/poisoned?search={Uri.EscapeDataString("order.%")}");
+        var response = await HttpClient.GetAsync(
+            $"{OutboxBaseUrl}/poisoned?search={Uri.EscapeDataString("order.%")}"
+        );
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        body.GetProperty("items").GetArrayLength().Should().Be(0,
-            "LIKE wildcards in user input must be escaped so they match literally");
+        body.GetProperty("items")
+            .GetArrayLength()
+            .Should()
+            .Be(0, "LIKE wildcards in user input must be escaped so they match literally");
     }
 
     [Test]
@@ -140,7 +162,9 @@ public class ManagementCoverageTests(RabbitMqContainerFixture rabbitMq, Postgres
 
         var req = new HttpRequestMessage(HttpMethod.Post, $"{OutboxBaseUrl}/poisoned/requeue")
         {
-            Content = JsonContent.Create(new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest([]))
+            Content = JsonContent.Create(
+                new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest([])
+            ),
         };
         var response = await HttpClient.SendAsync(req);
 
@@ -158,7 +182,9 @@ public class ManagementCoverageTests(RabbitMqContainerFixture rabbitMq, Postgres
 
         var req = new HttpRequestMessage(HttpMethod.Post, $"{OutboxBaseUrl}/poisoned/requeue")
         {
-            Content = JsonContent.Create(new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest([Guid.Empty]))
+            Content = JsonContent.Create(
+                new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest([Guid.Empty])
+            ),
         };
         var response = await HttpClient.SendAsync(req);
 
@@ -172,10 +198,15 @@ public class ManagementCoverageTests(RabbitMqContainerFixture rabbitMq, Postgres
     {
         await StartManagementTestAsync();
 
-        var ids = Enumerable.Range(0, BulkRequestValidator.MaxIds + 1).Select(_ => Guid.NewGuid()).ToList();
+        var ids = Enumerable
+            .Range(0, BulkRequestValidator.MaxIds + 1)
+            .Select(_ => Guid.NewGuid())
+            .ToList();
         var req = new HttpRequestMessage(HttpMethod.Post, $"{OutboxBaseUrl}/poisoned/requeue")
         {
-            Content = JsonContent.Create(new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest(ids))
+            Content = JsonContent.Create(
+                new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest(ids)
+            ),
         };
         var response = await HttpClient.SendAsync(req);
 
@@ -191,7 +222,9 @@ public class ManagementCoverageTests(RabbitMqContainerFixture rabbitMq, Postgres
 
         var req = new HttpRequestMessage(HttpMethod.Delete, $"{InboxBaseUrl}/poisoned")
         {
-            Content = JsonContent.Create(new BulkDeleteInboxEndpoint.BulkDeleteInboxRequest([Guid.Empty]))
+            Content = JsonContent.Create(
+                new BulkDeleteInboxEndpoint.BulkDeleteInboxRequest([Guid.Empty])
+            ),
         };
         var response = await HttpClient.SendAsync(req);
 
@@ -204,7 +237,9 @@ public class ManagementCoverageTests(RabbitMqContainerFixture rabbitMq, Postgres
     {
         await StartManagementTestAsync();
 
-        var response = await HttpClient.GetAsync("/ratatoskr/api/v1/efcore/contexts/DoesNotExist/outbox/poisoned");
+        var response = await HttpClient.GetAsync(
+            "/ratatoskr/api/v1/efcore/contexts/DoesNotExist/outbox/poisoned"
+        );
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
@@ -237,7 +272,8 @@ public class ManagementCompositionTests
 
         var act = () => new EfCoreManagementDbContextLookup(providers, null);
 
-        act.Should().Throw<InvalidOperationException>()
+        act.Should()
+            .Throw<InvalidOperationException>()
             .WithMessage("*TestDbContext*App.Alpha*App.Beta*");
     }
 
@@ -249,7 +285,9 @@ public class ManagementCompositionTests
         // the same endpoint builder and maps nothing.
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddAuthorization(o => o.AddPolicy("RatatoskrAdmin", p => p.RequireAssertion(_ => true)));
+        services.AddAuthorization(o =>
+            o.AddPolicy("RatatoskrAdmin", p => p.RequireAssertion(_ => true))
+        );
 
         using var sp = services.BuildServiceProvider();
         var routes = new MinimalEndpointRouteBuilder(sp);
@@ -257,10 +295,13 @@ public class ManagementCompositionTests
         var result = routes.MapRatatoskrManagementApi("RatatoskrAdmin");
 
         result.Should().BeSameAs(routes, "the extension should return the builder for chaining");
-        routes.DataSources.Should().BeEmpty("no configurators were registered, so no endpoints should exist");
+        routes
+            .DataSources.Should()
+            .BeEmpty("no configurators were registered, so no endpoints should exist");
     }
 
-    private sealed class StubDescriptor(string shortName, string fullName) : IEfCoreManagementDbContextDescriptor
+    private sealed class StubDescriptor(string shortName, string fullName)
+        : IEfCoreManagementDbContextDescriptor
     {
         public Type DbContextType { get; }
         public string DbContextName => shortName;
@@ -269,10 +310,12 @@ public class ManagementCompositionTests
         public bool HasInbox => false;
         public DateTimeOffset? LastOutboxProcessingAt => null;
         public DateTimeOffset? LastInboxProcessingAt => null;
+
         public DbContext GetDbContext(IServiceProvider _) => throw new NotSupportedException();
     }
 
-    private sealed class MinimalEndpointRouteBuilder(IServiceProvider sp) : Microsoft.AspNetCore.Routing.IEndpointRouteBuilder
+    private sealed class MinimalEndpointRouteBuilder(IServiceProvider sp)
+        : Microsoft.AspNetCore.Routing.IEndpointRouteBuilder
     {
         private readonly List<Microsoft.AspNetCore.Routing.EndpointDataSource> _ds = [];
 

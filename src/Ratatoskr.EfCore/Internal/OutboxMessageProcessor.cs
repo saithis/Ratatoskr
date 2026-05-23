@@ -16,11 +16,14 @@ internal class OutboxMessageProcessor<TDbContext>(
     TimeProvider timeProvider,
     OutboxOptionsHolder<TDbContext> optionsHolder,
     IEnumerable<IMessageActivityObserver> observers,
-    ILogger<OutboxMessageProcessor<TDbContext>> logger)
+    ILogger<OutboxMessageProcessor<TDbContext>> logger
+)
     where TDbContext : DbContext, IOutboxDbContext
 {
     private readonly OutboxOptions _options = optionsHolder.Options;
-    private Dictionary<string, IMessageSender> _senderMap = senders.ToDictionary(x => x.TransportName);
+    private Dictionary<string, IMessageSender> _senderMap = senders.ToDictionary(x =>
+        x.TransportName
+    );
 
     /// <summary>
     /// Processes a single batch of outbox messages.
@@ -28,19 +31,25 @@ internal class OutboxMessageProcessor<TDbContext>(
     /// </summary>
     public async Task<int> ProcessBatchAsync(
         bool includeStuckMessageDetection,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var now = timeProvider.GetUtcNow();
 
-        var query = dbContext.Set<OutboxMessageEntity>()
-            .Where(x => x.ProcessedAt == null
-                     && !x.IsPoisoned
-                     && (x.NextAttemptAt == null || x.NextAttemptAt <= now));
+        var query = dbContext
+            .Set<OutboxMessageEntity>()
+            .Where(x =>
+                x.ProcessedAt == null
+                && !x.IsPoisoned
+                && (x.NextAttemptAt == null || x.NextAttemptAt <= now)
+            );
 
         if (includeStuckMessageDetection)
         {
             var stuckThreshold = now - _options.StuckMessageThreshold;
-            query = query.Where(x => x.ProcessingStartedAt == null || x.ProcessingStartedAt < stuckThreshold);
+            query = query.Where(x =>
+                x.ProcessingStartedAt == null || x.ProcessingStartedAt < stuckThreshold
+            );
         }
         else
         {
@@ -113,8 +122,15 @@ internal class OutboxMessageProcessor<TDbContext>(
             {
                 if (!_senderMap.TryGetValue(message.TransportName, out var targetSender))
                 {
-                    OutboxMessageProcessorLog.NoSenderFound(logger, message.TransportName, message.Id);
-                    message.MarkAsPoisoned($"No sender found for transport '{message.TransportName}'", timeProvider);
+                    OutboxMessageProcessorLog.NoSenderFound(
+                        logger,
+                        message.TransportName,
+                        message.Id
+                    );
+                    message.MarkAsPoisoned(
+                        $"No sender found for transport '{message.TransportName}'",
+                        timeProvider
+                    );
                 }
                 else
                 {
@@ -122,11 +138,17 @@ internal class OutboxMessageProcessor<TDbContext>(
                     {
                         using var activity = telemetry.StartCreateActivity(props);
 
-                        OutboxMessageProcessorLog.ProcessingMessage(logger, message.Id, message.TransportName);
+                        OutboxMessageProcessorLog.ProcessingMessage(
+                            logger,
+                            message.Id,
+                            message.TransportName
+                        );
 
                         if (_options.SendTimeout.HasValue)
                         {
-                            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(
+                                cancellationToken
+                            );
                             timeoutCts.CancelAfter(_options.SendTimeout.Value);
                             await targetSender.SendAsync(message.Content, props, timeoutCts.Token);
                         }
@@ -136,16 +158,26 @@ internal class OutboxMessageProcessor<TDbContext>(
                         }
                         message.MarkAsProcessed(timeProvider);
                     }
-                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    catch (OperationCanceledException)
+                        when (cancellationToken.IsCancellationRequested)
                     {
                         throw;
                     }
                     catch (Exception e)
                     {
                         sendException = e;
-                        OutboxMessageProcessorLog.SendFailed(logger, message.Id, message.ErrorCount + 1, e);
-                        message.PublishFailed(e.Message, timeProvider,
-                            _options.MaxRetries, _options.MaxRetryDelay);
+                        OutboxMessageProcessorLog.SendFailed(
+                            logger,
+                            message.Id,
+                            message.ErrorCount + 1,
+                            e
+                        );
+                        message.PublishFailed(
+                            e.Message,
+                            timeProvider,
+                            _options.MaxRetries,
+                            _options.MaxRetryDelay
+                        );
                     }
                 }
             }
@@ -182,33 +214,45 @@ internal class OutboxMessageProcessor<TDbContext>(
                 if (message.IsPoisoned)
                 {
                     telemetry.RecordPoisoned();
-                    OutboxMessageProcessorLog.MessagePoisoned(logger, message.Id, message.TransportName, message.ErrorCount, sendException?.Message ?? string.Empty);
+                    OutboxMessageProcessorLog.MessagePoisoned(
+                        logger,
+                        message.Id,
+                        message.TransportName,
+                        message.ErrorCount,
+                        sendException?.Message ?? string.Empty
+                    );
                 }
             }
 
             if (sendException == null && props != null)
             {
-                await observers.NotifyAsync(new MessageActivity
-                {
-                    Stage = MessageStage.OutboxSent,
-                    Properties = props,
-                    SerializedBody = message.Content,
-                    TransportName = message.TransportName,
-                    Timestamp = timeProvider.GetUtcNow(),
-                }, logger);
+                await observers.NotifyAsync(
+                    new MessageActivity
+                    {
+                        Stage = MessageStage.OutboxSent,
+                        Properties = props,
+                        SerializedBody = message.Content,
+                        TransportName = message.TransportName,
+                        Timestamp = timeProvider.GetUtcNow(),
+                    },
+                    logger
+                );
             }
 
             if (message.IsPoisoned)
             {
-                await observers.NotifyAsync(new MessageActivity
-                {
-                    Stage = MessageStage.OutboxPoisoned,
-                    Properties = props ?? new MessageProperties(),
-                    SerializedBody = message.Content,
-                    TransportName = message.TransportName,
-                    Exception = sendException,
-                    Timestamp = timeProvider.GetUtcNow(),
-                }, logger);
+                await observers.NotifyAsync(
+                    new MessageActivity
+                    {
+                        Stage = MessageStage.OutboxPoisoned,
+                        Properties = props ?? new MessageProperties(),
+                        SerializedBody = message.Content,
+                        TransportName = message.TransportName,
+                        Exception = sendException,
+                        Timestamp = timeProvider.GetUtcNow(),
+                    },
+                    logger
+                );
             }
         }
 
@@ -223,24 +267,51 @@ internal static partial class OutboxMessageProcessorLog
     [LoggerMessage(Level = LogLevel.Information, Message = "Found {Count} messages to send")]
     public static partial void FoundMessagesToSend(ILogger logger, int count);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Skipped {ConflictCount} outbox message(s) already claimed by another worker")]
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Skipped {ConflictCount} outbox message(s) already claimed by another worker"
+    )]
     public static partial void SkippedConflicts(ILogger logger, int conflictCount);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Skipped {ConflictCount} outbox message(s) already claimed by another worker during save")]
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Skipped {ConflictCount} outbox message(s) already claimed by another worker during save"
+    )]
     public static partial void SkippedConflictsDuringSave(ILogger logger, int conflictCount);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to deserialize properties for message '{Id}' - treating as poison")]
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "Failed to deserialize properties for message '{Id}' - treating as poison"
+    )]
     public static partial void DeserializationFailed(ILogger logger, Guid id, Exception ex);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "No sender registered for transport '{Transport}' on message '{Id}' - treating as poison")]
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "No sender registered for transport '{Transport}' on message '{Id}' - treating as poison"
+    )]
     public static partial void NoSenderFound(ILogger logger, string transport, Guid id);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Processing message '{Id}' for transport '{Transport}'")]
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Processing message '{Id}' for transport '{Transport}'"
+    )]
     public static partial void ProcessingMessage(ILogger logger, Guid id, string transport);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to send message '{Id}', attempt {Attempt}")]
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Failed to send message '{Id}', attempt {Attempt}"
+    )]
     public static partial void SendFailed(ILogger logger, Guid id, int attempt, Exception ex);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Outbox message '{Id}' for transport '{Transport}' has been poisoned after {Attempts} failed attempts. Last error: {Error}")]
-    public static partial void MessagePoisoned(ILogger logger, Guid id, string transport, int attempts, string error);
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "Outbox message '{Id}' for transport '{Transport}' has been poisoned after {Attempts} failed attempts. Last error: {Error}"
+    )]
+    public static partial void MessagePoisoned(
+        ILogger logger,
+        Guid id,
+        string transport,
+        int attempts,
+        string error
+    );
 }

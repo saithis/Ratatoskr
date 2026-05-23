@@ -20,5 +20,5 @@ public enum ChannelType
     /// <summary>
     /// We expect this channel to exist (owned by another) and consume events from it. We declare our queue and bind it.
     /// </summary>
-    EventConsume
+    EventConsume,
 }

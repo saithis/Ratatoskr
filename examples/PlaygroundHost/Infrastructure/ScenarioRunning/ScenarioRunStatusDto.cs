@@ -6,4 +6,5 @@ public sealed record ScenarioRunStatusDto(
     string State,
     DateTimeOffset StartedAt,
     DateTimeOffset? CompletedAt,
-    string? Detail);
+    string? Detail
+);

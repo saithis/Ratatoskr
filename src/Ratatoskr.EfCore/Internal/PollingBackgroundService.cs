@@ -15,10 +15,11 @@ namespace Ratatoskr.EfCore.Internal;
 internal abstract class PollingBackgroundService(
     IDistributedLockProvider distributedLockProvider,
     TimeProvider timeProvider,
-    ILogger logger) : BackgroundService
+    ILogger logger
+) : BackgroundService
 {
-    public DateTimeOffset LastSuccessfulProcessingAt { get; private set; } = timeProvider.GetUtcNow();
-
+    public DateTimeOffset LastSuccessfulProcessingAt { get; private set; } =
+        timeProvider.GetUtcNow();
 
     private readonly Channel<byte> _triggerChannel = Channel.CreateBounded<byte>(
         new BoundedChannelOptions(1)
@@ -26,7 +27,8 @@ internal abstract class PollingBackgroundService(
             FullMode = BoundedChannelFullMode.DropOldest,
             SingleReader = true,
             SingleWriter = false,
-        });
+        }
+    );
 
     protected abstract string ProcessorName { get; }
     protected abstract TimeSpan PollingInterval { get; }
@@ -59,7 +61,12 @@ internal abstract class PollingBackgroundService(
             {
                 if (stoppingToken.IsCancellationRequested)
                     break;
-                logger.LogCritical(e, "{Processor} crashed, trying to restart in {Delay}", ProcessorName, RestartDelay);
+                logger.LogCritical(
+                    e,
+                    "{Processor} crashed, trying to restart in {Delay}",
+                    ProcessorName,
+                    RestartDelay
+                );
                 await Task.Delay(RestartDelay, timeProvider, stoppingToken);
                 if (stoppingToken.IsCancellationRequested)
                     break;
@@ -76,13 +83,20 @@ internal abstract class PollingBackgroundService(
             await distributedLockProvider.TryAcquireLockAsync(
                 LockName,
                 LockAcquireTimeout,
-                stoppingToken);
+                stoppingToken
+            );
 
         if (dLock == null)
         {
-            logger.LogWarning("Failed to acquire lock for {Processor}, processing will be skipped", ProcessorName);
-            RatatoskrDiagnostics.LockAcquisitionFailure.Add(1, new TagList { { "processor", ProcessorName } });
-            
+            logger.LogWarning(
+                "Failed to acquire lock for {Processor}, processing will be skipped",
+                ProcessorName
+            );
+            RatatoskrDiagnostics.LockAcquisitionFailure.Add(
+                1,
+                new TagList { { "processor", ProcessorName } }
+            );
+
             // Being a passive node is a valid state, so it's considered successfully healthy
             LastSuccessfulProcessingAt = timeProvider.GetUtcNow();
             return;
@@ -108,11 +122,17 @@ internal abstract class PollingBackgroundService(
         // OperationCanceledException/TaskCanceledException from Task.Delay in some runtimes.
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            logger.LogInformation("Stopping signal received during {Processor} processing", ProcessorName);
+            logger.LogInformation(
+                "Stopping signal received during {Processor} processing",
+                ProcessorName
+            );
         }
         catch (OperationCanceledException) when (dLock.HandleLostToken.CanBeCanceled)
         {
-            logger.LogWarning("Distributed lock was lost during {Processor} processing", ProcessorName);
+            logger.LogWarning(
+                "Distributed lock was lost during {Processor} processing",
+                ProcessorName
+            );
             RatatoskrDiagnostics.LockLost.Add(1, new TagList { { "processor", ProcessorName } });
         }
         catch (Exception e)
@@ -130,14 +150,22 @@ internal abstract class PollingBackgroundService(
 
     private async Task WaitForTriggerOrTimeoutAsync(CancellationToken stoppingToken)
     {
-        logger.LogDebug("Waiting for {Processor} trigger or {Delay} timeout", ProcessorName, PollingInterval);
+        logger.LogDebug(
+            "Waiting for {Processor} trigger or {Delay} timeout",
+            ProcessorName,
+            PollingInterval
+        );
 
         var channelTask = _triggerChannel.Reader.WaitToReadAsync(stoppingToken).AsTask();
         var delayTask = Task.Delay(PollingInterval, timeProvider, stoppingToken);
 
         var completedTask = await Task.WhenAny(channelTask, delayTask);
 
-        if (completedTask == channelTask && channelTask.IsCompletedSuccessfully && channelTask.Result)
+        if (
+            completedTask == channelTask
+            && channelTask.IsCompletedSuccessfully
+            && channelTask.Result
+        )
         {
             _triggerChannel.Reader.TryRead(out _);
             logger.LogDebug("{Processor} triggered immediately via channel", ProcessorName);

@@ -19,7 +19,8 @@ internal class InboxMessageProcessor<TDbContext>(
     InboxOptionsHolder<TDbContext> optionsHolder,
     IEnumerable<IMessageActivityObserver> observers,
     IMessageSerializerResolver serializerResolver,
-    ILogger<InboxMessageProcessor<TDbContext>> logger)
+    ILogger<InboxMessageProcessor<TDbContext>> logger
+)
     where TDbContext : DbContext, IInboxDbContext
 {
     private readonly InboxOptions _options = optionsHolder.Options;
@@ -35,19 +36,25 @@ internal class InboxMessageProcessor<TDbContext>(
     /// </remarks>
     public async Task<int> ProcessBatchAsync(
         bool includeStuckMessageDetection,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var now = timeProvider.GetUtcNow();
 
-        var query = dbContext.Set<InboxHandlerStatusEntity>()
-            .Where(s => s.CompletedAt == null
-                     && !s.IsPoisoned
-                     && (s.NextAttemptAt == null || s.NextAttemptAt <= now));
+        var query = dbContext
+            .Set<InboxHandlerStatusEntity>()
+            .Where(s =>
+                s.CompletedAt == null
+                && !s.IsPoisoned
+                && (s.NextAttemptAt == null || s.NextAttemptAt <= now)
+            );
 
         if (includeStuckMessageDetection)
         {
             var stuckThreshold = now - _options.StuckMessageThreshold;
-            query = query.Where(s => s.ProcessingStartedAt == null || s.ProcessingStartedAt < stuckThreshold);
+            query = query.Where(s =>
+                s.ProcessingStartedAt == null || s.ProcessingStartedAt < stuckThreshold
+            );
         }
         else
         {
@@ -65,7 +72,8 @@ internal class InboxMessageProcessor<TDbContext>(
         InboxMessageProcessorLog.FoundStatusesToDeliver(logger, statuses.Length);
 
         var messageIds = statuses.Select(s => s.MessageId).Distinct().ToArray();
-        var messages = await dbContext.Set<InboxMessageEntity>()
+        var messages = await dbContext
+            .Set<InboxMessageEntity>()
             .Where(m => messageIds.Contains(m.Id))
             .ToDictionaryAsync(m => m.Id, cancellationToken);
 
@@ -105,7 +113,10 @@ internal class InboxMessageProcessor<TDbContext>(
             if (!messages.TryGetValue(status.MessageId, out var inboxMessage))
             {
                 InboxMessageProcessorLog.MessageNotFound(logger, status.MessageId, status.Id);
-                status.MarkAsPoisoned("InboxMessage record not found — likely deleted.", timeProvider);
+                status.MarkAsPoisoned(
+                    "InboxMessage record not found — likely deleted.",
+                    timeProvider
+                );
                 telemetry.RecordPoisoned();
                 await dbContext.SaveChangesAsync(cancellationToken);
                 continue;
@@ -118,8 +129,16 @@ internal class InboxMessageProcessor<TDbContext>(
             }
             catch (Exception ex)
             {
-                InboxMessageProcessorLog.DeserializationFailed(logger, status.MessageId, status.Id, ex);
-                status.MarkAsPoisoned($"Properties deserialization failed: {ex.Message}", timeProvider);
+                InboxMessageProcessorLog.DeserializationFailed(
+                    logger,
+                    status.MessageId,
+                    status.Id,
+                    ex
+                );
+                status.MarkAsPoisoned(
+                    $"Properties deserialization failed: {ex.Message}",
+                    timeProvider
+                );
                 telemetry.RecordPoisoned();
                 await dbContext.SaveChangesAsync(cancellationToken);
                 continue;
@@ -128,21 +147,29 @@ internal class InboxMessageProcessor<TDbContext>(
             var registration = channelHandlerRegistry.GetInboxRegistrationByKey(status.HandlerKey);
             if (registration == null)
             {
-                InboxMessageProcessorLog.HandlerKeyNotRegistered(logger, status.HandlerKey, status.Id);
+                InboxMessageProcessorLog.HandlerKeyNotRegistered(
+                    logger,
+                    status.HandlerKey,
+                    status.Id
+                );
                 status.MarkAsPoisoned(
                     $"Handler key '{status.HandlerKey}' is not registered. The handler may have been removed or renamed.",
-                    timeProvider);
+                    timeProvider
+                );
                 telemetry.RecordPoisoned();
                 await dbContext.SaveChangesAsync(cancellationToken);
 
-                await observers.NotifyAsync(new MessageActivity
-                {
-                    Stage = MessageStage.InboxPoisoned,
-                    Properties = props,
-                    SerializedBody = inboxMessage.Content,
-                    TransportName = inboxMessage.TransportName,
-                    Timestamp = timeProvider.GetUtcNow(),
-                }, logger);
+                await observers.NotifyAsync(
+                    new MessageActivity
+                    {
+                        Stage = MessageStage.InboxPoisoned,
+                        Properties = props,
+                        SerializedBody = inboxMessage.Content,
+                        TransportName = inboxMessage.TransportName,
+                        Timestamp = timeProvider.GetUtcNow(),
+                    },
+                    logger
+                );
 
                 continue;
             }
@@ -155,22 +182,36 @@ internal class InboxMessageProcessor<TDbContext>(
                 deliverActivity = telemetry.StartDeliverActivity(props, status.HandlerKey);
 
                 var serializer = serializerResolver.GetSerializer(registration.MessageType);
-                deliveredMessage = serializer.Deserialize(inboxMessage.Content, registration.MessageType)
-                              ?? throw new InvalidOperationException(
-                                  $"Deserialized message of type '{registration.MessageType.Name}' was null.");
+                deliveredMessage =
+                    serializer.Deserialize(inboxMessage.Content, registration.MessageType)
+                    ?? throw new InvalidOperationException(
+                        $"Deserialized message of type '{registration.MessageType.Name}' was null."
+                    );
 
                 await handlerInvoker.InvokeAsync(
-                    registration.HandlerType, deliveredMessage, props,
-                    cancellationToken, _options.HandlerTimeout);
+                    registration.HandlerType,
+                    deliveredMessage,
+                    props,
+                    cancellationToken,
+                    _options.HandlerTimeout
+                );
 
                 status.MarkAsCompleted(timeProvider);
                 telemetry.RecordDelivered(success: true);
 
-                InboxMessageProcessorLog.HandlerCompleted(logger, status.HandlerKey, status.MessageId);
+                InboxMessageProcessorLog.HandlerCompleted(
+                    logger,
+                    status.HandlerKey,
+                    status.MessageId
+                );
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                InboxMessageProcessorLog.HandlerInterrupted(logger, status.HandlerKey, status.MessageId);
+                InboxMessageProcessorLog.HandlerInterrupted(
+                    logger,
+                    status.HandlerKey,
+                    status.MessageId
+                );
                 deliverActivity?.Dispose();
                 break;
             }
@@ -179,12 +220,29 @@ internal class InboxMessageProcessor<TDbContext>(
                 handlerException = ex;
                 deliverActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 telemetry.RecordDelivered(success: false);
-                InboxMessageProcessorLog.HandlerFailed(logger, status.HandlerKey, status.MessageId, status.ErrorCount + 1, ex);
-                status.MarkAsFailed(ex.Message, timeProvider, _options.MaxRetries, _options.MaxRetryDelay);
+                InboxMessageProcessorLog.HandlerFailed(
+                    logger,
+                    status.HandlerKey,
+                    status.MessageId,
+                    status.ErrorCount + 1,
+                    ex
+                );
+                status.MarkAsFailed(
+                    ex.Message,
+                    timeProvider,
+                    _options.MaxRetries,
+                    _options.MaxRetryDelay
+                );
 
                 if (status.IsPoisoned)
                 {
-                    InboxMessageProcessorLog.HandlerPoisoned(logger, status.HandlerKey, status.MessageId, status.ErrorCount, ex.Message);
+                    InboxMessageProcessorLog.HandlerPoisoned(
+                        logger,
+                        status.HandlerKey,
+                        status.MessageId,
+                        status.ErrorCount,
+                        ex.Message
+                    );
                 }
             }
             finally
@@ -194,31 +252,37 @@ internal class InboxMessageProcessor<TDbContext>(
 
             await dbContext.SaveChangesAsync(CancellationToken.None);
 
-            await observers.NotifyAsync(new MessageActivity
-            {
-                Stage = MessageStage.InboxDispatched,
-                Properties = props,
-                SerializedBody = inboxMessage.Content,
-                Message = deliveredMessage,
-                MessageType = registration.MessageType,
-                TransportName = inboxMessage.TransportName,
-                IsSuccess = handlerException == null,
-                Exception = handlerException,
-                Timestamp = timeProvider.GetUtcNow(),
-            }, logger);
+            await observers.NotifyAsync(
+                new MessageActivity
+                {
+                    Stage = MessageStage.InboxDispatched,
+                    Properties = props,
+                    SerializedBody = inboxMessage.Content,
+                    Message = deliveredMessage,
+                    MessageType = registration.MessageType,
+                    TransportName = inboxMessage.TransportName,
+                    IsSuccess = handlerException == null,
+                    Exception = handlerException,
+                    Timestamp = timeProvider.GetUtcNow(),
+                },
+                logger
+            );
 
             if (status.IsPoisoned)
             {
                 telemetry.RecordPoisoned();
-                await observers.NotifyAsync(new MessageActivity
-                {
-                    Stage = MessageStage.InboxPoisoned,
-                    Properties = props,
-                    SerializedBody = inboxMessage.Content,
-                    TransportName = inboxMessage.TransportName,
-                    Exception = handlerException,
-                    Timestamp = timeProvider.GetUtcNow(),
-                }, logger);
+                await observers.NotifyAsync(
+                    new MessageActivity
+                    {
+                        Stage = MessageStage.InboxPoisoned,
+                        Properties = props,
+                        SerializedBody = inboxMessage.Content,
+                        TransportName = inboxMessage.TransportName,
+                        Exception = handlerException,
+                        Timestamp = timeProvider.GetUtcNow(),
+                    },
+                    logger
+                );
             }
         }
 
@@ -230,30 +294,86 @@ internal class InboxMessageProcessor<TDbContext>(
 
 internal static partial class InboxMessageProcessorLog
 {
-    [LoggerMessage(Level = LogLevel.Information, Message = "Found {Count} inbox handler status(es) to deliver")]
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Found {Count} inbox handler status(es) to deliver"
+    )]
     public static partial void FoundStatusesToDeliver(ILogger logger, int count);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Skipped {ConflictCount} inbox handler status(es) already claimed by another worker")]
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Skipped {ConflictCount} inbox handler status(es) already claimed by another worker"
+    )]
     public static partial void SkippedConflicts(ILogger logger, int conflictCount);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "InboxMessage '{MessageId}' not found for handler status '{StatusId}'. Poisoning status.")]
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "InboxMessage '{MessageId}' not found for handler status '{StatusId}'. Poisoning status."
+    )]
     public static partial void MessageNotFound(ILogger logger, string messageId, Guid statusId);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to deserialize properties for InboxMessage '{MessageId}'. Poisoning status '{StatusId}'.")]
-    public static partial void DeserializationFailed(ILogger logger, string messageId, Guid statusId, Exception ex);
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "Failed to deserialize properties for InboxMessage '{MessageId}'. Poisoning status '{StatusId}'."
+    )]
+    public static partial void DeserializationFailed(
+        ILogger logger,
+        string messageId,
+        Guid statusId,
+        Exception ex
+    );
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Handler key '{HandlerKey}' is no longer registered. Poisoning status '{StatusId}'.")]
-    public static partial void HandlerKeyNotRegistered(ILogger logger, string handlerKey, Guid statusId);
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Handler key '{HandlerKey}' is no longer registered. Poisoning status '{StatusId}'."
+    )]
+    public static partial void HandlerKeyNotRegistered(
+        ILogger logger,
+        string handlerKey,
+        Guid statusId
+    );
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Inbox handler '{HandlerKey}' completed for message '{MessageId}'")]
-    public static partial void HandlerCompleted(ILogger logger, string handlerKey, string messageId);
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Inbox handler '{HandlerKey}' completed for message '{MessageId}'"
+    )]
+    public static partial void HandlerCompleted(
+        ILogger logger,
+        string handlerKey,
+        string messageId
+    );
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Inbox handler '{HandlerKey}' for message '{MessageId}' interrupted by cancellation, will be retried via stuck detection")]
-    public static partial void HandlerInterrupted(ILogger logger, string handlerKey, string messageId);
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Inbox handler '{HandlerKey}' for message '{MessageId}' interrupted by cancellation, will be retried via stuck detection"
+    )]
+    public static partial void HandlerInterrupted(
+        ILogger logger,
+        string handlerKey,
+        string messageId
+    );
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Inbox handler '{HandlerKey}' failed for message '{MessageId}', attempt {Attempt}")]
-    public static partial void HandlerFailed(ILogger logger, string handlerKey, string messageId, int attempt, Exception ex);
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Inbox handler '{HandlerKey}' failed for message '{MessageId}', attempt {Attempt}"
+    )]
+    public static partial void HandlerFailed(
+        ILogger logger,
+        string handlerKey,
+        string messageId,
+        int attempt,
+        Exception ex
+    );
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Inbox handler '{HandlerKey}' for message '{MessageId}' has been poisoned after {Attempts} failed attempts. Last error: {Error}")]
-    public static partial void HandlerPoisoned(ILogger logger, string handlerKey, string messageId, int attempts, string error);
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "Inbox handler '{HandlerKey}' for message '{MessageId}' has been poisoned after {Attempts} failed attempts. Last error: {Error}"
+    )]
+    public static partial void HandlerPoisoned(
+        ILogger logger,
+        string handlerKey,
+        string messageId,
+        int attempts,
+        string error
+    );
 }

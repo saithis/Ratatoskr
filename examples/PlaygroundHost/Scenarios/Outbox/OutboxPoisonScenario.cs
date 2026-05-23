@@ -9,15 +9,17 @@ namespace PlaygroundHost.Scenarios.Outbox;
 public sealed class OutboxPoisonScenario : IPlaygroundScenario
 {
     private const string ScenarioSlug = "outbox-poison";
-    private static string ExchangeName { get; } = PlaygroundAmqpNames.ExchangeName(ScenarioSlug, "events");
+    private static string ExchangeName { get; } =
+        PlaygroundAmqpNames.ExchangeName(ScenarioSlug, "events");
 
     public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues => [];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
     {
-        bus.AddEventPublishChannel(ExchangeName, c => c
-            .WithRabbitMq(r => r.WithTopicExchange())
-            .Produces<PoisonProbe>());
+        bus.AddEventPublishChannel(
+            ExchangeName,
+            c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<PoisonProbe>()
+        );
     }
 
     public string Slug => ScenarioSlug;
@@ -32,24 +34,33 @@ public sealed class OutboxPoisonScenario : IPlaygroundScenario
     private async Task StagePoisonProbeAsync(
         PublisherDbContext context,
         string runId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         this.StageCorrelatedOutboxMessage(
             context,
             runId,
             new PoisonProbe(runId),
-            $"outbox-poison-{runId}");
+            $"outbox-poison-{runId}"
+        );
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
+    public async Task<ScenarioVerdict> ExecuteAsync(
+        ScenarioExecutionContext context,
+        CancellationToken cancellationToken
+    )
     {
         var runId = context.ScenarioRunId;
         var registry = context.GetRequired<OutboxSendFailureRegistry>();
         registry.Register(runId, OutboxSendFailureKind.AlwaysFail, 0);
         try
         {
-            var before = await PlaygroundSqlMetrics.CountPoisonedOutboxForScenarioRunAsync(context.PublisherDb, runId, cancellationToken);
+            var before = await PlaygroundSqlMetrics.CountPoisonedOutboxForScenarioRunAsync(
+                context.PublisherDb,
+                runId,
+                cancellationToken
+            );
             await StagePoisonProbeAsync(context.PublisherDb, runId, cancellationToken);
             context.StepsCompleted.Add("staged_always_fail_send");
 
@@ -62,10 +73,15 @@ public sealed class OutboxPoisonScenario : IPlaygroundScenario
                 {
                     await using var scope2 = context.ScopeFactory.CreateAsyncScope();
                     var db2 = scope2.ServiceProvider.GetRequiredService<PublisherDbContext>();
-                    return await PlaygroundSqlMetrics.CountPoisonedOutboxForScenarioRunAsync(db2, runId, ct);
+                    return await PlaygroundSqlMetrics.CountPoisonedOutboxForScenarioRunAsync(
+                        db2,
+                        runId,
+                        ct
+                    );
                 },
                 "Poisoned outbox count",
-                cancellationToken);
+                cancellationToken
+            );
         }
         finally
         {

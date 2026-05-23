@@ -13,7 +13,10 @@ namespace Ratatoskr.Tests.RabbitMq;
 
 public class CloudEventsAmqpMapperIncomingTests
 {
-    private readonly CloudEventsAmqpMapper _mapper = new(new CloudEventsOptions(), NullLogger<CloudEventsAmqpMapper>.Instance);
+    private readonly CloudEventsAmqpMapper _mapper = new(
+        new CloudEventsOptions(),
+        NullLogger<CloudEventsAmqpMapper>.Instance
+    );
 
     [Test]
     public void MapBinaryModeIncoming_ShouldMapTraceContext()
@@ -25,23 +28,33 @@ public class CloudEventsAmqpMapperIncomingTests
             { "tracestate", "rojo=00f067aa0ba902b7" },
             { "cloudEvents_id", "123" },
             { "cloudEvents_source", "/unit-test" },
-            { "cloudEvents_type", "test.event" }
+            { "cloudEvents_type", "test.event" },
         };
 
         var basicProperties = new BasicProperties
         {
             Headers = headers,
-            ContentType = "application/json"
+            ContentType = "application/json",
         };
 
         var body = Encoding.UTF8.GetBytes("{}");
-        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", basicProperties, body);
+        var incoming = new BasicDeliverEventArgs(
+            "tag",
+            1,
+            false,
+            "ex",
+            "rk",
+            basicProperties,
+            body
+        );
 
         // Act
         var result = _mapper.MapIncoming(incoming);
 
         // Assert
-        result.props.TraceParent.Should().Be("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
+        result
+            .props.TraceParent.Should()
+            .Be("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
         result.props.TraceState.Should().Be("rojo=00f067aa0ba902b7");
     }
 
@@ -56,17 +69,25 @@ public class CloudEventsAmqpMapperIncomingTests
             { "cloudEvents_tracestate", "legacy=true" },
             { "cloudEvents_id", "123" },
             { "cloudEvents_source", "/unit-test" },
-            { "cloudEvents_type", "test.event" }
+            { "cloudEvents_type", "test.event" },
         };
 
         var basicProperties = new BasicProperties
         {
             Headers = headers,
-            ContentType = "application/json"
+            ContentType = "application/json",
         };
 
         var body = Encoding.UTF8.GetBytes("{}");
-        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", basicProperties, body);
+        var incoming = new BasicDeliverEventArgs(
+            "tag",
+            1,
+            false,
+            "ex",
+            "rk",
+            basicProperties,
+            body
+        );
 
         var result = _mapper.MapIncoming(incoming);
 
@@ -84,17 +105,25 @@ public class CloudEventsAmqpMapperIncomingTests
             { "cloudEvents_traceparent", "00-ratatoskr-send-trace-01" },
             { "cloudEvents_id", "123" },
             { "cloudEvents_source", "/unit-test" },
-            { "cloudEvents_type", "test.event" }
+            { "cloudEvents_type", "test.event" },
         };
 
         var basicProperties = new BasicProperties
         {
             Headers = headers,
-            ContentType = "application/json"
+            ContentType = "application/json",
         };
 
         var body = Encoding.UTF8.GetBytes("{}");
-        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", basicProperties, body);
+        var incoming = new BasicDeliverEventArgs(
+            "tag",
+            1,
+            false,
+            "ex",
+            "rk",
+            basicProperties,
+            body
+        );
 
         var result = _mapper.MapIncoming(incoming);
 
@@ -106,25 +135,42 @@ public class CloudEventsAmqpMapperIncomingTests
     {
         var headers = new Dictionary<string, object?>
         {
-            { "traceparent", new ReadOnlyMemory<byte>(Encoding.UTF8.GetBytes("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")) },
+            {
+                "traceparent",
+                new ReadOnlyMemory<byte>(
+                    Encoding.UTF8.GetBytes(
+                        "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+                    )
+                )
+            },
             { "tracestate", new ReadOnlyMemory<byte>(Encoding.UTF8.GetBytes("vendor=memory")) },
             { "cloudEvents_id", "123" },
             { "cloudEvents_source", "/unit-test" },
-            { "cloudEvents_type", "test.event" }
+            { "cloudEvents_type", "test.event" },
         };
 
         var basicProperties = new BasicProperties
         {
             Headers = headers,
-            ContentType = "application/json"
+            ContentType = "application/json",
         };
 
         var body = Encoding.UTF8.GetBytes("{}");
-        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", basicProperties, body);
+        var incoming = new BasicDeliverEventArgs(
+            "tag",
+            1,
+            false,
+            "ex",
+            "rk",
+            basicProperties,
+            body
+        );
 
         var result = _mapper.MapIncoming(incoming);
 
-        result.props.TraceParent.Should().Be("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
+        result
+            .props.TraceParent.Should()
+            .Be("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
         result.props.TraceState.Should().Be("vendor=memory");
     }
 
@@ -138,21 +184,31 @@ public class CloudEventsAmqpMapperIncomingTests
             { "tracestate", "vendor=bare" },
             { "cloudEvents_id", "123" },
             { "cloudEvents_source", "/unit-test" },
-            { "cloudEvents_type", "test.event" }
+            { "cloudEvents_type", "test.event" },
         };
 
         var basicProperties = new BasicProperties
         {
             Headers = headers,
-            ContentType = "application/json"
+            ContentType = "application/json",
         };
 
         var body = Encoding.UTF8.GetBytes("{}");
-        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", basicProperties, body);
+        var incoming = new BasicDeliverEventArgs(
+            "tag",
+            1,
+            false,
+            "ex",
+            "rk",
+            basicProperties,
+            body
+        );
 
         var result = _mapper.MapIncoming(incoming);
 
-        result.props.TraceParent.Should().Be("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
+        result
+            .props.TraceParent.Should()
+            .Be("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
         result.props.TraceState.Should().Be("vendor=bare");
     }
 
@@ -160,22 +216,31 @@ public class CloudEventsAmqpMapperIncomingTests
     public void MapStructuredModeIncoming_ShouldMapTraceContext()
     {
         // Arrange
-        var cloudEventJson = "{\"id\":\"123\",\"source\":\"/unit-test\",\"type\":\"test.event\",\"specversion\":\"1.0\",\"data\":{\"foo\":\"bar\"}}";
+        var cloudEventJson =
+            "{\"id\":\"123\",\"source\":\"/unit-test\",\"type\":\"test.event\",\"specversion\":\"1.0\",\"data\":{\"foo\":\"bar\"}}";
         var body = Encoding.UTF8.GetBytes(cloudEventJson);
 
         var headers = new Dictionary<string, object?>
         {
             { "traceparent", "00-structured-trace-id-01" },
-            { "tracestate", "structured=true" }
+            { "tracestate", "structured=true" },
         };
 
         var basicProperties = new BasicProperties
         {
             Headers = headers,
-            ContentType = "application/cloudevents+json"
+            ContentType = "application/cloudevents+json",
         };
 
-        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", basicProperties, body);
+        var incoming = new BasicDeliverEventArgs(
+            "tag",
+            1,
+            false,
+            "ex",
+            "rk",
+            basicProperties,
+            body
+        );
 
         // Act
         var result = _mapper.MapIncoming(incoming);
@@ -188,22 +253,31 @@ public class CloudEventsAmqpMapperIncomingTests
     [Test]
     public void MapStructuredModeIncoming_ShouldPreferEnvelopeTraceContextOverBareHeaders()
     {
-        var cloudEventJson = "{\"id\":\"123\",\"source\":\"/unit-test\",\"type\":\"test.event\",\"specversion\":\"1.0\",\"traceparent\":\"00-envelope-trace-id-01\",\"tracestate\":\"envelope=true\",\"data\":{\"foo\":\"bar\"}}";
+        var cloudEventJson =
+            "{\"id\":\"123\",\"source\":\"/unit-test\",\"type\":\"test.event\",\"specversion\":\"1.0\",\"traceparent\":\"00-envelope-trace-id-01\",\"tracestate\":\"envelope=true\",\"data\":{\"foo\":\"bar\"}}";
         var body = Encoding.UTF8.GetBytes(cloudEventJson);
 
         var headers = new Dictionary<string, object?>
         {
             { "traceparent", "00-rmq-client-trace-id-01" },
-            { "tracestate", "rmq=true" }
+            { "tracestate", "rmq=true" },
         };
 
         var basicProperties = new BasicProperties
         {
             Headers = headers,
-            ContentType = "application/cloudevents+json"
+            ContentType = "application/cloudevents+json",
         };
 
-        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", basicProperties, body);
+        var incoming = new BasicDeliverEventArgs(
+            "tag",
+            1,
+            false,
+            "ex",
+            "rk",
+            basicProperties,
+            body
+        );
         var result = _mapper.MapIncoming(incoming);
 
         result.props.TraceParent.Should().Be("00-envelope-trace-id-01");
@@ -222,7 +296,7 @@ public class CloudEventsAmqpMapperIncomingTests
             { "cloudEvents_type", "payment.received" },
             { "cloudEvents_time", "2025-06-15T12:00:00Z" },
             { "cloudEvents_subject", "payment-001" },
-            { "cloudEvents_datacontenttype", "application/json" }
+            { "cloudEvents_datacontenttype", "application/json" },
         };
         var basicProperties = new BasicProperties
         {
@@ -230,10 +304,18 @@ public class CloudEventsAmqpMapperIncomingTests
             ContentType = "application/json",
             MessageId = "evt-789",
             Type = "payment.received",
-            AppId = "/billing"
+            AppId = "/billing",
         };
         var body = Encoding.UTF8.GetBytes("{\"amount\":100}");
-        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", basicProperties, body);
+        var incoming = new BasicDeliverEventArgs(
+            "tag",
+            1,
+            false,
+            "ex",
+            "rk",
+            basicProperties,
+            body
+        );
 
         // Act
         var result = _mapper.MapIncoming(incoming);
@@ -251,21 +333,28 @@ public class CloudEventsAmqpMapperIncomingTests
     public void MapIncoming_StructuredMode_ExtractsDataFromEnvelope()
     {
         // Arrange
-        var cloudEventJson = JsonSerializer.Serialize(new
-        {
-            id = "evt-100",
-            source = "/inventory",
-            type = "item.updated",
-            specversion = "1.0",
-            time = "2025-06-15T12:00:00Z",
-            data = new { itemId = "abc", quantity = 5 }
-        });
+        var cloudEventJson = JsonSerializer.Serialize(
+            new
+            {
+                id = "evt-100",
+                source = "/inventory",
+                type = "item.updated",
+                specversion = "1.0",
+                time = "2025-06-15T12:00:00Z",
+                data = new { itemId = "abc", quantity = 5 },
+            }
+        );
         var body = Encoding.UTF8.GetBytes(cloudEventJson);
-        var basicProperties = new BasicProperties
-        {
-            ContentType = "application/cloudevents+json"
-        };
-        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", basicProperties, body);
+        var basicProperties = new BasicProperties { ContentType = "application/cloudevents+json" };
+        var incoming = new BasicDeliverEventArgs(
+            "tag",
+            1,
+            false,
+            "ex",
+            "rk",
+            basicProperties,
+            body
+        );
 
         // Act
         var result = _mapper.MapIncoming(incoming);
@@ -284,12 +373,17 @@ public class CloudEventsAmqpMapperIncomingTests
     public void MapIncoming_NullHeaders_HandlesGracefully()
     {
         // Arrange - BasicProperties with no headers set (null)
-        var basicProperties = new BasicProperties
-        {
-            ContentType = "application/json"
-        };
+        var basicProperties = new BasicProperties { ContentType = "application/json" };
         var body = Encoding.UTF8.GetBytes("{}");
-        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", basicProperties, body);
+        var incoming = new BasicDeliverEventArgs(
+            "tag",
+            1,
+            false,
+            "ex",
+            "rk",
+            basicProperties,
+            body
+        );
 
         // Act
         var result = _mapper.MapIncoming(incoming);
@@ -304,12 +398,25 @@ public class CloudEventsAmqpMapperIncomingTests
     public void MapIncoming_BinaryMode_MissingId_LogsWarning()
     {
         var warnings = new List<string>();
-        using var factory = LoggerFactory.Create(b => b.AddProvider(new WarningCaptureLoggerProvider(warnings)));
-        var mapper = new CloudEventsAmqpMapper(new CloudEventsOptions(), factory.CreateLogger<CloudEventsAmqpMapper>());
+        using var factory = LoggerFactory.Create(b =>
+            b.AddProvider(new WarningCaptureLoggerProvider(warnings))
+        );
+        var mapper = new CloudEventsAmqpMapper(
+            new CloudEventsOptions(),
+            factory.CreateLogger<CloudEventsAmqpMapper>()
+        );
 
         var basicProperties = new BasicProperties { ContentType = "application/json" };
         var body = Encoding.UTF8.GetBytes("{}");
-        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", basicProperties, body);
+        var incoming = new BasicDeliverEventArgs(
+            "tag",
+            1,
+            false,
+            "ex",
+            "rk",
+            basicProperties,
+            body
+        );
 
         var result = mapper.MapIncoming(incoming);
 
@@ -322,19 +429,24 @@ public class CloudEventsAmqpMapperIncomingTests
     private sealed class WarningCaptureLoggerProvider(List<string> sink) : ILoggerProvider
     {
         public ILogger CreateLogger(string categoryName) => new WarningCaptureLogger(sink);
+
         public void Dispose() { }
     }
 
     private sealed class WarningCaptureLogger(List<string> sink) : ILogger
     {
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
         public bool IsEnabled(LogLevel logLevel) => true;
+
         public void Log<TState>(
             LogLevel logLevel,
             EventId eventId,
             TState state,
             Exception? exception,
-            Func<TState, Exception?, string> formatter)
+            Func<TState, Exception?, string> formatter
+        )
         {
             if (logLevel == LogLevel.Warning)
             {
@@ -351,15 +463,23 @@ public class CloudEventsAmqpMapperIncomingTests
         {
             { "cloudEvents_id", "evt-empty" },
             { "cloudEvents_source", "/test" },
-            { "cloudEvents_type", "test.event" }
+            { "cloudEvents_type", "test.event" },
         };
         var basicProperties = new BasicProperties
         {
             Headers = headers,
-            ContentType = "application/json"
+            ContentType = "application/json",
         };
         var body = Array.Empty<byte>();
-        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", basicProperties, body);
+        var incoming = new BasicDeliverEventArgs(
+            "tag",
+            1,
+            false,
+            "ex",
+            "rk",
+            basicProperties,
+            body
+        );
 
         // Act
         var result = _mapper.MapIncoming(incoming);

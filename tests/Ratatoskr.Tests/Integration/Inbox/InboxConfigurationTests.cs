@@ -9,8 +9,10 @@ using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Inbox;
 
-public class InboxConfigurationTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
-    : InboxTestBase(rabbitMq, postgres)
+public class InboxConfigurationTests(
+    RabbitMqContainerFixture rabbitMq,
+    PostgresContainerFixture postgres
+) : InboxTestBase(rabbitMq, postgres)
 {
     [Test]
     public async Task Inbox_DuplicateHandlerKey_ThrowsAtStartup()
@@ -22,20 +24,26 @@ public class InboxConfigurationTests(RabbitMqContainerFixture rabbitMq, Postgres
             {
                 services.AddRatatoskr(bus =>
                 {
-                    bus.AddEventConsumeChannel("inbox-events", c => c
-                        .Consumes<TestEvent>(m => m
-                            .WithHandler<InboxHandlerA>("same-key")
-                            .WithHandler<InboxHandlerB>("same-key"))
-                        .UseInbox<TestDbContext>());
+                    bus.AddEventConsumeChannel(
+                        "inbox-events",
+                        c =>
+                            c.Consumes<TestEvent>(m =>
+                                    m.WithHandler<InboxHandlerA>("same-key")
+                                        .WithHandler<InboxHandlerB>("same-key")
+                                )
+                                .UseInbox<TestDbContext>()
+                    );
                     bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox());
                 });
 
-                services.AddDbContext<TestDbContext>((sp, opts) =>
-                    opts.UseNpgsql(PostgresConnectionString));
+                services.AddDbContext<TestDbContext>(
+                    (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+                );
             });
         };
 
-        await act.Should().ThrowAsync<InvalidOperationException>()
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
             .WithMessage("*Duplicate inbox handler key*same-key*");
     }
 
@@ -49,19 +57,28 @@ public class InboxConfigurationTests(RabbitMqContainerFixture rabbitMq, Postgres
             services.AddSingleton<TimeProvider>(fakeTime);
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
-                    .UseInbox<TestDbContext>());
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox =>
+                bus.AddEventPublishChannel(
+                    "inbox-events",
+                    c => c.WithEfCore().Produces<TestEvent>()
+                );
+                bus.AddEventConsumeChannel(
+                    "inbox-events",
+                    c =>
+                        c.Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
+                            .UseInbox<TestDbContext>()
+                );
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseInbox(inbox =>
                     {
                         inbox.WithMaxRetries(5);
                         inbox.WithoutBackgroundProcessing();
-                    }));
+                    })
+                );
             });
 
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
         });
 
         await InitializeDatabase();
@@ -71,7 +88,8 @@ public class InboxConfigurationTests(RabbitMqContainerFixture rabbitMq, Postgres
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             await bus.PublishDirectAsync(
                 new TestEvent { Id = "business-unrecoverable-1" },
-                new MessageProperties { Id = "unrecoverable-1" });
+                new MessageProperties { Id = "unrecoverable-1" }
+            );
         });
 
         await WaitForInboxEntriesAsync(1);
@@ -80,7 +98,8 @@ public class InboxConfigurationTests(RabbitMqContainerFixture rabbitMq, Postgres
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             await db.Database.ExecuteSqlRawAsync(
-                """UPDATE "InboxHandlerStatusEntity" SET "HandlerKey" = 'handler-removed-in-v2' WHERE "HandlerKey" = 'handler-a'""");
+                """UPDATE "InboxHandlerStatusEntity" SET "HandlerKey" = 'handler-removed-in-v2' WHERE "HandlerKey" = 'handler-a'"""
+            );
         });
 
         await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
@@ -90,8 +109,12 @@ public class InboxConfigurationTests(RabbitMqContainerFixture rabbitMq, Postgres
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var status = await db.Set<InboxHandlerStatusEntity>()
                 .SingleAsync(s => s.HandlerKey == "handler-removed-in-v2");
-            status.IsPoisoned.Should().BeTrue("should be poisoned immediately for unrecoverable error");
-            status.ErrorCount.Should().Be(0, "ErrorCount should not be incremented for unrecoverable errors");
+            status
+                .IsPoisoned.Should()
+                .BeTrue("should be poisoned immediately for unrecoverable error");
+            status
+                .ErrorCount.Should()
+                .Be(0, "ErrorCount should not be incremented for unrecoverable errors");
             status.LastError.Should().Contain("not registered");
         });
     }
@@ -107,16 +130,26 @@ public class InboxConfigurationTests(RabbitMqContainerFixture rabbitMq, Postgres
             services.AddSingleton<TimeProvider>(fakeTime);
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-v2", "handler-v1"))
-                    .UseInbox<TestDbContext>());
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox =>
-                    inbox.WithoutBackgroundProcessing()));
+                bus.AddEventPublishChannel(
+                    "inbox-events",
+                    c => c.WithEfCore().Produces<TestEvent>()
+                );
+                bus.AddEventConsumeChannel(
+                    "inbox-events",
+                    c =>
+                        c.Consumes<TestEvent>(m =>
+                                m.WithHandler<InboxHandlerA>("handler-v2", "handler-v1")
+                            )
+                            .UseInbox<TestDbContext>()
+                );
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseInbox(inbox => inbox.WithoutBackgroundProcessing())
+                );
             });
 
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
         });
 
         await InitializeDatabase();
@@ -127,7 +160,8 @@ public class InboxConfigurationTests(RabbitMqContainerFixture rabbitMq, Postgres
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             await bus.PublishDirectAsync(
                 new TestEvent { Id = "business-legacy-1" },
-                new MessageProperties { Id = "legacy-1" });
+                new MessageProperties { Id = "legacy-1" }
+            );
         });
 
         await WaitForInboxEntriesAsync(1);
@@ -138,7 +172,8 @@ public class InboxConfigurationTests(RabbitMqContainerFixture rabbitMq, Postgres
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             await db.Database.ExecuteSqlRawAsync(
-                """UPDATE "InboxHandlerStatusEntity" SET "HandlerKey" = 'handler-v1' WHERE "HandlerKey" = 'handler-v2'""");
+                """UPDATE "InboxHandlerStatusEntity" SET "HandlerKey" = 'handler-v1' WHERE "HandlerKey" = 'handler-v2'"""
+            );
         });
 
         // Process — the legacy key should resolve to the handler
@@ -150,7 +185,9 @@ public class InboxConfigurationTests(RabbitMqContainerFixture rabbitMq, Postgres
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var status = await db.Set<InboxHandlerStatusEntity>()
                 .SingleAsync(s => s.HandlerKey == "handler-v1");
-            status.CompletedAt.Should().NotBeNull("legacy key should resolve and handler should succeed");
+            status
+                .CompletedAt.Should()
+                .NotBeNull("legacy key should resolve and handler should succeed");
             status.IsPoisoned.Should().BeFalse();
             status.ErrorCount.Should().Be(0);
         });
@@ -166,16 +203,26 @@ public class InboxConfigurationTests(RabbitMqContainerFixture rabbitMq, Postgres
             services.AddSingleton<TimeProvider>(fakeTime);
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-v2", "handler-v1"))
-                    .UseInbox<TestDbContext>());
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox =>
-                    inbox.WithoutBackgroundProcessing()));
+                bus.AddEventPublishChannel(
+                    "inbox-events",
+                    c => c.WithEfCore().Produces<TestEvent>()
+                );
+                bus.AddEventConsumeChannel(
+                    "inbox-events",
+                    c =>
+                        c.Consumes<TestEvent>(m =>
+                                m.WithHandler<InboxHandlerA>("handler-v2", "handler-v1")
+                            )
+                            .UseInbox<TestDbContext>()
+                );
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseInbox(inbox => inbox.WithoutBackgroundProcessing())
+                );
             });
 
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
         });
 
         await InitializeDatabase();
@@ -186,7 +233,8 @@ public class InboxConfigurationTests(RabbitMqContainerFixture rabbitMq, Postgres
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             await bus.PublishDirectAsync(
                 new TestEvent { Id = "business-newentry-1" },
-                new MessageProperties { Id = "newentry-1" });
+                new MessageProperties { Id = "newentry-1" }
+            );
         });
 
         await WaitForInboxEntriesAsync(1);
@@ -195,7 +243,9 @@ public class InboxConfigurationTests(RabbitMqContainerFixture rabbitMq, Postgres
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var status = await db.Set<InboxHandlerStatusEntity>().SingleAsync();
-            status.HandlerKey.Should().Be("handler-v2", "new entries must use the current primary key, not legacy keys");
+            status
+                .HandlerKey.Should()
+                .Be("handler-v2", "new entries must use the current primary key, not legacy keys");
         });
     }
 
@@ -208,20 +258,26 @@ public class InboxConfigurationTests(RabbitMqContainerFixture rabbitMq, Postgres
             {
                 services.AddRatatoskr(bus =>
                 {
-                    bus.AddEventConsumeChannel("inbox-events", c => c
-                        .Consumes<TestEvent>(m => m
-                            .WithHandler<InboxHandlerA>("handler-a")
-                            .WithHandler<InboxHandlerB>("handler-b", "handler-a"))
-                        .UseInbox<TestDbContext>());
+                    bus.AddEventConsumeChannel(
+                        "inbox-events",
+                        c =>
+                            c.Consumes<TestEvent>(m =>
+                                    m.WithHandler<InboxHandlerA>("handler-a")
+                                        .WithHandler<InboxHandlerB>("handler-b", "handler-a")
+                                )
+                                .UseInbox<TestDbContext>()
+                    );
                     bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox());
                 });
 
-                services.AddDbContext<TestDbContext>((sp, opts) =>
-                    opts.UseNpgsql(PostgresConnectionString));
+                services.AddDbContext<TestDbContext>(
+                    (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+                );
             });
         };
 
-        await act.Should().ThrowAsync<InvalidOperationException>()
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
             .WithMessage("*Duplicate inbox handler key*handler-a*");
     }
 
@@ -234,15 +290,24 @@ public class InboxConfigurationTests(RabbitMqContainerFixture rabbitMq, Postgres
         {
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
-                    .UseInbox<TestDbContext>());
-                bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(inbox => inbox.WithoutBackgroundProcessing()));
+                bus.AddEventPublishChannel(
+                    "inbox-events",
+                    c => c.WithEfCore().Produces<TestEvent>()
+                );
+                bus.AddEventConsumeChannel(
+                    "inbox-events",
+                    c =>
+                        c.Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
+                            .UseInbox<TestDbContext>()
+                );
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseInbox(inbox => inbox.WithoutBackgroundProcessing())
+                );
             });
 
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
         });
 
         await InitializeDatabase();
@@ -252,7 +317,8 @@ public class InboxConfigurationTests(RabbitMqContainerFixture rabbitMq, Postgres
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             await bus.PublishDirectAsync(
                 new TestEvent { Id = "business-longid-1" },
-                new MessageProperties { Id = longId });
+                new MessageProperties { Id = longId }
+            );
         });
 
         await WaitForInboxEntriesAsync(1);
@@ -274,32 +340,47 @@ public class InboxConfigurationTests(RabbitMqContainerFixture rabbitMq, Postgres
         {
             services.AddRatatoskr(bus =>
             {
-                bus.AddEventPublishChannel("inbox-events", c => c.WithEfCore().Produces<TestEvent>());
-                bus.AddEventConsumeChannel("inbox-events", c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
-                    .UseInbox<TestDbContext>());
-                bus.AddEfCoreDurability<TestDbContext>(d => { d.UseInbox(); d.UseOutbox(); });
+                bus.AddEventPublishChannel(
+                    "inbox-events",
+                    c => c.WithEfCore().Produces<TestEvent>()
+                );
+                bus.AddEventConsumeChannel(
+                    "inbox-events",
+                    c =>
+                        c.Consumes<TestEvent>(m => m.WithHandler<InboxHandlerA>("handler-a"))
+                            .UseInbox<TestDbContext>()
+                );
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                {
+                    d.UseInbox();
+                    d.UseOutbox();
+                });
             });
 
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-            {
-                opts.UseNpgsql(PostgresConnectionString);
-                opts.RegisterOutbox<TestDbContext>(sp);
-            });
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) =>
+                {
+                    opts.UseNpgsql(PostgresConnectionString);
+                    opts.RegisterOutbox<TestDbContext>(sp);
+                }
+            );
         });
 
         await InitializeDatabase();
 
-        var act = () => InScopeAsync(async ctx =>
-        {
-            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            db.OutboxMessages.Add(
-                new TestEvent { Id = "business-toolong-1" },
-                new MessageProperties { Id = tooLongId });
-            await db.SaveChangesAsync();
-        });
+        var act = () =>
+            InScopeAsync(async ctx =>
+            {
+                var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+                db.OutboxMessages.Add(
+                    new TestEvent { Id = "business-toolong-1" },
+                    new MessageProperties { Id = tooLongId }
+                );
+                await db.SaveChangesAsync();
+            });
 
-        await act.Should().ThrowAsync<InvalidOperationException>()
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
             .WithMessage("*exceeds the maximum length*");
     }
 }

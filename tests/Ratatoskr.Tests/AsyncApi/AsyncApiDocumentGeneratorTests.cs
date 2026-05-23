@@ -7,10 +7,10 @@ using Ratatoskr.AsyncApi.Extensions;
 using Ratatoskr.AsyncApi.Generation;
 using Ratatoskr.AsyncApi.Model.Bindings;
 using Ratatoskr.CloudEvents;
+using Ratatoskr.Core;
 using Ratatoskr.RabbitMq;
 using Ratatoskr.RabbitMq.AsyncApi;
 using Ratatoskr.RabbitMq.Extensions;
-using Ratatoskr.Core;
 using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.AsyncApi;
@@ -29,7 +29,8 @@ public class AsyncApiDocumentGeneratorTests
         Action<RatatoskrBuilder> busConfig,
         Action<AsyncApiOptions>? asyncApiConfig = null,
         RabbitMqOptions? rabbitMqOptions = null,
-        CloudEventsContentMode contentMode = CloudEventsContentMode.Binary)
+        CloudEventsContentMode contentMode = CloudEventsContentMode.Binary
+    )
     {
         var services = new ServiceCollection();
 
@@ -47,7 +48,10 @@ public class AsyncApiDocumentGeneratorTests
         if (rabbitMqOptions != null)
         {
             services.AddSingleton(rabbitMqOptions);
-            services.AddSingleton<IAsyncApiTransportBindingProvider, RabbitMqAsyncApiBindingProvider>();
+            services.AddSingleton<
+                IAsyncApiTransportBindingProvider,
+                RabbitMqAsyncApiBindingProvider
+            >();
         }
 
         return services.BuildServiceProvider().GetRequiredService<AsyncApiDocumentGenerator>();
@@ -57,26 +61,42 @@ public class AsyncApiDocumentGeneratorTests
     public async Task Generate_BinaryMode_PublishAndConsumeChannels_WithRabbitMqBindings()
     {
         var generator = BuildGenerator(
-            bus => bus
-                .AddEventPublishChannel("apikey.events", c => c
-                    .WithAsyncApi(a => a
-                        .WithDescription("Channel for API key related events.")
-                        .WithOperation(o => o.WithDescription("Publishes API key lifecycle events.")))
-                    .WithRabbitMq(r => r.WithTopicExchange())
-                    .Produces<ApiKeyRevokedEvent>())
-                .AddEventConsumeChannel("user.events", c => c
-                    .WithAsyncApi(a => a
-                        .WithDescription("Channel for authorization events owned by the user service."))
-                    .WithRabbitMq(r => r
-                        .WithFanoutExchange()
-                        .WithQueueName("apikey.subscriptions"))
-                    .Consumes<UserRolesChangedEvent>(
-                        m => m.WithHandler<NoOpUserRolesChangedHandler>(),
-                        msg => msg.WithAsyncApi(a => a
-                            .WithVersion("2.0.0")))),
-            asyncApiConfig: opts => opts
-                .WithDescription("AsyncAPI documentation for the API Key service."),
-            rabbitMqOptions: new RabbitMqOptions { ConnectionString = new Uri("amqp://a:b@rabbitmq.example.com/") });
+            bus =>
+                bus.AddEventPublishChannel(
+                        "apikey.events",
+                        c =>
+                            c.WithAsyncApi(a =>
+                                    a.WithDescription("Channel for API key related events.")
+                                        .WithOperation(o =>
+                                            o.WithDescription("Publishes API key lifecycle events.")
+                                        )
+                                )
+                                .WithRabbitMq(r => r.WithTopicExchange())
+                                .Produces<ApiKeyRevokedEvent>()
+                    )
+                    .AddEventConsumeChannel(
+                        "user.events",
+                        c =>
+                            c.WithAsyncApi(a =>
+                                    a.WithDescription(
+                                        "Channel for authorization events owned by the user service."
+                                    )
+                                )
+                                .WithRabbitMq(r =>
+                                    r.WithFanoutExchange().WithQueueName("apikey.subscriptions")
+                                )
+                                .Consumes<UserRolesChangedEvent>(
+                                    m => m.WithHandler<NoOpUserRolesChangedHandler>(),
+                                    msg => msg.WithAsyncApi(a => a.WithVersion("2.0.0"))
+                                )
+                    ),
+            asyncApiConfig: opts =>
+                opts.WithDescription("AsyncAPI documentation for the API Key service."),
+            rabbitMqOptions: new RabbitMqOptions
+            {
+                ConnectionString = new Uri("amqp://a:b@rabbitmq.example.com/"),
+            }
+        );
 
         var document = generator.Generate();
         var json = JsonSerializer.Serialize(document, JsonOptions);
@@ -88,12 +108,17 @@ public class AsyncApiDocumentGeneratorTests
     public async Task Generate_StructuredMode_ProducesCloudEventEnvelope()
     {
         var generator = BuildGenerator(
-            bus => bus
-                .AddEventPublishChannel("orders.events", c => c
-                    .WithRabbitMq(r => r.WithTopicExchange())
-                    .Produces<OrderCreatedEvent>()),
-            rabbitMqOptions: new RabbitMqOptions { ConnectionString = new Uri("amqp://a:b@localhost/") },
-            contentMode: CloudEventsContentMode.Structured);
+            bus =>
+                bus.AddEventPublishChannel(
+                    "orders.events",
+                    c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<OrderCreatedEvent>()
+                ),
+            rabbitMqOptions: new RabbitMqOptions
+            {
+                ConnectionString = new Uri("amqp://a:b@localhost/"),
+            },
+            contentMode: CloudEventsContentMode.Structured
+        );
 
         var document = generator.Generate();
         var json = JsonSerializer.Serialize(document, JsonOptions);
@@ -104,10 +129,9 @@ public class AsyncApiDocumentGeneratorTests
     [Test]
     public void Generate_WithDataAnnotations_SchemaIncludesConstraints()
     {
-        var generator = BuildGenerator(
-            bus => bus
-                .AddEventPublishChannel("orders.events", c => c
-                    .Produces<OrderCreatedEvent>()));
+        var generator = BuildGenerator(bus =>
+            bus.AddEventPublishChannel("orders.events", c => c.Produces<OrderCreatedEvent>())
+        );
 
         var document = generator.Generate();
 
@@ -127,10 +151,9 @@ public class AsyncApiDocumentGeneratorTests
     [Test]
     public void Generate_WithAsyncApiMessageAttribute_UsesAttributeMetadata()
     {
-        var generator = BuildGenerator(
-            bus => bus
-                .AddEventPublishChannel("apikey.events", c => c
-                    .Produces<ApiKeyRevokedEvent>()));
+        var generator = BuildGenerator(bus =>
+            bus.AddEventPublishChannel("apikey.events", c => c.Produces<ApiKeyRevokedEvent>())
+        );
 
         var document = generator.Generate();
 
@@ -147,11 +170,20 @@ public class AsyncApiDocumentGeneratorTests
     public void Generate_ConsumerChannel_RoleIsClient()
     {
         var generator = BuildGenerator(
-            bus => bus
-                .AddEventConsumeChannel("user.events", c => c
-                    .WithRabbitMq(r => r.WithQueueName("my.queue"))
-                    .Consumes<UserRolesChangedEvent>(m => m.WithHandler<NoOpUserRolesChangedHandler>())),
-            rabbitMqOptions: new RabbitMqOptions { ConnectionString = new Uri("amqp://a:b@localhost/") });
+            bus =>
+                bus.AddEventConsumeChannel(
+                    "user.events",
+                    c =>
+                        c.WithRabbitMq(r => r.WithQueueName("my.queue"))
+                            .Consumes<UserRolesChangedEvent>(m =>
+                                m.WithHandler<NoOpUserRolesChangedHandler>()
+                            )
+                ),
+            rabbitMqOptions: new RabbitMqOptions
+            {
+                ConnectionString = new Uri("amqp://a:b@localhost/"),
+            }
+        );
 
         var document = generator.Generate();
 
@@ -162,10 +194,9 @@ public class AsyncApiDocumentGeneratorTests
     [Test]
     public async Task Generate_WithoutRabbitMq_ProducesTransportAgnosticDocument()
     {
-        var generator = BuildGenerator(
-            bus => bus
-                .AddEventPublishChannel("events", c => c
-                    .Produces<OrderCreatedEvent>()));
+        var generator = BuildGenerator(bus =>
+            bus.AddEventPublishChannel("events", c => c.Produces<OrderCreatedEvent>())
+        );
 
         var document = generator.Generate();
         var json = JsonSerializer.Serialize(document, JsonOptions);
@@ -178,11 +209,16 @@ public class AsyncApiDocumentGeneratorTests
     public void Generate_MultipleMessagesOnChannel_DefaultPerMessageOperations()
     {
         var generator = BuildGenerator(
-            bus => bus
-                .AddEventPublishChannel("events", c => c
-                    .Produces<ApiKeyRevokedEvent>()
-                    .Produces<OrderCreatedEvent>()),
-            rabbitMqOptions: new RabbitMqOptions { ConnectionString = new Uri("amqp://a:b@localhost/") });
+            bus =>
+                bus.AddEventPublishChannel(
+                    "events",
+                    c => c.Produces<ApiKeyRevokedEvent>().Produces<OrderCreatedEvent>()
+                ),
+            rabbitMqOptions: new RabbitMqOptions
+            {
+                ConnectionString = new Uri("amqp://a:b@localhost/"),
+            }
+        );
 
         var document = generator.Generate();
 
@@ -203,13 +239,22 @@ public class AsyncApiDocumentGeneratorTests
     public void Generate_RabbitMqQueueChannel_IsAddedForConsumeChannels()
     {
         var generator = BuildGenerator(
-            bus => bus
-                .AddEventConsumeChannel("user.events", c => c
-                    .WithRabbitMq(r => r
-                        .WithFanoutExchange()
-                        .WithQueueName("apikey.subscriptions"))
-                    .Consumes<UserRolesChangedEvent>(m => m.WithHandler<NoOpUserRolesChangedHandler>())),
-            rabbitMqOptions: new RabbitMqOptions { ConnectionString = new Uri("amqp://a:b@localhost/") });
+            bus =>
+                bus.AddEventConsumeChannel(
+                    "user.events",
+                    c =>
+                        c.WithRabbitMq(r =>
+                                r.WithFanoutExchange().WithQueueName("apikey.subscriptions")
+                            )
+                            .Consumes<UserRolesChangedEvent>(m =>
+                                m.WithHandler<NoOpUserRolesChangedHandler>()
+                            )
+                ),
+            rabbitMqOptions: new RabbitMqOptions
+            {
+                ConnectionString = new Uri("amqp://a:b@localhost/"),
+            }
+        );
 
         var document = generator.Generate();
 
@@ -224,12 +269,15 @@ public class AsyncApiDocumentGeneratorTests
     [Test]
     public void Generate_ChannelLevelOperation_GroupsAllMessages()
     {
-        var generator = BuildGenerator(
-            bus => bus
-                .AddEventPublishChannel("order.events", c => c
-                    .WithAsyncApi(a => a.WithOperation(o => o.WithTitle("Publish Order Events")))
-                    .Produces<OrderCreatedEvent>()
-                    .Produces<ApiKeyRevokedEvent>()));
+        var generator = BuildGenerator(bus =>
+            bus.AddEventPublishChannel(
+                "order.events",
+                c =>
+                    c.WithAsyncApi(a => a.WithOperation(o => o.WithTitle("Publish Order Events")))
+                        .Produces<OrderCreatedEvent>()
+                        .Produces<ApiKeyRevokedEvent>()
+            )
+        );
 
         var document = generator.Generate();
 
@@ -243,11 +291,16 @@ public class AsyncApiDocumentGeneratorTests
     [Test]
     public void Generate_ChannelLevelOperationId_CanBeOverridden()
     {
-        var generator = BuildGenerator(
-            bus => bus
-                .AddEventConsumeChannel("user.events", c => c
-                    .WithAsyncApi(a => a.WithOperation(o => o.WithId("partner-api-key-revoke")))
-                    .Consumes<UserRolesChangedEvent>(m => m.WithHandler<NoOpUserRolesChangedHandler>())));
+        var generator = BuildGenerator(bus =>
+            bus.AddEventConsumeChannel(
+                "user.events",
+                c =>
+                    c.WithAsyncApi(a => a.WithOperation(o => o.WithId("partner-api-key-revoke")))
+                        .Consumes<UserRolesChangedEvent>(m =>
+                            m.WithHandler<NoOpUserRolesChangedHandler>()
+                        )
+            )
+        );
 
         var document = generator.Generate();
 
@@ -258,19 +311,32 @@ public class AsyncApiDocumentGeneratorTests
     [Test]
     public void Generate_SharedOperationId_MergesMessagesIntoOneOperation()
     {
-        var generator = BuildGenerator(
-            bus => bus
-                .AddEventConsumeChannel("order.events", c => c
-                    .Consumes<OrderCreatedEvent>(
-                        m => m.WithHandler<NoOpOrderCreatedHandler>(),
-                        msg => msg.WithAsyncApi(a => a.WithOperation(o => o
-                            .WithId("consumeOrderLifecycle")
-                            .WithTitle("Consume Order Lifecycle"))))
-                    .Consumes<ApiKeyRevokedEvent>(
-                        m => m.WithHandler<NoOpApiKeyRevokedHandler>(),
-                        msg => msg.WithAsyncApi(a => a.WithOperation(o => o
-                            .WithId("consumeOrderLifecycle"))))
-                    .Consumes<UserRolesChangedEvent>(m => m.WithHandler<NoOpUserRolesChangedHandler>())));
+        var generator = BuildGenerator(bus =>
+            bus.AddEventConsumeChannel(
+                "order.events",
+                c =>
+                    c.Consumes<OrderCreatedEvent>(
+                            m => m.WithHandler<NoOpOrderCreatedHandler>(),
+                            msg =>
+                                msg.WithAsyncApi(a =>
+                                    a.WithOperation(o =>
+                                        o.WithId("consumeOrderLifecycle")
+                                            .WithTitle("Consume Order Lifecycle")
+                                    )
+                                )
+                        )
+                        .Consumes<ApiKeyRevokedEvent>(
+                            m => m.WithHandler<NoOpApiKeyRevokedHandler>(),
+                            msg =>
+                                msg.WithAsyncApi(a =>
+                                    a.WithOperation(o => o.WithId("consumeOrderLifecycle"))
+                                )
+                        )
+                        .Consumes<UserRolesChangedEvent>(m =>
+                            m.WithHandler<NoOpUserRolesChangedHandler>()
+                        )
+            )
+        );
 
         var document = generator.Generate();
 
@@ -289,29 +355,36 @@ public class AsyncApiDocumentGeneratorTests
     [Test]
     public void Generate_PerMessageOperationCustomization()
     {
-        var generator = BuildGenerator(
-            bus => bus
-                .AddEventPublishChannel("order.events", c => c
-                    .Produces<OrderCreatedEvent>(m => m
-                        .WithAsyncApi(a => a.WithOperation(o => o
-                            .WithDescription("Emitted when a new order is placed."))))));
+        var generator = BuildGenerator(bus =>
+            bus.AddEventPublishChannel(
+                "order.events",
+                c =>
+                    c.Produces<OrderCreatedEvent>(m =>
+                        m.WithAsyncApi(a =>
+                            a.WithOperation(o =>
+                                o.WithDescription("Emitted when a new order is placed.")
+                            )
+                        )
+                    )
+            )
+        );
 
         var document = generator.Generate();
 
         document.Operations.Should().ContainKey("sendOrderCreatedEvent");
-        document.Operations["sendOrderCreatedEvent"].Description
-            .Should().Be("Emitted when a new order is placed.");
+        document
+            .Operations["sendOrderCreatedEvent"]
+            .Description.Should()
+            .Be("Emitted when a new order is placed.");
     }
 
     [Test]
     public void Generate_DuplicateOperationId_AcrossChannels_Throws()
     {
-        var generator = BuildGenerator(
-            bus => bus
-                .AddEventPublishChannel("channel1", c => c
-                    .Produces<OrderCreatedEvent>())
-                .AddEventPublishChannel("channel2", c => c
-                    .Produces<OrderCreatedEvent>()));
+        var generator = BuildGenerator(bus =>
+            bus.AddEventPublishChannel("channel1", c => c.Produces<OrderCreatedEvent>())
+                .AddEventPublishChannel("channel2", c => c.Produces<OrderCreatedEvent>())
+        );
 
         // Same message type on two channels → both default to "sendOrderCreatedEvent"
         var act = () => generator.Generate();
@@ -322,15 +395,25 @@ public class AsyncApiDocumentGeneratorTests
     public void Generate_PublishAndConsumeOnSameChannel_NoDuplicateServerRefs()
     {
         var generator = BuildGenerator(
-            bus => bus
-                .AddEventPublishChannel("events.topic", c => c
-                    .WithRabbitMq(r => r.WithTopicExchange())
-                    .Produces<OrderCreatedEvent>())
-                .AddEventConsumeChannel("events.topic", c => c
-                    .WithRabbitMq(r => r
-                        .WithQueueName("events.subscriptions"))
-                    .Consumes<OrderCreatedEvent>(m => m.WithHandler<NoOpOrderCreatedHandler>())),
-            rabbitMqOptions: new RabbitMqOptions { ConnectionString = new Uri("amqp://a:b@localhost/") });
+            bus =>
+                bus.AddEventPublishChannel(
+                        "events.topic",
+                        c =>
+                            c.WithRabbitMq(r => r.WithTopicExchange()).Produces<OrderCreatedEvent>()
+                    )
+                    .AddEventConsumeChannel(
+                        "events.topic",
+                        c =>
+                            c.WithRabbitMq(r => r.WithQueueName("events.subscriptions"))
+                                .Consumes<OrderCreatedEvent>(m =>
+                                    m.WithHandler<NoOpOrderCreatedHandler>()
+                                )
+                    ),
+            rabbitMqOptions: new RabbitMqOptions
+            {
+                ConnectionString = new Uri("amqp://a:b@localhost/"),
+            }
+        );
 
         var document = generator.Generate();
 
@@ -342,12 +425,15 @@ public class AsyncApiDocumentGeneratorTests
     [Test]
     public void Generate_OperationTags_IncludedInOutput()
     {
-        var generator = BuildGenerator(
-            bus => bus
-                .AddEventPublishChannel("order.events", c => c
-                    .Produces<OrderCreatedEvent>(m => m
-                        .WithAsyncApi(a => a.WithOperation(o => o
-                            .WithTags("orders", "lifecycle"))))));
+        var generator = BuildGenerator(bus =>
+            bus.AddEventPublishChannel(
+                "order.events",
+                c =>
+                    c.Produces<OrderCreatedEvent>(m =>
+                        m.WithAsyncApi(a => a.WithOperation(o => o.WithTags("orders", "lifecycle")))
+                    )
+            )
+        );
 
         var document = generator.Generate();
 
@@ -361,18 +447,27 @@ public class AsyncApiDocumentGeneratorTests
 
 file class NoOpUserRolesChangedHandler : IMessageHandler<UserRolesChangedEvent>
 {
-    public Task HandleAsync(UserRolesChangedEvent message, MessageProperties context, CancellationToken cancellationToken)
-        => Task.CompletedTask;
+    public Task HandleAsync(
+        UserRolesChangedEvent message,
+        MessageProperties context,
+        CancellationToken cancellationToken
+    ) => Task.CompletedTask;
 }
 
 file class NoOpOrderCreatedHandler : IMessageHandler<OrderCreatedEvent>
 {
-    public Task HandleAsync(OrderCreatedEvent message, MessageProperties context, CancellationToken cancellationToken)
-        => Task.CompletedTask;
+    public Task HandleAsync(
+        OrderCreatedEvent message,
+        MessageProperties context,
+        CancellationToken cancellationToken
+    ) => Task.CompletedTask;
 }
 
 file class NoOpApiKeyRevokedHandler : IMessageHandler<ApiKeyRevokedEvent>
 {
-    public Task HandleAsync(ApiKeyRevokedEvent message, MessageProperties context, CancellationToken cancellationToken)
-        => Task.CompletedTask;
+    public Task HandleAsync(
+        ApiKeyRevokedEvent message,
+        MessageProperties context,
+        CancellationToken cancellationToken
+    ) => Task.CompletedTask;
 }

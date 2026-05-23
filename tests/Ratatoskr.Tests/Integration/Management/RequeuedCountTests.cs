@@ -7,8 +7,10 @@ using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Management;
 
-public class RequeuedCountTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
-    : ManagementTestBase(rabbitMq, postgres)
+public class RequeuedCountTests(
+    RabbitMqContainerFixture rabbitMq,
+    PostgresContainerFixture postgres
+) : ManagementTestBase(rabbitMq, postgres)
 {
     private const string BaseUrl = "/ratatoskr/api/v1/efcore/contexts/TestDbContext/outbox";
 
@@ -74,8 +76,12 @@ public class RequeuedCountTests(RabbitMqContainerFixture rabbitMq, PostgresConta
             var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
             var cutoff = time.GetUtcNow().AddDays(1);
             var wouldBeDeleted = await db.Set<OutboxMessageEntity>()
-                .AnyAsync(x => x.Id == id && x.ProcessedAt != null && x.ProcessedAt < cutoff && !x.IsPoisoned);
-            wouldBeDeleted.Should().BeFalse("poisoned messages must not match the cleanup predicate");
+                .AnyAsync(x =>
+                    x.Id == id && x.ProcessedAt != null && x.ProcessedAt < cutoff && !x.IsPoisoned
+                );
+            wouldBeDeleted
+                .Should()
+                .BeFalse("poisoned messages must not match the cleanup predicate");
         });
 
         // Verify the poisoned message still exists

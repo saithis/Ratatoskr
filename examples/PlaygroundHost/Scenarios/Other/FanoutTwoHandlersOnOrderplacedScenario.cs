@@ -12,29 +12,37 @@ namespace PlaygroundHost.Scenarios.Other;
 public sealed class FanoutTwoHandlersOnOrderplacedScenario : IPlaygroundScenario
 {
     private const string ScenarioSlug = "fanout-two-handlers-on-orderplaced";
-    private static string ExchangeName { get; } = PlaygroundAmqpNames.ExchangeName(ScenarioSlug, "events");
-    private static string QueueName { get; } = PlaygroundAmqpNames.QueueName(ScenarioSlug, "notifications");
+    private static string ExchangeName { get; } =
+        PlaygroundAmqpNames.ExchangeName(ScenarioSlug, "events");
+    private static string QueueName { get; } =
+        PlaygroundAmqpNames.QueueName(ScenarioSlug, "notifications");
 
     public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues =>
         [new("notifications", QueueName)];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
     {
-        bus.AddEventPublishChannel(ExchangeName, c => c
-            .WithRabbitMq(r => r.WithTopicExchange())
-            .Produces<OrderPlaced>());
+        bus.AddEventPublishChannel(
+            ExchangeName,
+            c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<OrderPlaced>()
+        );
 
-        bus.AddEventConsumeChannel($"{ScenarioSlug}-notifications", c => c
-            .WithRabbitMq(r => r
-                .WithTopicExchange()
-                .WithAmqpExchangeName(ExchangeName)
-                .WithQueueName(QueueName)
-                .WithQueueType(QueueType.Classic)
-                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5)))
-            .Consumes<OrderPlaced>(m => m
-                .WithHandler<OrderPlacedNotifyHandler>($"{ScenarioSlug}.notify")
-                .WithHandler<OrderPlacedAnalyticsHandler>($"{ScenarioSlug}.analytics"))
-            .UseInbox<PublisherDbContext>());
+        bus.AddEventConsumeChannel(
+            $"{ScenarioSlug}-notifications",
+            c =>
+                c.WithRabbitMq(r =>
+                        r.WithTopicExchange()
+                            .WithAmqpExchangeName(ExchangeName)
+                            .WithQueueName(QueueName)
+                            .WithQueueType(QueueType.Classic)
+                            .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(5))
+                    )
+                    .Consumes<OrderPlaced>(m =>
+                        m.WithHandler<OrderPlacedNotifyHandler>($"{ScenarioSlug}.notify")
+                            .WithHandler<OrderPlacedAnalyticsHandler>($"{ScenarioSlug}.analytics")
+                    )
+                    .UseInbox<PublisherDbContext>()
+        );
     }
 
     public string Slug => ScenarioSlug;
@@ -50,24 +58,35 @@ public sealed class FanoutTwoHandlersOnOrderplacedScenario : IPlaygroundScenario
         PublisherDbContext context,
         TimeProvider timeProvider,
         string runId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var order = this.AddPlacedOrderToContext(context, timeProvider, "outbox");
         this.StageCorrelatedOutboxMessage(
             context,
             runId,
             new OrderPlaced(order.Id.ToString(), runId),
-            PlaygroundMessageIds.OrderPlaced(order.Id));
+            PlaygroundMessageIds.OrderPlaced(order.Id)
+        );
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context, CancellationToken cancellationToken)
+    public async Task<ScenarioVerdict> ExecuteAsync(
+        ScenarioExecutionContext context,
+        CancellationToken cancellationToken
+    )
     {
-        static int CountSuccessfulOrderPlacedDispatches(IReadOnlyList<PlaygroundActivityEntry> entries) =>
+        static int CountSuccessfulOrderPlacedDispatches(
+            IReadOnlyList<PlaygroundActivityEntry> entries
+        ) =>
             entries.Count(e =>
-                e.Stage == nameof(MessageStage.InboxDispatched) &&
-                e.IsSuccess == true &&
-                (e.MessageType ?? "").Contains("order-placed", StringComparison.OrdinalIgnoreCase));
+                e.Stage == nameof(MessageStage.InboxDispatched)
+                && e.IsSuccess == true
+                && (e.MessageType ?? "").Contains(
+                    "order-placed",
+                    StringComparison.OrdinalIgnoreCase
+                )
+            );
 
         var recorder = context.GetRequired<PlaygroundActivityRecorder>();
         var runId = context.ScenarioRunId;
@@ -84,7 +103,8 @@ public sealed class FanoutTwoHandlersOnOrderplacedScenario : IPlaygroundScenario
                 var entries = recorder.GetEntriesForScenarioRun(runId);
                 return CountSuccessfulOrderPlacedDispatches(entries) >= 2;
             },
-            cancellationToken);
+            cancellationToken
+        );
 
         if (ok)
         {
@@ -95,21 +115,31 @@ public sealed class FanoutTwoHandlersOnOrderplacedScenario : IPlaygroundScenario
 
         var final = recorder.GetEntriesForScenarioRun(runId);
         var n = CountSuccessfulOrderPlacedDispatches(final);
-        return new ScenarioVerdict(false, $"Expected at least 2 successful OrderPlaced handler rows for this run; saw {n}.");
+        return new ScenarioVerdict(
+            false,
+            $"Expected at least 2 successful OrderPlaced handler rows for this run; saw {n}."
+        );
     }
 
     [RatatoskrMessage("fanout-two-handlers-on-orderplaced.order-placed")]
-    public sealed record OrderPlaced(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
+    public sealed record OrderPlaced(string OrderId, string ScenarioRunId)
+        : IPlaygroundCorrelatedOrderMessage;
 
     public sealed class OrderPlacedNotifyHandler : IMessageHandler<OrderPlaced>
     {
-        public Task HandleAsync(OrderPlaced message, MessageProperties properties, CancellationToken cancellationToken) =>
-            Task.CompletedTask;
+        public Task HandleAsync(
+            OrderPlaced message,
+            MessageProperties properties,
+            CancellationToken cancellationToken
+        ) => Task.CompletedTask;
     }
 
     public sealed class OrderPlacedAnalyticsHandler : IMessageHandler<OrderPlaced>
     {
-        public Task HandleAsync(OrderPlaced message, MessageProperties properties, CancellationToken cancellationToken) =>
-            Task.CompletedTask;
+        public Task HandleAsync(
+            OrderPlaced message,
+            MessageProperties properties,
+            CancellationToken cancellationToken
+        ) => Task.CompletedTask;
     }
 }

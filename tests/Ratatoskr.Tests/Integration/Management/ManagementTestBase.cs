@@ -17,8 +17,10 @@ namespace Ratatoskr.Tests.Integration.Management;
 /// Base class for management API integration tests.
 /// Sets up an HTTP client, authorization, and a seeded test database.
 /// </summary>
-public abstract class ManagementTestBase(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
-    : RatatoskrIntegrationTest(rabbitMq, postgres)
+public abstract class ManagementTestBase(
+    RabbitMqContainerFixture rabbitMq,
+    PostgresContainerFixture postgres
+) : RatatoskrIntegrationTest(rabbitMq, postgres)
 {
     protected HttpClient HttpClient { get; private set; } = null!;
 
@@ -30,20 +32,25 @@ public abstract class ManagementTestBase(RabbitMqContainerFixture rabbitMq, Post
             // so we need *some* scheme registered or the middleware pipeline fails to build.
             // A permissive scheme that always authenticates as "test" lets the "RequireAssertion(true)"
             // policy below pass without real credentials.
-            services.AddAuthentication(AllowAnonymousAuthenticationHandler.SchemeName)
+            services
+                .AddAuthentication(AllowAnonymousAuthenticationHandler.SchemeName)
                 .AddScheme<AuthenticationSchemeOptions, AllowAnonymousAuthenticationHandler>(
-                    AllowAnonymousAuthenticationHandler.SchemeName, _ => { });
+                    AllowAnonymousAuthenticationHandler.SchemeName,
+                    _ => { }
+                );
 
             services.AddAuthorization(o =>
-                o.AddPolicy("RatatoskrAdmin", p => p.RequireAssertion(_ => true)));
+                o.AddPolicy("RatatoskrAdmin", p => p.RequireAssertion(_ => true))
+            );
 
             services.AddRatatoskr(bus =>
             {
                 bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox().UseOutbox());
             });
 
-            services.AddDbContext<TestDbContext>((_, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (_, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
 
             configure?.Invoke(services);
         });
@@ -60,8 +67,14 @@ public abstract class ManagementTestBase(RabbitMqContainerFixture rabbitMq, Post
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
-            var props = new MessageProperties { Type = messageType ?? "test.event", Id = Guid.NewGuid().ToString() };
-            var content = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new { Data = "payload" });
+            var props = new MessageProperties
+            {
+                Type = messageType ?? "test.event",
+                Id = Guid.NewGuid().ToString(),
+            };
+            var content = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
+                new { Data = "payload" }
+            );
             var entity = OutboxMessageEntity.Create(content, props, time, "efcore");
             // Poison it by reaching max retries (ErrorCount >= maxRetries sets IsPoisoned)
             for (var i = 0; i < 3; i++)
@@ -75,7 +88,8 @@ public abstract class ManagementTestBase(RabbitMqContainerFixture rabbitMq, Post
 
     /// <summary>Seeds a poisoned inbox handler status and returns (messageId, handlerStatusId).</summary>
     protected async Task<(string MessageId, Guid HandlerStatusId)> SeedPoisonedInboxAsync(
-        string? messageType = null)
+        string? messageType = null
+    )
     {
         string messageId = null!;
         Guid handlerStatusId = Guid.Empty;
@@ -84,9 +98,16 @@ public abstract class ManagementTestBase(RabbitMqContainerFixture rabbitMq, Post
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
             var props = new MessageProperties { Type = messageType ?? "test.event" };
-            var content = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new { Data = "inbox-payload" });
+            var content = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
+                new { Data = "inbox-payload" }
+            );
             var msg = InboxMessageEntity.Create(
-                Guid.NewGuid().ToString(), "efcore", content, props, time);
+                Guid.NewGuid().ToString(),
+                "efcore",
+                content,
+                props,
+                time
+            );
             db.Set<InboxMessageEntity>().Add(msg);
 
             var handler = InboxHandlerStatusEntity.Create(msg.Id, "handler-a", time);
@@ -109,8 +130,8 @@ public abstract class ManagementTestBase(RabbitMqContainerFixture rabbitMq, Post
     private sealed class AllowAnonymousAuthenticationHandler(
         IOptionsMonitor<AuthenticationSchemeOptions> options,
         ILoggerFactory loggerFactory,
-        UrlEncoder encoder)
-        : AuthenticationHandler<AuthenticationSchemeOptions>(options, loggerFactory, encoder)
+        UrlEncoder encoder
+    ) : AuthenticationHandler<AuthenticationSchemeOptions>(options, loggerFactory, encoder)
     {
         internal const string SchemeName = "AllowAnonymousTest";
 

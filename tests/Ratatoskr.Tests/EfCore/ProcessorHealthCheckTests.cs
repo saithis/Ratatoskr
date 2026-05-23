@@ -18,14 +18,14 @@ public class ProcessorHealthCheckTests
     {
         // Arrange
         var services = new ServiceCollection();
-        
+
         // Act
         services.AddHealthChecks().AddRatatoskrOutbox<TestDbContext>();
-        
+
         // Assert
         using var provider = services.BuildServiceProvider();
         var options = provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value;
-        
+
         options.Registrations.Should().Contain(r => r.Name == "ratatoskr-outbox-TestDbContext");
         var reg = options.Registrations.First(r => r.Name == "ratatoskr-outbox-TestDbContext");
         reg.Tags.Should().Contain("ready");
@@ -36,14 +36,14 @@ public class ProcessorHealthCheckTests
     {
         // Arrange
         var services = new ServiceCollection();
-        
+
         // Act
         services.AddHealthChecks().AddRatatoskrInbox<TestDbContext>();
-        
+
         // Assert
         using var provider = services.BuildServiceProvider();
         var options = provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value;
-        
+
         options.Registrations.Should().Contain(r => r.Name == "ratatoskr-inbox-TestDbContext");
         var reg = options.Registrations.First(r => r.Name == "ratatoskr-inbox-TestDbContext");
         reg.Tags.Should().Contain("ready");
@@ -55,7 +55,7 @@ public class ProcessorHealthCheckTests
         // Arrange
         var timeProvider = new FakeTimeProvider();
         var processor = new TestProcessor(timeProvider);
-        
+
         // Last success is exactly now.
         var healthCheck = new ProcessorHealthCheck<TestProcessor>(
             processor,
@@ -75,10 +75,10 @@ public class ProcessorHealthCheckTests
     {
         // Arrange
         var timeProvider = new FakeTimeProvider();
-        
+
         // When processor is created, LastSuccessfulProcessingAt is initialized to timeProvider.GetUtcNow()
         var processor = new TestProcessor(timeProvider);
-        
+
         var healthCheck = new ProcessorHealthCheck<TestProcessor>(
             processor,
             timeProvider,
@@ -94,13 +94,11 @@ public class ProcessorHealthCheckTests
         // Assert
         result.Status.Should().Be(HealthStatus.Unhealthy);
     }
-    
+
     private class TestProcessor : PollingBackgroundService
     {
-        public TestProcessor(TimeProvider timeProvider) 
-            : base(default!, timeProvider, NullLogger.Instance)
-        {
-        }
+        public TestProcessor(TimeProvider timeProvider)
+            : base(default!, timeProvider, NullLogger.Instance) { }
 
         protected override string ProcessorName => "Test";
         protected override TimeSpan PollingInterval => TimeSpan.FromSeconds(1);
@@ -108,6 +106,7 @@ public class ProcessorHealthCheckTests
         protected override TimeSpan LockAcquireTimeout => TimeSpan.FromSeconds(1);
         protected override string LockName => "TestLock";
 
-        protected override Task ProcessBatchesAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        protected override Task ProcessBatchesAsync(CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
 }

@@ -23,10 +23,14 @@ internal static class GetOutboxDetailEndpoint
         Guid id,
         EfCoreManagementDbContextLookup lookup,
         ILoggerFactory loggerFactory,
-        CancellationToken ct)
+        CancellationToken ct
+    )
     {
         var logger = loggerFactory.CreateLogger(typeof(GetOutboxDetailEndpoint).FullName!);
-        if (ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is { } resolveError)
+        if (
+            ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is
+            { } resolveError
+        )
             return resolveError;
 
         var entity = await db.Set<OutboxMessageEntity>()
@@ -40,10 +44,21 @@ internal static class GetOutboxDetailEndpoint
         var props = entity.GetProperties();
         var (jsonPayload, base64) = ManagementHelpers.DecodeContent(entity.Content, logger);
 
-        return TypedResults.Ok(new OutboxPoisonedDetail(
-            entity.Id, props.Type ?? "(unknown)", entity.CreatedAt, entity.ErrorCount, entity.RequeuedCount,
-            string.IsNullOrEmpty(entity.Error) ? null : entity.Error,
-            entity.FailedAt, props, jsonPayload, base64, contextName));
+        return TypedResults.Ok(
+            new OutboxPoisonedDetail(
+                entity.Id,
+                props.Type ?? "(unknown)",
+                entity.CreatedAt,
+                entity.ErrorCount,
+                entity.RequeuedCount,
+                string.IsNullOrEmpty(entity.Error) ? null : entity.Error,
+                entity.FailedAt,
+                props,
+                jsonPayload,
+                base64,
+                contextName
+            )
+        );
     }
 
     internal record OutboxPoisonedDetail(
@@ -57,5 +72,6 @@ internal static class GetOutboxDetailEndpoint
         MessageProperties Properties,
         string? JsonPayload,
         string PayloadBase64,
-        string DbContext);
+        string DbContext
+    );
 }

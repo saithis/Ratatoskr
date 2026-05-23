@@ -20,9 +20,13 @@ internal static class RequeueInboxMessageEndpoint
         string contextName,
         string messageId,
         EfCoreManagementDbContextLookup lookup,
-        CancellationToken ct)
+        CancellationToken ct
+    )
     {
-        if (ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is { } resolveError)
+        if (
+            ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
+            { } resolveError
+        )
             return resolveError;
 
         var handlers = await db.Set<InboxHandlerStatusEntity>()
@@ -30,7 +34,9 @@ internal static class RequeueInboxMessageEndpoint
             .ToListAsync(ct);
 
         if (handlers.Count == 0)
-            return ManagementResults.NotFound($"No poisoned handlers found for inbox message '{messageId}'.");
+            return ManagementResults.NotFound(
+                $"No poisoned handlers found for inbox message '{messageId}'."
+            );
 
         foreach (var h in handlers)
             h.Requeue();
@@ -38,11 +44,15 @@ internal static class RequeueInboxMessageEndpoint
         try
         {
             await db.SaveChangesAsync(ct);
-            return TypedResults.Ok(new RequeueInboxMessageResponse(handlers.Select(h => h.Id).ToList()));
+            return TypedResults.Ok(
+                new RequeueInboxMessageResponse(handlers.Select(h => h.Id).ToList())
+            );
         }
         catch (DbUpdateConcurrencyException)
         {
-            return ManagementResults.Conflict("One or more handlers were modified concurrently; retry.");
+            return ManagementResults.Conflict(
+                "One or more handlers were modified concurrently; retry."
+            );
         }
     }
 

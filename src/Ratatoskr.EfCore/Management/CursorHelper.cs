@@ -34,7 +34,8 @@ internal static class CursorHelper
     internal static bool TryDecode(string cursor, out Cursor value)
     {
         value = default;
-        if (string.IsNullOrEmpty(cursor)) return false;
+        if (string.IsNullOrEmpty(cursor))
+            return false;
 
         Span<byte> bytes = stackalloc byte[CursorByteLength];
         if (!TryBase64UrlDecode(cursor, bytes, out var written) || written != CursorByteLength)
@@ -75,7 +76,8 @@ internal static class CursorHelper
         if (!Convert.TryFromBase64String(normalized, decoded, out var written))
             return false;
 
-        if (written > destination.Length) return false;
+        if (written > destination.Length)
+            return false;
         decoded[..written].CopyTo(destination);
         bytesWritten = written;
         return true;

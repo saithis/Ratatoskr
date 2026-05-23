@@ -18,5 +18,5 @@ public enum ConsumeChannelInboxRequirement
     /// <summary>
     /// Startup fails when a consume channel does not use <c>UseInbox&lt;TDbContext&gt;()</c>.
     /// </summary>
-    Fail = 2
+    Fail = 2,
 }

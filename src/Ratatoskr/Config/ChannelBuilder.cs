@@ -9,7 +9,8 @@ public class ChannelBuilder(ChannelRegistration channel)
     /// Sets a typed extension on the channel registration.
     /// Used by transport providers to attach transport-specific configuration.
     /// </summary>
-    protected internal ChannelBuilder WithExtension<T>(T value) where T : class
+    protected internal ChannelBuilder WithExtension<T>(T value)
+        where T : class
     {
         channel.SetExtension(value);
         return this;
@@ -33,8 +34,9 @@ public class ChannelBuilder(ChannelRegistration channel)
 
         if (channel.Messages.Any(r => r.MessageType == type))
             throw new InvalidOperationException(
-                $"Message type '{type.FullName}' is already registered on this channel.");
-        
+                $"Message type '{type.FullName}' is already registered on this channel."
+            );
+
         var registration = new MessageRegistration(type, typeName);
         registration.DataSchema = GetDataSchema(type);
 

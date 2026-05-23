@@ -20,16 +20,21 @@ internal static class RequeueOutboxEndpoint
         string contextName,
         Guid id,
         EfCoreManagementDbContextLookup lookup,
-        CancellationToken ct)
+        CancellationToken ct
+    )
     {
-        if (ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is { } resolveError)
+        if (
+            ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is
+            { } resolveError
+        )
             return resolveError;
-        
-        var entity = await db.Set<OutboxMessageEntity>()
-            .SingleOrDefaultAsync(x => x.Id == id, ct);
 
-        if (entity is null) return ManagementResults.NotFound($"Outbox message '{id}' was not found.");
-        if (!entity.IsPoisoned) return ManagementResults.BadRequest("Outbox message is not poisoned.");
+        var entity = await db.Set<OutboxMessageEntity>().SingleOrDefaultAsync(x => x.Id == id, ct);
+
+        if (entity is null)
+            return ManagementResults.NotFound($"Outbox message '{id}' was not found.");
+        if (!entity.IsPoisoned)
+            return ManagementResults.BadRequest("Outbox message is not poisoned.");
 
         entity.Requeue();
 
@@ -40,7 +45,9 @@ internal static class RequeueOutboxEndpoint
         }
         catch (DbUpdateConcurrencyException)
         {
-            return ManagementResults.Conflict("Outbox message was modified by another operation; retry.");
+            return ManagementResults.Conflict(
+                "Outbox message was modified by another operation; retry."
+            );
         }
     }
 }

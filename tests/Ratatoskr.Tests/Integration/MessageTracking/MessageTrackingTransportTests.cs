@@ -12,7 +12,8 @@ namespace Ratatoskr.Tests.Integration.MessageTracking;
 
 public class MessageTrackingTransportTests(
     RabbitMqContainerFixture rabbitMq,
-    PostgresContainerFixture postgres) : MessageTrackingTestBase(rabbitMq, postgres)
+    PostgresContainerFixture postgres
+) : MessageTrackingTestBase(rabbitMq, postgres)
 {
     [Test]
     public async Task Tracking_TransportShape_RawBodyAssertable()
@@ -23,9 +24,10 @@ public class MessageTrackingTransportTests(
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-                bus.AddEventPublishChannel(ExchangeName, c => c
-                    .WithRabbitMq(r => r.WithTopicExchange())
-                    .Produces<TestEvent>());
+                bus.AddEventPublishChannel(
+                    ExchangeName,
+                    c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<TestEvent>()
+                );
             });
             services.AddRatatoskrTesting();
         });
@@ -41,7 +43,10 @@ public class MessageTrackingTransportTests(
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             var props = new MessageProperties();
             props.SetRoutingKey(DefaultRoutingKey);
-            await bus.PublishDirectAsync(new TestEvent { Id = "shape-1", Data = "transport shape" }, props);
+            await bus.PublishDirectAsync(
+                new TestEvent { Id = "shape-1", Data = "transport shape" },
+                props
+            );
         });
 
         // Assert - verify the raw bytes on the wire
@@ -65,9 +70,10 @@ public class MessageTrackingTransportTests(
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-                bus.AddEventPublishChannel(ExchangeName, c => c
-                    .WithRabbitMq(r => r.WithTopicExchange())
-                    .Produces<TestEvent>());
+                bus.AddEventPublishChannel(
+                    ExchangeName,
+                    c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<TestEvent>()
+                );
             });
             services.AddRatatoskrTesting();
         });
@@ -83,7 +89,10 @@ public class MessageTrackingTransportTests(
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             var props = new MessageProperties();
             props.SetRoutingKey(DefaultRoutingKey);
-            await bus.PublishDirectAsync(new TestEvent { Id = "neg-1", Data = "negative test" }, props);
+            await bus.PublishDirectAsync(
+                new TestEvent { Id = "neg-1", Data = "negative test" },
+                props
+            );
         });
 
         var published = await session.WaitForPublished<TestEvent>(TimeSpan.FromSeconds(5));
@@ -103,9 +112,10 @@ public class MessageTrackingTransportTests(
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-                bus.AddEventPublishChannel(ExchangeName, c => c
-                    .WithRabbitMq(r => r.WithTopicExchange())
-                    .Produces<TestEvent>());
+                bus.AddEventPublishChannel(
+                    ExchangeName,
+                    c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<TestEvent>()
+                );
             });
             services.AddRatatoskrTesting();
         });
@@ -121,7 +131,10 @@ public class MessageTrackingTransportTests(
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             var props = new MessageProperties();
             props.SetRoutingKey(DefaultRoutingKey);
-            await bus.PublishDirectAsync(new TestEvent { Id = "wire-1", Data = "wire format" }, props);
+            await bus.PublishDirectAsync(
+                new TestEvent { Id = "wire-1", Data = "wire format" },
+                props
+            );
         });
 
         // Assert - Sent stage should have TransportMessage with wire-level headers
@@ -172,7 +185,9 @@ public class MessageTrackingTransportTests(
         await InScopeAsync(async ctx =>
         {
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
-            await bus.PublishDirectAsync(new TestEvent { Id = "wire-recv-1", Data = "receive wire" });
+            await bus.PublishDirectAsync(
+                new TestEvent { Id = "wire-recv-1", Data = "receive wire" }
+            );
         });
 
         // Assert - Received stage should have TransportMessage with raw wire data
@@ -210,14 +225,18 @@ public class MessageTrackingTransportTests(
             services.AddRatatoskr(bus =>
             {
                 bus.AddEventPublishChannel(channelName, c => c.WithEfCore().Produces<TestEvent>());
-                bus.AddEventConsumeChannel(channelName, c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<NoOpTestEventHandler>("no-op"))
-                    .UseInbox<TestDbContext>());
+                bus.AddEventConsumeChannel(
+                    channelName,
+                    c =>
+                        c.Consumes<TestEvent>(m => m.WithHandler<NoOpTestEventHandler>("no-op"))
+                            .UseInbox<TestDbContext>()
+                );
                 bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox());
             });
             services.AddRatatoskrTesting();
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
         });
 
         await InitializeDatabase();
@@ -228,7 +247,9 @@ public class MessageTrackingTransportTests(
         await InScopeAsync(async ctx =>
         {
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
-            await bus.PublishDirectAsync(new TestEvent { Id = "inbox-queue-1", Data = "track inbox" });
+            await bus.PublishDirectAsync(
+                new TestEvent { Id = "inbox-queue-1", Data = "track inbox" }
+            );
         });
 
         // Assert — InboxQueued stage emitted by InboxAcceptor
@@ -247,14 +268,18 @@ public class MessageTrackingTransportTests(
             services.AddRatatoskr(bus =>
             {
                 bus.AddEventPublishChannel(channelName, c => c.WithEfCore().Produces<TestEvent>());
-                bus.AddEventConsumeChannel(channelName, c => c
-                    .Consumes<TestEvent>(m => m.WithHandler<NoOpTestEventHandler>("no-op"))
-                    .UseInbox<TestDbContext>());
+                bus.AddEventConsumeChannel(
+                    channelName,
+                    c =>
+                        c.Consumes<TestEvent>(m => m.WithHandler<NoOpTestEventHandler>("no-op"))
+                            .UseInbox<TestDbContext>()
+                );
                 bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox());
             });
             services.AddRatatoskrTesting();
-            services.AddDbContext<TestDbContext>((sp, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (sp, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
         });
 
         await InitializeDatabase();
@@ -265,7 +290,9 @@ public class MessageTrackingTransportTests(
         await InScopeAsync(async ctx =>
         {
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
-            await bus.PublishDirectAsync(new TestEvent { Id = "inbox-disp-1", Data = "track dispatch" });
+            await bus.PublishDirectAsync(
+                new TestEvent { Id = "inbox-disp-1", Data = "track dispatch" }
+            );
         });
 
         // Assert — InboxDispatched stage emitted after handler completes

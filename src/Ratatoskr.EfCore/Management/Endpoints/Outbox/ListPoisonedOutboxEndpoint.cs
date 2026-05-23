@@ -26,10 +26,14 @@ internal static class ListPoisonedOutboxEndpoint
         DateTimeOffset? from = null,
         DateTimeOffset? to = null,
         string? search = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default
+    )
     {
         var logger = loggerFactory.CreateLogger(typeof(ListPoisonedOutboxEndpoint).FullName!);
-        if (ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is { } resolveError)
+        if (
+            ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is
+            { } resolveError
+        )
             return resolveError;
 
         pageSize = PaginationOptions.ClampPageSize(pageSize);
@@ -41,19 +45,26 @@ internal static class ListPoisonedOutboxEndpoint
             {
                 // Info, not warning: likely a malformed/stale cursor copied from an older
                 // client. Surface it once so an operator can correlate 400s to their UI.
-                logger.LogInformation("Rejecting management list request with malformed cursor (context {ContextName}).", contextName);
+                logger.LogInformation(
+                    "Rejecting management list request with malformed cursor (context {ContextName}).",
+                    contextName
+                );
                 return ManagementResults.BadRequest("Invalid pagination cursor.");
             }
             decodedCursor = c;
         }
 
         var filtered = db.Set<OutboxMessageEntity>().AsNoTracking().Where(x => x.IsPoisoned);
-        if (from.HasValue) filtered = filtered.Where(x => x.CreatedAt >= from.Value);
-        if (to.HasValue) filtered = filtered.Where(x => x.CreatedAt <= to.Value);
+        if (from.HasValue)
+            filtered = filtered.Where(x => x.CreatedAt >= from.Value);
+        if (to.HasValue)
+            filtered = filtered.Where(x => x.CreatedAt <= to.Value);
         if (search is not null)
         {
             var pattern = ManagementHelpers.BuildSearchPattern(search);
-            filtered = filtered.Where(x => EF.Functions.Like(x.SerializedProperties, pattern, @"\"));
+            filtered = filtered.Where(x =>
+                EF.Functions.Like(x.SerializedProperties, pattern, @"\")
+            );
         }
 
         var paged = filtered;
@@ -61,32 +72,45 @@ internal static class ListPoisonedOutboxEndpoint
         {
             // Tuple comparison: (CreatedAt, Id) > (cursor.Time, cursor.Id).
             // Expressed as OR-form so EF translates cleanly on both Postgres and SQL Server.
-            paged = paged.Where(x => x.CreatedAt > k.Time || (x.CreatedAt == k.Time && x.Id > k.Id));
+            paged = paged.Where(x =>
+                x.CreatedAt > k.Time || (x.CreatedAt == k.Time && x.Id > k.Id)
+            );
         }
 
         // Deliberately fetch pageSize + 1 so we can determine whether another page exists
         // without a separate round-trip.
         var items = await paged
-            .OrderBy(x => x.CreatedAt).ThenBy(x => x.Id)
+            .OrderBy(x => x.CreatedAt)
+            .ThenBy(x => x.Id)
             .Take(pageSize + 1)
-            .Select(x => new { x.Id, x.SerializedProperties, x.CreatedAt, x.ErrorCount, x.RequeuedCount, x.Error })
+            .Select(x => new
+            {
+                x.Id,
+                x.SerializedProperties,
+                x.CreatedAt,
+                x.ErrorCount,
+                x.RequeuedCount,
+                x.Error,
+            })
             .ToListAsync(ct);
 
         var hasNext = items.Count > pageSize;
-        if (hasNext) items.RemoveAt(items.Count - 1);
+        if (hasNext)
+            items.RemoveAt(items.Count - 1);
 
         var dtos = items
             .Select(x => new OutboxPoisonedListItem(
                 x.Id,
                 ManagementHelpers.ExtractType(x.SerializedProperties, logger),
-                x.CreatedAt, x.ErrorCount, x.RequeuedCount,
+                x.CreatedAt,
+                x.ErrorCount,
+                x.RequeuedCount,
                 string.IsNullOrEmpty(x.Error) ? null : x.Error,
-                contextName))
+                contextName
+            ))
             .ToList();
 
-        var nextCursor = hasNext
-            ? CursorHelper.Encode(items[^1].CreatedAt, items[^1].Id)
-            : null;
+        var nextCursor = hasNext ? CursorHelper.Encode(items[^1].CreatedAt, items[^1].Id) : null;
 
         // Total reflects the full filtered set, not the remainder-after-cursor, so the UI can
         // display progress consistently across pages.
@@ -101,10 +125,12 @@ internal static class ListPoisonedOutboxEndpoint
         int ErrorCount,
         int RequeuedCount,
         string? LastError,
-        string DbContext);
+        string DbContext
+    );
 
     internal record OutboxPoisonedListResponse(
         List<OutboxPoisonedListItem> Items,
         long TotalCount,
-        string? NextCursor);
+        string? NextCursor
+    );
 }

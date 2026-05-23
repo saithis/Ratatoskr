@@ -7,19 +7,19 @@ public class MessageProperties
     /// Maps to CloudEvents "id" field.
     /// </summary>
     public string? Id { get; set; }
-    
+
     /// <summary>
     /// The type of the message, e.g. "com.example.order-shipped".
     /// Maps to CloudEvents "type" field.
     /// </summary>
     public string? Type { get; set; }
-    
+
     /// <summary>
     /// URI identifying the event source, e.g. "/orders-service".
     /// Maps to CloudEvents "source" field.
     /// </summary>
     public string? Source { get; set; }
-    
+
     /// <summary>
     /// Subject of the event, e.g. order ID.
     /// Maps to CloudEvents "subject" field.
@@ -31,45 +31,45 @@ public class MessageProperties
     /// Maps to CloudEvents "dataschema" attribute (optional).
     /// </summary>
     public string? DataSchema { get; set; }
-    
+
     /// <summary>
     /// Content type of the data payload.
     /// </summary>
     public string? ContentType { get; set; }
-    
+
     /// <summary>
     /// Event timestamp. Auto-set to current time if not specified.
     /// </summary>
     public DateTimeOffset? Time { get; set; }
-    
+
     /// <summary>
     /// W3C Traceparent header - Contains a version, trace ID, span ID, and trace options
     /// https://w3c.github.io/trace-context/#traceparent-header
     /// </summary>
     public string? TraceParent { get; set; }
-    
+
     /// <summary>
     /// W3C Tracestate header - a comma-delimited list of key-value pairs
     /// https://w3c.github.io/trace-context/#tracestate-header
     /// </summary>
     public string? TraceState { get; set; }
-    
+
     /// <summary>
     /// Custom headers to include with the message.
     /// </summary>
     public Dictionary<string, string> Headers { get; set; } = new();
-    
+
     /// <summary>
     /// The transports this message should be sent over.
     /// </summary>
     public HashSet<string> Transports { get; set; } = new();
-    
+
     /// <summary>
     /// Transport-specific metadata (e.g., RabbitMQ exchange/routing key).
     /// Not included in CloudEvents envelope.
     /// </summary>
     public Dictionary<string, string> TransportMetadata { get; set; } = new();
-    
+
     /// <summary>
     /// CloudEvents extension attributes (included in envelope).
     /// </summary>

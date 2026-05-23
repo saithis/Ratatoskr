@@ -11,7 +11,9 @@ public class InboxHandlerStatusEntityTests
     public void MarkAsFailed_CalculatesExponentialBackoffWithJitter()
     {
         // Arrange
-        var fakeTime = new FakeTimeProvider(new DateTimeOffset(2025, 1, 24, 12, 0, 0, TimeSpan.Zero));
+        var fakeTime = new FakeTimeProvider(
+            new DateTimeOffset(2025, 1, 24, 12, 0, 0, TimeSpan.Zero)
+        );
         var status = InboxHandlerStatusEntity.Create("msg-1", "handler-a", fakeTime);
 
         // Act - First failure (base = 2^1 = 2s, jitter range = [1s, 2s))
@@ -105,10 +107,12 @@ public class InboxHandlerStatusEntityTests
             status.MarkAsFailed("Error", fakeTime, maxRetries: 10, TimeSpan.FromMinutes(5));
 
             // ErrorCount=1: base = 2^1 = 2, delay ∈ [1, 2)
-            status.NextAttemptAt!.Value.Should().BeOnOrAfter(now.AddSeconds(1),
-                $"run {run}: jitter minimum is base*0.5 = 1s");
-            status.NextAttemptAt!.Value.Should().BeOnOrBefore(now.AddSeconds(2),
-                $"run {run}: jitter maximum is base = 2s");
+            status
+                .NextAttemptAt!.Value.Should()
+                .BeOnOrAfter(now.AddSeconds(1), $"run {run}: jitter minimum is base*0.5 = 1s");
+            status
+                .NextAttemptAt!.Value.Should()
+                .BeOnOrBefore(now.AddSeconds(2), $"run {run}: jitter maximum is base = 2s");
         }
     }
 }

@@ -1,19 +1,23 @@
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using RabbitMQ.Client;
-using Ratatoskr.Tests.Fixtures;
 using System.Text;
 using Medallion.Threading;
 using Medallion.Threading.FileSystem;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using RabbitMQ.Client;
 using Ratatoskr.RabbitMq;
 using Ratatoskr.TestHost;
+using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration;
 
-[ClassDataSource<RabbitMqContainerFixture, PostgresContainerFixture>(Shared = [SharedType.PerTestSession, SharedType.PerTestSession])]
-public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
-    : IAsyncDisposable
+[ClassDataSource<RabbitMqContainerFixture, PostgresContainerFixture>(
+    Shared = [SharedType.PerTestSession, SharedType.PerTestSession]
+)]
+public abstract class RatatoskrIntegrationTest(
+    RabbitMqContainerFixture rabbitMq,
+    PostgresContainerFixture postgres
+) : IAsyncDisposable
 {
     private WebApplicationFactory<RatatoskrTestHostAppMarker>? _factory;
 
@@ -21,11 +25,14 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
     /// Provides access to the application's root service provider.
     /// Available after <see cref="StartTestAsync"/> has been called.
     /// </summary>
-    protected IServiceProvider Services => _factory?.Services ?? throw new InvalidOperationException("StartTestAsync has not been called yet.");
+    protected IServiceProvider Services =>
+        _factory?.Services
+        ?? throw new InvalidOperationException("StartTestAsync has not been called yet.");
 
     // Unique ID for this test instance to isolate resources
     protected string TestId { get; } = Guid.NewGuid().ToString("N");
     protected string RabbitMqConnectionString => rabbitMq.ConnectionString;
+
     // Override the connection string to point to the unique database for this test
     protected string PostgresConnectionString
     {
@@ -34,7 +41,7 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
             var builder = new Npgsql.NpgsqlConnectionStringBuilder(postgres.ConnectionString)
             {
                 Database = $"test_{TestId}",
-                MaxPoolSize = 2
+                MaxPoolSize = 2,
             };
             return builder.ToString();
         }
@@ -93,9 +100,13 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
         services.AddLogging();
         services.AddSingleton<TimeProvider>(TimeProvider.System);
 
-        var lockFileDirectory = new DirectoryInfo(Path.Combine(Environment.CurrentDirectory, TestId)); // choose where the lock files will live
+        var lockFileDirectory = new DirectoryInfo(
+            Path.Combine(Environment.CurrentDirectory, TestId)
+        ); // choose where the lock files will live
         lockFileDirectory.Create();
-        services.AddSingleton<IDistributedLockProvider>(_ => new FileDistributedSynchronizationProvider(lockFileDirectory));
+        services.AddSingleton<IDistributedLockProvider>(
+            _ => new FileDistributedSynchronizationProvider(lockFileDirectory)
+        );
     }
 
     /// <summary>
@@ -104,7 +115,8 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
     /// </summary>
     protected HttpClient CreateHttpClient()
     {
-        if (_factory is null) throw new InvalidOperationException("StartTestAsync has not been called yet.");
+        if (_factory is null)
+            throw new InvalidOperationException("StartTestAsync has not been called yet.");
         return _factory.CreateClient();
     }
 
@@ -112,7 +124,7 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
     {
         if (_factory != null)
             await _factory.DisposeAsync();
-            
+
         await DropDatabaseAsync();
     }
 
@@ -142,13 +154,11 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
     {
         public required IServiceProvider ServiceProvider { get; set; }
     }
+
     protected async Task InScopeAsync(Func<ScopeContext, Task> arrange)
     {
         using var scope = _factory.Services.CreateScope();
-        await arrange(new ScopeContext
-        {
-            ServiceProvider = scope.ServiceProvider,
-        });
+        await arrange(new ScopeContext { ServiceProvider = scope.ServiceProvider });
     }
 
     protected async Task InScopeAsync(Action<ScopeContext> arrange)
@@ -163,10 +173,7 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
     protected async Task<TRes> InScopeAsync<TRes>(Func<ScopeContext, Task<TRes>> arrange)
     {
         using var scope = _factory.Services.CreateScope();
-        TRes result = await arrange(new ScopeContext
-        {
-            ServiceProvider = scope.ServiceProvider,
-        });
+        TRes result = await arrange(new ScopeContext { ServiceProvider = scope.ServiceProvider });
         return result;
     }
 
@@ -178,8 +185,13 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
             return Task.FromResult(result);
         });
     }
-    
-    protected async Task PublishToRabbitMqAsync<T>(string exchange, string routingKey, T message, string? type = null)
+
+    protected async Task PublishToRabbitMqAsync<T>(
+        string exchange,
+        string routingKey,
+        T message,
+        string? type = null
+    )
     {
         var factory = new ConnectionFactory { Uri = new Uri(RabbitMqConnectionString) };
         await using var connection = await factory.CreateConnectionAsync();
@@ -191,21 +203,28 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
         var props = new BasicProperties
         {
             MessageId = Guid.NewGuid().ToString(),
-            Type = type ?? System.Reflection.CustomAttributeExtensions.GetCustomAttribute<RatatoskrMessageAttribute>(typeof(T))?.Type ?? throw new NullReferenceException(),
+            Type =
+                type
+                ?? System
+                    .Reflection.CustomAttributeExtensions.GetCustomAttribute<RatatoskrMessageAttribute>(
+                        typeof(T)
+                    )
+                    ?.Type
+                ?? throw new NullReferenceException(),
             ContentType = "application/json",
-            DeliveryMode = DeliveryModes.Persistent
+            DeliveryMode = DeliveryModes.Persistent,
         };
 
         await channel.BasicPublishAsync(exchange, routingKey, false, props, body);
     }
-    
+
     protected async Task<uint> GetMessageCountAsync(string queueName)
     {
         var factory = new ConnectionFactory { Uri = new Uri(RabbitMqConnectionString) };
         await using var connection = await factory.CreateConnectionAsync();
         await using var channel = await connection.CreateChannelAsync();
-        
-        try 
+
+        try
         {
             return await channel.MessageCountAsync(queueName);
         }
@@ -221,7 +240,7 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
         var factory = new ConnectionFactory { Uri = new Uri(RabbitMqConnectionString) };
         await using var connection = await factory.CreateConnectionAsync();
         await using var channel = await connection.CreateChannelAsync();
-        
+
         return await channel.BasicGetAsync(queueName, autoAck: true);
     }
 
@@ -231,8 +250,13 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
         await using var connection = await factory.CreateConnectionAsync();
         await using var channel = await connection.CreateChannelAsync();
 
-        await channel.QueueDeclareAsync(queue: queueName, durable: false, exclusive: false, autoDelete: true);
-        
+        await channel.QueueDeclareAsync(
+            queue: queueName,
+            durable: false,
+            exclusive: false,
+            autoDelete: true
+        );
+
         if (!string.IsNullOrEmpty(exchange))
         {
             await channel.ExchangeDeclarePassiveAsync(exchange);
@@ -249,12 +273,20 @@ public abstract class RatatoskrIntegrationTest(RabbitMqContainerFixture rabbitMq
         });
     }
 
-    protected Task WaitForConditionAsync(Func<bool> condition, TimeSpan timeout, string? message = null)
+    protected Task WaitForConditionAsync(
+        Func<bool> condition,
+        TimeSpan timeout,
+        string? message = null
+    )
     {
         return WaitForConditionAsync(() => Task.FromResult(condition()), timeout, message);
     }
 
-    protected async Task WaitForConditionAsync(Func<Task<bool>> condition, TimeSpan timeout, string? message = null)
+    protected async Task WaitForConditionAsync(
+        Func<Task<bool>> condition,
+        TimeSpan timeout,
+        string? message = null
+    )
     {
         var start = DateTime.UtcNow;
         while (!await condition())

@@ -18,7 +18,7 @@ internal sealed class EfCoreEndpointConfigurator : IRatatoskrEndpointConfigurato
     public void MapEndpoints(IEndpointRouteBuilder group)
     {
         var efcoreGroup = group.MapGroup("/efcore");
-        
+
         GetContextsEndpoint.Map(efcoreGroup);
 
         var contextGroup = efcoreGroup.MapGroup("/contexts/{contextName}");

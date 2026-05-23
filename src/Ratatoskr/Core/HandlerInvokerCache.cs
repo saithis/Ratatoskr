@@ -9,12 +9,18 @@ namespace Ratatoskr.Core;
 /// </summary>
 internal static class HandlerInvokerCache
 {
-    private static readonly ConcurrentDictionary<Type, Func<object, object, MessageProperties, CancellationToken, Task>> _cache = new();
+    private static readonly ConcurrentDictionary<
+        Type,
+        Func<object, object, MessageProperties, CancellationToken, Task>
+    > _cache = new();
 
-    public static Func<object, object, MessageProperties, CancellationToken, Task> Get(Type messageType) =>
-        _cache.GetOrAdd(messageType, CreateInvoker);
+    public static Func<object, object, MessageProperties, CancellationToken, Task> Get(
+        Type messageType
+    ) => _cache.GetOrAdd(messageType, CreateInvoker);
 
-    private static Func<object, object, MessageProperties, CancellationToken, Task> CreateInvoker(Type messageType)
+    private static Func<object, object, MessageProperties, CancellationToken, Task> CreateInvoker(
+        Type messageType
+    )
     {
         var handlerParam = Expression.Parameter(typeof(object), "handler");
         var messageParam = Expression.Parameter(typeof(object), "message");
@@ -28,7 +34,14 @@ internal static class HandlerInvokerCache
         var typedMessage = Expression.Convert(messageParam, messageType);
         var call = Expression.Call(typedHandler, handleMethod, typedMessage, propsParam, ctParam);
 
-        return Expression.Lambda<Func<object, object, MessageProperties, CancellationToken, Task>>(
-            call, handlerParam, messageParam, propsParam, ctParam).Compile();
+        return Expression
+            .Lambda<Func<object, object, MessageProperties, CancellationToken, Task>>(
+                call,
+                handlerParam,
+                messageParam,
+                propsParam,
+                ctParam
+            )
+            .Compile();
     }
 }

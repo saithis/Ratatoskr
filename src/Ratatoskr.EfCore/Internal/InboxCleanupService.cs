@@ -13,7 +13,8 @@ internal class InboxCleanupService<TDbContext>(
     InboxOptionsHolder<TDbContext> optionsHolder,
     IDistributedLockProvider distributedLockProvider,
     TimeProvider timeProvider,
-    ILogger<InboxCleanupService<TDbContext>> logger) : BackgroundService
+    ILogger<InboxCleanupService<TDbContext>> logger
+) : BackgroundService
     where TDbContext : DbContext, IInboxDbContext
 {
     private readonly InboxOptions _options = optionsHolder.Options;
@@ -42,13 +43,18 @@ internal class InboxCleanupService<TDbContext>(
     internal async Task<bool> TryCleanupWithLockAsync(CancellationToken cancellationToken)
     {
         await using var dLock = await distributedLockProvider.TryAcquireLockAsync(
-            _options.CleanupLockName, TimeSpan.Zero, cancellationToken);
+            _options.CleanupLockName,
+            TimeSpan.Zero,
+            cancellationToken
+        );
 
         if (dLock == null)
         {
             logger.LogDebug("InboxCleanupService skipped — another instance holds the lock");
-            RatatoskrDiagnostics.LockAcquisitionFailure.Add(1,
-                new TagList { { "processor", "InboxCleanupService" } });
+            RatatoskrDiagnostics.LockAcquisitionFailure.Add(
+                1,
+                new TagList { { "processor", "InboxCleanupService" } }
+            );
             return false;
         }
 
@@ -56,7 +62,9 @@ internal class InboxCleanupService<TDbContext>(
         return true;
     }
 
-    internal async Task<(int HandlerStatuses, int OrphanedMessages)> CleanupAsync(CancellationToken cancellationToken)
+    internal async Task<(int HandlerStatuses, int OrphanedMessages)> CleanupAsync(
+        CancellationToken cancellationToken
+    )
     {
         var startTimestamp = Stopwatch.GetTimestamp();
         var cutoff = timeProvider.GetUtcNow() - _options.RetentionPeriod!.Value;
@@ -69,10 +77,9 @@ internal class InboxCleanupService<TDbContext>(
             using var scope = serviceScopeFactory.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<TDbContext>();
 
-            deleted = await dbContext.Set<InboxHandlerStatusEntity>()
-                .Where(x => x.CompletedAt != null
-                          && !x.IsPoisoned
-                          && x.CompletedAt < cutoff)
+            deleted = await dbContext
+                .Set<InboxHandlerStatusEntity>()
+                .Where(x => x.CompletedAt != null && !x.IsPoisoned && x.CompletedAt < cutoff)
                 .OrderBy(x => x.CompletedAt)
                 .Take(_options.CleanupBatchSize)
                 .ExecuteDeleteAsync(cancellationToken);
@@ -90,8 +97,11 @@ internal class InboxCleanupService<TDbContext>(
             using var scope = serviceScopeFactory.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<TDbContext>();
 
-            deleted = await dbContext.Set<InboxMessageEntity>()
-                .Where(m => !dbContext.Set<InboxHandlerStatusEntity>().Any(s => s.MessageId == m.Id))
+            deleted = await dbContext
+                .Set<InboxMessageEntity>()
+                .Where(m =>
+                    !dbContext.Set<InboxHandlerStatusEntity>().Any(s => s.MessageId == m.Id)
+                )
                 .OrderBy(m => m.Id)
                 .Take(_options.CleanupBatchSize)
                 .ExecuteDeleteAsync(cancellationToken);
@@ -102,12 +112,16 @@ internal class InboxCleanupService<TDbContext>(
             totalMessagesDeleted += deleted;
         } while (deleted == _options.CleanupBatchSize);
 
-        RatatoskrDiagnostics.InboxCleanupDuration.Record(Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds);
+        RatatoskrDiagnostics.InboxCleanupDuration.Record(
+            Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds
+        );
 
         if (totalStatusesDeleted > 0 || totalMessagesDeleted > 0)
             logger.LogInformation(
                 "InboxCleanupService deleted {StatusCount} handler status(es) and {MessageCount} orphaned message(s)",
-                totalStatusesDeleted, totalMessagesDeleted);
+                totalStatusesDeleted,
+                totalMessagesDeleted
+            );
 
         return (totalStatusesDeleted, totalMessagesDeleted);
     }

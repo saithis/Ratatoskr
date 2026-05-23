@@ -5,12 +5,16 @@ using Ratatoskr.EfCore.Internal;
 namespace Ratatoskr.EfCore.Management;
 
 internal sealed class EfCoreManagementDbContextDescriptor<TDbContext>(
-    IServiceProvider serviceProvider)
-    : IEfCoreManagementDbContextDescriptor
+    IServiceProvider serviceProvider
+) : IEfCoreManagementDbContextDescriptor
     where TDbContext : DbContext, IOutboxDbContext, IInboxDbContext
 {
-    private readonly OutboxProcessor<TDbContext>? _outboxProcessor = serviceProvider.GetService<OutboxProcessor<TDbContext>>();
-    private readonly InboxProcessor<TDbContext>? _inboxProcessor = serviceProvider.GetService<InboxProcessor<TDbContext>>();
+    private readonly OutboxProcessor<TDbContext>? _outboxProcessor = serviceProvider.GetService<
+        OutboxProcessor<TDbContext>
+    >();
+    private readonly InboxProcessor<TDbContext>? _inboxProcessor = serviceProvider.GetService<
+        InboxProcessor<TDbContext>
+    >();
 
     public Type DbContextType { get; } = typeof(TDbContext);
     public string DbContextName => DbContextType.Name;

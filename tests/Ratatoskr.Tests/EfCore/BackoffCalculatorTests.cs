@@ -37,9 +37,9 @@ public class BackoffCalculatorTests
 
         // base doubles each time: 2^1=2, 2^2=4, 2^3=8
         // With jitter=0.5: delay = base*0.5 + base*0.5*0.5 = base*0.75
-        delay1.TotalSeconds.Should().Be(1.5);  // 2 * 0.75
-        delay2.TotalSeconds.Should().Be(3.0);  // 4 * 0.75
-        delay3.TotalSeconds.Should().Be(6.0);  // 8 * 0.75
+        delay1.TotalSeconds.Should().Be(1.5); // 2 * 0.75
+        delay2.TotalSeconds.Should().Be(3.0); // 4 * 0.75
+        delay3.TotalSeconds.Should().Be(6.0); // 8 * 0.75
     }
 
     [Test]

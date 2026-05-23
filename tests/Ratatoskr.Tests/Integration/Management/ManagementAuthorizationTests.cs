@@ -15,8 +15,10 @@ using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Management;
 
-public class ManagementAuthorizationTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
-    : ManagementTestBase(rabbitMq, postgres)
+public class ManagementAuthorizationTests(
+    RabbitMqContainerFixture rabbitMq,
+    PostgresContainerFixture postgres
+) : ManagementTestBase(rabbitMq, postgres)
 {
     [Test]
     public async Task ManagementApi_UnauthenticatedRequest_Returns401()
@@ -25,25 +27,30 @@ public class ManagementAuthorizationTests(RabbitMqContainerFixture rabbitMq, Pos
         await StartTestAsync(services =>
         {
             // Use a scheme that returns 401 on challenge (no real auth in tests)
-            services.AddAuthentication("Reject")
+            services
+                .AddAuthentication("Reject")
                 .AddScheme<AuthenticationSchemeOptions, AlwaysRejectHandler>("Reject", _ => { });
             services.AddAuthorization(o =>
-                o.AddPolicy("RatatoskrAdmin", p => p.RequireAuthenticatedUser()));
+                o.AddPolicy("RatatoskrAdmin", p => p.RequireAuthenticatedUser())
+            );
 
             services.AddRatatoskr(bus =>
             {
                 bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox());
             });
 
-            services.AddDbContext<TestDbContext>((_, opts) =>
-                opts.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (_, opts) => opts.UseNpgsql(PostgresConnectionString)
+            );
         });
 
         await InitializeDatabase();
         var client = CreateHttpClient();
 
         // No authentication → 401
-        var response = await client.GetAsync("/ratatoskr/api/v1/efcore/contexts/TestDbContext/outbox/poisoned");
+        var response = await client.GetAsync(
+            "/ratatoskr/api/v1/efcore/contexts/TestDbContext/outbox/poisoned"
+        );
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
@@ -53,17 +60,16 @@ public class ManagementAuthorizationTests(RabbitMqContainerFixture rabbitMq, Pos
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddAuthorization(o =>
-            o.AddPolicy("ExistingPolicy", p => p.RequireAssertion(_ => true)));
-        services.AddRatatoskr(bus =>
-            bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox()));
+            o.AddPolicy("ExistingPolicy", p => p.RequireAssertion(_ => true))
+        );
+        services.AddRatatoskr(bus => bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox()));
         services.AddDbContext<TestDbContext>(opts => opts.UseInMemoryDatabase("throwtest"));
 
         await using var sp = services.BuildServiceProvider();
         var endpointBuilder = new MinimalEndpointRouteBuilder(sp);
 
         var act = () => endpointBuilder.MapRatatoskrManagementApi("NonExistentPolicy");
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*NonExistentPolicy*");
+        act.Should().Throw<InvalidOperationException>().WithMessage("*NonExistentPolicy*");
     }
 }
 
@@ -71,15 +77,16 @@ public class ManagementAuthorizationTests(RabbitMqContainerFixture rabbitMq, Pos
 file sealed class AlwaysRejectHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options,
     ILoggerFactory logger,
-    UrlEncoder encoder)
-    : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+    UrlEncoder encoder
+) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
     protected override Task<AuthenticateResult> HandleAuthenticateAsync() =>
         Task.FromResult(AuthenticateResult.NoResult());
 }
 
 /// <summary>Minimal <see cref="IEndpointRouteBuilder"/> for unit-testing MapRatatoskrManagementApi.</summary>
-file sealed class MinimalEndpointRouteBuilder(IServiceProvider serviceProvider) : IEndpointRouteBuilder
+file sealed class MinimalEndpointRouteBuilder(IServiceProvider serviceProvider)
+    : IEndpointRouteBuilder
 {
     private readonly List<EndpointDataSource> _dataSources = [];
 

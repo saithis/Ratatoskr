@@ -3,6 +3,5 @@ namespace Ratatoskr.Tests;
 public class VerifyChecksTests
 {
     [Test]
-    public Task Run() =>
-        VerifyChecks.Run();
+    public Task Run() => VerifyChecks.Run();
 }

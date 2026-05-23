@@ -14,7 +14,8 @@ public sealed class ScenarioAssertionsTests
             TimeSpan.FromSeconds(2),
             TimeSpan.FromMilliseconds(20),
             _ => Task.FromResult(true),
-            CancellationToken.None);
+            CancellationToken.None
+        );
 
         result.Should().BeTrue();
     }
@@ -28,7 +29,8 @@ public sealed class ScenarioAssertionsTests
             TimeSpan.FromMilliseconds(80),
             TimeSpan.FromMilliseconds(40),
             _ => Task.FromResult(false),
-            CancellationToken.None);
+            CancellationToken.None
+        );
 
         result.Should().BeFalse();
     }
@@ -47,7 +49,8 @@ public sealed class ScenarioAssertionsTests
                 n++;
                 return Task.FromResult(n >= 2);
             },
-            CancellationToken.None);
+            CancellationToken.None
+        );
 
         result.Should().BeTrue();
     }

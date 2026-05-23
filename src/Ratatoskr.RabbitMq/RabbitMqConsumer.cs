@@ -20,11 +20,16 @@ internal sealed class RabbitMqConsumer(
     RabbitMqOptions options,
     TimeProvider timeProvider,
     IEnumerable<IMessageActivityObserver> observers,
-    ILogger<RabbitMqConsumer> logger)
-    : BackgroundService
+    ILogger<RabbitMqConsumer> logger
+) : BackgroundService
 {
     private readonly Lock _channelsLock = new();
-    private readonly List<(IChannel Channel, string ConsumerTag, SemaphoreSlim ConcurrencyGate, SemaphoreSlim AckLock)> _consumers = new();
+    private readonly List<(
+        IChannel Channel,
+        string ConsumerTag,
+        SemaphoreSlim ConcurrencyGate,
+        SemaphoreSlim AckLock
+    )> _consumers = new();
     private int _inFlightHandlers;
 
     /// <summary>
@@ -57,9 +62,11 @@ internal sealed class RabbitMqConsumer(
 
             if (channelOptions is { AutoAck: true, ConcurrencyLimit: > 1 })
                 logger.LogWarning(
-                    "Channel '{Channel}': AutoAck=true disables broker-side prefetch limiting; with " +
-                    "ConcurrencyLimit={Limit} messages may accumulate faster than handlers process them.",
-                    reg.ChannelName, channelOptions.ConcurrencyLimit);
+                    "Channel '{Channel}': AutoAck=true disables broker-side prefetch limiting; with "
+                        + "ConcurrencyLimit={Limit} messages may accumulate faster than handlers process them.",
+                    reg.ChannelName,
+                    channelOptions.ConcurrencyLimit
+                );
         }
 
         await ProvisionAndConsumeAsync(stoppingToken);
@@ -83,18 +90,28 @@ internal sealed class RabbitMqConsumer(
 
             if (string.IsNullOrEmpty(channelOptions.QueueName))
             {
-                logger.LogWarning("Skipping consumer channel '{Channel}' because no queue name is configured.", reg.ChannelName);
+                logger.LogWarning(
+                    "Skipping consumer channel '{Channel}' because no queue name is configured.",
+                    reg.ChannelName
+                );
                 continue;
             }
 
             var channel = await connectionManager.CreateChannelAsync(false, stoppingToken);
             await channel.BasicQosAsync(0, channelOptions.PrefetchCount, false, stoppingToken);
-            var concurrencyGate = new SemaphoreSlim(channelOptions.ConcurrencyLimit, channelOptions.ConcurrencyLimit);
+            var concurrencyGate = new SemaphoreSlim(
+                channelOptions.ConcurrencyLimit,
+                channelOptions.ConcurrencyLimit
+            );
             var ackLock = new SemaphoreSlim(1, 1);
 
             channel.ChannelShutdownAsync += (_, args) =>
             {
-                logger.LogWarning("RabbitMQ channel closed: {ReplyCode} - {ReplyText}", args.ReplyCode, args.ReplyText);
+                logger.LogWarning(
+                    "RabbitMQ channel closed: {ReplyCode} - {ReplyText}",
+                    args.ReplyCode,
+                    args.ReplyText
+                );
                 return Task.CompletedTask;
             };
 
@@ -118,7 +135,15 @@ internal sealed class RabbitMqConsumer(
                 {
                     try
                     {
-                        await HandleMessageCoreAsync(channel, ea, channelOptions, channelOptions.QueueName, reg.ChannelName, ackLock, stoppingToken);
+                        await HandleMessageCoreAsync(
+                            channel,
+                            ea,
+                            channelOptions,
+                            channelOptions.QueueName,
+                            reg.ChannelName,
+                            ackLock,
+                            stoppingToken
+                        );
                     }
                     catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                     {
@@ -126,7 +151,11 @@ internal sealed class RabbitMqConsumer(
                     }
                     catch (Exception ex)
                     {
-                        logger.LogError(ex, "Unhandled exception dispatching message on channel '{Channel}'", reg.ChannelName);
+                        logger.LogError(
+                            ex,
+                            "Unhandled exception dispatching message on channel '{Channel}'",
+                            reg.ChannelName
+                        );
                     }
                     finally
                     {
@@ -136,13 +165,18 @@ internal sealed class RabbitMqConsumer(
                 }
             };
 
-            logger.LogInformation("Starting consuming from queue '{Queue}' for channel '{Channel}'", channelOptions.QueueName, reg.ChannelName);
+            logger.LogInformation(
+                "Starting consuming from queue '{Queue}' for channel '{Channel}'",
+                channelOptions.QueueName,
+                reg.ChannelName
+            );
 
             var consumerTag = await channel.BasicConsumeAsync(
                 queue: channelOptions.QueueName!,
                 autoAck: channelOptions.AutoAck,
                 consumer: consumer,
-                cancellationToken: stoppingToken);
+                cancellationToken: stoppingToken
+            );
 
             lock (_channelsLock)
             {
@@ -153,10 +187,15 @@ internal sealed class RabbitMqConsumer(
 
     private async Task CancelConsumersAsync(CancellationToken cancellationToken)
     {
-        List<(IChannel Channel, string ConsumerTag, SemaphoreSlim ConcurrencyGate, SemaphoreSlim AckLock)> snapshot;
+        List<(
+            IChannel Channel,
+            string ConsumerTag,
+            SemaphoreSlim ConcurrencyGate,
+            SemaphoreSlim AckLock
+        )> snapshot;
         lock (_channelsLock)
         {
-            snapshot = [.._consumers];
+            snapshot = [.. _consumers];
         }
 
         var cancelTasks = snapshot.Select(async entry =>
@@ -164,7 +203,11 @@ internal sealed class RabbitMqConsumer(
             try
             {
                 if (entry.Channel.IsOpen)
-                    await entry.Channel.BasicCancelAsync(entry.ConsumerTag, noWait: false, cancellationToken);
+                    await entry.Channel.BasicCancelAsync(
+                        entry.ConsumerTag,
+                        noWait: false,
+                        cancellationToken
+                    );
             }
             catch (OperationCanceledException)
             {
@@ -172,7 +215,11 @@ internal sealed class RabbitMqConsumer(
             }
             catch (Exception ex)
             {
-                logger.LogDebug(ex, "Error cancelling RabbitMQ consumer {ConsumerTag}", entry.ConsumerTag);
+                logger.LogDebug(
+                    ex,
+                    "Error cancelling RabbitMQ consumer {ConsumerTag}",
+                    entry.ConsumerTag
+                );
             }
         });
 
@@ -193,7 +240,8 @@ internal sealed class RabbitMqConsumer(
                 logger.LogWarning(
                     "Shutdown drain timed out after {Timeout}; {InFlight} handler(s) still in flight",
                     timeout,
-                    Volatile.Read(ref _inFlightHandlers));
+                    Volatile.Read(ref _inFlightHandlers)
+                );
                 return;
             }
 
@@ -205,7 +253,8 @@ internal sealed class RabbitMqConsumer(
             {
                 logger.LogWarning(
                     "Shutdown drain interrupted by host cancellation; {InFlight} handler(s) still in flight",
-                    Volatile.Read(ref _inFlightHandlers));
+                    Volatile.Read(ref _inFlightHandlers)
+                );
                 return;
             }
         }
@@ -213,10 +262,17 @@ internal sealed class RabbitMqConsumer(
 
     private async Task CleanupChannelsAsync()
     {
-        List<(IChannel Channel, SemaphoreSlim ConcurrencyGate, SemaphoreSlim AckLock)> channelsToCleanup;
+        List<(
+            IChannel Channel,
+            SemaphoreSlim ConcurrencyGate,
+            SemaphoreSlim AckLock
+        )> channelsToCleanup;
         lock (_channelsLock)
         {
-            channelsToCleanup = [.._consumers.Select(c => (c.Channel, c.ConcurrencyGate, c.AckLock))];
+            channelsToCleanup =
+            [
+                .. _consumers.Select(c => (c.Channel, c.ConcurrencyGate, c.AckLock)),
+            ];
             _consumers.Clear();
         }
 
@@ -237,14 +293,21 @@ internal sealed class RabbitMqConsumer(
         }
     }
 
-    private static void ValidateChannelConcurrency(string channelName, RabbitMqChannelOptions channelOptions)
+    private static void ValidateChannelConcurrency(
+        string channelName,
+        RabbitMqChannelOptions channelOptions
+    )
     {
-        if (channelOptions.PrefetchCount != 0 && channelOptions.ConcurrencyLimit > channelOptions.PrefetchCount)
+        if (
+            channelOptions.PrefetchCount != 0
+            && channelOptions.ConcurrencyLimit > channelOptions.PrefetchCount
+        )
         {
             throw new InvalidOperationException(
-                $"Invalid RabbitMQ channel configuration for '{channelName}': " +
-                $"ConcurrencyLimit ({channelOptions.ConcurrencyLimit}) must be less than or equal to " +
-                $"PrefetchCount ({channelOptions.PrefetchCount}).");
+                $"Invalid RabbitMQ channel configuration for '{channelName}': "
+                    + $"ConcurrencyLimit ({channelOptions.ConcurrencyLimit}) must be less than or equal to "
+                    + $"PrefetchCount ({channelOptions.PrefetchCount})."
+            );
         }
     }
 
@@ -255,7 +318,8 @@ internal sealed class RabbitMqConsumer(
         string queueName,
         string channelName,
         SemaphoreSlim ackLock,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var messageId = ea.BasicProperties.MessageId ?? Guid.NewGuid().ToString();
         var processStartTimestamp = Stopwatch.GetTimestamp();
@@ -267,22 +331,36 @@ internal sealed class RabbitMqConsumer(
         try
         {
             // Enforce inbound message size limit
-            if (options.MaxInboundMessageSize.HasValue && ea.Body.Length > options.MaxInboundMessageSize.Value)
+            if (
+                options.MaxInboundMessageSize.HasValue
+                && ea.Body.Length > options.MaxInboundMessageSize.Value
+            )
             {
                 logger.LogWarning(
                     "Inbound message size of {Size} bytes exceeds the configured maximum of {Max} bytes for message '{MessageId}'. Rejecting to DLQ.",
-                    ea.Body.Length, options.MaxInboundMessageSize.Value, messageId);
+                    ea.Body.Length,
+                    options.MaxInboundMessageSize.Value,
+                    messageId
+                );
                 if (channelOptions.AutoAck)
                 {
                     logger.LogError(
                         "MaxInboundMessageSize is configured, but channel '{Channel}' uses auto-ack; oversized message cannot be nacked to DLQ.",
-                        channelName);
+                        channelName
+                    );
                     return;
                 }
                 await ackLock.WaitAsync(cancellationToken);
                 try
                 {
-                    await retryHandler.HandleFailureAsync(channel, ea, channelOptions, queueName, DispatchResult.PermanentError, cancellationToken);
+                    await retryHandler.HandleFailureAsync(
+                        channel,
+                        ea,
+                        channelOptions,
+                        queueName,
+                        DispatchResult.PermanentError,
+                        cancellationToken
+                    );
                 }
                 finally
                 {
@@ -300,15 +378,18 @@ internal sealed class RabbitMqConsumer(
 
             var receivedTimestamp = timeProvider.GetUtcNow();
 
-            await observers.NotifyAsync(new MessageActivity
-            {
-                Stage = MessageStage.Received,
-                Properties = props,
-                SerializedBody = body,
-                TransportName = RabbitMqConstants.TransportName,
-                TransportMessage = transportMessage,
-                Timestamp = receivedTimestamp,
-            }, logger);
+            await observers.NotifyAsync(
+                new MessageActivity
+                {
+                    Stage = MessageStage.Received,
+                    Properties = props,
+                    SerializedBody = body,
+                    TransportName = RabbitMqConstants.TransportName,
+                    TransportMessage = transportMessage,
+                    Timestamp = receivedTimestamp,
+                },
+                logger
+            );
 
             tags = telemetry.CreateConsumeTags(ea, props, queueName);
 
@@ -316,13 +397,19 @@ internal sealed class RabbitMqConsumer(
 
             activity = telemetry.StartConsumeActivity(props, tags, body.Length, ea.DeliveryTag);
 
-            var result = await router.RouteAsync(body, props, RabbitMqConstants.TransportName, cancellationToken, channelName);
+            var result = await router.RouteAsync(
+                body,
+                props,
+                RabbitMqConstants.TransportName,
+                cancellationToken,
+                channelName
+            );
 
             errorType = result switch
             {
                 DispatchResult.Success => null,
                 DispatchResult.NoHandlers => "NoHandlerError",
-                _ => "ProcessingError"
+                _ => "ProcessingError",
             };
 
             if (errorType != null)
@@ -333,7 +420,15 @@ internal sealed class RabbitMqConsumer(
 
             if (!channelOptions.AutoAck)
             {
-                await HandleDispatchResultAsync(channel, ea, channelOptions, queueName, result, ackLock, cancellationToken);
+                await HandleDispatchResultAsync(
+                    channel,
+                    ea,
+                    channelOptions,
+                    queueName,
+                    result,
+                    ackLock,
+                    cancellationToken
+                );
             }
         }
         catch (Exception ex)
@@ -356,8 +451,13 @@ internal sealed class RabbitMqConsumer(
                 try
                 {
                     await retryHandler.HandleFailureAsync(
-                        channel, ea, channelOptions, queueName,
-                        DispatchResult.RecoverableError, cancellationToken);
+                        channel,
+                        ea,
+                        channelOptions,
+                        queueName,
+                        DispatchResult.RecoverableError,
+                        cancellationToken
+                    );
                 }
                 finally
                 {
@@ -383,7 +483,8 @@ internal sealed class RabbitMqConsumer(
         string queueName,
         DispatchResult result,
         SemaphoreSlim ackLock,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         await ackLock.WaitAsync(cancellationToken);
         try
@@ -398,7 +499,13 @@ internal sealed class RabbitMqConsumer(
                 case DispatchResult.PermanentError:
                 case DispatchResult.RecoverableError:
                     await retryHandler.HandleFailureAsync(
-                        channel, ea, channelOptions, queueName, result, cancellationToken);
+                        channel,
+                        ea,
+                        channelOptions,
+                        queueName,
+                        result,
+                        cancellationToken
+                    );
                     break;
             }
         }

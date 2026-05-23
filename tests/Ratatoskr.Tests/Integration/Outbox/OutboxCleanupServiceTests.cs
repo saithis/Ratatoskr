@@ -13,10 +13,14 @@ using TUnit.Core;
 
 namespace Ratatoskr.Tests.Integration.Outbox;
 
-public class OutboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
-    : OutboxTestBase(rabbitMq, postgres)
+public class OutboxCleanupServiceTests(
+    RabbitMqContainerFixture rabbitMq,
+    PostgresContainerFixture postgres
+) : OutboxTestBase(rabbitMq, postgres)
 {
-    private readonly FakeTimeProvider _timeProvider = new(new DateTimeOffset(2025, 6, 1, 12, 0, 0, TimeSpan.Zero));
+    private readonly FakeTimeProvider _timeProvider = new(
+        new DateTimeOffset(2025, 6, 1, 12, 0, 0, TimeSpan.Zero)
+    );
 
     private OutboxCleanupService<TestDbContext> CreateCleanupService(OutboxOptions options) =>
         new(
@@ -24,14 +28,16 @@ public class OutboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgr
             new OutboxOptionsHolder<TestDbContext>(options),
             Services.GetRequiredService<IDistributedLockProvider>(),
             _timeProvider,
-            Services.GetRequiredService<ILogger<OutboxCleanupService<TestDbContext>>>());
+            Services.GetRequiredService<ILogger<OutboxCleanupService<TestDbContext>>>()
+        );
 
     private async Task SetupAsync()
     {
         await StartTestAsync(services =>
         {
-            services.AddDbContext<TestDbContext>((_, options) =>
-                options.UseNpgsql(PostgresConnectionString));
+            services.AddDbContext<TestDbContext>(
+                (_, options) => options.UseNpgsql(PostgresConnectionString)
+            );
         });
         await InitializeDatabase();
     }
@@ -47,7 +53,12 @@ public class OutboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgr
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var entity = OutboxMessageEntity.Create("old"u8.ToArray(), new MessageProperties { Type = "test" }, _timeProvider, "rabbitmq");
+            var entity = OutboxMessageEntity.Create(
+                "old"u8.ToArray(),
+                new MessageProperties { Type = "test" },
+                _timeProvider,
+                "rabbitmq"
+            );
             entity.MarkAsProcessing(_timeProvider);
             entity.MarkAsProcessed(_timeProvider);
             db.Set<OutboxMessageEntity>().Add(entity);
@@ -61,7 +72,12 @@ public class OutboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgr
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var entity = OutboxMessageEntity.Create("new"u8.ToArray(), new MessageProperties { Type = "test" }, _timeProvider, "rabbitmq");
+            var entity = OutboxMessageEntity.Create(
+                "new"u8.ToArray(),
+                new MessageProperties { Type = "test" },
+                _timeProvider,
+                "rabbitmq"
+            );
             entity.MarkAsProcessing(_timeProvider);
             entity.MarkAsProcessed(_timeProvider);
             db.Set<OutboxMessageEntity>().Add(entity);
@@ -94,7 +110,12 @@ public class OutboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgr
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var entity = OutboxMessageEntity.Create("pending"u8.ToArray(), new MessageProperties { Type = "test" }, _timeProvider, "rabbitmq");
+            var entity = OutboxMessageEntity.Create(
+                "pending"u8.ToArray(),
+                new MessageProperties { Type = "test" },
+                _timeProvider,
+                "rabbitmq"
+            );
             db.Set<OutboxMessageEntity>().Add(entity);
             await db.SaveChangesAsync();
         });
@@ -128,7 +149,12 @@ public class OutboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgr
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var entity = OutboxMessageEntity.Create("poisoned"u8.ToArray(), new MessageProperties { Type = "test" }, _timeProvider, "rabbitmq");
+            var entity = OutboxMessageEntity.Create(
+                "poisoned"u8.ToArray(),
+                new MessageProperties { Type = "test" },
+                _timeProvider,
+                "rabbitmq"
+            );
             entity.MarkAsPoisoned("test failure", _timeProvider);
             db.Set<OutboxMessageEntity>().Add(entity);
             await db.SaveChangesAsync();
@@ -165,7 +191,12 @@ public class OutboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgr
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             for (var i = 0; i < 5; i++)
             {
-                var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties { Type = "test" }, _timeProvider, "rabbitmq");
+                var entity = OutboxMessageEntity.Create(
+                    "test"u8.ToArray(),
+                    new MessageProperties { Type = "test" },
+                    _timeProvider,
+                    "rabbitmq"
+                );
                 entity.MarkAsProcessing(_timeProvider);
                 entity.MarkAsProcessed(_timeProvider);
                 db.Set<OutboxMessageEntity>().Add(entity);
@@ -177,7 +208,11 @@ public class OutboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgr
         _timeProvider.Advance(TimeSpan.FromDays(10));
 
         // Use batch size of 2 - should still delete all 5 in multiple batches
-        var options = new OutboxOptions { RetentionPeriod = TimeSpan.FromDays(1), CleanupBatchSize = 2 };
+        var options = new OutboxOptions
+        {
+            RetentionPeriod = TimeSpan.FromDays(1),
+            CleanupBatchSize = 2,
+        };
         var service = CreateCleanupService(options);
 
         // Act
@@ -203,7 +238,12 @@ public class OutboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgr
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var entity = OutboxMessageEntity.Create("recent"u8.ToArray(), new MessageProperties { Type = "test" }, _timeProvider, "rabbitmq");
+            var entity = OutboxMessageEntity.Create(
+                "recent"u8.ToArray(),
+                new MessageProperties { Type = "test" },
+                _timeProvider,
+                "rabbitmq"
+            );
             entity.MarkAsProcessing(_timeProvider);
             entity.MarkAsProcessed(_timeProvider);
             db.Set<OutboxMessageEntity>().Add(entity);
@@ -238,23 +278,32 @@ public class OutboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgr
             if (instrument.Meter.Name == RatatoskrDiagnostics.MeterName)
                 meterListener.EnableMeasurementEvents(instrument);
         };
-        listener.SetMeasurementEventCallback<long>((instrument, measurement, _, _) =>
-        {
-            if (instrument.Name == "ratatoskr.outbox.cleanup.count")
-                Interlocked.Add(ref cleanupCount, measurement);
-        });
-        listener.SetMeasurementEventCallback<double>((instrument, measurement, _, _) =>
-        {
-            if (instrument.Name == "ratatoskr.outbox.cleanup.duration")
-                cleanupDuration = measurement;
-        });
+        listener.SetMeasurementEventCallback<long>(
+            (instrument, measurement, _, _) =>
+            {
+                if (instrument.Name == "ratatoskr.outbox.cleanup.count")
+                    Interlocked.Add(ref cleanupCount, measurement);
+            }
+        );
+        listener.SetMeasurementEventCallback<double>(
+            (instrument, measurement, _, _) =>
+            {
+                if (instrument.Name == "ratatoskr.outbox.cleanup.duration")
+                    cleanupDuration = measurement;
+            }
+        );
         listener.Start();
 
         // Insert a processed message
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties { Type = "test" }, _timeProvider, "rabbitmq");
+            var entity = OutboxMessageEntity.Create(
+                "test"u8.ToArray(),
+                new MessageProperties { Type = "test" },
+                _timeProvider,
+                "rabbitmq"
+            );
             entity.MarkAsProcessing(_timeProvider);
             entity.MarkAsProcessed(_timeProvider);
             db.Set<OutboxMessageEntity>().Add(entity);
@@ -284,7 +333,12 @@ public class OutboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgr
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties { Type = "test" }, _timeProvider, "rabbitmq");
+            var entity = OutboxMessageEntity.Create(
+                "test"u8.ToArray(),
+                new MessageProperties { Type = "test" },
+                _timeProvider,
+                "rabbitmq"
+            );
             entity.MarkAsProcessing(_timeProvider);
             entity.MarkAsProcessed(_timeProvider);
             db.Set<OutboxMessageEntity>().Add(entity);
@@ -318,7 +372,12 @@ public class OutboxCleanupServiceTests(RabbitMqContainerFixture rabbitMq, Postgr
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties { Type = "test" }, _timeProvider, "rabbitmq");
+            var entity = OutboxMessageEntity.Create(
+                "test"u8.ToArray(),
+                new MessageProperties { Type = "test" },
+                _timeProvider,
+                "rabbitmq"
+            );
             entity.MarkAsProcessing(_timeProvider);
             entity.MarkAsProcessed(_timeProvider);
             db.Set<OutboxMessageEntity>().Add(entity);

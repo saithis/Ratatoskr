@@ -17,8 +17,9 @@ public interface IRatatoskr
     /// with database operations, use <c>DbContext.OutboxMessages.Add()</c> instead.
     /// </remarks>
     Task PublishDirectAsync<TMessage>(
-        TMessage message, 
-        MessageProperties? props = null, 
-        CancellationToken cancellationToken = default)
+        TMessage message,
+        MessageProperties? props = null,
+        CancellationToken cancellationToken = default
+    )
         where TMessage : notnull;
 }

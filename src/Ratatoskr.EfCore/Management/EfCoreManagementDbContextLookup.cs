@@ -15,10 +15,15 @@ internal sealed class EfCoreManagementDbContextLookup
     private readonly IServiceProvider _serviceProvider;
     private readonly Dictionary<string, IEfCoreManagementDbContextDescriptor> _byName;
 
-    public EfCoreManagementDbContextLookup(IEnumerable<IEfCoreManagementDbContextDescriptor> providers, IServiceProvider serviceProvider)
+    public EfCoreManagementDbContextLookup(
+        IEnumerable<IEfCoreManagementDbContextDescriptor> providers,
+        IServiceProvider serviceProvider
+    )
     {
         _serviceProvider = serviceProvider;
-        _byName = new Dictionary<string, IEfCoreManagementDbContextDescriptor>(StringComparer.OrdinalIgnoreCase);
+        _byName = new Dictionary<string, IEfCoreManagementDbContextDescriptor>(
+            StringComparer.OrdinalIgnoreCase
+        );
         foreach (var provider in providers)
         {
             if (!_byName.TryAdd(provider.DbContextName, provider))
@@ -29,9 +34,10 @@ internal sealed class EfCoreManagementDbContextLookup
                 // one of the DbContext types (or wrap the offending type in a distinct alias).
                 var existing = _byName[provider.DbContextName];
                 throw new InvalidOperationException(
-                    $"Multiple DbContexts share the short name '{provider.DbContextName}': " +
-                    $"'{existing.DbContextFullName}' and '{provider.DbContextFullName}'. " +
-                    "Rename one of them so management API URLs stay unambiguous.");
+                    $"Multiple DbContexts share the short name '{provider.DbContextName}': "
+                        + $"'{existing.DbContextFullName}' and '{provider.DbContextFullName}'. "
+                        + "Rename one of them so management API URLs stay unambiguous."
+                );
             }
         }
     }
@@ -39,10 +45,11 @@ internal sealed class EfCoreManagementDbContextLookup
     public DbContext? GetDbContext(string contextName)
     {
         var descriptor = Find(contextName);
-        if (descriptor is null) return null;
+        if (descriptor is null)
+            return null;
         return (DbContext?)_serviceProvider.GetService(descriptor.DbContextType);
     }
-    
+
     public IEfCoreManagementDbContextDescriptor? Find(string contextName) =>
         _byName.GetValueOrDefault(contextName);
 

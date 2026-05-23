@@ -19,11 +19,14 @@ public class AsyncApiDocumentGenerator(
     AsyncApiOptions options,
     ChannelRegistry channelRegistry,
     CloudEventsOptions cloudEventsOptions,
-    IEnumerable<IAsyncApiTransportBindingProvider> bindingProviders)
+    IEnumerable<IAsyncApiTransportBindingProvider> bindingProviders
+)
 {
     private readonly JsonSchemaGenerator _schemaGenerator = new();
-    private static readonly Regex SentenceCasePattern =
-        new(@"(?<=[a-z])([A-Z])|(?<=[A-Z])([A-Z][a-z])", RegexOptions.Compiled);
+    private static readonly Regex SentenceCasePattern = new(
+        @"(?<=[a-z])([A-Z])|(?<=[A-Z])([A-Z][a-z])",
+        RegexOptions.Compiled
+    );
 
     public AsyncApiDocument Generate()
     {
@@ -33,11 +36,7 @@ public class AsyncApiDocumentGenerator(
         var document = new AsyncApiDocument
         {
             Info = options.Info,
-            Components = new AsyncApiComponents
-            {
-                Schemas = schemas,
-                Messages = messages,
-            },
+            Components = new AsyncApiComponents { Schemas = schemas, Messages = messages },
         };
 
         var allChannels = channelRegistry.GetAllChannels().ToList();
@@ -54,8 +53,10 @@ public class AsyncApiDocumentGenerator(
             provider.ConfigureServers(document, allChannels);
 
         // Clean up empty component collections
-        if (document.Components!.Schemas?.Count == 0) document.Components.Schemas = null;
-        if (document.Components!.Messages?.Count == 0) document.Components.Messages = null;
+        if (document.Components!.Schemas?.Count == 0)
+            document.Components.Schemas = null;
+        if (document.Components!.Messages?.Count == 0)
+            document.Components.Messages = null;
         if (document.Components!.Schemas == null && document.Components.Messages == null)
             document.Components = null;
 
@@ -66,7 +67,8 @@ public class AsyncApiDocumentGenerator(
         ChannelRegistration channel,
         AsyncApiDocument document,
         Dictionary<string, JsonSchema> schemas,
-        Dictionary<string, AsyncApiMessage> componentMessages)
+        Dictionary<string, AsyncApiMessage> componentMessages
+    )
     {
         var asyncApiChannel = new AsyncApiChannel
         {
@@ -84,7 +86,9 @@ public class AsyncApiDocumentGenerator(
         {
             var asyncApiMessage = BuildMessage(msg, channel, schemas);
             componentMessages[msg.MessageTypeName] = asyncApiMessage;
-            asyncApiChannel.Messages[msg.MessageTypeName] = AsyncApiReference.ToComponentMessage(msg.MessageTypeName);
+            asyncApiChannel.Messages[msg.MessageTypeName] = AsyncApiReference.ToComponentMessage(
+                msg.MessageTypeName
+            );
         }
 
         if (asyncApiChannel.Messages.Count == 0)
@@ -103,7 +107,8 @@ public class AsyncApiDocumentGenerator(
     private AsyncApiMessage BuildMessage(
         MessageRegistration msg,
         ChannelRegistration channel,
-        Dictionary<string, JsonSchema> schemas)
+        Dictionary<string, JsonSchema> schemas
+    )
     {
         var msgAttr = msg.MessageType.GetCustomAttribute<AsyncApiMessageAttribute>();
         var msgOpts = msg.GetAsyncApiMessageOptions();
@@ -151,8 +156,12 @@ public class AsyncApiDocumentGenerator(
         // Add EventCatalog extension properties
         asyncApiMessage.Extensions = new Dictionary<string, JsonElement>
         {
-            ["x-eventcatalog-message-type"] = JsonSerializer.SerializeToElement(messageType.ToString().ToLowerInvariant()),
-            ["x-eventcatalog-role"] = JsonSerializer.SerializeToElement(role.ToString().ToLowerInvariant()),
+            ["x-eventcatalog-message-type"] = JsonSerializer.SerializeToElement(
+                messageType.ToString().ToLowerInvariant()
+            ),
+            ["x-eventcatalog-role"] = JsonSerializer.SerializeToElement(
+                role.ToString().ToLowerInvariant()
+            ),
             ["x-eventcatalog-message-version"] = JsonSerializer.SerializeToElement(version),
         };
 
@@ -163,9 +172,7 @@ public class AsyncApiDocumentGenerator(
         return asyncApiMessage;
     }
 
-    private void BuildOperations(
-        ChannelRegistration channel,
-        AsyncApiDocument document)
+    private void BuildOperations(ChannelRegistration channel, AsyncApiDocument document)
     {
         var channelOpts = channel.GetAsyncApiChannelOptions();
 
@@ -182,7 +189,8 @@ public class AsyncApiDocumentGenerator(
     private void BuildGroupedOperation(
         ChannelRegistration channel,
         AsyncApiOperationOptions opOpts,
-        AsyncApiDocument document)
+        AsyncApiDocument document
+    )
     {
         var action = GetAction(channel);
         var operationId = opOpts.Id ?? channel.ChannelName;
@@ -199,22 +207,26 @@ public class AsyncApiDocumentGenerator(
 
         if (channel.Messages.Count > 0)
         {
-            operation.Messages = channel.Messages
-                .Select(m => AsyncApiReference.ToChannelMessage(channel.ChannelName, m.MessageTypeName))
+            operation.Messages = channel
+                .Messages.Select(m =>
+                    AsyncApiReference.ToChannelMessage(channel.ChannelName, m.MessageTypeName)
+                )
                 .ToList();
         }
 
         AddOperation(operationId, operation, channel, document);
     }
 
-    private void BuildPerMessageOperations(
-        ChannelRegistration channel,
-        AsyncApiDocument document)
+    private void BuildPerMessageOperations(ChannelRegistration channel, AsyncApiDocument document)
     {
         var action = GetAction(channel);
 
         // Phase 1: Group messages by operationId (messages sharing an ID are merged)
-        var groups = new Dictionary<string, (AsyncApiOperationOptions? Opts, List<MessageRegistration> Messages)>();
+        var groups =
+            new Dictionary<
+                string,
+                (AsyncApiOperationOptions? Opts, List<MessageRegistration> Messages)
+            >();
 
         foreach (var msg in channel.Messages)
         {
@@ -250,7 +262,9 @@ public class AsyncApiDocumentGenerator(
                 Description = opOpts?.Description,
                 Tags = opOpts?.Tags?.Select(t => new AsyncApiTag { Name = t }).ToList(),
                 Messages = messages
-                    .Select(m => AsyncApiReference.ToChannelMessage(channel.ChannelName, m.MessageTypeName))
+                    .Select(m =>
+                        AsyncApiReference.ToChannelMessage(channel.ChannelName, m.MessageTypeName)
+                    )
                     .ToList(),
             };
 
@@ -262,13 +276,15 @@ public class AsyncApiDocumentGenerator(
         string operationId,
         AsyncApiOperation operation,
         ChannelRegistration channel,
-        AsyncApiDocument document)
+        AsyncApiDocument document
+    )
     {
         if (!document.Operations.TryAdd(operationId, operation))
         {
             throw new InvalidOperationException(
-                $"Duplicate AsyncAPI operationId '{operationId}'. " +
-                $"Use WithOperation(o => o.WithId(\"...\")) to set a unique ID.");
+                $"Duplicate AsyncAPI operationId '{operationId}'. "
+                    + $"Use WithOperation(o => o.WithId(\"...\")) to set a unique ID."
+            );
         }
 
         foreach (var provider in bindingProviders)

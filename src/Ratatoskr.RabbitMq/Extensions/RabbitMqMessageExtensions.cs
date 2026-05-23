@@ -19,7 +19,8 @@ public static class RabbitMqMessageExtensions
             return options;
         }
 
-        public RabbitMqMessageOptions? GetRabbitMqOptions() => registration.GetExtension<RabbitMqMessageOptions>();
+        public RabbitMqMessageOptions? GetRabbitMqOptions() =>
+            registration.GetExtension<RabbitMqMessageOptions>();
     }
 
     public static MessageBuilder WithRoutingKey(this MessageBuilder builder, string routingKey)

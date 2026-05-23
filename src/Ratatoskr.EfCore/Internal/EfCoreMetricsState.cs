@@ -10,7 +10,8 @@ internal readonly record struct DbContextMetrics(
     long PendingOutboxCount,
     long PoisonedOutboxCount,
     long PendingInboxCount,
-    long PoisonedInboxCount);
+    long PoisonedInboxCount
+);
 
 internal class EfCoreMetricsState
 {
@@ -19,14 +20,18 @@ internal class EfCoreMetricsState
     /// </summary>
     public ConcurrentDictionary<string, DbContextMetrics> ContextMetrics { get; } = new();
 
-    public bool TryGetValue<TDbContext>(TDbContext _, out DbContextMetrics metrics) where TDbContext : DbContext
+    public bool TryGetValue<TDbContext>(TDbContext _, out DbContextMetrics metrics)
+        where TDbContext : DbContext
     {
         var type = typeof(TDbContext);
         return TryGetValue(type, out metrics);
     }
-    
+
     public bool TryGetValue(Type dbContextType, out DbContextMetrics metrics)
     {
-        return ContextMetrics.TryGetValue(dbContextType.FullName ?? dbContextType.Name, out metrics);
+        return ContextMetrics.TryGetValue(
+            dbContextType.FullName ?? dbContextType.Name,
+            out metrics
+        );
     }
 }

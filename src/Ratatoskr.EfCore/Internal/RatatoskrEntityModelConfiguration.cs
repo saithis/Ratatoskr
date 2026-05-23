@@ -15,14 +15,16 @@ internal static class RatatoskrEntityModelConfiguration
             entity.HasKey(e => e.Id);
 
             var index = entity.HasIndex(
-                e => new {
+                e => new
+                {
                     e.ProcessedAt,
                     e.IsPoisoned,
                     e.NextAttemptAt,
                     e.ProcessingStartedAt,
-                    e.CreatedAt
+                    e.CreatedAt,
                 },
-                "IX_OutboxMessages_Processing");
+                "IX_OutboxMessages_Processing"
+            );
 
             var filter = DatabaseProviderHelper.GetOutboxProcessingFilter(database);
             if (filter != null)
@@ -52,13 +54,22 @@ internal static class RatatoskrEntityModelConfiguration
         {
             entity.HasKey(e => e.Id);
 
-            entity.HasIndex(e => new { e.MessageId, e.HandlerKey })
+            entity
+                .HasIndex(e => new { e.MessageId, e.HandlerKey })
                 .IsUnique()
                 .HasDatabaseName("UX_InboxHandlerStatuses_MessageId_HandlerKey");
 
             var processingIndex = entity.HasIndex(
-                e => new { e.CompletedAt, e.IsPoisoned, e.NextAttemptAt, e.ProcessingStartedAt, e.MessageId },
-                "IX_InboxHandlerStatuses_Processing");
+                e => new
+                {
+                    e.CompletedAt,
+                    e.IsPoisoned,
+                    e.NextAttemptAt,
+                    e.ProcessingStartedAt,
+                    e.MessageId,
+                },
+                "IX_InboxHandlerStatuses_Processing"
+            );
 
             var filter = DatabaseProviderHelper.GetInboxProcessingFilter(database);
             if (filter != null)
@@ -70,7 +81,8 @@ internal static class RatatoskrEntityModelConfiguration
             entity.Property(e => e.Version).IsConcurrencyToken();
             entity.Property(e => e.RequeuedCount).HasDefaultValue(0);
 
-            entity.HasOne<InboxMessageEntity>()
+            entity
+                .HasOne<InboxMessageEntity>()
                 .WithMany()
                 .HasForeignKey(e => e.MessageId)
                 .OnDelete(DeleteBehavior.Cascade);

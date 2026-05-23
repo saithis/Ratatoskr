@@ -42,8 +42,9 @@ internal static class MessageTypeMatcher
 
     public static string? GetTypeName(Type type)
     {
-        var attr = type.GetCustomAttributes(typeof(RatatoskrMessageAttribute), false)
-            .FirstOrDefault() as RatatoskrMessageAttribute;
+        var attr =
+            type.GetCustomAttributes(typeof(RatatoskrMessageAttribute), false).FirstOrDefault()
+            as RatatoskrMessageAttribute;
         return attr?.Type;
     }
 }

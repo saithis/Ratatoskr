@@ -28,12 +28,18 @@ internal static class ManagementHelpers
         {
             // Corrupt serialized properties — surface to the operator while still
             // returning a sentinel so the UI can render the row.
-            logger?.LogWarning(ex, "Failed to parse serialized message properties; returning '(unknown)' type.");
+            logger?.LogWarning(
+                ex,
+                "Failed to parse serialized message properties; returning '(unknown)' type."
+            );
         }
         return "(unknown)";
     }
 
-    internal static (string? JsonPayload, string PayloadBase64) DecodeContent(byte[] content, ILogger? logger = null)
+    internal static (string? JsonPayload, string PayloadBase64) DecodeContent(
+        byte[] content,
+        ILogger? logger = null
+    )
     {
         var base64 = Convert.ToBase64String(content);
         try

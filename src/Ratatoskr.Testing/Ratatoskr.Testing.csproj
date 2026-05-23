@@ -1,20 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Testing utilities for Ratatoskr CloudEventBus. Provides message tracking, session-based test isolation, and assertion helpers.</Description>
+    <PackageTags>cloudevents;eventbus;messaging;testing</PackageTags>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
 
-    <PropertyGroup>
-        <Description>Testing utilities for Ratatoskr CloudEventBus. Provides message tracking, session-based test isolation, and assertion helpers.</Description>
-        <PackageTags>cloudevents;eventbus;messaging;testing</PackageTags>
-        <IsPackable>true</IsPackable>
-    </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
-    <ItemGroup>
-        <None Include="README.md" Pack="true" PackagePath="\"/>
-    </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Ratatoskr\Ratatoskr.csproj" />
+  </ItemGroup>
 
-    <ItemGroup>
-      <ProjectReference Include="..\Ratatoskr\Ratatoskr.csproj" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <InternalsVisibleTo Include="Ratatoskr.Tests" />
-    </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Ratatoskr.Tests" />
+  </ItemGroup>
 </Project>

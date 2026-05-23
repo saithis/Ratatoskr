@@ -10,7 +10,8 @@ namespace Ratatoskr.Core;
 /// </summary>
 public class MessageRouter(
     MessageDispatcher dispatcher,
-    IEnumerable<IMessageRouteInterceptor> interceptors)
+    IEnumerable<IMessageRouteInterceptor> interceptors
+)
 {
     private readonly IMessageRouteInterceptor[] _interceptors = interceptors.ToArray();
 
@@ -19,18 +20,29 @@ public class MessageRouter(
         MessageProperties properties,
         string transportName,
         CancellationToken cancellationToken,
-        string channelName)
+        string channelName
+    )
     {
         var handlersAccepted = false;
         foreach (var interceptor in _interceptors)
         {
             var interceptResult = await interceptor.BeforeDispatchAsync(
-                body, properties, transportName, channelName, cancellationToken);
+                body,
+                properties,
+                transportName,
+                channelName,
+                cancellationToken
+            );
             handlersAccepted |= interceptResult.HandlersAccepted;
         }
 
         var result = await dispatcher.DispatchAsync(
-            body, properties, cancellationToken, channelName, transportName);
+            body,
+            properties,
+            cancellationToken,
+            channelName,
+            transportName
+        );
 
         if (result == DispatchResult.NoHandlers && handlersAccepted)
             result = DispatchResult.Success;

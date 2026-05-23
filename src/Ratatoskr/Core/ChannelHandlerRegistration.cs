@@ -16,11 +16,17 @@ public record ChannelHandlerRegistration(
     Type HandlerType,
     bool IsInbox,
     string? InboxKey,
-    IReadOnlyList<string> LegacyKeys)
+    IReadOnlyList<string> LegacyKeys
+)
 {
     /// <summary>
     /// Creates a registration without legacy keys.
     /// </summary>
-    public ChannelHandlerRegistration(Type MessageType, Type HandlerType, bool IsInbox, string? InboxKey)
+    public ChannelHandlerRegistration(
+        Type MessageType,
+        Type HandlerType,
+        bool IsInbox,
+        string? InboxKey
+    )
         : this(MessageType, HandlerType, IsInbox, InboxKey, Array.Empty<string>()) { }
 }

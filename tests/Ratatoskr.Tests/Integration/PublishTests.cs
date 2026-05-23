@@ -9,7 +9,8 @@ using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration;
 
-public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres) : RatatoskrIntegrationTest(rabbitMq, postgres)
+public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
+    : RatatoskrIntegrationTest(rabbitMq, postgres)
 {
     private string ExchangeName => $"pub-test-{TestId}";
     private string DefaultRoutingKey => "test.event";
@@ -23,9 +24,10 @@ public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-                bus.AddEventPublishChannel(ExchangeName, c => c
-                    .WithRabbitMq(r => r.WithTopicExchange())
-                    .Produces<TestEvent>());
+                bus.AddEventPublishChannel(
+                    ExchangeName,
+                    c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<TestEvent>()
+                );
             });
         });
 
@@ -59,9 +61,10 @@ public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-                bus.AddEventPublishChannel(ExchangeName, c => c
-                        .WithRabbitMq(r => r.WithTopicExchange())
-                        .Produces<TestEvent>())
+                bus.AddEventPublishChannel(
+                        ExchangeName,
+                        c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<TestEvent>()
+                    )
                     .ConfigureCloudEvents(ce => ce.ContentMode = CloudEventsContentMode.Binary);
             });
         });
@@ -97,9 +100,10 @@ public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-                bus.AddEventPublishChannel(ExchangeName, c => c
-                        .WithRabbitMq(r => r.WithTopicExchange())
-                        .Produces<TestEvent>())
+                bus.AddEventPublishChannel(
+                        ExchangeName,
+                        c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<TestEvent>()
+                    )
                     .ConfigureCloudEvents(ce => ce.ContentMode = CloudEventsContentMode.Structured);
             });
         });
@@ -137,9 +141,12 @@ public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-                bus.AddEventPublishChannel(ExchangeName, c => c
-                    .WithRabbitMq(r => r.WithTopicExchange())
-                    .Produces<TestEvent>(m => m.WithRoutingKey(customRoutingKey)));
+                bus.AddEventPublishChannel(
+                    ExchangeName,
+                    c =>
+                        c.WithRabbitMq(r => r.WithTopicExchange())
+                            .Produces<TestEvent>(m => m.WithRoutingKey(customRoutingKey))
+                );
             });
         });
 
@@ -175,16 +182,26 @@ public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
-                bus.AddCommandConsumeChannel(queueName, c => c
-                    .WithRabbitMq(o => o.WithQueueName(queueName).WithAutoAck(false).WithTransientQueue()
-                        .WithQueueType(QueueType.Classic))
-                    .Consumes<TestEvent>(m => m.WithHandler<ContextCapturingHandler>()));
+                bus.AddCommandConsumeChannel(
+                    queueName,
+                    c =>
+                        c.WithRabbitMq(o =>
+                                o.WithQueueName(queueName)
+                                    .WithAutoAck(false)
+                                    .WithTransientQueue()
+                                    .WithQueueType(QueueType.Classic)
+                            )
+                            .Consumes<TestEvent>(m => m.WithHandler<ContextCapturingHandler>())
+                );
             });
         });
 
         // Act - Publish directly to queue with custom subject
-        await PublishToRabbitMqWithSubjectAsync(queueName,
-            new TestEvent { Data = "properties test" }, subject: "order-123");
+        await PublishToRabbitMqWithSubjectAsync(
+            queueName,
+            new TestEvent { Data = "properties test" },
+            subject: "order-123"
+        );
 
         // Assert - Verify properties are preserved
         await WaitForConditionAsync(() => handler.CapturedContext != null, TimeSpan.FromSeconds(5));
@@ -193,9 +210,16 @@ public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
         handler.CapturedContext.Type.Should().Be("test.event");
     }
 
-    private async Task PublishToRabbitMqWithSubjectAsync(string routingKey, TestEvent eventData, string subject)
+    private async Task PublishToRabbitMqWithSubjectAsync(
+        string routingKey,
+        TestEvent eventData,
+        string subject
+    )
     {
-        var factory = new RabbitMQ.Client.ConnectionFactory { Uri = new Uri(RabbitMqConnectionString) };
+        var factory = new RabbitMQ.Client.ConnectionFactory
+        {
+            Uri = new Uri(RabbitMqConnectionString),
+        };
         await using var connection = await factory.CreateConnectionAsync();
         await using var channel = await connection.CreateChannelAsync();
 
@@ -208,13 +232,15 @@ public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
             Type = "test.event",
             ContentType = "application/json",
             DeliveryMode = RabbitMQ.Client.DeliveryModes.Persistent,
-            Headers = new Dictionary<string, object?>
-            {
-                ["cloudEvents_subject"] = subject
-            }
+            Headers = new Dictionary<string, object?> { ["cloudEvents_subject"] = subject },
         };
 
-        await channel.BasicPublishAsync(exchange: "", routingKey: routingKey,
-            mandatory: false, basicProperties: props, body: body);
+        await channel.BasicPublishAsync(
+            exchange: "",
+            routingKey: routingKey,
+            mandatory: false,
+            basicProperties: props,
+            body: body
+        );
     }
 }

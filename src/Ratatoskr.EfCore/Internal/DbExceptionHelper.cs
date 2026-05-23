@@ -14,7 +14,8 @@ internal static class DbExceptionHelper
     public static bool IsUniqueConstraintViolation(DbUpdateException ex)
     {
         var inner = ex.InnerException;
-        if (inner == null) return false;
+        if (inner == null)
+            return false;
 
         // Check provider-specific exception types first (more reliable than message sniffing).
         // PostgreSQL: Npgsql.PostgresException has a SqlState property.

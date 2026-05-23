@@ -21,9 +21,13 @@ internal static class BulkDeleteInboxEndpoint
         string contextName,
         [FromBody] BulkDeleteInboxRequest req,
         EfCoreManagementDbContextLookup lookup,
-        CancellationToken ct)
+        CancellationToken ct
+    )
     {
-        if (ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is { } resolveError)
+        if (
+            ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
+            { } resolveError
+        )
             return resolveError;
 
         if (!BulkRequestValidator.TryValidateIds(req.Ids, out var error))
@@ -53,9 +57,13 @@ internal static class BulkDeleteInboxEndpoint
     private static async Task<Results<Ok, ProblemHttpResult>> HandleAll(
         string contextName,
         EfCoreManagementDbContextLookup lookup,
-        CancellationToken ct)
+        CancellationToken ct
+    )
     {
-        if (ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is { } resolveError)
+        if (
+            ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
+            { } resolveError
+        )
             return resolveError;
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
@@ -66,9 +74,7 @@ internal static class BulkDeleteInboxEndpoint
             .Distinct()
             .ToListAsync(ct);
 
-        await db.Set<InboxHandlerStatusEntity>()
-            .Where(x => x.IsPoisoned)
-            .ExecuteDeleteAsync(ct);
+        await db.Set<InboxHandlerStatusEntity>().Where(x => x.IsPoisoned).ExecuteDeleteAsync(ct);
 
         await DeleteOrphanedMessagesAsync(db, affectedMessageIds, ct);
 
@@ -81,13 +87,19 @@ internal static class BulkDeleteInboxEndpoint
     /// <paramref name="messageIds"/> and that no longer have any handler status rows.
     /// </summary>
     private static async Task DeleteOrphanedMessagesAsync(
-        DbContext db, List<string> messageIds, CancellationToken ct)
+        DbContext db,
+        List<string> messageIds,
+        CancellationToken ct
+    )
     {
-        if (messageIds.Count == 0) return;
+        if (messageIds.Count == 0)
+            return;
 
         await db.Set<InboxMessageEntity>()
-            .Where(msg => messageIds.Contains(msg.Id) &&
-                          !db.Set<InboxHandlerStatusEntity>().Any(hs => hs.MessageId == msg.Id))
+            .Where(msg =>
+                messageIds.Contains(msg.Id)
+                && !db.Set<InboxHandlerStatusEntity>().Any(hs => hs.MessageId == msg.Id)
+            )
             .ExecuteDeleteAsync(ct);
     }
 

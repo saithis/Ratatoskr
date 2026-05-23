@@ -15,13 +15,15 @@ public class OutboxMessageEntityTests
     public void Create_SetsRequiredProperties()
     {
         // Arrange
-        var fakeTime = new FakeTimeProvider(new DateTimeOffset(2025, 1, 24, 12, 0, 0, TimeSpan.Zero));
+        var fakeTime = new FakeTimeProvider(
+            new DateTimeOffset(2025, 1, 24, 12, 0, 0, TimeSpan.Zero)
+        );
         var content = "test content"u8.ToArray();
         var props = new MessageProperties { Type = "test.event" };
-        
+
         // Act
         var entity = OutboxMessageEntity.Create(content, props, fakeTime, "rabbitmq");
-        
+
         // Assert
         entity.Id.Should().NotBe(Guid.Empty);
         entity.Content.Should().BeEquivalentTo(content);
@@ -37,13 +39,18 @@ public class OutboxMessageEntityTests
     {
         // Arrange
         var fakeTime = new FakeTimeProvider();
-        var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties(), fakeTime, "rabbitmq");
-        
+        var entity = OutboxMessageEntity.Create(
+            "test"u8.ToArray(),
+            new MessageProperties(),
+            fakeTime,
+            "rabbitmq"
+        );
+
         fakeTime.Advance(TimeSpan.FromSeconds(5));
-        
+
         // Act
         entity.MarkAsProcessing(fakeTime);
-        
+
         // Assert
         entity.ProcessingStartedAt.Should().Be(fakeTime.GetUtcNow());
     }
@@ -53,14 +60,19 @@ public class OutboxMessageEntityTests
     {
         // Arrange
         var fakeTime = new FakeTimeProvider();
-        var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties(), fakeTime, "rabbitmq");
+        var entity = OutboxMessageEntity.Create(
+            "test"u8.ToArray(),
+            new MessageProperties(),
+            fakeTime,
+            "rabbitmq"
+        );
         entity.MarkAsProcessing(fakeTime);
-        
+
         fakeTime.Advance(TimeSpan.FromSeconds(1));
-        
+
         // Act
         entity.MarkAsProcessed(fakeTime);
-        
+
         // Assert
         entity.ProcessedAt.Should().Be(fakeTime.GetUtcNow());
         entity.ProcessingStartedAt.Should().BeNull(); // Cleared on completion
@@ -71,11 +83,16 @@ public class OutboxMessageEntityTests
     {
         // Arrange
         var fakeTime = new FakeTimeProvider();
-        var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties(), fakeTime, "rabbitmq");
-        
+        var entity = OutboxMessageEntity.Create(
+            "test"u8.ToArray(),
+            new MessageProperties(),
+            fakeTime,
+            "rabbitmq"
+        );
+
         // Act
         entity.PublishFailed("Error 1", fakeTime, maxRetries: 5, TimeSpan.FromMinutes(5));
-        
+
         // Assert
         entity.ErrorCount.Should().Be(1);
         entity.Error.Should().Be("Error 1");
@@ -88,8 +105,15 @@ public class OutboxMessageEntityTests
     public void PublishFailed_CalculatesExponentialBackoffWithJitter()
     {
         // Arrange
-        var fakeTime = new FakeTimeProvider(new DateTimeOffset(2025, 1, 24, 12, 0, 0, TimeSpan.Zero));
-        var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties(), fakeTime, "rabbitmq");
+        var fakeTime = new FakeTimeProvider(
+            new DateTimeOffset(2025, 1, 24, 12, 0, 0, TimeSpan.Zero)
+        );
+        var entity = OutboxMessageEntity.Create(
+            "test"u8.ToArray(),
+            new MessageProperties(),
+            fakeTime,
+            "rabbitmq"
+        );
 
         // Act - First failure (base = 2^1 = 2s, jitter range = [1s, 2s))
         entity.PublishFailed("Error 1", fakeTime, maxRetries: 5, TimeSpan.FromMinutes(5));
@@ -126,7 +150,12 @@ public class OutboxMessageEntityTests
     {
         // Arrange
         var fakeTime = new FakeTimeProvider();
-        var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties(), fakeTime, "rabbitmq");
+        var entity = OutboxMessageEntity.Create(
+            "test"u8.ToArray(),
+            new MessageProperties(),
+            fakeTime,
+            "rabbitmq"
+        );
         var maxDelay = TimeSpan.FromSeconds(10);
 
         // Simulate many failures to hit the cap
@@ -151,16 +180,21 @@ public class OutboxMessageEntityTests
     {
         // Arrange
         var fakeTime = new FakeTimeProvider();
-        var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties(), fakeTime, "rabbitmq");
+        var entity = OutboxMessageEntity.Create(
+            "test"u8.ToArray(),
+            new MessageProperties(),
+            fakeTime,
+            "rabbitmq"
+        );
         var maxRetries = 3;
-        
+
         // Act - Fail maxRetries times
         for (int i = 0; i < maxRetries; i++)
         {
             entity.PublishFailed($"Error {i}", fakeTime, maxRetries, TimeSpan.FromMinutes(5));
             fakeTime.Advance(TimeSpan.FromSeconds(1));
         }
-        
+
         // Assert
         entity.ErrorCount.Should().Be((short)maxRetries);
         entity.IsPoisoned.Should().BeTrue();
@@ -172,11 +206,16 @@ public class OutboxMessageEntityTests
     {
         // Arrange
         var fakeTime = new FakeTimeProvider();
-        var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties(), fakeTime, "rabbitmq");
-        
+        var entity = OutboxMessageEntity.Create(
+            "test"u8.ToArray(),
+            new MessageProperties(),
+            fakeTime,
+            "rabbitmq"
+        );
+
         // Act
         entity.MarkAsPoisoned("Manual poisoning", fakeTime);
-        
+
         // Assert
         entity.IsPoisoned.Should().BeTrue();
         entity.Error.Should().Be("Manual poisoning");
@@ -189,17 +228,17 @@ public class OutboxMessageEntityTests
     {
         // Arrange
         var fakeTime = new FakeTimeProvider();
-        var props = new MessageProperties 
-        { 
+        var props = new MessageProperties
+        {
             Type = "test.event",
             Source = "/test",
-            Subject = "test-subject"
+            Subject = "test-subject",
         };
         var entity = OutboxMessageEntity.Create("test"u8.ToArray(), props, fakeTime, "rabbitmq");
-        
+
         // Act
         var deserializedProps = entity.GetProperties();
-        
+
         // Assert
         deserializedProps.Type.Should().Be("test.event");
         deserializedProps.Source.Should().Be("/test");
@@ -211,12 +250,17 @@ public class OutboxMessageEntityTests
     {
         // Arrange
         var fakeTime = new FakeTimeProvider();
-        var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties(), fakeTime, "rabbitmq");
+        var entity = OutboxMessageEntity.Create(
+            "test"u8.ToArray(),
+            new MessageProperties(),
+            fakeTime,
+            "rabbitmq"
+        );
         var longError = new string('x', 3000); // Longer than 2000 char limit
-        
+
         // Act
         entity.PublishFailed(longError, fakeTime, maxRetries: 5, TimeSpan.FromMinutes(5));
-        
+
         // Assert
         entity.Error.Length.Should().Be(2000);
         entity.Error.Should().Be(longError[..2000]);
@@ -229,7 +273,12 @@ public class OutboxMessageEntityTests
         var fakeTime = new FakeTimeProvider();
 
         // Act - passing null content (violates non-nullable contract but no runtime guard)
-        var entity = OutboxMessageEntity.Create(null!, new MessageProperties(), fakeTime, "rabbitmq");
+        var entity = OutboxMessageEntity.Create(
+            null!,
+            new MessageProperties(),
+            fakeTime,
+            "rabbitmq"
+        );
 
         // Assert - entity is created, content is null (no validation in Create)
         entity.Should().NotBeNull();
@@ -241,10 +290,17 @@ public class OutboxMessageEntityTests
     {
         // Arrange - create entity then corrupt SerializedProperties via reflection
         var fakeTime = new FakeTimeProvider();
-        var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties(), fakeTime, "rabbitmq");
+        var entity = OutboxMessageEntity.Create(
+            "test"u8.ToArray(),
+            new MessageProperties(),
+            fakeTime,
+            "rabbitmq"
+        );
 
-        var backingField = typeof(BaseMessageEntity)
-            .GetField("<SerializedProperties>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var backingField = typeof(BaseMessageEntity).GetField(
+            "<SerializedProperties>k__BackingField",
+            BindingFlags.NonPublic | BindingFlags.Instance
+        )!;
         backingField.SetValue(entity, "not valid json");
 
         // Act
@@ -259,10 +315,17 @@ public class OutboxMessageEntityTests
     {
         // Arrange - set SerializedProperties to JSON "null" which deserializes to null
         var fakeTime = new FakeTimeProvider();
-        var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties(), fakeTime, "rabbitmq");
+        var entity = OutboxMessageEntity.Create(
+            "test"u8.ToArray(),
+            new MessageProperties(),
+            fakeTime,
+            "rabbitmq"
+        );
 
-        var backingField = typeof(BaseMessageEntity)
-            .GetField("<SerializedProperties>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var backingField = typeof(BaseMessageEntity).GetField(
+            "<SerializedProperties>k__BackingField",
+            BindingFlags.NonPublic | BindingFlags.Instance
+        )!;
         backingField.SetValue(entity, "null");
 
         // Act
@@ -277,7 +340,12 @@ public class OutboxMessageEntityTests
     {
         // Arrange
         var fakeTime = new FakeTimeProvider();
-        var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties(), fakeTime, "rabbitmq");
+        var entity = OutboxMessageEntity.Create(
+            "test"u8.ToArray(),
+            new MessageProperties(),
+            fakeTime,
+            "rabbitmq"
+        );
         entity.Version.Should().Be(0u);
 
         // Act & Assert - MarkAsProcessing increments
@@ -294,7 +362,12 @@ public class OutboxMessageEntityTests
     {
         // Arrange
         var fakeTime = new FakeTimeProvider();
-        var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties(), fakeTime, "rabbitmq");
+        var entity = OutboxMessageEntity.Create(
+            "test"u8.ToArray(),
+            new MessageProperties(),
+            fakeTime,
+            "rabbitmq"
+        );
 
         // Act
         entity.PublishFailed("Error", fakeTime, maxRetries: 5, TimeSpan.FromMinutes(5));
@@ -308,7 +381,12 @@ public class OutboxMessageEntityTests
     {
         // Arrange
         var fakeTime = new FakeTimeProvider();
-        var entity = OutboxMessageEntity.Create("test"u8.ToArray(), new MessageProperties(), fakeTime, "rabbitmq");
+        var entity = OutboxMessageEntity.Create(
+            "test"u8.ToArray(),
+            new MessageProperties(),
+            fakeTime,
+            "rabbitmq"
+        );
 
         // Act
         entity.MarkAsPoisoned("reason", fakeTime);

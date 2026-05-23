@@ -72,7 +72,10 @@ public class JsonSchemaGeneratorTests
 
     /// <summary>Returns true if the schema type is a two-element array including "null" (nullable primitive).</summary>
     private static bool IsNullableType(JsonSchema schema, string expectedType) =>
-        schema.Type is string[] arr && arr.Length == 2 && arr[0] == expectedType && arr[1] == "null";
+        schema.Type is string[] arr
+        && arr.Length == 2
+        && arr[0] == expectedType
+        && arr[1] == "null";
 
     /// <summary>Returns true if the schema is a oneOf with [innerSchema, {type: "null"}] (nullable complex/collection).</summary>
     private static bool IsOneOfWithNull(JsonSchema schema) =>

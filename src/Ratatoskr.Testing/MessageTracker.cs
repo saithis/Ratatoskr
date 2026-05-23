@@ -28,9 +28,7 @@ public class MessageTracker : IMessageActivityObserver
         if (traceId == null)
             return _activities.ToArray();
 
-        return _activities
-            .Where(a => ExtractTraceId(a.Properties.TraceParent) == traceId)
-            .ToList();
+        return _activities.Where(a => ExtractTraceId(a.Properties.TraceParent) == traceId).ToList();
     }
 
     /// <summary>
@@ -40,7 +38,8 @@ public class MessageTracker : IMessageActivityObserver
     public Task<MessageActivity> WaitForAsync(
         Func<MessageActivity, bool> predicate,
         TimeSpan timeout,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         lock (_lock)
         {
@@ -50,7 +49,9 @@ public class MessageTracker : IMessageActivityObserver
                 return Task.FromResult(existing);
 
             // Register waiter while still holding the lock — no activity can slip through
-            var tcs = new TaskCompletionSource<MessageActivity>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var tcs = new TaskCompletionSource<MessageActivity>(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
             var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(timeout);
             cts.Token.Register(() =>
@@ -59,7 +60,10 @@ public class MessageTracker : IMessageActivityObserver
                     tcs.TrySetCanceled(cancellationToken);
                 else
                     tcs.TrySetException(
-                        new TimeoutException($"Timed out after {timeout.TotalSeconds}s waiting for message activity."));
+                        new TimeoutException(
+                            $"Timed out after {timeout.TotalSeconds}s waiting for message activity."
+                        )
+                    );
                 cts.Dispose();
             });
 
@@ -131,5 +135,6 @@ public class MessageTracker : IMessageActivityObserver
     private record Waiter(
         Func<MessageActivity, bool> Predicate,
         TaskCompletionSource<MessageActivity> Completion,
-        CancellationTokenSource Cts);
+        CancellationTokenSource Cts
+    );
 }

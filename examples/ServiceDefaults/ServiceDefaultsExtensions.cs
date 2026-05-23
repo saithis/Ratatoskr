@@ -27,7 +27,9 @@ public static class ServiceDefaultsExtensions
         return builder;
     }
 
-    public static IHostApplicationBuilder ConfigureOpenTelemetry(this IHostApplicationBuilder builder)
+    public static IHostApplicationBuilder ConfigureOpenTelemetry(
+        this IHostApplicationBuilder builder
+    )
     {
         builder.Logging.AddOpenTelemetry(logging =>
         {
@@ -35,17 +37,20 @@ public static class ServiceDefaultsExtensions
             logging.IncludeScopes = true;
         });
 
-        builder.Services.AddOpenTelemetry()
+        builder
+            .Services.AddOpenTelemetry()
             .WithMetrics(metrics =>
             {
-                metrics.AddAspNetCoreInstrumentation()
+                metrics
+                    .AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
                     .AddRuntimeInstrumentation()
                     .AddMeter("Ratatoskr");
             })
             .WithTracing(tracing =>
             {
-                tracing.AddAspNetCoreInstrumentation()
+                tracing
+                    .AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
                     .AddSource("Ratatoskr");
             });
@@ -56,9 +61,12 @@ public static class ServiceDefaultsExtensions
         return builder;
     }
 
-    public static IHostApplicationBuilder AddDefaultHealthChecks(this IHostApplicationBuilder builder)
+    public static IHostApplicationBuilder AddDefaultHealthChecks(
+        this IHostApplicationBuilder builder
+    )
     {
-        builder.Services.AddHealthChecks()
+        builder
+            .Services.AddHealthChecks()
             .AddCheck("self", () => HealthCheckResult.Healthy(), ["live"]);
 
         return builder;
@@ -70,10 +78,10 @@ public static class ServiceDefaultsExtensions
         {
             app.MapHealthChecks("/health");
             app.MapHealthChecks("/health/ready");
-            app.MapHealthChecks("/alive", new HealthCheckOptions
-            {
-                Predicate = r => r.Tags.Contains("live")
-            });
+            app.MapHealthChecks(
+                "/alive",
+                new HealthCheckOptions { Predicate = r => r.Tags.Contains("live") }
+            );
         }
 
         return app;

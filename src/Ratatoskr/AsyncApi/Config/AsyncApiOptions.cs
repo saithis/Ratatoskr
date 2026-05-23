@@ -30,7 +30,12 @@ public class AsyncApiOptions
 
     public AsyncApiOptions WithContact(string name, string? url = null, string? email = null)
     {
-        Info.Contact = new AsyncApiContact { Name = name, Url = url, Email = email };
+        Info.Contact = new AsyncApiContact
+        {
+            Name = name,
+            Url = url,
+            Email = email,
+        };
         return this;
     }
 }

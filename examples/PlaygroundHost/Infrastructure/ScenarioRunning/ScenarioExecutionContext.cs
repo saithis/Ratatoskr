@@ -7,7 +7,8 @@ public sealed class ScenarioExecutionContext(
     Guid runId,
     IServiceProvider services,
     IServiceScopeFactory scopeFactory,
-    ILogger logger)
+    ILogger logger
+)
 {
     public Guid RunId { get; } = runId;
 
@@ -27,10 +28,12 @@ public sealed class ScenarioExecutionContext(
     public List<string> StepsCompleted { get; } = [];
 
     private TimeProvider? _timeProvider;
-    public TimeProvider TimeProvider => _timeProvider ??= Services.GetRequiredService<TimeProvider>();
+    public TimeProvider TimeProvider =>
+        _timeProvider ??= Services.GetRequiredService<TimeProvider>();
 
     private PublisherDbContext? _publisherDb;
-    public PublisherDbContext PublisherDb => _publisherDb ??= Services.GetRequiredService<PublisherDbContext>();
+    public PublisherDbContext PublisherDb =>
+        _publisherDb ??= Services.GetRequiredService<PublisherDbContext>();
 
     private IRatatoskr? _ratatoskr;
     public IRatatoskr Ratatoskr => _ratatoskr ??= Services.GetRequiredService<IRatatoskr>();
@@ -42,8 +45,9 @@ public sealed class ScenarioExecutionContext(
             if (string.IsNullOrEmpty(field))
             {
                 var cfg = GetRequired<IConfiguration>();
-                field = cfg.GetConnectionString("rabbitmq")
-                        ?? throw new InvalidOperationException("rabbitmq connection string missing.");
+                field =
+                    cfg.GetConnectionString("rabbitmq")
+                    ?? throw new InvalidOperationException("rabbitmq connection string missing.");
             }
             return field;
         }

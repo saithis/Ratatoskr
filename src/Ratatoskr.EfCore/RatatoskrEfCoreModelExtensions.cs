@@ -18,7 +18,10 @@ public static class RatatoskrEfCoreModelExtensions
     /// The context's <see cref="DbContext.Database"/> so provider-specific filtered indexes can be applied for supported providers
     /// (PostgreSQL, SQL Server), avoiding full-table processing indexes on large tables.
     /// </param>
-    public static void AddRatatoskrEfCoreModel(this ModelBuilder modelBuilder, DatabaseFacade database)
+    public static void AddRatatoskrEfCoreModel(
+        this ModelBuilder modelBuilder,
+        DatabaseFacade database
+    )
     {
         ArgumentNullException.ThrowIfNull(database);
 

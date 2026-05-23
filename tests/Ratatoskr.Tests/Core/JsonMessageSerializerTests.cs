@@ -1,9 +1,9 @@
 using System.Text;
 using System.Text.Json;
 using AwesomeAssertions;
-using Ratatoskr.Tests.Fixtures;
 using Ratatoskr.Core;
 using Ratatoskr.Serializers.Json;
+using Ratatoskr.Tests.Fixtures;
 using TUnit.Core;
 
 namespace Ratatoskr.Tests.Core;
@@ -16,45 +16,45 @@ public class JsonMessageSerializerTests
         // Arrange
         var serializer = new JsonMessageSerializer();
         var testEvent = new TestEvent { Id = "123", Data = "test data" };
-        
+
         // Act
         var body = serializer.Serialize(testEvent);
         var result = JsonSerializer.Deserialize<TestEvent>(body);
-        
+
         // Assert
         serializer.ContentType.Should().Be("application/json");
         result.Should().NotBeNull();
         result.Id.Should().Be("123");
         result.Data.Should().Be("test data");
     }
-    
+
     [Test]
     public void Serialize_NullData_ReturnsNull()
     {
         // Arrange
         var serializer = new JsonMessageSerializer();
-        
+
         // Act
         var body = serializer.Serialize(null!);
         var result = JsonSerializer.Deserialize<TestEvent>(body);
-        
+
         // Assert
         serializer.ContentType.Should().Be("application/json");
         result.Should().BeNull();
     }
-    
+
     [Test]
     public void Deserialize_ExtractsDataFromBody()
     {
         // Arrange
         var deserializer = new JsonMessageSerializer();
-        
+
         var testEvent = new TestEvent { Id = "123", Data = "test data" };
         var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testEvent));
-        
+
         // Act
         var result = deserializer.Deserialize<TestEvent>(body);
-        
+
         // Assert
         result.Should().NotBeNull();
         result.Id.Should().Be("123");
@@ -67,10 +67,10 @@ public class JsonMessageSerializerTests
         // Arrange
         var deserializer = new JsonMessageSerializer();
         var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize((TestEvent?)null));
-        
+
         // Act
         var result = deserializer.Deserialize<TestEvent>(body);
-        
+
         // Assert
         result.Should().BeNull();
     }
@@ -80,13 +80,13 @@ public class JsonMessageSerializerTests
     {
         // Arrange
         var deserializer = new JsonMessageSerializer();
-        
+
         var testEvent = new TestEvent { Id = "123", Data = "test data" };
         var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testEvent));
-        
+
         // Act
         var result = deserializer.Deserialize(body, typeof(TestEvent));
-        
+
         // Assert
         result.Should().NotBeNull();
         result.Should().BeOfType<TestEvent>();
@@ -100,13 +100,13 @@ public class JsonMessageSerializerTests
     {
         // Arrange
         var deserializer = new JsonMessageSerializer();
-        
+
         var orderId = Guid.NewGuid();
         var orderEvent = new OrderCreatedEvent
         {
             OrderId = orderId,
             Amount = 123.45m,
-            CreatedAt = new DateTimeOffset(2024, 1, 15, 10, 30, 0, TimeSpan.Zero)
+            CreatedAt = new DateTimeOffset(2024, 1, 15, 10, 30, 0, TimeSpan.Zero),
         };
         var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(orderEvent));
 
@@ -170,7 +170,10 @@ public class JsonMessageSerializerTests
     public void Serialize_WithCamelCaseOptions_ProducesCamelCaseJson()
     {
         // Arrange
-        var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+        var options = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        };
         var serializer = new JsonMessageSerializer(options);
         var testEvent = new TestEvent { Id = "123", Data = "test data" };
 
@@ -189,7 +192,10 @@ public class JsonMessageSerializerTests
     public void Deserialize_WithCamelCaseOptions_ReadsFromCamelCaseJson()
     {
         // Arrange
-        var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+        var options = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        };
         var serializer = new JsonMessageSerializer(options);
         var body = Encoding.UTF8.GetBytes("""{"id":"456","data":"camel case data"}""");
 

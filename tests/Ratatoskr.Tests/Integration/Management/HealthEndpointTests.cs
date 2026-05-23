@@ -9,8 +9,10 @@ using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Management;
 
-public class HealthEndpointTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
-    : ManagementTestBase(rabbitMq, postgres)
+public class HealthEndpointTests(
+    RabbitMqContainerFixture rabbitMq,
+    PostgresContainerFixture postgres
+) : ManagementTestBase(rabbitMq, postgres)
 {
     [Test]
     public async Task Health_ReturnsCachedCounts()
@@ -20,15 +22,21 @@ public class HealthEndpointTests(RabbitMqContainerFixture rabbitMq, PostgresCont
         await SeedPoisonedInboxAsync();
         await RefreshMetricsAsync();
 
-        var response = await HttpClient.GetAsync("/ratatoskr/api/v1/efcore/contexts/TestDbContext/health");
+        var response = await HttpClient.GetAsync(
+            "/ratatoskr/api/v1/efcore/contexts/TestDbContext/health"
+        );
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("dbContextName").GetString().Should().Be("TestDbContext");
-        body.GetProperty("poisonedOutboxCount").GetInt64().Should().Be(1,
-            "the seeded outbox entity is poisoned and the metrics scrape has just run");
-        body.GetProperty("poisonedInboxCount").GetInt64().Should().Be(1,
-            "the seeded inbox handler is poisoned and the metrics scrape has just run");
+        body.GetProperty("poisonedOutboxCount")
+            .GetInt64()
+            .Should()
+            .Be(1, "the seeded outbox entity is poisoned and the metrics scrape has just run");
+        body.GetProperty("poisonedInboxCount")
+            .GetInt64()
+            .Should()
+            .Be(1, "the seeded inbox handler is poisoned and the metrics scrape has just run");
         body.GetProperty("pendingOutboxCount").GetInt64().Should().Be(0);
         body.GetProperty("pendingInboxCount").GetInt64().Should().Be(0);
     }
@@ -38,17 +46,27 @@ public class HealthEndpointTests(RabbitMqContainerFixture rabbitMq, PostgresCont
     {
         await StartManagementTestAsync();
 
-        var response = await HttpClient.GetAsync("/ratatoskr/api/v1/efcore/contexts/TestDbContext/health");
+        var response = await HttpClient.GetAsync(
+            "/ratatoskr/api/v1/efcore/contexts/TestDbContext/health"
+        );
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         // Processors initialise `LastSuccessfulProcessingAt` from TimeProvider at construction, so
         // the field is always populated once hosted services have started. This is what the UI
         // actually renders — asserting the shape is populated is what keeps the contract honest.
-        body.GetProperty("lastOutboxProcessedAt").ValueKind.Should().Be(JsonValueKind.String,
-            "the outbox processor has started and stamped LastSuccessfulProcessingAt");
-        body.GetProperty("lastInboxProcessedAt").ValueKind.Should().Be(JsonValueKind.String,
-            "the inbox processor has started and stamped LastSuccessfulProcessingAt");
+        body.GetProperty("lastOutboxProcessedAt")
+            .ValueKind.Should()
+            .Be(
+                JsonValueKind.String,
+                "the outbox processor has started and stamped LastSuccessfulProcessingAt"
+            );
+        body.GetProperty("lastInboxProcessedAt")
+            .ValueKind.Should()
+            .Be(
+                JsonValueKind.String,
+                "the inbox processor has started and stamped LastSuccessfulProcessingAt"
+            );
     }
 
     [Test]
@@ -74,7 +92,9 @@ public class HealthEndpointTests(RabbitMqContainerFixture rabbitMq, PostgresCont
     {
         await StartManagementTestAsync();
 
-        var response = await HttpClient.GetAsync("/ratatoskr/api/v1/efcore/contexts/NonExistentContext/health");
+        var response = await HttpClient.GetAsync(
+            "/ratatoskr/api/v1/efcore/contexts/NonExistentContext/health"
+        );
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
@@ -89,7 +109,8 @@ public class HealthEndpointTests(RabbitMqContainerFixture rabbitMq, PostgresCont
     {
         // The BGS is only registered under the IHostedService contract (see AddHostedService<T>),
         // so we fish it out by type from the enumerable.
-        var bg = Services.GetServices<IHostedService>()
+        var bg = Services
+            .GetServices<IHostedService>()
             .OfType<EfCoreMetricsBackgroundService<TestDbContext>>()
             .Single();
         await bg.UpdateMetricsAsync(CancellationToken.None);

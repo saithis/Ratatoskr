@@ -15,42 +15,52 @@ public sealed class InboxDedupsScenario : IPlaygroundScenario
 
     private const string MessageType = "inbox-dedups.order-placed";
 
-    private static string InboxQueue { get; } = PlaygroundAmqpNames.QueueName(ScenarioSlug, "with-inbox");
-    private static string NonInboxQueue { get; } = PlaygroundAmqpNames.QueueName(ScenarioSlug, "no-inbox");
+    private static string InboxQueue { get; } =
+        PlaygroundAmqpNames.QueueName(ScenarioSlug, "with-inbox");
+    private static string NonInboxQueue { get; } =
+        PlaygroundAmqpNames.QueueName(ScenarioSlug, "no-inbox");
 
     public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues =>
-    [
-        new("inbox-dedup", InboxQueue),
-        new("direct-double", NonInboxQueue)
-    ];
+        [new("inbox-dedup", InboxQueue), new("direct-double", NonInboxQueue)];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
     {
         var exchangeName = PlaygroundAmqpNames.ExchangeName(ScenarioSlug, "inbox-dedup");
 
-        bus.AddEventPublishChannel(exchangeName, c => c
-            .WithRabbitMq(r => r.WithTopicExchange())
-            .Produces<OrderPlaced>());
+        bus.AddEventPublishChannel(
+            exchangeName,
+            c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<OrderPlaced>()
+        );
 
-        bus.AddEventConsumeChannel($"{ScenarioSlug}-inbox", c => c
-            .WithRabbitMq(r => r
-                .WithTopicExchange()
-                .WithAmqpExchangeName(exchangeName)
-                .WithQueueName(InboxQueue)
-                .WithQueueType(QueueType.Classic)
-                .WithRetry(3, TimeSpan.FromSeconds(1)))
-            .Consumes<OrderPlaced>(m => m.WithHandler<OrderPlacedInboxHandler>($"{ScenarioSlug}.inbox"))
-            .UseInbox<PublisherDbContext>());
+        bus.AddEventConsumeChannel(
+            $"{ScenarioSlug}-inbox",
+            c =>
+                c.WithRabbitMq(r =>
+                        r.WithTopicExchange()
+                            .WithAmqpExchangeName(exchangeName)
+                            .WithQueueName(InboxQueue)
+                            .WithQueueType(QueueType.Classic)
+                            .WithRetry(3, TimeSpan.FromSeconds(1))
+                    )
+                    .Consumes<OrderPlaced>(m =>
+                        m.WithHandler<OrderPlacedInboxHandler>($"{ScenarioSlug}.inbox")
+                    )
+                    .UseInbox<PublisherDbContext>()
+        );
 
-        bus.AddEventConsumeChannel($"{ScenarioSlug}-direct", c => c
-            .WithRabbitMq(r => r
-                .WithTopicExchange()
-                .WithAmqpExchangeName(exchangeName)
-                .WithQueueName(NonInboxQueue)
-                .WithQueueType(QueueType.Classic)
-                .WithRetry(3, TimeSpan.FromSeconds(1)))
-            .Consumes<OrderPlaced>(m => m.WithHandler<OrderPlacedDirectHandler>())
-            .AllowConsumeWithoutInbox());
+        bus.AddEventConsumeChannel(
+            $"{ScenarioSlug}-direct",
+            c =>
+                c.WithRabbitMq(r =>
+                        r.WithTopicExchange()
+                            .WithAmqpExchangeName(exchangeName)
+                            .WithQueueName(NonInboxQueue)
+                            .WithQueueType(QueueType.Classic)
+                            .WithRetry(3, TimeSpan.FromSeconds(1))
+                    )
+                    .Consumes<OrderPlaced>(m => m.WithHandler<OrderPlacedDirectHandler>())
+                    .AllowConsumeWithoutInbox()
+        );
     }
 
     public string Slug => ScenarioSlug;
@@ -62,13 +72,18 @@ public sealed class InboxDedupsScenario : IPlaygroundScenario
 
     public string Topic => "Inbox";
 
-    public async Task<ScenarioVerdict> ExecuteAsync(ScenarioExecutionContext context,
-        CancellationToken cancellationToken)
+    public async Task<ScenarioVerdict> ExecuteAsync(
+        ScenarioExecutionContext context,
+        CancellationToken cancellationToken
+    )
     {
         var recorder = context.GetRequired<PlaygroundActivityRecorder>();
         var fakeOrderId = Guid.NewGuid();
 
-        var props = this.CreateMessageProperties(context, PlaygroundMessageIds.OrderPlaced(fakeOrderId));
+        var props = this.CreateMessageProperties(
+            context,
+            PlaygroundMessageIds.OrderPlaced(fakeOrderId)
+        );
         var evt = new OrderPlaced(fakeOrderId.ToString(), context.ScenarioRunId);
 
         await context.Ratatoskr.PublishDirectAsync(evt, props, cancellationToken);
@@ -87,47 +102,65 @@ public sealed class InboxDedupsScenario : IPlaygroundScenario
                 var (i, d) = CountEntries(recorder.GetEntriesForScenarioRun(context.ScenarioRunId));
                 return i >= 1 && d >= 2;
             },
-            cancellationToken);
+            cancellationToken
+        );
 
-        var (inbox, direct) = CountEntries(recorder.GetEntriesForScenarioRun(context.ScenarioRunId));
+        var (inbox, direct) = CountEntries(
+            recorder.GetEntriesForScenarioRun(context.ScenarioRunId)
+        );
         return inbox == 1 && direct == 2
             ? new ScenarioVerdict(
                 true,
-                details: new { inboxInboxDispatched = inbox, directDispatched = direct })
+                details: new { inboxInboxDispatched = inbox, directDispatched = direct }
+            )
             : new ScenarioVerdict(
                 false,
-                $"Expected 1 inbox and 2 direct dispatches (inbox={inbox}, direct={direct}).");
+                $"Expected 1 inbox and 2 direct dispatches (inbox={inbox}, direct={direct})."
+            );
     }
 
-    private static (int inbox, int direct) CountEntries(IReadOnlyList<PlaygroundActivityEntry> entries)
+    private static (int inbox, int direct) CountEntries(
+        IReadOnlyList<PlaygroundActivityEntry> entries
+    )
     {
-        var inbox = entries.Count(e => e is
-        {
-            MessageType: MessageType,
-            Stage: nameof(MessageStage.InboxDispatched), 
-            IsSuccess: true
-        });
-        var direct = entries.Count(e => e is
-        {
-            MessageType: MessageType,
-            Stage: nameof(MessageStage.Dispatched),
-            DispatchResult: nameof(DispatchResult.Success)
-        });
+        var inbox = entries.Count(e =>
+            e
+                is {
+                    MessageType: MessageType,
+                    Stage: nameof(MessageStage.InboxDispatched),
+                    IsSuccess: true
+                }
+        );
+        var direct = entries.Count(e =>
+            e
+                is {
+                    MessageType: MessageType,
+                    Stage: nameof(MessageStage.Dispatched),
+                    DispatchResult: nameof(DispatchResult.Success)
+                }
+        );
         return (inbox, direct);
     }
 
     [RatatoskrMessage(MessageType)]
-    public sealed record OrderPlaced(string OrderId, string ScenarioRunId) : IPlaygroundCorrelatedOrderMessage;
+    public sealed record OrderPlaced(string OrderId, string ScenarioRunId)
+        : IPlaygroundCorrelatedOrderMessage;
 
     public sealed class OrderPlacedInboxHandler : IMessageHandler<OrderPlaced>
     {
-        public Task HandleAsync(OrderPlaced message, MessageProperties properties, CancellationToken cancellationToken) =>
-            Task.CompletedTask;
+        public Task HandleAsync(
+            OrderPlaced message,
+            MessageProperties properties,
+            CancellationToken cancellationToken
+        ) => Task.CompletedTask;
     }
 
     public sealed class OrderPlacedDirectHandler : IMessageHandler<OrderPlaced>
     {
-        public Task HandleAsync(OrderPlaced message, MessageProperties properties, CancellationToken cancellationToken) =>
-            Task.CompletedTask;
+        public Task HandleAsync(
+            OrderPlaced message,
+            MessageProperties properties,
+            CancellationToken cancellationToken
+        ) => Task.CompletedTask;
     }
 }

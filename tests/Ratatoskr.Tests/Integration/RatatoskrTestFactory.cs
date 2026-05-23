@@ -7,7 +7,10 @@ using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration;
 
-public class RatatoskrTestFactory(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres) : WebApplicationFactory<RatatoskrTestHostAppMarker>
+public class RatatoskrTestFactory(
+    RabbitMqContainerFixture rabbitMq,
+    PostgresContainerFixture postgres
+) : WebApplicationFactory<RatatoskrTestHostAppMarker>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -22,10 +25,10 @@ public class RatatoskrTestFactory(RabbitMqContainerFixture rabbitMq, PostgresCon
 
     protected override IHost CreateHost(IHostBuilder builder)
     {
-        // Ensure we hook into the host building process if needed, 
+        // Ensure we hook into the host building process if needed,
         // but typically ConfigureWebHost is enough for TestServer.
         // We'll expose the connection strings through configuration or direct service replacement in tests.
-        
+
         return base.CreateHost(builder);
     }
 }

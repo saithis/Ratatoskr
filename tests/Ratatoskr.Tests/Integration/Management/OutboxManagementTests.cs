@@ -12,8 +12,10 @@ using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Management;
 
-public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
-    : ManagementTestBase(rabbitMq, postgres)
+public class OutboxManagementTests(
+    RabbitMqContainerFixture rabbitMq,
+    PostgresContainerFixture postgres
+) : ManagementTestBase(rabbitMq, postgres)
 {
     private const string BaseUrl = "/ratatoskr/api/v1/efcore/contexts/TestDbContext/outbox";
 
@@ -54,8 +56,11 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
 
         var items = body.GetProperty("items").EnumerateArray().ToList();
-        items.Should().AllSatisfy(item =>
-            item.GetProperty("dbContext").GetString().Should().Be("TestDbContext"));
+        items
+            .Should()
+            .AllSatisfy(item =>
+                item.GetProperty("dbContext").GetString().Should().Be("TestDbContext")
+            );
     }
 
     [Test]
@@ -189,13 +194,18 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
 
         var req = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/poisoned/requeue")
         {
-            Content = JsonContent.Create(new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest([id1, id2]))
+            Content = JsonContent.Create(
+                new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest([id1, id2])
+            ),
         };
         var response = await HttpClient.SendAsync(req);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var body = await response.Content.ReadFromJsonAsync<BulkRequeueOutboxEndpoint.BulkRequeueOutboxResponse>();
-        body!.Succeeded.Should().BeEquivalentTo([id1, id2], "both ids must be reported as succeeded");
+        var body =
+            await response.Content.ReadFromJsonAsync<BulkRequeueOutboxEndpoint.BulkRequeueOutboxResponse>();
+        body!
+            .Succeeded.Should()
+            .BeEquivalentTo([id1, id2], "both ids must be reported as succeeded");
         body.Failed.Should().BeEmpty("no ids should have failed");
 
         await InScopeAsync(async ctx =>
@@ -234,7 +244,9 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
 
         var req = new HttpRequestMessage(HttpMethod.Delete, $"{BaseUrl}/poisoned")
         {
-            Content = JsonContent.Create(new BulkDeleteOutboxEndpoint.BulkDeleteOutboxRequest([id1, id2]))
+            Content = JsonContent.Create(
+                new BulkDeleteOutboxEndpoint.BulkDeleteOutboxRequest([id1, id2])
+            ),
         };
         var response = await HttpClient.SendAsync(req);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -261,8 +273,11 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         var items = body.GetProperty("items").EnumerateArray().ToList();
         items.Should().NotBeEmpty();
-        items.Should().AllSatisfy(item =>
-            item.GetProperty("messageType").GetString().Should().Be("order.created"));
+        items
+            .Should()
+            .AllSatisfy(item =>
+                item.GetProperty("messageType").GetString().Should().Be("order.created")
+            );
 
         // TotalCount must reflect the filtered result
         body.GetProperty("totalCount").GetInt64().Should().Be(items.Count);
@@ -278,7 +293,9 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
 
         var req = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/poisoned/requeue")
         {
-            Content = JsonContent.Create(new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest([id1, id2, id3]))
+            Content = JsonContent.Create(
+                new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest([id1, id2, id3])
+            ),
         };
         var response = await HttpClient.SendAsync(req);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -291,7 +308,9 @@ public class OutboxManagementTests(RabbitMqContainerFixture rabbitMq, PostgresCo
             poisonedCount.Should().Be(0);
 
             var requeuedCount = await db.Set<OutboxMessageEntity>()
-                .CountAsync(x => (x.Id == id1 || x.Id == id2 || x.Id == id3) && x.RequeuedCount == 1);
+                .CountAsync(x =>
+                    (x.Id == id1 || x.Id == id2 || x.Id == id3) && x.RequeuedCount == 1
+                );
             requeuedCount.Should().Be(3);
         });
     }

@@ -6,4 +6,5 @@ public sealed record ScenarioCatalogEntry(
     string Description,
     string Topic,
     bool RequiresDangerConfirmation,
-    string? DangerConfirmationText);
+    string? DangerConfirmationText
+);

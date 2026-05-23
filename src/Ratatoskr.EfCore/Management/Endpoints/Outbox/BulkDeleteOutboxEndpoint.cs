@@ -26,9 +26,13 @@ internal static class BulkDeleteOutboxEndpoint
         string contextName,
         [FromBody] BulkDeleteOutboxRequest req,
         EfCoreManagementDbContextLookup lookup,
-        CancellationToken ct)
+        CancellationToken ct
+    )
     {
-        if (ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is { } resolveError)
+        if (
+            ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is
+            { } resolveError
+        )
             return resolveError;
 
         if (!BulkRequestValidator.TryValidateIds(req.Ids, out var error))
@@ -44,14 +48,16 @@ internal static class BulkDeleteOutboxEndpoint
     private static async Task<Results<Ok, ProblemHttpResult>> HandleAll(
         string contextName,
         EfCoreManagementDbContextLookup lookup,
-        CancellationToken ct)
+        CancellationToken ct
+    )
     {
-        if (ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is { } resolveError)
+        if (
+            ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is
+            { } resolveError
+        )
             return resolveError;
 
-        await db.Set<OutboxMessageEntity>()
-            .Where(x => x.IsPoisoned)
-            .ExecuteDeleteAsync(ct);
+        await db.Set<OutboxMessageEntity>().Where(x => x.IsPoisoned).ExecuteDeleteAsync(ct);
 
         return TypedResults.Ok();
     }

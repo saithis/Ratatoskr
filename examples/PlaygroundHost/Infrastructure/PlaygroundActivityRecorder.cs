@@ -22,29 +22,22 @@ public sealed class PlaygroundActivityRecorder : IMessageActivityObserver
             activity.IsSuccess,
             activity.Exception?.Message,
             activity.TransportName,
-            activity.DispatchResult?.ToString());
+            activity.DispatchResult?.ToString()
+        );
         _entries.Enqueue(entry);
-        while (_entries.Count > MaxEntries && _entries.TryDequeue(out _))
-        {
-        }
+        while (_entries.Count > MaxEntries && _entries.TryDequeue(out _)) { }
 
         return ValueTask.CompletedTask;
     }
 
     public IReadOnlyList<PlaygroundActivityEntry> GetEntriesForScenarioRun(string scenarioRunId) =>
-        _entries
-            .Where(e => e.ScenarioRunId == scenarioRunId)
-            .OrderBy(e => e.Timestamp)
-            .ToList();
+        _entries.Where(e => e.ScenarioRunId == scenarioRunId).OrderBy(e => e.Timestamp).ToList();
 
     /// <summary>Backward-compatible filter: order id string matches <see cref="Order.Id"/>.</summary>
     public IReadOnlyList<PlaygroundActivityEntry> GetEntriesForOrder(Guid orderId)
     {
         var key = orderId.ToString("D");
-        return _entries
-            .Where(e => e.OrderId == key)
-            .OrderBy(e => e.Timestamp)
-            .ToList();
+        return _entries.Where(e => e.OrderId == key).OrderBy(e => e.Timestamp).ToList();
     }
 
     public IReadOnlyList<PlaygroundActivityEntry> GetRecentEntries(int max = 500) =>
@@ -52,11 +45,19 @@ public sealed class PlaygroundActivityRecorder : IMessageActivityObserver
 
     private static string? TryResolveScenarioRunId(MessageActivity activity)
     {
-        if (activity.Properties.CloudEventExtensions.TryGetValue(PlaygroundCorrelation.CloudEventsExtensionKey, out var ext))
+        if (
+            activity.Properties.CloudEventExtensions.TryGetValue(
+                PlaygroundCorrelation.CloudEventsExtensionKey,
+                out var ext
+            )
+        )
         {
             if (ext is string s && s.Length > 0)
                 return s;
-            if (ext is System.Text.Json.JsonElement je && je.ValueKind == System.Text.Json.JsonValueKind.String)
+            if (
+                ext is System.Text.Json.JsonElement je
+                && je.ValueKind == System.Text.Json.JsonValueKind.String
+            )
                 return je.GetString();
         }
 
@@ -74,7 +75,10 @@ public sealed class PlaygroundActivityRecorder : IMessageActivityObserver
         if (!string.IsNullOrEmpty(fromMessage) && Guid.TryParse(fromMessage, out _))
             return Guid.Parse(fromMessage).ToString("D");
 
-        if (activity.Properties.Id != null && PlaygroundMessageIds.TryParseOrderId(activity.Properties.Id, out var id))
+        if (
+            activity.Properties.Id != null
+            && PlaygroundMessageIds.TryParseOrderId(activity.Properties.Id, out var id)
+        )
             return id.ToString("D");
 
         return null;

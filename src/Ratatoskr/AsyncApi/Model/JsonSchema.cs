@@ -84,5 +84,6 @@ public class JsonSchema
     public string? Pattern { get; set; }
 
     /// <summary>Creates a $ref schema pointing to components/schemas/{name}.</summary>
-    public static JsonSchema RefTo(string schemaName) => new() { Ref = $"#/components/schemas/{schemaName}" };
+    public static JsonSchema RefTo(string schemaName) =>
+        new() { Ref = $"#/components/schemas/{schemaName}" };
 }

@@ -10,8 +10,8 @@ internal class InboxProcessor<TDbContext>(
     IDistributedLockProvider distributedLockProvider,
     TimeProvider timeProvider,
     InboxOptionsHolder<TDbContext> optionsHolder,
-    ILogger<InboxProcessor<TDbContext>> logger)
-    : PollingBackgroundService(distributedLockProvider, timeProvider, logger), IProcessorTrigger
+    ILogger<InboxProcessor<TDbContext>> logger
+) : PollingBackgroundService(distributedLockProvider, timeProvider, logger), IProcessorTrigger
     where TDbContext : DbContext, IInboxDbContext
 {
     private readonly InboxOptions _options = optionsHolder.Options;
@@ -28,12 +28,15 @@ internal class InboxProcessor<TDbContext>(
         {
             // Create a fresh scope (and DbContext) per batch to avoid stale EF state
             using var batchScope = serviceScopeFactory.CreateScope();
-            var processor = batchScope.ServiceProvider.GetRequiredService<InboxMessageProcessor<TDbContext>>();
+            var processor = batchScope.ServiceProvider.GetRequiredService<
+                InboxMessageProcessor<TDbContext>
+            >();
 
             logger.LogDebug("Checking inbox for pending handler deliveries");
             var processed = await processor.ProcessBatchAsync(
                 includeStuckMessageDetection: true,
-                cancellationToken);
+                cancellationToken
+            );
 
             if (processed == 0)
                 return;
