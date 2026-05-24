@@ -8,7 +8,7 @@ public sealed class JsonMessageSerializer : IMessageSerializer
     private readonly JsonSerializerOptions? _options;
 
     public JsonMessageSerializer()
-        : this(null) { }
+        : this(options: null) { }
 
     public JsonMessageSerializer(JsonSerializerOptions? options)
     {

@@ -52,7 +52,12 @@ internal partial class RabbitMqRetryHandler(
             LogMessageWillBeRetried(logger, messageId, retryCount + 1, config.Retry.MaxRetries);
 
             // Reject without requeue - DLX will route to retry queue
-            await channel.BasicNackAsync(ea.DeliveryTag, false, false, cancellationToken);
+            await channel.BasicNackAsync(
+                ea.DeliveryTag,
+                multiple: false,
+                requeue: false,
+                cancellationToken
+            );
 
             telemetry.RecordRetry(ea, queueName);
         }
@@ -99,12 +104,17 @@ internal partial class RabbitMqRetryHandler(
             );
 
             // ACK original message
-            await channel.BasicAckAsync(ea.DeliveryTag, false, cancellationToken);
+            await channel.BasicAckAsync(ea.DeliveryTag, multiple: false, cancellationToken);
         }
         else
         {
             // Just reject without requeue - let DLX handle it
-            await channel.BasicNackAsync(ea.DeliveryTag, false, false, cancellationToken);
+            await channel.BasicNackAsync(
+                ea.DeliveryTag,
+                multiple: false,
+                requeue: false,
+                cancellationToken
+            );
         }
 
         telemetry.RecordDeadLetter(ea, queueName);

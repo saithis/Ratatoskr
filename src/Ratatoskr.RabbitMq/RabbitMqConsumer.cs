@@ -93,8 +93,16 @@ internal sealed partial class RabbitMqConsumer(
                 continue;
             }
 
-            var channel = await connectionManager.CreateChannelAsync(false, stoppingToken);
-            await channel.BasicQosAsync(0, channelOptions.PrefetchCount, false, stoppingToken);
+            var channel = await connectionManager.CreateChannelAsync(
+                enablePublisherConfirms: false,
+                stoppingToken
+            );
+            await channel.BasicQosAsync(
+                prefetchSize: 0,
+                prefetchCount: channelOptions.PrefetchCount,
+                global: false,
+                cancellationToken: stoppingToken
+            );
             var concurrencyGate = new SemaphoreSlim(
                 channelOptions.ConcurrencyLimit,
                 channelOptions.ConcurrencyLimit
@@ -469,7 +477,7 @@ internal sealed partial class RabbitMqConsumer(
             switch (result)
             {
                 case DispatchResult.Success:
-                    await channel.BasicAckAsync(ea.DeliveryTag, false, cancellationToken);
+                    await channel.BasicAckAsync(ea.DeliveryTag, multiple: false, cancellationToken);
                     break;
 
                 case DispatchResult.NoHandlers:
