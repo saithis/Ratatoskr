@@ -1130,6 +1130,10 @@ dotnet_diagnostic.MA0041.severity = none
 # Meziantou method length configuration
 dotnet_code_quality.MA0051.maximum_lines = 120
 
+# Suppress collection abstraction rule for serialization DTOs mapping 1:1 to AsyncAPI specification
+[src/Ratatoskr/AsyncApi/Model/**]
+dotnet_diagnostic.MA0016.severity = none
+
 ####################################################################################################
 # Other Platform Diagnostics
 ####################################################################################################

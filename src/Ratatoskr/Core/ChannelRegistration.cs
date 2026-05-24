@@ -17,9 +17,9 @@ public sealed class ChannelRegistration(string channelName, ChannelType intent)
     public void SetExtension<T>(T value)
         where T : class => _extensions[typeof(T)] = value;
 
-    public HashSet<string> Transports { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public ISet<string> Transports { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-    public Collection<MessageRegistration> Messages { get; } = new();
+    public IList<MessageRegistration> Messages { get; } = new Collection<MessageRegistration>();
 
     /// <summary>
     /// O(1) lookup indexes — populated by ChannelRegistry.Freeze()
