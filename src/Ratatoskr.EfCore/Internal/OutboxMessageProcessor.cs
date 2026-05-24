@@ -35,11 +35,6 @@ internal class OutboxMessageProcessor<TDbContext>(
         "CA1502:AvoidExcessiveComplexity",
         Justification = "Orchestrator class coordinating many components"
     )]
-    [SuppressMessage(
-        "Maintainability",
-        "CA1506:AvoidExcessiveClassCoupling",
-        Justification = "Orchestrator class coordinating many components"
-    )]
     public async Task<int> ProcessBatchAsync(
         bool includeStuckMessageDetection,
         CancellationToken cancellationToken

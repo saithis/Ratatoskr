@@ -8,4 +8,4 @@ namespace PlaygroundHost.Infrastructure.ScenarioRunning;
     "CA1711:Identifiers should not have incorrect suffix",
     Justification = "This holds rabbitmq queue data"
 )]
-internal readonly record struct PlaygroundRabbitQueue(string Key, string MainQueueName);
+public readonly record struct PlaygroundRabbitQueue(string Key, string MainQueueName);

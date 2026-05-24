@@ -374,7 +374,7 @@ playground.MapPost(
 app.UseStaticFiles();
 app.MapFallbackToFile("index.html");
 
-app.Run();
+await app.RunAsync();
 
 static async Task<uint> SafeMessageCountAsync(
     IChannel channel,

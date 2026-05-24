@@ -835,7 +835,7 @@ dotnet_diagnostic.CA1502.severity = error
 dotnet_diagnostic.CA1505.severity = error
 
 # Avoid excessive class coupling
-dotnet_diagnostic.CA1506.severity = error
+dotnet_diagnostic.CA1506.severity = suggestion # This also triggers for the main method
 
 # Use nameof in place of string
 # Examples in Rock Your Code: Coding Standards for Microsoft .NET

@@ -1,4 +1,5 @@
 using System.Data;
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 
 namespace PlaygroundHost.Infrastructure;
@@ -64,7 +65,8 @@ public static class PlaygroundSqlMetrics
             cancellationToken
         );
 
-    private static string EscapeLike(string s) => s.Replace("'", "''");
+    private static string EscapeLike(string s) =>
+        s.Replace("'", "''", StringComparison.OrdinalIgnoreCase);
 
     private static async Task<int> ExecuteScalarIntAsync(
         DbContext db,
@@ -83,9 +85,12 @@ public static class PlaygroundSqlMetrics
         try
         {
             await using var cmd = conn.CreateCommand();
+#pragma warning disable CA2100
+            // This is just a demo, so it is fine
             cmd.CommandText = sql;
+#pragma warning restore CA2100
             var o = await cmd.ExecuteScalarAsync(cancellationToken);
-            return Convert.ToInt32(o);
+            return Convert.ToInt32(o, CultureInfo.InvariantCulture);
         }
         finally
         {
