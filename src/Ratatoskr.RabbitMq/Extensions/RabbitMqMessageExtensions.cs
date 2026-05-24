@@ -27,6 +27,7 @@ public static class RabbitMqMessageExtensions
 
     public static MessageBuilder WithRoutingKey(this MessageBuilder builder, string routingKey)
     {
+        ArgumentNullException.ThrowIfNull(builder);
         builder.MessageRegistration.EnsureRabbitMqOptions().WithRoutingKey(routingKey);
         return builder;
     }

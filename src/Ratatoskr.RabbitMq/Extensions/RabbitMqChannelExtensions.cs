@@ -24,6 +24,9 @@ public static class RabbitMqChannelExtensions
         /// </summary>
         public PublishChannelBuilder WithRabbitMq(Action<RabbitMqExchangeOptions> configure)
         {
+            ArgumentNullException.ThrowIfNull(builder);
+            ArgumentNullException.ThrowIfNull(configure);
+
             var inner = new RabbitMqChannelOptions();
             var options = new RabbitMqExchangeOptions(inner);
             configure(options);
@@ -41,6 +44,9 @@ public static class RabbitMqChannelExtensions
         /// </summary>
         public ConsumeChannelBuilder WithRabbitMq(Action<RabbitMqConsumeOptions> configure)
         {
+            ArgumentNullException.ThrowIfNull(builder);
+            ArgumentNullException.ThrowIfNull(configure);
+
             var inner = new RabbitMqChannelOptions();
             var options = new RabbitMqConsumeOptions(inner);
             configure(options);

@@ -25,6 +25,10 @@ public partial class CloudEventsAmqpMapper(
         BasicProperties outgoing
     )
     {
+        ArgumentNullException.ThrowIfNull(serializedData);
+        ArgumentNullException.ThrowIfNull(props);
+        ArgumentNullException.ThrowIfNull(outgoing);
+
         // Ensure required CloudEvents fields are set
         if (string.IsNullOrEmpty(props.Id))
         {
@@ -57,6 +61,8 @@ public partial class CloudEventsAmqpMapper(
 
     public (byte[] body, MessageProperties props) MapIncoming(BasicDeliverEventArgs incoming)
     {
+        ArgumentNullException.ThrowIfNull(incoming);
+
         // Detect content mode based on content type
         var contentType = incoming.BasicProperties.ContentType;
         var isStructured =

@@ -189,6 +189,8 @@ public class OutboxBuilder<TDbContext>
     /// </summary>
     public OutboxBuilder<TDbContext> Configure(Action<OutboxOptions> configure)
     {
+        ArgumentNullException.ThrowIfNull(configure);
+
         configure(Options);
         return this;
     }

@@ -15,6 +15,9 @@ public static class RabbitMqRatatoskrBuilderExtensions
         Action<RabbitMqOptions> configure
     )
     {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(configure);
+
         var options = new RabbitMqOptions();
         configure.Invoke(options);
 

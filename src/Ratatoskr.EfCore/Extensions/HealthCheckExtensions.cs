@@ -23,6 +23,7 @@ public static class HealthCheckExtensions
     )
         where TDbContext : DbContext, IOutboxDbContext
     {
+        ArgumentNullException.ThrowIfNull(builder);
         var checkName = name ?? $"ratatoskr-outbox-{typeof(TDbContext).Name}";
         var tagList = NormalizeTags(tags);
 
@@ -53,6 +54,7 @@ public static class HealthCheckExtensions
     )
         where TDbContext : DbContext, IInboxDbContext
     {
+        ArgumentNullException.ThrowIfNull(builder);
         var checkName = name ?? $"ratatoskr-inbox-{typeof(TDbContext).Name}";
         var tagList = NormalizeTags(tags);
 

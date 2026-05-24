@@ -15,6 +15,7 @@ public static class InboxPublicApiExtensions
     /// </summary>
     public static ConsumeChannelBuilder AllowConsumeWithoutInbox(this ConsumeChannelBuilder builder)
     {
+        ArgumentNullException.ThrowIfNull(builder);
         builder.Channel.SetExtension(new ConsumeChannelInboxRequirementOptOut());
         return builder;
     }
@@ -27,6 +28,7 @@ public static class InboxPublicApiExtensions
     public static ConsumeChannelBuilder UseInbox<TDbContext>(this ConsumeChannelBuilder builder)
         where TDbContext : DbContext, IInboxDbContext
     {
+        ArgumentNullException.ThrowIfNull(builder);
         builder.Channel.SetExtension(new ChannelInboxConfig(typeof(TDbContext)));
 
         // Deferred validation: ensure AddEfCoreDurability<TDbContext>(d => d.UseInbox()) was called

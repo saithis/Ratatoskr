@@ -23,6 +23,7 @@ public static class RatatoskrEfCoreModelExtensions
         DatabaseFacade database
     )
     {
+        ArgumentNullException.ThrowIfNull(modelBuilder);
         ArgumentNullException.ThrowIfNull(database);
 
         RatatoskrEntityModelConfiguration.ConfigureOutboxEntities(modelBuilder, database);

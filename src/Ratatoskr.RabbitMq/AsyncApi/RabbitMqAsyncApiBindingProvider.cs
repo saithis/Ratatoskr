@@ -25,6 +25,9 @@ public class RabbitMqAsyncApiBindingProvider(
         IEnumerable<ChannelRegistration> channels
     )
     {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(channels);
+
         if (rabbitMqOptions.ConnectionString is null)
         {
             throw new InvalidOperationException(
@@ -58,6 +61,9 @@ public class RabbitMqAsyncApiBindingProvider(
 
     public void ConfigureChannel(ChannelRegistration channel, AsyncApiDocument document)
     {
+        ArgumentNullException.ThrowIfNull(channel);
+        ArgumentNullException.ThrowIfNull(document);
+
         if (!channel.IsRabbitMqChannel())
         {
             return;
@@ -96,6 +102,9 @@ public class RabbitMqAsyncApiBindingProvider(
 
     public void ConfigureOperation(ChannelRegistration channel, AsyncApiOperation operation)
     {
+        ArgumentNullException.ThrowIfNull(channel);
+        ArgumentNullException.ThrowIfNull(operation);
+
         if (!channel.IsRabbitMqChannel())
         {
             return;
@@ -135,6 +144,10 @@ public class RabbitMqAsyncApiBindingProvider(
         AsyncApiMessage asyncApiMessage
     )
     {
+        ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(channel);
+        ArgumentNullException.ThrowIfNull(asyncApiMessage);
+
         if (!channel.IsRabbitMqChannel())
         {
             return;

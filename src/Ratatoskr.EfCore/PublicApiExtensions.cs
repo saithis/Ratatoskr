@@ -26,6 +26,8 @@ public static class PublicApiExtensions
         )
             where TDbContext : DbContext, IInboxDbContext, IOutboxDbContext
         {
+            ArgumentNullException.ThrowIfNull(configure);
+
             // Idempotency: skip if already registered for this DbContext type
             if (builder.Services.Any(d => d.ServiceType == typeof(DurabilityMarker<TDbContext>)))
             {
@@ -233,6 +235,8 @@ public static class PublicApiExtensions
     )
         where TDbContext : DbContext, IOutboxDbContext
     {
+        ArgumentNullException.ThrowIfNull(builder);
+
         var interceptor = serviceProvider.GetRequiredService<
             OutboxTriggerInterceptor<TDbContext>
         >();
