@@ -279,10 +279,10 @@ dotnet_naming_style.local_function_style.capitalization = pascal_case
 dotnet_naming_symbols.local_functions.applicable_kinds = local_function
 
 # "this." and "Me." qualifiers
-dotnet_style_qualification_for_event = true:warning
-dotnet_style_qualification_for_field = true:warning
-dotnet_style_qualification_for_method = true:warning
-dotnet_style_qualification_for_property = true:warning
+dotnet_style_qualification_for_event = false:silent
+dotnet_style_qualification_for_field = false:silent
+dotnet_style_qualification_for_method = false:silent
+dotnet_style_qualification_for_property = false:silent
 
 # Undocumented
 dotnet_style_operator_placement_when_wrapping = end_of_line
@@ -455,7 +455,7 @@ csharp_style_pattern_matching_over_is_with_cast_check = true:warning
 csharp_style_prefer_not_pattern = true:warning
 csharp_style_prefer_pattern_matching = true:warning
 csharp_style_prefer_switch_expression = true:warning
-csharp_style_prefer_explicit_this = true:warning
+csharp_style_prefer_explicit_this = false:silent
 
 # "Null" checking preferences
 csharp_style_conditional_delegate_call = true:warning
