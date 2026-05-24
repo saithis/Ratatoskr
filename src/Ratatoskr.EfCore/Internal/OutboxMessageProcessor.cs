@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Ratatoskr.Core;
@@ -29,6 +30,16 @@ internal class OutboxMessageProcessor<TDbContext>(
     /// Processes a single batch of outbox messages.
     /// Returns the number of messages successfully processed.
     /// </summary>
+    [SuppressMessage(
+        "Maintainability",
+        "CA1502:AvoidExcessiveComplexity",
+        Justification = "Orchestrator class coordinating many components"
+    )]
+    [SuppressMessage(
+        "Maintainability",
+        "CA1506:AvoidExcessiveClassCoupling",
+        Justification = "Orchestrator class coordinating many components"
+    )]
     public async Task<int> ProcessBatchAsync(
         bool includeStuckMessageDetection,
         CancellationToken cancellationToken

@@ -2,7 +2,7 @@ using RabbitMQ.Client;
 
 namespace Ratatoskr.RabbitMq;
 
-public class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposable
+public sealed class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposable
 {
     private readonly SemaphoreSlim _connectionLock = new(1, 1);
     private readonly SemaphoreSlim _sendChannelLock = new(1, 1);
@@ -10,7 +10,7 @@ public class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposab
     private IChannel? _sendChannel;
 
     /// <summary>
-    /// Returns <c>true</c> if an AMQP connection is currently open.
+    /// Returns <see langword="true"/> if an AMQP connection is currently open.
     /// </summary>
     public bool IsConnected => _connection is { IsOpen: true };
 
@@ -103,6 +103,11 @@ public class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposab
             if (_connection is { IsOpen: true })
             {
                 return _connection;
+            }
+
+            if (_connection != null)
+            {
+                await _connection.DisposeAsync();
             }
 
             var factory = CreateConnectionFactory();

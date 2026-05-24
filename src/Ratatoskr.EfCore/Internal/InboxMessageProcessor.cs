@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Ratatoskr.Core;
@@ -34,6 +35,11 @@ internal class InboxMessageProcessor<TDbContext>(
     /// only data for that database. Handler lookup by key is global (across all DbContext types),
     /// so correctness is maintained even if databases overlap.
     /// </remarks>
+    [SuppressMessage(
+        "Maintainability",
+        "CA1506:AvoidExcessiveClassCoupling",
+        Justification = "Orchestrator class coordinating many components"
+    )]
     public async Task<int> ProcessBatchAsync(
         bool includeStuckMessageDetection,
         CancellationToken cancellationToken

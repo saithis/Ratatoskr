@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
@@ -55,7 +56,11 @@ public partial class CloudEventsAmqpMapper(
         {
             CloudEventsContentMode.Binary => MapBinaryMode(serializedData, props, outgoing),
             CloudEventsContentMode.Structured => MapStructuredMode(serializedData, props, outgoing),
-            _ => throw new ArgumentOutOfRangeException(),
+            _ => throw new InvalidEnumArgumentException(
+                $"{nameof(options)}.{nameof(options.ContentMode)}",
+                (int)options.ContentMode,
+                typeof(CloudEventsContentMode)
+            ),
         };
     }
 

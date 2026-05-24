@@ -12,10 +12,10 @@ internal static class RequeueOutboxEndpoint
 {
     internal static void Map(IEndpointRouteBuilder outboxGroup)
     {
-        outboxGroup.MapPost("/poisoned/{id:guid}/requeue", Handle);
+        outboxGroup.MapPost("/poisoned/{id:guid}/requeue", HandleAsync);
     }
 
-    private static async Task<Results<Ok, ProblemHttpResult>> Handle(
+    private static async Task<Results<Ok, ProblemHttpResult>> HandleAsync(
         string contextName,
         Guid id,
         EfCoreManagementDbContextLookup lookup,

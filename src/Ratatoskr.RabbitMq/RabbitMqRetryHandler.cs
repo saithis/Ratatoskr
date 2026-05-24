@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -68,7 +69,7 @@ internal partial class RabbitMqRetryHandler(
         // Need to manually publish to DLQ since we can't conditionally route via DLX
         if (config.Retry.UseManaged)
         {
-            var dlqName = $"{queueName}{config.Retry.DeadLetterSuffix}";
+            var dlqName = queueName + config.Retry.DeadLetterSuffix;
 
             // Copy properties and add metadata about failure
             var props = new BasicProperties
@@ -123,18 +124,16 @@ internal partial class RabbitMqRetryHandler(
             long totalCount = 0;
             foreach (var entryObj in xDeathList)
             {
-                if (entryObj is IDictionary<string, object> entry)
+                if (
+                    entryObj is IDictionary<string, object> entry
+                    && entry.TryGetValue("count", out var countObj)
+                    && entry.TryGetValue("reason", out var reasonObj)
+                )
                 {
-                    if (
-                        entry.TryGetValue("count", out var countObj)
-                        && entry.TryGetValue("reason", out var reasonObj)
-                    )
+                    var reason = RabbitMqHeaderHelper.ConvertHeaderToString(reasonObj);
+                    if (reason == "rejected")
                     {
-                        var reason = RabbitMqHeaderHelper.ConvertHeaderToString(reasonObj);
-                        if (reason == "rejected")
-                        {
-                            totalCount += Convert.ToInt64(countObj);
-                        }
+                        totalCount += Convert.ToInt64(countObj, CultureInfo.InvariantCulture);
                     }
                 }
             }

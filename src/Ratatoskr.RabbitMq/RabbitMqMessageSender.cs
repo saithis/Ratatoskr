@@ -6,7 +6,7 @@ using Ratatoskr.RabbitMq.Extensions;
 
 namespace Ratatoskr.RabbitMq;
 
-internal class RabbitMqMessageSender(
+internal sealed class RabbitMqMessageSender(
     RabbitMqConnectionManager connectionManager,
     RabbitMqTopologyManager topologyManager,
     RabbitMqOptions options,
@@ -15,7 +15,7 @@ internal class RabbitMqMessageSender(
     TimeProvider timeProvider,
     IEnumerable<IMessageActivityObserver> observers,
     ILogger<RabbitMqMessageSender> logger
-) : IMessageSender, IAsyncDisposable
+) : IMessageSender, IDisposable
 {
     private readonly IMessageActivityObserver[] _observers = [.. observers];
     private readonly SemaphoreSlim _publishLock = new(1, 1);
@@ -100,9 +100,5 @@ internal class RabbitMqMessageSender(
         }
     }
 
-    public async ValueTask DisposeAsync()
-    {
-        _publishLock.Dispose();
-        await connectionManager.DisposeAsync();
-    }
+    public void Dispose() => _publishLock.Dispose();
 }

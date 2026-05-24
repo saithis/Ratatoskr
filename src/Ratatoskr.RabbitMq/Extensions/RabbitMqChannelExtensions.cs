@@ -1,9 +1,15 @@
+using System.Diagnostics.CodeAnalysis;
 using Ratatoskr.Config;
 using Ratatoskr.Core;
 using Ratatoskr.RabbitMq.Config;
 
 namespace Ratatoskr.RabbitMq.Extensions;
 
+[SuppressMessage(
+    "Naming",
+    "CA1708:Identifiers should differ by more than case",
+    Justification = "False positive"
+)]
 public static class RabbitMqChannelExtensions
 {
     extension(ChannelRegistration registration)

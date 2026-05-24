@@ -623,7 +623,7 @@ dotnet_diagnostic.CA1030.severity = suggestion
 
 # Do not catch general exception types
 # Examples in Rock Your Code: Coding Standards for Microsoft .NET
-dotnet_diagnostic.CA1031.severity = error
+dotnet_diagnostic.CA1031.severity = suggestion
 
 # Implement standard exception constructors
 dotnet_diagnostic.CA1032.severity = suggestion

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Ratatoskr.Core;
 
 namespace Ratatoskr.EfCore;
@@ -6,6 +7,11 @@ namespace Ratatoskr.EfCore;
 /// Collection for staging messages to be sent via the outbox pattern.
 /// Messages added here will be persisted to the database and sent transactionally.
 /// </summary>
+[SuppressMessage(
+    "Naming",
+    "CA1711:Identifiers should not have incorrect suffix",
+    Justification = "It is like a collection"
+)]
 public sealed class OutboxStagingCollection
 {
     internal List<Item> StagedItems { get; } = [];

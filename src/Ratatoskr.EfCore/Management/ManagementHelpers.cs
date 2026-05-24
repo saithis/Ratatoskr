@@ -15,7 +15,12 @@ internal static partial class ManagementHelpers
     /// <c>EF.Functions.Like</c>.
     /// </summary>
     internal static string BuildSearchPattern(string search) =>
-        "%" + search.Replace(@"\", @"\\").Replace("%", @"\%").Replace("_", @"\_") + "%";
+        "%"
+        + search
+            .Replace(@"\", @"\\", StringComparison.OrdinalIgnoreCase)
+            .Replace("%", @"\%", StringComparison.OrdinalIgnoreCase)
+            .Replace("_", @"\_", StringComparison.OrdinalIgnoreCase)
+        + "%";
 
     internal static string ExtractType(string serializedProperties, ILogger? logger = null)
     {
