@@ -80,8 +80,9 @@ internal partial class OutboxTriggerInterceptor<TDbContext>(
             )
             {
                 throw new InvalidOperationException(
-                    $"Serialized message of type '{item.Message.GetType().Name}' is {serializedMessage.Length} bytes, "
-                        + $"which exceeds the configured maximum of {_options.MaxMessageSize.Value} bytes."
+                    FormattableString.Invariant(
+                        $"Serialized message of type '{item.Message.GetType().Name}' is {serializedMessage.Length} bytes, which exceeds the configured maximum of {_options.MaxMessageSize.Value} bytes."
+                    )
                 );
             }
 
