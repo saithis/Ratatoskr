@@ -308,7 +308,7 @@ public class ManagementCompositionTests
     private sealed class StubDescriptor(string shortName, string fullName)
         : IEfCoreManagementDbContextDescriptor
     {
-        public Type DbContextType { get; }
+        public Type DbContextType { get; } = null!;
         public string DbContextName => shortName;
         public string DbContextFullName => fullName;
         public bool HasOutbox => false;

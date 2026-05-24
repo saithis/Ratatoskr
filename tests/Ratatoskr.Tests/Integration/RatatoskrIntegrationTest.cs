@@ -29,11 +29,15 @@ public abstract class RatatoskrIntegrationTest(
         _factory?.Services
         ?? throw new InvalidOperationException("StartTestAsync has not been called yet.");
 
-    // Unique ID for this test instance to isolate resources
+    /// <summary>
+    /// Unique ID for this test instance to isolate resources
+    /// </summary>
     protected string TestId { get; } = Guid.NewGuid().ToString("N");
     protected string RabbitMqConnectionString => rabbitMq.ConnectionString;
 
-    // Override the connection string to point to the unique database for this test
+    /// <summary>
+    /// Override the connection string to point to the unique database for this test
+    /// </summary>
     protected string PostgresConnectionString
     {
         get
@@ -65,7 +69,7 @@ public abstract class RatatoskrIntegrationTest(
             _factory = null;
         }
 
-        var factory = new RatatoskrTestFactory(rabbitMq, postgres).WithWebHostBuilder(builder =>
+        _factory = new RatatoskrTestFactory().WithWebHostBuilder(builder =>
         {
             builder.ConfigureServices(services =>
             {
@@ -73,10 +77,9 @@ public abstract class RatatoskrIntegrationTest(
                 configure?.Invoke(services);
             });
         });
-        _factory = factory;
 
         // Create the scope from the factory's services
-        using var scope = _factory.Services.CreateScope();
+        await using var scope = _factory.Services.CreateAsyncScope();
         var topologyManager = scope.ServiceProvider.GetService<RabbitMqTopologyManager>();
         if (topologyManager != null)
         {
@@ -180,34 +183,39 @@ public abstract class RatatoskrIntegrationTest(
 
     protected async Task InScopeAsync(Func<ScopeContext, Task> arrange)
     {
-        using var scope = _factory.Services.CreateScope();
+        if (_factory == null)
+        {
+            throw new InvalidOperationException($"Call {nameof(StartTestAsync)} first");
+        }
+
+        await using var scope = _factory.Services.CreateAsyncScope();
         await arrange(new ScopeContext { ServiceProvider = scope.ServiceProvider });
     }
 
-    protected async Task InScopeAsync(Action<ScopeContext> arrange)
-    {
+    protected async Task InScopeAsync(Action<ScopeContext> arrange) =>
         await InScopeAsync(ctx =>
         {
             arrange(ctx);
             return Task.CompletedTask;
         });
-    }
 
     protected async Task<TRes> InScopeAsync<TRes>(Func<ScopeContext, Task<TRes>> arrange)
     {
-        using var scope = _factory.Services.CreateScope();
-        var result = await arrange(new ScopeContext { ServiceProvider = scope.ServiceProvider });
-        return result;
+        if (_factory == null)
+        {
+            throw new InvalidOperationException($"Call {nameof(StartTestAsync)} first");
+        }
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        return await arrange(new ScopeContext { ServiceProvider = scope.ServiceProvider });
     }
 
-    protected async Task<TRes> InScopeAsync<TRes>(Func<ScopeContext, TRes> arrange)
-    {
-        return await InScopeAsync(ctx =>
+    protected async Task<TRes> InScopeAsync<TRes>(Func<ScopeContext, TRes> arrange) =>
+        await InScopeAsync(ctx =>
         {
             var result = arrange(ctx);
             return Task.FromResult(result);
         });
-    }
 
     protected async Task PublishToRabbitMqAsync<T>(
         string exchange,
@@ -289,25 +297,20 @@ public abstract class RatatoskrIntegrationTest(
         }
     }
 
-    protected async Task InitializeDatabase()
-    {
+    protected async Task InitializeDatabase() =>
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             await db.Database.EnsureCreatedAsync();
         });
-    }
 
     protected Task WaitForConditionAsync(
         Func<bool> condition,
         TimeSpan timeout,
         string? message = null
-    )
-    {
-        return WaitForConditionAsync(() => Task.FromResult(condition()), timeout, message);
-    }
+    ) => WaitForConditionAsync(() => Task.FromResult(condition()), timeout, message);
 
-    protected async Task WaitForConditionAsync(
+    protected static async Task WaitForConditionAsync(
         Func<Task<bool>> condition,
         TimeSpan timeout,
         string? message = null

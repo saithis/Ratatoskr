@@ -369,9 +369,6 @@ dotnet_diagnostic.CA1505.severity = warning
 # Avoid dead conditional code
 dotnet_diagnostic.CA1508.severity = warning
 
-# Consider making public types internal
-dotnet_diagnostic.CA1515.severity = warning
-
 # Flags enums should have plural names
 dotnet_diagnostic.CA1714.severity = warning
 

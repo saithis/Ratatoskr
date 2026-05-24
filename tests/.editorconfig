@@ -29,3 +29,6 @@ dotnet_diagnostic.CA1852.severity = none
 
 # Identifiers should not have incorrect suffix
 dotnet_diagnostic.CA1711.severity = none
+
+# Use an overload with a CancellationToken
+dotnet_diagnostic.MA0040.severity = suggestion
