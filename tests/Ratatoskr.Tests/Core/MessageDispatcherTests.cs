@@ -425,7 +425,7 @@ public class MessageDispatcherTests
 
         var channelHandlerRegistry = ChannelHandlerRegistry.Build(channelRegistry);
         var deserializer = new JsonMessageSerializer();
-        var provider = services.BuildServiceProvider();
+        using var provider = services.BuildServiceProvider();
         var serializerResolver = new MessageSerializerResolver(
             channelRegistry,
             deserializer,

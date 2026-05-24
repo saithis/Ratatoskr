@@ -89,7 +89,7 @@ public class RatatoskrBuilderTests
             "test-channel",
             c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
         );
-        var provider = services.BuildServiceProvider();
+        using var provider = services.BuildServiceProvider();
 
         // Assert - Can resolve as concrete type
         using (var scope = provider.CreateScope())

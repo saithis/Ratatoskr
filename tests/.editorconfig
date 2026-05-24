@@ -14,3 +14,12 @@ dotnet_diagnostic.VSTHRD200.severity = none
 
 # RCS1046: Add suffix 'Async' to asynchronous method name
 dotnet_diagnostic.RCS1046.severity = none
+
+# Do not expose generic lists
+dotnet_diagnostic.CA1002.severity = none
+
+# Review SQL queries for security vulnerabilities
+dotnet_diagnostic.CA2100.severity = none
+
+# Validate arguments of public methods
+dotnet_diagnostic.CA1062.severity = none

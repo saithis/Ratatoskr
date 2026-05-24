@@ -11,7 +11,7 @@ public class ActivityTrackerTests
     public async Task PublishAndWaitAsync_WithWaitConditions_ThrowsInvalidOperationException()
     {
         // Arrange
-        var services = new ServiceCollection().BuildServiceProvider();
+        using var services = new ServiceCollection().BuildServiceProvider();
         var tracker = new MessageTracker();
         var activity = new ActivityTracker(services, tracker);
 

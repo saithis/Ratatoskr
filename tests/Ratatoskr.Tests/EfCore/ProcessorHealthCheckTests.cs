@@ -53,7 +53,7 @@ public class ProcessorHealthCheckTests
     {
         // Arrange
         var timeProvider = new FakeTimeProvider();
-        var processor = new TestProcessor(timeProvider);
+        using var processor = new TestProcessor(timeProvider);
 
         // Last success is exactly now.
         var healthCheck = new ProcessorHealthCheck<TestProcessor>(
@@ -76,7 +76,7 @@ public class ProcessorHealthCheckTests
         var timeProvider = new FakeTimeProvider();
 
         // When processor is created, LastSuccessfulProcessingAt is initialized to timeProvider.GetUtcNow()
-        var processor = new TestProcessor(timeProvider);
+        using var processor = new TestProcessor(timeProvider);
 
         var healthCheck = new ProcessorHealthCheck<TestProcessor>(
             processor,

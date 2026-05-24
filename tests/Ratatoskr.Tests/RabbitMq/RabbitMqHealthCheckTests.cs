@@ -18,7 +18,7 @@ public class RabbitMqHealthCheckTests
         services.AddHealthChecks().AddRatatoskrRabbitMq("my-rabbit");
 
         // Assert
-        var provider = services.BuildServiceProvider();
+        using var provider = services.BuildServiceProvider();
         var options = provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value;
 
         options.Registrations.Should().Contain(r => r.Name == "my-rabbit");

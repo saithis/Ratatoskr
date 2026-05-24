@@ -50,7 +50,7 @@ public class ManagementCoverageTests(
             var url =
                 $"{OutboxBaseUrl}/poisoned?pageSize=2"
                 + (cursor is null ? string.Empty : $"&cursor={Uri.EscapeDataString(cursor)}");
-            var response = await HttpClient.GetAsync(url);
+            using var response = await HttpClient.GetAsync(url);
             response.StatusCode.Should().Be(HttpStatusCode.OK);
             var body = await response.Content.ReadFromJsonAsync<JsonElement>();
 
@@ -88,7 +88,7 @@ public class ManagementCoverageTests(
             await SeedPoisonedOutboxAsync();
         }
 
-        var response = await HttpClient.GetAsync($"{OutboxBaseUrl}/poisoned?pageSize=10000");
+        using var response = await HttpClient.GetAsync($"{OutboxBaseUrl}/poisoned?pageSize=10000");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -106,7 +106,9 @@ public class ManagementCoverageTests(
     {
         await StartManagementTestAsync();
 
-        var response = await HttpClient.GetAsync($"{OutboxBaseUrl}/poisoned?cursor=not-a-cursor");
+        using var response = await HttpClient.GetAsync(
+            $"{OutboxBaseUrl}/poisoned?cursor=not-a-cursor"
+        );
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
@@ -126,7 +128,7 @@ public class ManagementCoverageTests(
         await SeedPoisonedOutboxAsync("payment.failed");
 
         // "order" is a substring of "order.placed" but not "payment.failed"
-        var response = await HttpClient.GetAsync($"{OutboxBaseUrl}/poisoned?search=order");
+        using var response = await HttpClient.GetAsync($"{OutboxBaseUrl}/poisoned?search=order");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -146,7 +148,7 @@ public class ManagementCoverageTests(
         // "%" is a SQL LIKE wildcard; if we forgot to escape it server-side, this query would
         // match both rows above. Escaped correctly, it matches zero rows because no message
         // has the literal string "order.%" in its serialized properties.
-        var response = await HttpClient.GetAsync(
+        using var response = await HttpClient.GetAsync(
             $"{OutboxBaseUrl}/poisoned?search={Uri.EscapeDataString("order.%")}"
         );
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -163,13 +165,13 @@ public class ManagementCoverageTests(
     {
         await StartManagementTestAsync();
 
-        var req = new HttpRequestMessage(HttpMethod.Post, $"{OutboxBaseUrl}/poisoned/requeue")
+        using var req = new HttpRequestMessage(HttpMethod.Post, $"{OutboxBaseUrl}/poisoned/requeue")
         {
             Content = JsonContent.Create(
                 new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest([])
             ),
         };
-        var response = await HttpClient.SendAsync(req);
+        using var response = await HttpClient.SendAsync(req);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
@@ -183,13 +185,13 @@ public class ManagementCoverageTests(
     {
         await StartManagementTestAsync();
 
-        var req = new HttpRequestMessage(HttpMethod.Post, $"{OutboxBaseUrl}/poisoned/requeue")
+        using var req = new HttpRequestMessage(HttpMethod.Post, $"{OutboxBaseUrl}/poisoned/requeue")
         {
             Content = JsonContent.Create(
                 new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest([Guid.Empty])
             ),
         };
-        var response = await HttpClient.SendAsync(req);
+        using var response = await HttpClient.SendAsync(req);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -205,13 +207,13 @@ public class ManagementCoverageTests(
             .Range(0, BulkRequestValidator.MaxIds + 1)
             .Select(_ => Guid.NewGuid())
             .ToList();
-        var req = new HttpRequestMessage(HttpMethod.Post, $"{OutboxBaseUrl}/poisoned/requeue")
+        using var req = new HttpRequestMessage(HttpMethod.Post, $"{OutboxBaseUrl}/poisoned/requeue")
         {
             Content = JsonContent.Create(
                 new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest(ids)
             ),
         };
-        var response = await HttpClient.SendAsync(req);
+        using var response = await HttpClient.SendAsync(req);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -223,13 +225,13 @@ public class ManagementCoverageTests(
     {
         await StartManagementTestAsync();
 
-        var req = new HttpRequestMessage(HttpMethod.Delete, $"{InboxBaseUrl}/poisoned")
+        using var req = new HttpRequestMessage(HttpMethod.Delete, $"{InboxBaseUrl}/poisoned")
         {
             Content = JsonContent.Create(
                 new BulkDeleteInboxEndpoint.BulkDeleteInboxRequest([Guid.Empty])
             ),
         };
-        var response = await HttpClient.SendAsync(req);
+        using var response = await HttpClient.SendAsync(req);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
@@ -240,7 +242,7 @@ public class ManagementCoverageTests(
     {
         await StartManagementTestAsync();
 
-        var response = await HttpClient.GetAsync(
+        using var response = await HttpClient.GetAsync(
             "/ratatoskr/api/v1/efcore/contexts/DoesNotExist/outbox/poisoned"
         );
 

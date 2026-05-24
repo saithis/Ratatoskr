@@ -25,7 +25,7 @@ public class OutboxManagementTests(
         await SeedPoisonedOutboxAsync();
         await SeedPoisonedOutboxAsync();
 
-        var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned");
+        using var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -51,7 +51,7 @@ public class OutboxManagementTests(
             await db.SaveChangesAsync();
         });
 
-        var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned");
+        using var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned");
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
 
         var items = body.GetProperty("items").EnumerateArray().ToList();
@@ -70,7 +70,7 @@ public class OutboxManagementTests(
 
         var time = Services.GetRequiredService<TimeProvider>();
         var future = Uri.EscapeDataString(time.GetUtcNow().AddDays(1).ToString("O"));
-        var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned?to={future}");
+        using var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned?to={future}");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -83,7 +83,7 @@ public class OutboxManagementTests(
         await StartManagementTestAsync();
         var id = await SeedPoisonedOutboxAsync("detail.event");
 
-        var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned/{id}");
+        using var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned/{id}");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -100,7 +100,7 @@ public class OutboxManagementTests(
         await StartManagementTestAsync();
         var id = await SeedPoisonedOutboxAsync();
 
-        var response = await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", null);
+        using var response = await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", null);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         await InScopeAsync(async ctx =>
@@ -163,7 +163,7 @@ public class OutboxManagementTests(
             id = entity.Id;
         });
 
-        var response = await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", null);
+        using var response = await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", null);
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
@@ -173,7 +173,7 @@ public class OutboxManagementTests(
         await StartManagementTestAsync();
         var id = await SeedPoisonedOutboxAsync();
 
-        var response = await HttpClient.DeleteAsync($"{BaseUrl}/poisoned/{id}");
+        using var response = await HttpClient.DeleteAsync($"{BaseUrl}/poisoned/{id}");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         await InScopeAsync(async ctx =>
@@ -191,13 +191,13 @@ public class OutboxManagementTests(
         var id1 = await SeedPoisonedOutboxAsync();
         var id2 = await SeedPoisonedOutboxAsync();
 
-        var req = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/poisoned/requeue")
+        using var req = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/poisoned/requeue")
         {
             Content = JsonContent.Create(
                 new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest([id1, id2])
             ),
         };
-        var response = await HttpClient.SendAsync(req);
+        using var response = await HttpClient.SendAsync(req);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body =
@@ -223,7 +223,10 @@ public class OutboxManagementTests(
         await SeedPoisonedOutboxAsync();
         await SeedPoisonedOutboxAsync();
 
-        var response = await HttpClient.PostAsync($"{BaseUrl}/poisoned/requeue/all", content: null);
+        using var response = await HttpClient.PostAsync(
+            $"{BaseUrl}/poisoned/requeue/all",
+            content: null
+        );
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         await InScopeAsync(async ctx =>
@@ -241,13 +244,13 @@ public class OutboxManagementTests(
         var id1 = await SeedPoisonedOutboxAsync();
         var id2 = await SeedPoisonedOutboxAsync();
 
-        var req = new HttpRequestMessage(HttpMethod.Delete, $"{BaseUrl}/poisoned")
+        using var req = new HttpRequestMessage(HttpMethod.Delete, $"{BaseUrl}/poisoned")
         {
             Content = JsonContent.Create(
                 new BulkDeleteOutboxEndpoint.BulkDeleteOutboxRequest([id1, id2])
             ),
         };
-        var response = await HttpClient.SendAsync(req);
+        using var response = await HttpClient.SendAsync(req);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         await InScopeAsync(async ctx =>
@@ -266,7 +269,7 @@ public class OutboxManagementTests(
         await SeedPoisonedOutboxAsync("order.created");
         await SeedPoisonedOutboxAsync("payment.processed");
 
-        var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned?search=order.created");
+        using var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned?search=order.created");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -290,13 +293,13 @@ public class OutboxManagementTests(
         var id2 = await SeedPoisonedOutboxAsync();
         var id3 = await SeedPoisonedOutboxAsync();
 
-        var req = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/poisoned/requeue")
+        using var req = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/poisoned/requeue")
         {
             Content = JsonContent.Create(
                 new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest([id1, id2, id3])
             ),
         };
-        var response = await HttpClient.SendAsync(req);
+        using var response = await HttpClient.SendAsync(req);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         await InScopeAsync(async ctx =>

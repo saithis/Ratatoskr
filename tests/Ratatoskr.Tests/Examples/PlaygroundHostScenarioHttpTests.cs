@@ -127,7 +127,7 @@ public sealed class PlaygroundHostScenarioHttpTests(
             status = await client.GetFromJsonAsync<ScenarioRunStatusDto>(
                 $"/api/playground/runs/{runId}"
             );
-            if (status is { state: "Passed" or "Failed" or "Cancelled" })
+            if (status is { State: "Passed" or "Failed" or "Cancelled" })
             {
                 break;
             }
@@ -146,7 +146,7 @@ public sealed class PlaygroundHostScenarioHttpTests(
     )
     {
         var q = confirmDanger ? "?confirmDanger=true" : "";
-        var runRes = await client.PostAsync(
+        using var runRes = await client.PostAsync(
             $"/api/playground/scenarios/{Uri.EscapeDataString(slug)}/run{q}",
             null
         );
@@ -156,20 +156,20 @@ public sealed class PlaygroundHostScenarioHttpTests(
             .Should()
             .BeTrue($"POST run failed for slug={slug}: {(int)runRes.StatusCode} {errBody}");
         var runBody = await runRes.Content.ReadFromJsonAsync<RunAcceptedDto>();
-        runBody!.runId.Should().NotBeEmpty();
-        return runBody.runId;
+        runBody!.RunId.Should().NotBeEmpty();
+        return runBody.RunId;
     }
 
     [Test]
     public async Task Catalog_Contains_AllScenarios()
     {
-        var client = await GetClientAsync();
+        using var client = await GetClientAsync();
 
         var catalog = await client.GetFromJsonAsync<List<ScenarioCatalogDto>>(
             "/api/playground/scenarios"
         );
         catalog.Should().NotBeNull();
-        var slugs = catalog.Select(c => c.slug).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var slugs = catalog.Select(c => c.Slug).ToHashSet(StringComparer.OrdinalIgnoreCase);
         slugs.Should().Contain("outbox-success");
         slugs.Should().Contain("cancel-smoke");
         slugs.Should().Contain("blocking-hold");
@@ -178,7 +178,7 @@ public sealed class PlaygroundHostScenarioHttpTests(
     [Test]
     public async Task ConcurrentStarts_TwoOutboxSuccessRuns_BothAccepted()
     {
-        var client = await GetClientAsync();
+        using var client = await GetClientAsync();
 
         var a = client.PostAsync("/api/playground/scenarios/outbox-success/run", null);
         var b = client.PostAsync("/api/playground/scenarios/outbox-success/run", null);
@@ -195,29 +195,29 @@ public sealed class PlaygroundHostScenarioHttpTests(
     public async Task CancelSmoke_AfterCancel_CompletesWithPassAndCancelledDetail()
     {
         var slug = "cancel-smoke";
-        var client = await GetClientAsync();
+        using var client = await GetClientAsync();
 
         var runId = await StartScenarioAsync(client, slug);
-        var cancelRes = await client.PostAsync($"/api/playground/runs/{runId}/cancel", null);
+        using var cancelRes = await client.PostAsync($"/api/playground/runs/{runId}/cancel", null);
         cancelRes.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var status = await WaitForTerminalAsync(client, runId, 30);
-        status.state.Should().Be("Passed");
-        status.detail.Should().Contain("Cancelled", $"detail was: {status.detail}");
+        status.State.Should().Be("Passed");
+        status.Detail.Should().Contain("Cancelled", $"detail was: {status.Detail}");
     }
 
     [Test]
     public async Task BlockingHold_WithCancel_TerminatesAsCancelled()
     {
         var slug = "blocking-hold";
-        var client = await GetClientAsync();
+        using var client = await GetClientAsync();
 
         var runId = await StartScenarioAsync(client, slug, confirmDanger: true);
-        var cancelRes = await client.PostAsync($"/api/playground/runs/{runId}/cancel", null);
+        using var cancelRes = await client.PostAsync($"/api/playground/runs/{runId}/cancel", null);
         cancelRes.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var status = await WaitForTerminalAsync(client, runId, 30);
-        status.state.Should().Be("Cancelled");
+        status.State.Should().Be("Cancelled");
     }
 
     [Test]
@@ -236,20 +236,20 @@ public sealed class PlaygroundHostScenarioHttpTests(
     [Arguments("efcore-internal-command")]
     public async Task Scenario_EndsPassed(string slug)
     {
-        var client = await GetClientAsync();
+        using var client = await GetClientAsync();
 
         var runId = await StartScenarioAsync(client, slug);
         var status = await WaitForTerminalAsync(client, runId, 20);
-        status.state.Should().Be("Passed", $"slug={slug} detail={status.detail}");
+        status.State.Should().Be("Passed", $"slug={slug} detail={status.Detail}");
     }
 
     [Test]
     public async Task BlockingHold_WithoutDangerConfirm_ReturnsBadRequest()
     {
         var slug = "blocking-hold";
-        var client = await GetClientAsync();
+        using var client = await GetClientAsync();
 
-        var runRes = await client.PostAsync($"/api/playground/scenarios/{slug}/run", null);
+        using var runRes = await client.PostAsync($"/api/playground/scenarios/{slug}/run", null);
         runRes.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
@@ -291,28 +291,28 @@ public sealed class PlaygroundHostScenarioHttpTests(
             });
         _ = factory.Server;
 
-        var client = factory.CreateClient();
+        using var client = factory.CreateClient();
         var runId = await StartScenarioAsync(client, "blocking-hold", confirmDanger: true);
         var status = await WaitForTerminalAsync(client, runId, 20);
-        status.state.Should().Be("Failed");
-        status.detail.Should().Contain("Timed out", $"detail was: {status.detail}");
+        status.State.Should().Be("Failed");
+        status.Detail.Should().Contain("Timed out", $"detail was: {status.Detail}");
     }
 
     private sealed record ScenarioCatalogDto(
-        string slug,
-        string title,
-        string description,
-        string? topic
+        string Slug,
+        string Title,
+        string Description,
+        string? Topic
     );
 
-    private sealed record RunAcceptedDto(Guid runId, string? title);
+    private sealed record RunAcceptedDto(Guid RunId, string? Title);
 
     private sealed record ScenarioRunStatusDto(
-        Guid id,
-        string scenarioSlug,
-        string state,
-        DateTimeOffset startedAt,
-        DateTimeOffset? completedAt,
-        string? detail
+        Guid Id,
+        string ScenarioSlug,
+        string State,
+        DateTimeOffset StartedAt,
+        DateTimeOffset? CompletedAt,
+        string? Detail
     );
 }
