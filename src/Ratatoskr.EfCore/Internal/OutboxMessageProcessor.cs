@@ -70,7 +70,7 @@ internal class OutboxMessageProcessor<TDbContext>(
             .Take(_options.BatchSize)
             .ToArrayAsync(cancellationToken);
 
-        telemetry.RecordBatchSize(messages.Length);
+        OutboxTelemetry.RecordBatchSize(messages.Length);
 
         OutboxMessageProcessorLog.FoundMessagesToSend(logger, messages.Length);
 
@@ -147,7 +147,7 @@ internal class OutboxMessageProcessor<TDbContext>(
                 {
                     try
                     {
-                        using var activity = telemetry.StartCreateActivity(props);
+                        using var activity = OutboxTelemetry.StartCreateActivity(props);
 
                         OutboxMessageProcessorLog.ProcessingMessage(
                             logger,
@@ -218,15 +218,15 @@ internal class OutboxMessageProcessor<TDbContext>(
             if (sendException == null && props != null)
             {
                 processedCount++;
-                telemetry.RecordProcessed(success: true);
+                OutboxTelemetry.RecordProcessed(success: true);
             }
             else
             {
-                telemetry.RecordProcessed(success: false);
+                OutboxTelemetry.RecordProcessed(success: false);
 
                 if (message.IsPoisoned)
                 {
-                    telemetry.RecordPoisoned();
+                    OutboxTelemetry.RecordPoisoned();
                     OutboxMessageProcessorLog.MessagePoisoned(
                         logger,
                         message.Id,
@@ -269,7 +269,7 @@ internal class OutboxMessageProcessor<TDbContext>(
             }
         }
 
-        telemetry.RecordBatchDuration(batchStartTimestamp);
+        OutboxTelemetry.RecordBatchDuration(batchStartTimestamp);
 
         return processedCount;
     }

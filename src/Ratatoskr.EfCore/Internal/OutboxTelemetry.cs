@@ -11,7 +11,7 @@ internal class OutboxTelemetry
     /// <summary>
     /// Starts a "create outbox" activity, restoring trace context from the message properties.
     /// </summary>
-    public Activity? StartCreateActivity(MessageProperties props)
+    public static Activity? StartCreateActivity(MessageProperties props)
     {
         // https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/
         ActivityContext.TryParse(props.TraceParent, props.TraceState, out var parentContext);
@@ -36,12 +36,12 @@ internal class OutboxTelemetry
         return activity;
     }
 
-    public void RecordBatchSize(int count)
+    public static void RecordBatchSize(int count)
     {
         RatatoskrDiagnostics.OutboxBatchSize.Record(count);
     }
 
-    public void RecordProcessed(bool success)
+    public static void RecordProcessed(bool success)
     {
         RatatoskrDiagnostics.OutboxProcessCount.Add(
             1,
@@ -49,12 +49,12 @@ internal class OutboxTelemetry
         );
     }
 
-    public void RecordPoisoned()
+    public static void RecordPoisoned()
     {
         RatatoskrDiagnostics.OutboxPoisonCount.Add(1);
     }
 
-    public void RecordBatchDuration(long startTimestamp)
+    public static void RecordBatchDuration(long startTimestamp)
     {
         RatatoskrDiagnostics.OutboxProcessDuration.Record(
             Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds
