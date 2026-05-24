@@ -22,8 +22,9 @@ internal class OutboxMessageProcessor<TDbContext>(
     where TDbContext : DbContext, IOutboxDbContext
 {
     private readonly OutboxOptions _options = optionsHolder.Options;
-    private readonly Dictionary<string, IMessageSender> _senderMap = senders.ToDictionary(x =>
-        x.TransportName
+    private readonly Dictionary<string, IMessageSender> _senderMap = senders.ToDictionary(
+        x => x.TransportName,
+        StringComparer.Ordinal
     );
 
     /// <summary>

@@ -79,7 +79,7 @@ public class RabbitMqChannelOptions
     /// Additional queue arguments passed to RabbitMQ on queue declaration.
     /// </summary>
     public IDictionary<string, object?> QueueArguments { get; private set; } =
-        new Dictionary<string, object?>();
+        new Dictionary<string, object?>(StringComparer.Ordinal);
 
     // ── Retry ────────────────────────────────────────────────────────
 

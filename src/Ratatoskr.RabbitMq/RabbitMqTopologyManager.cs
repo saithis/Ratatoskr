@@ -129,7 +129,8 @@ public partial class RabbitMqTopologyManager(
             );
 
         IDictionary<string, object?> queueArgs = new Dictionary<string, object?>(
-            channelOpts.QueueArguments
+            channelOpts.QueueArguments,
+            StringComparer.Ordinal
         );
         if (channelOpts.QueueType == QueueType.Quorum)
         {
@@ -197,7 +198,7 @@ public partial class RabbitMqTopologyManager(
         );
 
         // 2. Declare DLQ Queue
-        var dlqArgs = new Dictionary<string, object?>(mainQueueArgs);
+        var dlqArgs = new Dictionary<string, object?>(mainQueueArgs, StringComparer.Ordinal);
         dlqArgs.Remove("x-dead-letter-exchange");
         dlqArgs.Remove("x-dead-letter-routing-key");
         await channel.QueueDeclareAsync(
@@ -218,7 +219,7 @@ public partial class RabbitMqTopologyManager(
         );
 
         // 4. Declare Retry Queue (TTL -> Main Queue)
-        var retryArgs = new Dictionary<string, object?>(mainQueueArgs)
+        var retryArgs = new Dictionary<string, object?>(mainQueueArgs, StringComparer.Ordinal)
         {
             ["x-dead-letter-exchange"] = "",
             ["x-dead-letter-routing-key"] = queueName,

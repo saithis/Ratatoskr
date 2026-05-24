@@ -17,7 +17,7 @@ internal static class CloudEventsSchemaHelper
         {
             Type = "object",
             Description = "CloudEvent envelope (structured content mode).",
-            Properties = new Dictionary<string, JsonSchema>
+            Properties = new Dictionary<string, JsonSchema>(StringComparer.Ordinal)
             {
                 ["specversion"] = new JsonSchema
                 {

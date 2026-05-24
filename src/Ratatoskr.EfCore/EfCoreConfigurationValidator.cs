@@ -11,7 +11,7 @@ internal static class EfCoreConfigurationValidator
     public static void Validate(ChannelRegistry channelRegistry)
     {
         // Collect all message types published via the EF Core transport
-        var efCorePublishedTypes = new HashSet<string>();
+        var efCorePublishedTypes = new HashSet<string>(StringComparer.Ordinal);
         foreach (var publishChannel in channelRegistry.GetPublishChannels())
         {
             if (!publishChannel.Transports.Contains(EfCoreTransportConstants.TransportName))

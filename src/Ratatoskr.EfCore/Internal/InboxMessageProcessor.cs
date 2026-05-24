@@ -74,7 +74,10 @@ internal class InboxMessageProcessor<TDbContext>(
 
         InboxMessageProcessorLog.FoundStatusesToDeliver(logger, statuses.Length);
 
-        var messageIds = statuses.Select(s => s.MessageId).Distinct().ToArray();
+        var messageIds = statuses
+            .Select(s => s.MessageId)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
         var messages = await dbContext
             .Set<InboxMessageEntity>()
             .Where(m => messageIds.Contains(m.Id))

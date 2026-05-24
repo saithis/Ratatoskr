@@ -105,7 +105,7 @@ public partial class CloudEventsAmqpMapper(
         }
 
         // Initialize headers if needed
-        outgoing.Headers ??= new Dictionary<string, object?>();
+        outgoing.Headers ??= new Dictionary<string, object?>(StringComparer.Ordinal);
 
         // Set CloudEvents attributes as headers (AMQP binding spec)
         SetCloudEventHeader(outgoing.Headers, "specversion", CloudEventsAmqpConstants.SpecVersion);
@@ -197,18 +197,18 @@ public partial class CloudEventsAmqpMapper(
 
         var extensions =
             props.CloudEventExtensions.Count > 0
-                ? new Dictionary<string, object>(props.CloudEventExtensions)
+                ? new Dictionary<string, object>(props.CloudEventExtensions, StringComparer.Ordinal)
                 : null;
 
         if (!string.IsNullOrWhiteSpace(props.TraceParent))
         {
-            extensions ??= new Dictionary<string, object>();
+            extensions ??= new Dictionary<string, object>(StringComparer.Ordinal);
             extensions[CloudEventsAmqpConstants.TraceParentHeader] = props.TraceParent;
         }
 
         if (!string.IsNullOrWhiteSpace(props.TraceState))
         {
-            extensions ??= new Dictionary<string, object>();
+            extensions ??= new Dictionary<string, object>(StringComparer.Ordinal);
             extensions[CloudEventsAmqpConstants.TraceStateHeader] = props.TraceState;
         }
 
@@ -243,7 +243,7 @@ public partial class CloudEventsAmqpMapper(
         // Copy custom headers
         if (props.Headers.Count > 0)
         {
-            outgoing.Headers = new Dictionary<string, object?>();
+            outgoing.Headers = new Dictionary<string, object?>(StringComparer.Ordinal);
             foreach (var header in props.Headers)
             {
                 outgoing.Headers[header.Key] = header.Value;
@@ -261,7 +261,9 @@ public partial class CloudEventsAmqpMapper(
         BasicDeliverEventArgs incoming
     )
     {
-        var incomingHeaders = incoming.BasicProperties.Headers ?? new Dictionary<string, object?>();
+        var incomingHeaders =
+            incoming.BasicProperties.Headers
+            ?? new Dictionary<string, object?>(StringComparer.Ordinal);
 
         // Prefer standard RabbitMQ properties over CloudEvents headers (Wolverine compatibility)
         var id =
@@ -308,7 +310,7 @@ public partial class CloudEventsAmqpMapper(
         var (traceParent, traceState) = ResolveTraceContextFromBinaryHeaders(incomingHeaders);
 
         // Build headers dictionary (include all headers)
-        var headers = new Dictionary<string, string>();
+        var headers = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var header in incomingHeaders)
         {
             headers[header.Key] = ConvertToString(header.Value);
@@ -439,7 +441,9 @@ public partial class CloudEventsAmqpMapper(
             dataBytes = Array.Empty<byte>();
         }
 
-        var incomingHeaders = incoming.BasicProperties.Headers ?? new Dictionary<string, object?>();
+        var incomingHeaders =
+            incoming.BasicProperties.Headers
+            ?? new Dictionary<string, object?>(StringComparer.Ordinal);
         cloudEvent.TryGetExtension<string>(
             CloudEventsAmqpConstants.TraceParentHeader,
             out var envelopeTraceParent

@@ -79,7 +79,9 @@ internal partial class RabbitMqRetryHandler(
                 DeliveryMode = ea.BasicProperties.DeliveryMode,
                 Type = ea.BasicProperties.Type,
                 Headers = new Dictionary<string, object?>(
-                    ea.BasicProperties.Headers ?? new Dictionary<string, object?>()
+                    ea.BasicProperties.Headers
+                        ?? new Dictionary<string, object?>(StringComparer.Ordinal),
+                    StringComparer.Ordinal
                 ),
             };
 
