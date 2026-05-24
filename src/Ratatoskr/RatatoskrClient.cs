@@ -6,13 +6,13 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr;
 
-public sealed partial class Ratatoskr(
+internal sealed partial class RatatoskrClient(
     IMessageSerializerResolver serializerResolver,
     IEnumerable<IMessageSender> senders,
     IMessagePropertiesEnricher enricher,
     TimeProvider timeProvider,
     IEnumerable<IMessageActivityObserver> observers,
-    ILogger<Ratatoskr> logger
+    ILogger<RatatoskrClient> logger
 ) : IRatatoskr
 {
     private readonly FrozenDictionary<string, IMessageSender> _senderMap =

@@ -55,7 +55,7 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IMessageSerializerResolver, MessageSerializerResolver>();
 
         services.TryAddSingleton<HandlerInvoker>();
-        _ = services.AddSingleton<IRatatoskr, Ratatoskr>();
+        _ = services.AddSingleton<IRatatoskr, RatatoskrClient>();
 
         // AsyncAPI document generation
         _ = services.AddSingleton(builder.AsyncApiOptions);
