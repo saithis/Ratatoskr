@@ -1106,11 +1106,14 @@ dotnet_diagnostic.RemoveUnnecessaryImportsFixable.severity = warning
 # Meziantou Analyzer Rules (MA)
 ####################################################################################################
 
-# Use ConfigureAwait(false) (Meziantou)
+# Use ConfigureAwait(false)
 dotnet_diagnostic.MA0004.severity = none # Meziantou default: warning
 
-# Use String.Equals instead of equality operator (Meziantou)
+# Use String.Equals instead of equality operator
 dotnet_diagnostic.MA0006.severity = suggestion # Meziantou default: warning
+
+# Make method static (deprecated, use CA1822 instead)
+dotnet_diagnostic.MA0038.severity = none # Meziantou default: warning
 
 ####################################################################################################
 # Other Platform Diagnostics
