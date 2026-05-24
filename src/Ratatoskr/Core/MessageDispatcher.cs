@@ -13,7 +13,7 @@ namespace Ratatoskr.Core;
     "CA1506:AvoidExcessiveClassCoupling",
     Justification = "Orchestrator class coordinating many components"
 )]
-public sealed class MessageDispatcher(
+public sealed partial class MessageDispatcher(
     ChannelRegistry channelRegistry,
     ChannelHandlerRegistry channelHandlerRegistry,
     IMessageSerializerResolver serializerResolver,

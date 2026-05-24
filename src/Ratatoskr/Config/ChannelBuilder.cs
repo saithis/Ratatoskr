@@ -3,7 +3,7 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr.Config;
 
-public sealed class ChannelBuilder(ChannelRegistration channel)
+public abstract class ChannelBuilder(ChannelRegistration channel)
 {
     /// <summary>The underlying channel registration.</summary>
     internal ChannelRegistration Channel { get; } = channel;

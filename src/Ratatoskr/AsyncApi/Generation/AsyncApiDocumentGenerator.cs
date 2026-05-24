@@ -15,7 +15,7 @@ namespace Ratatoskr.AsyncApi.Generation;
 /// Generates an AsyncAPI v3 document from the Ratatoskr channel registry and configuration.
 /// Transport-agnostic: transport-specific bindings are applied by registered <see cref="IAsyncApiTransportBindingProvider"/> implementations.
 /// </summary>
-public sealed class AsyncApiDocumentGenerator(
+public sealed partial class AsyncApiDocumentGenerator(
     AsyncApiOptions options,
     ChannelRegistry channelRegistry,
     CloudEventsOptions cloudEventsOptions,

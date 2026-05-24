@@ -6,7 +6,7 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr;
 
-public sealed class Ratatoskr(
+public sealed partial class Ratatoskr(
     IMessageSerializerResolver serializerResolver,
     IEnumerable<IMessageSender> senders,
     IMessagePropertiesEnricher enricher,

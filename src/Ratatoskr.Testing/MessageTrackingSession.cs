@@ -228,7 +228,6 @@ public sealed class MessageTrackingSession : IAsyncDisposable
         _activity.Stop();
         _activity.Dispose();
         Activity.Current = _previousActivity;
-        GC.SuppressFinalize(this);
         return ValueTask.CompletedTask;
     }
 }
