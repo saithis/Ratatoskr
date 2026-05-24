@@ -6,7 +6,7 @@ using Ratatoskr.RabbitMq.Extensions;
 
 namespace Ratatoskr.RabbitMq;
 
-public class RabbitMqTopologyManager(
+public partial class RabbitMqTopologyManager(
     ChannelRegistry registry,
     RabbitMqConnectionManager connectionManager,
     ILogger<RabbitMqTopologyManager> logger
@@ -89,11 +89,7 @@ public class RabbitMqTopologyManager(
         if (reg.Intent is ChannelType.EventPublish or ChannelType.CommandConsume)
         {
             // We OWN the exchange -> Declare it
-            logger.LogInformation(
-                "Declaring exchange '{Exchange}' Type: {Type}",
-                exchangeName,
-                channelOpts.ExchangeType
-            );
+            LogDeclaringExchange(logger, exchangeName, channelOpts.ExchangeType);
             await channel.ExchangeDeclareAsync(
                 exchange: exchangeName,
                 type: channelOpts.ExchangeType.ToRabbitMqString(),
@@ -106,19 +102,14 @@ public class RabbitMqTopologyManager(
         else
         {
             // We EXPECT the exchange -> Validate it (Passive Declare)
-            logger.LogInformation("Validating exchange '{Exchange}' exists", exchangeName);
+            LogValidatingExchangeExists(logger, exchangeName);
             try
             {
                 await channel.ExchangeDeclarePassiveAsync(exchangeName, token);
             }
             catch (Exception ex)
             {
-                logger.LogCritical(
-                    ex,
-                    "Exchange '{Exchange}' validation failed. It must exist for intent {Intent}.",
-                    exchangeName,
-                    reg.Intent
-                );
+                LogExchangeValidationFailed(logger, ex, exchangeName, reg.Intent);
                 throw;
             }
         }
@@ -150,11 +141,7 @@ public class RabbitMqTopologyManager(
             await ProvisionRetryTopologyAsync(channel, queueName, queueArgs, channelOpts, token);
         }
 
-        logger.LogInformation(
-            "Declaring queue '{Queue}' for channel '{Channel}'",
-            queueName,
-            reg.ChannelName
-        );
+        LogDeclaringQueue(logger, queueName, reg.ChannelName);
 
         await channel.QueueDeclareAsync(
             queue: queueName,
@@ -174,12 +161,7 @@ public class RabbitMqTopologyManager(
 
             string routingKey = msgOpts?.RoutingKey ?? msg.MessageTypeName;
 
-            logger.LogInformation(
-                "Binding queue '{Queue}' to exchange '{Exchange}' with key '{Key}'",
-                queueName,
-                exchangeName,
-                routingKey
-            );
+            LogBindingQueue(logger, queueName, exchangeName, routingKey);
 
             await channel.QueueBindAsync(
                 queue: queueName,
@@ -202,12 +184,7 @@ public class RabbitMqTopologyManager(
         var dlqName = $"{queueName}{channelOpts.Retry.DeadLetterSuffix}";
         var retryQueueName = $"{queueName}{channelOpts.Retry.RetrySuffix}";
 
-        logger.LogInformation(
-            "Provisioning retry topology for queue '{Queue}' (DLQ: {Dlq}, Retry: {Retry})",
-            queueName,
-            dlqName,
-            retryQueueName
-        );
+        LogProvisioningRetryTopology(logger, queueName, dlqName, retryQueueName);
 
         // 1. Declare DLQ Exchange (Fanout)
         await channel.ExchangeDeclareAsync(
@@ -261,4 +238,65 @@ public class RabbitMqTopologyManager(
         mainQueueArgs["x-dead-letter-exchange"] = "";
         mainQueueArgs["x-dead-letter-routing-key"] = retryQueueName;
     }
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Information,
+        Message = "Declaring exchange '{Exchange}' Type: {Type}"
+    )]
+    private static partial void LogDeclaringExchange(
+        ILogger logger,
+        string exchange,
+        RabbitMqExchangeType type
+    );
+
+    [LoggerMessage(
+        EventId = 2,
+        Level = LogLevel.Information,
+        Message = "Validating exchange '{Exchange}' exists"
+    )]
+    private static partial void LogValidatingExchangeExists(ILogger logger, string exchange);
+
+    [LoggerMessage(
+        EventId = 3,
+        Level = LogLevel.Critical,
+        Message = "Exchange '{Exchange}' validation failed. It must exist for intent {Intent}."
+    )]
+    private static partial void LogExchangeValidationFailed(
+        ILogger logger,
+        Exception ex,
+        string exchange,
+        ChannelType intent
+    );
+
+    [LoggerMessage(
+        EventId = 4,
+        Level = LogLevel.Information,
+        Message = "Declaring queue '{Queue}' for channel '{Channel}'"
+    )]
+    private static partial void LogDeclaringQueue(ILogger logger, string queue, string channel);
+
+    [LoggerMessage(
+        EventId = 5,
+        Level = LogLevel.Information,
+        Message = "Binding queue '{Queue}' to exchange '{Exchange}' with key '{Key}'"
+    )]
+    private static partial void LogBindingQueue(
+        ILogger logger,
+        string queue,
+        string exchange,
+        string key
+    );
+
+    [LoggerMessage(
+        EventId = 6,
+        Level = LogLevel.Information,
+        Message = "Provisioning retry topology for queue '{Queue}' (DLQ: {Dlq}, Retry: {Retry})"
+    )]
+    private static partial void LogProvisioningRetryTopology(
+        ILogger logger,
+        string queue,
+        string dlq,
+        string retry
+    );
 }

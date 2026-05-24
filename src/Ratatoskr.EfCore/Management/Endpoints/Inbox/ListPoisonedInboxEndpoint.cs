@@ -9,7 +9,7 @@ using Ratatoskr.Management;
 
 namespace Ratatoskr.EfCore.Management.Endpoints.Inbox;
 
-internal static class ListPoisonedInboxEndpoint
+internal static partial class ListPoisonedInboxEndpoint
 {
     internal static void Map(IEndpointRouteBuilder inboxGroup)
     {
@@ -44,10 +44,7 @@ internal static class ListPoisonedInboxEndpoint
         {
             if (!CursorHelper.TryDecode(cursor, out var c))
             {
-                logger.LogInformation(
-                    "Rejecting management list request with malformed cursor (context {ContextName}).",
-                    contextName
-                );
+                LogRejectingMalformedCursor(logger, contextName);
                 return ManagementResults.BadRequest("Invalid pagination cursor.");
             }
             decodedCursor = c;
@@ -145,4 +142,11 @@ internal static class ListPoisonedInboxEndpoint
         long TotalCount,
         string? NextCursor
     );
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Information,
+        Message = "Rejecting management list request with malformed cursor (context {ContextName})."
+    )]
+    private static partial void LogRejectingMalformedCursor(ILogger logger, string contextName);
 }

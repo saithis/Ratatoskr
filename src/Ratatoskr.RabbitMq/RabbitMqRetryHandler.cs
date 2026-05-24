@@ -9,7 +9,7 @@ namespace Ratatoskr.RabbitMq;
 /// <summary>
 /// Handles retry logic for failed messages.
 /// </summary>
-internal class RabbitMqRetryHandler(
+internal partial class RabbitMqRetryHandler(
     RabbitMqTelemetry telemetry,
     RabbitMqOptions options,
     TimeProvider timeProvider,
@@ -33,10 +33,7 @@ internal class RabbitMqRetryHandler(
         // Permanent errors go straight to DLQ
         if (result is DispatchResult.PermanentError or DispatchResult.NoHandlers)
         {
-            logger.LogWarning(
-                "Permanent error for message '{MessageId}', sending to DLQ",
-                messageId
-            );
+            LogPermanentErrorSendingToDlq(logger, messageId);
             await RejectToDlqAsync(channel, ea, config, queueName, cancellationToken);
             return;
         }
@@ -46,21 +43,12 @@ internal class RabbitMqRetryHandler(
 
         if (retryCount >= config.Retry.MaxRetries)
         {
-            logger.LogError(
-                "Message '{MessageId}' exceeded max retries ({MaxRetries}), sending to DLQ",
-                messageId,
-                config.Retry.MaxRetries
-            );
+            LogMessageExceededMaxRetries(logger, messageId, config.Retry.MaxRetries);
             await RejectToDlqAsync(channel, ea, config, queueName, cancellationToken);
         }
         else
         {
-            logger.LogInformation(
-                "Message '{MessageId}' will be retried (attempt {RetryCount}/{MaxRetries})",
-                messageId,
-                retryCount + 1,
-                config.Retry.MaxRetries
-            );
+            LogMessageWillBeRetried(logger, messageId, retryCount + 1, config.Retry.MaxRetries);
 
             // Reject without requeue - DLX will route to retry queue
             await channel.BasicNackAsync(ea.DeliveryTag, false, false, cancellationToken);
@@ -155,4 +143,34 @@ internal class RabbitMqRetryHandler(
 
         return 0;
     }
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Warning,
+        Message = "Permanent error for message '{MessageId}', sending to DLQ"
+    )]
+    private static partial void LogPermanentErrorSendingToDlq(ILogger logger, string messageId);
+
+    [LoggerMessage(
+        EventId = 2,
+        Level = LogLevel.Error,
+        Message = "Message '{MessageId}' exceeded max retries ({MaxRetries}), sending to DLQ"
+    )]
+    private static partial void LogMessageExceededMaxRetries(
+        ILogger logger,
+        string messageId,
+        int maxRetries
+    );
+
+    [LoggerMessage(
+        EventId = 3,
+        Level = LogLevel.Information,
+        Message = "Message '{MessageId}' will be retried (attempt {RetryCount}/{MaxRetries})"
+    )]
+    private static partial void LogMessageWillBeRetried(
+        ILogger logger,
+        string messageId,
+        int retryCount,
+        int maxRetries
+    );
 }

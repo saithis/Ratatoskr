@@ -12,7 +12,7 @@ namespace Ratatoskr.EfCore.Internal;
 /// and distributed lock acquisition. Provides crash restart, trigger/polling,
 /// and lock-based concurrency control.
 /// </summary>
-internal abstract class PollingBackgroundService(
+internal abstract partial class PollingBackgroundService(
     IDistributedLockProvider distributedLockProvider,
     TimeProvider timeProvider,
     ILogger logger
@@ -48,7 +48,7 @@ internal abstract class PollingBackgroundService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("Starting {Processor}", ProcessorName);
+        LogStartingProcessor(logger, ProcessorName);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -64,12 +64,7 @@ internal abstract class PollingBackgroundService(
                     break;
                 }
 
-                logger.LogCritical(
-                    e,
-                    "{Processor} crashed, trying to restart in {Delay}",
-                    ProcessorName,
-                    RestartDelay
-                );
+                LogProcessorCrashed(logger, e, ProcessorName, RestartDelay);
                 await Task.Delay(RestartDelay, timeProvider, stoppingToken);
                 if (stoppingToken.IsCancellationRequested)
                 {
@@ -78,12 +73,12 @@ internal abstract class PollingBackgroundService(
             }
         }
 
-        logger.LogInformation("Stopped {Processor}", ProcessorName);
+        LogStoppedProcessor(logger, ProcessorName);
     }
 
     private async Task ProcessWithLockAsync(CancellationToken stoppingToken)
     {
-        logger.LogDebug("Trying to acquire distributed lock '{LockName}'", LockName);
+        LogTryingToAcquireDistributedLock(logger, LockName);
         await using var dLock = await distributedLockProvider.TryAcquireLockAsync(
             LockName,
             LockAcquireTimeout,
@@ -92,10 +87,7 @@ internal abstract class PollingBackgroundService(
 
         if (dLock == null)
         {
-            logger.LogWarning(
-                "Failed to acquire lock for {Processor}, processing will be skipped",
-                ProcessorName
-            );
+            LogFailedToAcquireLock(logger, ProcessorName);
             RatatoskrDiagnostics.LockAcquisitionFailure.Add(
                 1,
                 new TagList { { "processor", ProcessorName } }
@@ -106,7 +98,7 @@ internal abstract class PollingBackgroundService(
             return;
         }
 
-        logger.LogDebug("{Processor} distributed lock acquired", ProcessorName);
+        LogDistributedLockAcquired(logger, ProcessorName);
 
         // Combine the host stopping token with the lock's HandleLostToken so that
         // processing stops immediately if the lock is lost (e.g. network partition).
@@ -126,22 +118,16 @@ internal abstract class PollingBackgroundService(
         // OperationCanceledException/TaskCanceledException from Task.Delay in some runtimes.
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            logger.LogInformation(
-                "Stopping signal received during {Processor} processing",
-                ProcessorName
-            );
+            LogStoppingSignalReceived(logger, ProcessorName);
         }
         catch (OperationCanceledException) when (dLock.HandleLostToken.CanBeCanceled)
         {
-            logger.LogWarning(
-                "Distributed lock was lost during {Processor} processing",
-                ProcessorName
-            );
+            LogDistributedLockWasLost(logger, ProcessorName);
             RatatoskrDiagnostics.LockLost.Add(1, new TagList { { "processor", ProcessorName } });
         }
         catch (Exception e)
         {
-            logger.LogError(e, "Error while processing {Processor} messages", ProcessorName);
+            LogErrorWhileProcessingMessages(logger, e, ProcessorName);
         }
     }
 
@@ -154,11 +140,7 @@ internal abstract class PollingBackgroundService(
 
     private async Task WaitForTriggerOrTimeoutAsync(CancellationToken stoppingToken)
     {
-        logger.LogDebug(
-            "Waiting for {Processor} trigger or {Delay} timeout",
-            ProcessorName,
-            PollingInterval
-        );
+        LogWaitingForTriggerOrTimeout(logger, ProcessorName, PollingInterval);
 
         var channelTask = _triggerChannel.Reader.WaitToReadAsync(stoppingToken).AsTask();
         var delayTask = Task.Delay(PollingInterval, timeProvider, stoppingToken);
@@ -168,15 +150,104 @@ internal abstract class PollingBackgroundService(
         if (
             completedTask == channelTask
             && channelTask.IsCompletedSuccessfully
-            && channelTask.Result
+            && await channelTask
         )
         {
             _triggerChannel.Reader.TryRead(out _);
-            logger.LogDebug("{Processor} triggered immediately via channel", ProcessorName);
+            LogTriggeredImmediatelyViaChannel(logger, ProcessorName);
         }
         else
         {
-            logger.LogDebug("{Processor} polling interval elapsed", ProcessorName);
+            LogPollingIntervalElapsed(logger, ProcessorName);
         }
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Starting {Processor}")]
+    private static partial void LogStartingProcessor(ILogger logger, string processor);
+
+    [LoggerMessage(
+        EventId = 2,
+        Level = LogLevel.Critical,
+        Message = "{Processor} crashed, trying to restart in {Delay}"
+    )]
+    private static partial void LogProcessorCrashed(
+        ILogger logger,
+        Exception ex,
+        string processor,
+        TimeSpan delay
+    );
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Stopped {Processor}")]
+    private static partial void LogStoppedProcessor(ILogger logger, string processor);
+
+    [LoggerMessage(
+        EventId = 4,
+        Level = LogLevel.Debug,
+        Message = "Trying to acquire distributed lock '{LockName}'"
+    )]
+    private static partial void LogTryingToAcquireDistributedLock(ILogger logger, string lockName);
+
+    [LoggerMessage(
+        EventId = 5,
+        Level = LogLevel.Warning,
+        Message = "Failed to acquire lock for {Processor}, processing will be skipped"
+    )]
+    private static partial void LogFailedToAcquireLock(ILogger logger, string processor);
+
+    [LoggerMessage(
+        EventId = 6,
+        Level = LogLevel.Debug,
+        Message = "{Processor} distributed lock acquired"
+    )]
+    private static partial void LogDistributedLockAcquired(ILogger logger, string processor);
+
+    [LoggerMessage(
+        EventId = 7,
+        Level = LogLevel.Information,
+        Message = "Stopping signal received during {Processor} processing"
+    )]
+    private static partial void LogStoppingSignalReceived(ILogger logger, string processor);
+
+    [LoggerMessage(
+        EventId = 8,
+        Level = LogLevel.Warning,
+        Message = "Distributed lock was lost during {Processor} processing"
+    )]
+    private static partial void LogDistributedLockWasLost(ILogger logger, string processor);
+
+    [LoggerMessage(
+        EventId = 9,
+        Level = LogLevel.Error,
+        Message = "Error while processing {Processor} messages"
+    )]
+    private static partial void LogErrorWhileProcessingMessages(
+        ILogger logger,
+        Exception ex,
+        string processor
+    );
+
+    [LoggerMessage(
+        EventId = 10,
+        Level = LogLevel.Debug,
+        Message = "Waiting for {Processor} trigger or {Delay} timeout"
+    )]
+    private static partial void LogWaitingForTriggerOrTimeout(
+        ILogger logger,
+        string processor,
+        TimeSpan delay
+    );
+
+    [LoggerMessage(
+        EventId = 11,
+        Level = LogLevel.Debug,
+        Message = "{Processor} triggered immediately via channel"
+    )]
+    private static partial void LogTriggeredImmediatelyViaChannel(ILogger logger, string processor);
+
+    [LoggerMessage(
+        EventId = 12,
+        Level = LogLevel.Debug,
+        Message = "{Processor} polling interval elapsed"
+    )]
+    private static partial void LogPollingIntervalElapsed(ILogger logger, string processor);
 }

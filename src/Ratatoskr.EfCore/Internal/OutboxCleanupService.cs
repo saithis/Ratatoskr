@@ -8,7 +8,7 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr.EfCore.Internal;
 
-internal class OutboxCleanupService<TDbContext>(
+internal partial class OutboxCleanupService<TDbContext>(
     IServiceScopeFactory serviceScopeFactory,
     OutboxOptionsHolder<TDbContext> optionsHolder,
     IDistributedLockProvider distributedLockProvider,
@@ -21,7 +21,7 @@ internal class OutboxCleanupService<TDbContext>(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("Starting OutboxCleanupService");
+        LogStartingOutboxCleanupService(logger);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -33,11 +33,11 @@ internal class OutboxCleanupService<TDbContext>(
             }
             catch (Exception e) when (!stoppingToken.IsCancellationRequested)
             {
-                logger.LogError(e, "OutboxCleanupService encountered an error during cleanup");
+                LogOutboxCleanupServiceError(logger, e);
             }
         }
 
-        logger.LogInformation("Stopped OutboxCleanupService");
+        LogStoppedOutboxCleanupService(logger);
     }
 
     internal async Task<bool> TryCleanupWithLockAsync(CancellationToken cancellationToken)
@@ -50,7 +50,7 @@ internal class OutboxCleanupService<TDbContext>(
 
         if (dLock == null)
         {
-            logger.LogDebug("OutboxCleanupService skipped — another instance holds the lock");
+            LogOutboxCleanupServiceSkippedLock(logger);
             RatatoskrDiagnostics.LockAcquisitionFailure.Add(
                 1,
                 new TagList { { "processor", "OutboxCleanupService" } }
@@ -94,12 +94,44 @@ internal class OutboxCleanupService<TDbContext>(
         );
         if (totalDeleted > 0)
         {
-            logger.LogInformation(
-                "OutboxCleanupService deleted {Count} processed message(s)",
-                totalDeleted
-            );
+            LogOutboxCleanupServiceDeleted(logger, totalDeleted);
         }
 
         return totalDeleted;
     }
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Information,
+        Message = "Starting OutboxCleanupService"
+    )]
+    private static partial void LogStartingOutboxCleanupService(ILogger logger);
+
+    [LoggerMessage(
+        EventId = 2,
+        Level = LogLevel.Error,
+        Message = "OutboxCleanupService encountered an error during cleanup"
+    )]
+    private static partial void LogOutboxCleanupServiceError(ILogger logger, Exception ex);
+
+    [LoggerMessage(
+        EventId = 3,
+        Level = LogLevel.Information,
+        Message = "Stopped OutboxCleanupService"
+    )]
+    private static partial void LogStoppedOutboxCleanupService(ILogger logger);
+
+    [LoggerMessage(
+        EventId = 4,
+        Level = LogLevel.Debug,
+        Message = "OutboxCleanupService skipped — another instance holds the lock"
+    )]
+    private static partial void LogOutboxCleanupServiceSkippedLock(ILogger logger);
+
+    [LoggerMessage(
+        EventId = 5,
+        Level = LogLevel.Information,
+        Message = "OutboxCleanupService deleted {Count} processed message(s)"
+    )]
+    private static partial void LogOutboxCleanupServiceDeleted(ILogger logger, int count);
 }

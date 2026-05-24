@@ -9,7 +9,7 @@ using Ratatoskr.RabbitMq.Extensions;
 
 namespace Ratatoskr.RabbitMq;
 
-internal sealed class RabbitMqConsumer(
+internal sealed partial class RabbitMqConsumer(
     RabbitMqConnectionManager connectionManager,
     ChannelRegistry registry,
     RabbitMqTopologyManager topologyManager,
@@ -48,7 +48,7 @@ internal sealed class RabbitMqConsumer(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("Starting RabbitMQ consumer");
+        LogStartingConsumer(logger);
 
         // Validate channel configurations upfront so a misconfigured channel causes an
         // immediate startup failure instead of surfacing as a confusing runtime error.
@@ -64,12 +64,7 @@ internal sealed class RabbitMqConsumer(
 
             if (channelOptions is { AutoAck: true, ConcurrencyLimit: > 1 })
             {
-                logger.LogWarning(
-                    "Channel '{Channel}': AutoAck=true disables broker-side prefetch limiting; with "
-                        + "ConcurrencyLimit={Limit} messages may accumulate faster than handlers process them.",
-                    reg.ChannelName,
-                    channelOptions.ConcurrencyLimit
-                );
+                LogAutoAckPrefetchWarning(logger, reg.ChannelName, channelOptions.ConcurrencyLimit);
             }
         }
 
@@ -80,12 +75,12 @@ internal sealed class RabbitMqConsumer(
         await Task.Delay(Timeout.Infinite, stoppingToken)
             .ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
-        logger.LogInformation("RabbitMQ consumer stopped");
+        LogConsumerStopped(logger);
     }
 
     private async Task ProvisionAndConsumeAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("Provisioning topology...");
+        LogProvisioningTopology(logger);
         await topologyManager.ProvisionTopologyAsync(stoppingToken);
 
         foreach (var reg in registry.GetConsumeChannels())
@@ -94,10 +89,7 @@ internal sealed class RabbitMqConsumer(
 
             if (string.IsNullOrEmpty(channelOptions.QueueName))
             {
-                logger.LogWarning(
-                    "Skipping consumer channel '{Channel}' because no queue name is configured.",
-                    reg.ChannelName
-                );
+                LogSkippingConsumerChannel(logger, reg.ChannelName);
                 continue;
             }
 
@@ -111,11 +103,7 @@ internal sealed class RabbitMqConsumer(
 
             channel.ChannelShutdownAsync += (_, args) =>
             {
-                logger.LogWarning(
-                    "RabbitMQ channel closed: {ReplyCode} - {ReplyText}",
-                    args.ReplyCode,
-                    args.ReplyText
-                );
+                LogChannelClosed(logger, args.ReplyCode, args.ReplyText);
                 return Task.CompletedTask;
             };
 
@@ -155,11 +143,7 @@ internal sealed class RabbitMqConsumer(
                     }
                     catch (Exception ex)
                     {
-                        logger.LogError(
-                            ex,
-                            "Unhandled exception dispatching message on channel '{Channel}'",
-                            reg.ChannelName
-                        );
+                        LogUnhandledExceptionDispatching(logger, ex, reg.ChannelName);
                     }
                     finally
                     {
@@ -169,11 +153,7 @@ internal sealed class RabbitMqConsumer(
                 }
             };
 
-            logger.LogInformation(
-                "Starting consuming from queue '{Queue}' for channel '{Channel}'",
-                channelOptions.QueueName,
-                reg.ChannelName
-            );
+            LogStartingConsuming(logger, channelOptions.QueueName, reg.ChannelName);
 
             var consumerTag = await channel.BasicConsumeAsync(
                 queue: channelOptions.QueueName,
@@ -221,11 +201,7 @@ internal sealed class RabbitMqConsumer(
             }
             catch (Exception ex)
             {
-                logger.LogDebug(
-                    ex,
-                    "Error cancelling RabbitMQ consumer {ConsumerTag}",
-                    entry.ConsumerTag
-                );
+                LogCancellationError(logger, ex, entry.ConsumerTag);
             }
         });
 
@@ -245,11 +221,7 @@ internal sealed class RabbitMqConsumer(
         {
             if (timeProvider.GetUtcNow() >= deadline)
             {
-                logger.LogWarning(
-                    "Shutdown drain timed out after {Timeout}; {InFlight} handler(s) still in flight",
-                    timeout,
-                    Volatile.Read(ref _inFlightHandlers)
-                );
+                LogShutdownDrainTimeout(logger, timeout, Volatile.Read(ref _inFlightHandlers));
                 return;
             }
 
@@ -259,10 +231,7 @@ internal sealed class RabbitMqConsumer(
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                logger.LogWarning(
-                    "Shutdown drain interrupted by host cancellation; {InFlight} handler(s) still in flight",
-                    Volatile.Read(ref _inFlightHandlers)
-                );
+                LogShutdownDrainInterrupted(logger, Volatile.Read(ref _inFlightHandlers));
                 return;
             }
         }
@@ -299,7 +268,7 @@ internal sealed class RabbitMqConsumer(
             }
             catch (Exception ex)
             {
-                logger.LogDebug(ex, "Error cleaning up RabbitMQ channel during shutdown");
+                LogCleanupError(logger, ex);
             }
         }
     }
@@ -347,18 +316,15 @@ internal sealed class RabbitMqConsumer(
                 && ea.Body.Length > options.MaxInboundMessageSize.Value
             )
             {
-                logger.LogWarning(
-                    "Inbound message size of {Size} bytes exceeds the configured maximum of {Max} bytes for message '{MessageId}'. Rejecting to DLQ.",
+                LogOversizedMessageRejected(
+                    logger,
                     ea.Body.Length,
                     options.MaxInboundMessageSize.Value,
                     messageId
                 );
                 if (channelOptions.AutoAck)
                 {
-                    logger.LogError(
-                        "MaxInboundMessageSize is configured, but channel '{Channel}' uses auto-ack; oversized message cannot be nacked to DLQ.",
-                        channelName
-                    );
+                    LogOversizedMessageAutoAckError(logger, channelName);
                     return;
                 }
                 await ackLock.WaitAsync(cancellationToken);
@@ -444,7 +410,7 @@ internal sealed class RabbitMqConsumer(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error processing message '{MessageId}'", messageId);
+            LogErrorProcessingMessage(logger, ex, messageId);
 
             errorType = ex.GetType().FullName;
 
@@ -530,7 +496,7 @@ internal sealed class RabbitMqConsumer(
 
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
-        logger.LogInformation("Stopping RabbitMQ consumer");
+        LogStoppingConsumer(logger);
 
         try
         {
@@ -551,4 +517,141 @@ internal sealed class RabbitMqConsumer(
             await CleanupChannelsAsync();
         }
     }
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Information,
+        Message = "Starting RabbitMQ consumer"
+    )]
+    private static partial void LogStartingConsumer(ILogger logger);
+
+    [LoggerMessage(
+        EventId = 2,
+        Level = LogLevel.Warning,
+        Message = "Channel '{Channel}': AutoAck=true disables broker-side prefetch limiting; with ConcurrencyLimit={Limit} messages may accumulate faster than handlers process them."
+    )]
+    private static partial void LogAutoAckPrefetchWarning(
+        ILogger logger,
+        string channel,
+        int limit
+    );
+
+    [LoggerMessage(
+        EventId = 3,
+        Level = LogLevel.Information,
+        Message = "RabbitMQ consumer stopped"
+    )]
+    private static partial void LogConsumerStopped(ILogger logger);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Provisioning topology...")]
+    private static partial void LogProvisioningTopology(ILogger logger);
+
+    [LoggerMessage(
+        EventId = 5,
+        Level = LogLevel.Warning,
+        Message = "Skipping consumer channel '{Channel}' because no queue name is configured."
+    )]
+    private static partial void LogSkippingConsumerChannel(ILogger logger, string channel);
+
+    [LoggerMessage(
+        EventId = 6,
+        Level = LogLevel.Warning,
+        Message = "RabbitMQ channel closed: {ReplyCode} - {ReplyText}"
+    )]
+    private static partial void LogChannelClosed(
+        ILogger logger,
+        ushort replyCode,
+        string replyText
+    );
+
+    [LoggerMessage(
+        EventId = 7,
+        Level = LogLevel.Error,
+        Message = "Unhandled exception dispatching message on channel '{Channel}'"
+    )]
+    private static partial void LogUnhandledExceptionDispatching(
+        ILogger logger,
+        Exception ex,
+        string channel
+    );
+
+    [LoggerMessage(
+        EventId = 8,
+        Level = LogLevel.Information,
+        Message = "Starting consuming from queue '{Queue}' for channel '{Channel}'"
+    )]
+    private static partial void LogStartingConsuming(ILogger logger, string queue, string channel);
+
+    [LoggerMessage(
+        EventId = 9,
+        Level = LogLevel.Debug,
+        Message = "Error cancelling RabbitMQ consumer {ConsumerTag}"
+    )]
+    private static partial void LogCancellationError(
+        ILogger logger,
+        Exception ex,
+        string consumerTag
+    );
+
+    [LoggerMessage(
+        EventId = 10,
+        Level = LogLevel.Warning,
+        Message = "Shutdown drain timed out after {Timeout}; {InFlight} handler(s) still in flight"
+    )]
+    private static partial void LogShutdownDrainTimeout(
+        ILogger logger,
+        TimeSpan timeout,
+        int inFlight
+    );
+
+    [LoggerMessage(
+        EventId = 11,
+        Level = LogLevel.Warning,
+        Message = "Shutdown drain interrupted by host cancellation; {InFlight} handler(s) still in flight"
+    )]
+    private static partial void LogShutdownDrainInterrupted(ILogger logger, int inFlight);
+
+    [LoggerMessage(
+        EventId = 12,
+        Level = LogLevel.Debug,
+        Message = "Error cleaning up RabbitMQ channel during shutdown"
+    )]
+    private static partial void LogCleanupError(ILogger logger, Exception ex);
+
+    [LoggerMessage(
+        EventId = 13,
+        Level = LogLevel.Warning,
+        Message = "Inbound message size of {Size} bytes exceeds the configured maximum of {Max} bytes for message '{MessageId}'. Rejecting to DLQ."
+    )]
+    private static partial void LogOversizedMessageRejected(
+        ILogger logger,
+        int size,
+        int max,
+        string messageId
+    );
+
+    [LoggerMessage(
+        EventId = 14,
+        Level = LogLevel.Error,
+        Message = "MaxInboundMessageSize is configured, but channel '{Channel}' uses auto-ack; oversized message cannot be nacked to DLQ."
+    )]
+    private static partial void LogOversizedMessageAutoAckError(ILogger logger, string channel);
+
+    [LoggerMessage(
+        EventId = 15,
+        Level = LogLevel.Error,
+        Message = "Error processing message '{MessageId}'"
+    )]
+    private static partial void LogErrorProcessingMessage(
+        ILogger logger,
+        Exception ex,
+        string messageId
+    );
+
+    [LoggerMessage(
+        EventId = 16,
+        Level = LogLevel.Information,
+        Message = "Stopping RabbitMQ consumer"
+    )]
+    private static partial void LogStoppingConsumer(ILogger logger);
 }

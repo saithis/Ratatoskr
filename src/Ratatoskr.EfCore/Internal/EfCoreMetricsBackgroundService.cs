@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Ratatoskr.EfCore.Internal;
 
-internal class EfCoreMetricsBackgroundService<TDbContext>(
+internal partial class EfCoreMetricsBackgroundService<TDbContext>(
     IServiceProvider serviceProvider,
     TimeProvider timeProvider,
     EfCoreMetricsState state,
@@ -18,7 +18,7 @@ internal class EfCoreMetricsBackgroundService<TDbContext>(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogDebug("Starting EF Core Metrics Polling for {DbContext}", _contextName);
+        LogStartingPolling(logger, _contextName);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -33,13 +33,13 @@ internal class EfCoreMetricsBackgroundService<TDbContext>(
                     break;
                 }
 
-                logger.LogError(ex, "Error updating EF Core metrics for {DbContext}", _contextName);
+                LogErrorUpdatingMetrics(logger, ex, _contextName);
             }
 
             await Task.Delay(settings.PollingInterval, timeProvider, stoppingToken);
         }
 
-        logger.LogDebug("Stopped EF Core Metrics Polling for {DbContext}", _contextName);
+        LogStoppedPolling(logger, _contextName);
     }
 
     internal async Task UpdateMetricsAsync(CancellationToken stoppingToken)
@@ -126,4 +126,29 @@ internal class EfCoreMetricsBackgroundService<TDbContext>(
         cts.CancelAfter(settings.QueryTimeout);
         return await count(dbContext, cts.Token);
     }
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Debug,
+        Message = "Starting EF Core Metrics Polling for {DbContext}"
+    )]
+    private static partial void LogStartingPolling(ILogger logger, string dbContext);
+
+    [LoggerMessage(
+        EventId = 2,
+        Level = LogLevel.Error,
+        Message = "Error updating EF Core metrics for {DbContext}"
+    )]
+    private static partial void LogErrorUpdatingMetrics(
+        ILogger logger,
+        Exception ex,
+        string dbContext
+    );
+
+    [LoggerMessage(
+        EventId = 3,
+        Level = LogLevel.Debug,
+        Message = "Stopped EF Core Metrics Polling for {DbContext}"
+    )]
+    private static partial void LogStoppedPolling(ILogger logger, string dbContext);
 }

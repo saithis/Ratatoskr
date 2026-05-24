@@ -10,7 +10,7 @@ namespace Ratatoskr.EfCore.Internal;
 /// to persist inbox-managed handler statuses to the database before message dispatch.
 /// Only processes channels whose inbox DbContext matches <typeparamref name="TDbContext"/>.
 /// </summary>
-internal class InboxAcceptor<TDbContext>(
+internal partial class InboxAcceptor<TDbContext>(
     IServiceScopeFactory scopeFactory,
     ChannelRegistry channelRegistry,
     ChannelHandlerRegistry channelHandlerRegistry,
@@ -69,10 +69,7 @@ internal class InboxAcceptor<TDbContext>(
 
         if (string.IsNullOrWhiteSpace(properties.Id))
         {
-            logger.LogError(
-                "Cannot persist to inbox: message has no Id. Type: '{Type}'",
-                properties.Type
-            );
+            LogCannotPersistInboxNoId(logger, properties.Type);
             throw new InvalidOperationException(
                 "Messages must have a non-empty Id for inbox deduplication."
             );
@@ -105,11 +102,7 @@ internal class InboxAcceptor<TDbContext>(
         try
         {
             await dbContext.SaveChangesAsync(cancellationToken);
-            logger.LogDebug(
-                "Accepted new inbox message '{MessageId}' of type '{Type}'",
-                properties.Id,
-                properties.Type
-            );
+            LogAcceptedNewInboxMessage(logger, properties.Id, properties.Type);
         }
         catch (DbUpdateException ex) when (DbExceptionHelper.IsUniqueConstraintViolation(ex))
         {
@@ -127,10 +120,7 @@ internal class InboxAcceptor<TDbContext>(
                 .ToList();
             if (newHandlers.Count == 0)
             {
-                logger.LogDebug(
-                    "Inbox entries for message '{MessageId}' already exist (duplicate delivery). Ignoring.",
-                    properties.Id
-                );
+                LogInboxDuplicateIgnored(logger, properties.Id);
                 return InboxAcceptOutcome.Duplicate;
             }
 
@@ -150,28 +140,17 @@ internal class InboxAcceptor<TDbContext>(
             try
             {
                 await dbContext.SaveChangesAsync(cancellationToken);
-                logger.LogDebug(
-                    "Inbox message '{MessageId}' already existed, added {Count} new handler status(es)",
-                    properties.Id,
-                    newHandlers.Count
-                );
+                LogInboxAlreadyExistedAddedHandlers(logger, properties.Id, newHandlers.Count);
             }
             catch (DbUpdateException ex2) when (DbExceptionHelper.IsUniqueConstraintViolation(ex2))
             {
                 dbContext.ChangeTracker.Clear();
-                logger.LogDebug(
-                    "Inbox handler statuses for message '{MessageId}' were already inserted by a concurrent instance. Ignoring.",
-                    properties.Id
-                );
+                LogInboxHandlersAlreadyInserted(logger, properties.Id);
                 return InboxAcceptOutcome.Duplicate;
             }
         }
 
-        logger.LogDebug(
-            "Persisted inbox entries for message '{MessageId}', {HandlerCount} handler(s)",
-            properties.Id,
-            inboxHandlers.Count
-        );
+        LogPersistedInboxEntries(logger, properties.Id, inboxHandlers.Count);
 
         await _observers.NotifyAsync(
             new MessageActivity
@@ -189,6 +168,60 @@ internal class InboxAcceptor<TDbContext>(
 
         return InboxAcceptOutcome.Accepted;
     }
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Error,
+        Message = "Cannot persist to inbox: message has no Id. Type: '{Type}'"
+    )]
+    private static partial void LogCannotPersistInboxNoId(ILogger logger, string type);
+
+    [LoggerMessage(
+        EventId = 2,
+        Level = LogLevel.Debug,
+        Message = "Accepted new inbox message '{MessageId}' of type '{Type}'"
+    )]
+    private static partial void LogAcceptedNewInboxMessage(
+        ILogger logger,
+        string messageId,
+        string type
+    );
+
+    [LoggerMessage(
+        EventId = 3,
+        Level = LogLevel.Debug,
+        Message = "Inbox entries for message '{MessageId}' already exist (duplicate delivery). Ignoring."
+    )]
+    private static partial void LogInboxDuplicateIgnored(ILogger logger, string messageId);
+
+    [LoggerMessage(
+        EventId = 4,
+        Level = LogLevel.Debug,
+        Message = "Inbox message '{MessageId}' already existed, added {Count} new handler status(es)"
+    )]
+    private static partial void LogInboxAlreadyExistedAddedHandlers(
+        ILogger logger,
+        string messageId,
+        int count
+    );
+
+    [LoggerMessage(
+        EventId = 5,
+        Level = LogLevel.Debug,
+        Message = "Inbox handler statuses for message '{MessageId}' were already inserted by a concurrent instance. Ignoring."
+    )]
+    private static partial void LogInboxHandlersAlreadyInserted(ILogger logger, string messageId);
+
+    [LoggerMessage(
+        EventId = 6,
+        Level = LogLevel.Debug,
+        Message = "Persisted inbox entries for message '{MessageId}', {HandlerCount} handler(s)"
+    )]
+    private static partial void LogPersistedInboxEntries(
+        ILogger logger,
+        string messageId,
+        int handlerCount
+    );
 }
 
 /// <summary>

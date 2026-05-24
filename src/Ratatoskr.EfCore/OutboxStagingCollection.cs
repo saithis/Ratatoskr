@@ -8,7 +8,7 @@ namespace Ratatoskr.EfCore;
 /// </summary>
 public sealed class OutboxStagingCollection
 {
-    internal readonly List<Item> StagedItems = new();
+    internal List<Item> StagedItems { get; } = [];
 
     /// <summary>
     /// Stages a message to be sent when SaveChanges is called.

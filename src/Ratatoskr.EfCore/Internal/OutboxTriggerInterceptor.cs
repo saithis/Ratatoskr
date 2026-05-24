@@ -6,7 +6,7 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr.EfCore.Internal;
 
-internal class OutboxTriggerInterceptor<TDbContext>(
+internal partial class OutboxTriggerInterceptor<TDbContext>(
     OutboxProcessor<TDbContext> outboxProcessor,
     IMessageSerializerResolver serializerResolver,
     IMessagePropertiesEnricher enricher,
@@ -26,12 +26,12 @@ internal class OutboxTriggerInterceptor<TDbContext>(
     // Per-DbContext state for flags set in SavingChangesAsync and read in SavedChangesAsync.
     // ConditionalWeakTable ensures no memory leak — entries are collected when the DbContext is GC'd.
     // This is safe for a singleton interceptor shared across concurrent SaveChanges calls.
-    private static readonly ConditionalWeakTable<DbContext, StagedFlags> _perContextFlags = new();
+    private static readonly ConditionalWeakTable<DbContext, StagedFlags> PerContextFlags = new();
 
     private sealed class StagedFlags
     {
-        public bool OutboxEntitiesStaged;
-        public bool InboxEntitiesStaged;
+        public bool OutboxEntitiesStaged { get; set; }
+        public bool InboxEntitiesStaged { get; set; }
     }
 
     public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
@@ -51,7 +51,7 @@ internal class OutboxTriggerInterceptor<TDbContext>(
             throw new InvalidOperationException("Expected IOutboxDbContext");
         }
 
-        var flags = _perContextFlags.GetOrCreateValue(context);
+        var flags = PerContextFlags.GetOrCreateValue(context);
         flags.OutboxEntitiesStaged = false;
         flags.InboxEntitiesStaged = false;
 
@@ -87,10 +87,7 @@ internal class OutboxTriggerInterceptor<TDbContext>(
 
             if (enrichedProperties.Transports.Count == 0)
             {
-                logger.LogError(
-                    "No transports found for message '{MessageType}'",
-                    item.Message.GetType()
-                );
+                LogNoTransportsFound(logger, item.Message.GetType());
                 throw new InvalidOperationException(
                     $"No transports found for message '{item.Message.GetType()}'."
                 );
@@ -116,12 +113,7 @@ internal class OutboxTriggerInterceptor<TDbContext>(
 
                 if (sameDbCreated && hasCrossDbChannels)
                 {
-                    logger.LogWarning(
-                        "Message '{MessageId}' targets both same-DbContext and cross-DbContext inbox channels. "
-                            + "Same-DbContext entries were created in this transaction; an outbox entry will also be created "
-                            + "for cross-DbContext delivery. The inbox acceptor will deduplicate on delivery.",
-                        enrichedProperties.Id
-                    );
+                    LogTargetsBothSameAndCrossDb(logger, enrichedProperties.Id);
                 }
 
                 if (sameDbCreated)
@@ -262,8 +254,8 @@ internal class OutboxTriggerInterceptor<TDbContext>(
                     );
             }
 
-            logger.LogDebug(
-                "Created inbox entries for message '{MessageId}' on channel '{Channel}' with {HandlerCount} handler(s) in outbox transaction",
+            LogCreatedInboxEntries(
+                logger,
                 enrichedProperties.Id,
                 channel.ChannelName,
                 inboxHandlers.Count
@@ -292,7 +284,7 @@ internal class OutboxTriggerInterceptor<TDbContext>(
 
         if (
             eventData.Context != null
-            && _perContextFlags.TryGetValue(eventData.Context, out var flags)
+            && PerContextFlags.TryGetValue(eventData.Context, out var flags)
         )
         {
             if (flags.OutboxEntitiesStaged)
@@ -305,7 +297,7 @@ internal class OutboxTriggerInterceptor<TDbContext>(
                 await inboxProcessorTrigger.TriggerAsync(cancellationToken);
             }
 
-            _perContextFlags.Remove(eventData.Context);
+            PerContextFlags.Remove(eventData.Context);
         }
 
         return result;
@@ -322,4 +314,30 @@ internal class OutboxTriggerInterceptor<TDbContext>(
             }
         }
     }
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Error,
+        Message = "No transports found for message '{MessageType}'"
+    )]
+    private static partial void LogNoTransportsFound(ILogger logger, Type messageType);
+
+    [LoggerMessage(
+        EventId = 2,
+        Level = LogLevel.Warning,
+        Message = "Message '{MessageId}' targets both same-DbContext and cross-DbContext inbox channels. Same-DbContext entries were created in this transaction; an outbox entry will also be created for cross-DbContext delivery. The inbox acceptor will deduplicate on delivery."
+    )]
+    private static partial void LogTargetsBothSameAndCrossDb(ILogger logger, string messageId);
+
+    [LoggerMessage(
+        EventId = 3,
+        Level = LogLevel.Debug,
+        Message = "Created inbox entries for message '{MessageId}' on channel '{Channel}' with {HandlerCount} handler(s) in outbox transaction"
+    )]
+    private static partial void LogCreatedInboxEntries(
+        ILogger logger,
+        string messageId,
+        string channel,
+        int handlerCount
+    );
 }

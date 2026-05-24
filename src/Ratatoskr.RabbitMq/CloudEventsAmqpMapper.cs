@@ -14,7 +14,7 @@ namespace Ratatoskr.RabbitMq;
 /// Default implementation of IRabbitMqEnvelopeMapper that follows the CloudEvents AMQP protocol binding.
 /// See: https://github.com/cloudevents/spec/blob/main/cloudevents/bindings/amqp-protocol-binding.md
 /// </summary>
-public class CloudEventsAmqpMapper(
+public partial class CloudEventsAmqpMapper(
     CloudEventsOptions options,
     ILogger<CloudEventsAmqpMapper> logger
 ) : IRabbitMqEnvelopeMapper
@@ -259,11 +259,7 @@ public class CloudEventsAmqpMapper(
         if (id is null)
         {
             id = Guid.NewGuid().ToString();
-            logger.LogWarning(
-                "Incoming binary CloudEvent has no id (AMQP message-id and cloudEvents_id are missing). "
-                    + "Generated id {GeneratedEventId}. Per CloudEvents spec, id is required; inbox deduplication will not treat replays of this message as duplicates.",
-                id
-            );
+            LogIncomingBinaryCloudEventHasNoId(logger, id);
         }
 
         var type =
@@ -603,4 +599,14 @@ public class CloudEventsAmqpMapper(
             _ => value.ToString() ?? "",
         };
     }
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Warning,
+        Message = "Incoming binary CloudEvent has no id (AMQP message-id and cloudEvents_id are missing). Generated id {GeneratedEventId}. Per CloudEvents spec, id is required; inbox deduplication will not treat replays of this message as duplicates."
+    )]
+    private static partial void LogIncomingBinaryCloudEventHasNoId(
+        ILogger logger,
+        string generatedEventId
+    );
 }
