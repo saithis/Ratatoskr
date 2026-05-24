@@ -114,22 +114,9 @@ dotnet_analyzer_diagnostic.severity = warning
 # Formatting & Layout Rules
 ####################################################################################################
 
-# Newline preferences (Handled by CSharpier)
-# csharp_new_line_before_open_brace = all
-# csharp_new_line_before_else = true
-# csharp_new_line_before_catch = true
-# csharp_new_line_before_finally = true
-# csharp_new_line_before_members_in_object_initializers = true
-# csharp_new_line_before_members_in_anonymous_types = true
-
 # Organizing Usings (System directives first, sorted alphabetically)
 dotnet_sort_system_directives_first = true
 dotnet_separate_import_directive_groups = all
-
-# Space preferences (Handled by CSharpier)
-# csharp_space_after_cast = false
-# csharp_space_after_keywords_in_control_flow_statements = true
-# csharp_space_between_parentheses = false
 
 ####################################################################################################
 # Strict Naming Conventions (Natively ignores discards '_')
@@ -161,6 +148,14 @@ dotnet_naming_symbols.private_field_symbols.applicable_kinds = field
 dotnet_naming_symbols.private_field_symbols.applicable_accessibilities = private
 dotnet_naming_style.prefix_underscore_style.required_prefix = _
 dotnet_naming_style.prefix_underscore_style.capitalization = camel_case
+
+# ----- Rule: Const fields must be PascalCase -----
+dotnet_naming_rule.private_const_fields_pascal_case.symbols = private_const_field_symbols
+dotnet_naming_rule.private_const_fields_pascal_case.style = pascal_case_style
+dotnet_naming_rule.private_const_fields_pascal_case.severity = error
+
+dotnet_naming_symbols.private_const_field_symbols.applicable_kinds = field
+dotnet_naming_symbols.private_const_field_symbols.required_modifiers = const
 
 # ----- Rule: Public / Protected / Internal Members must be PascalCase -----
 dotnet_naming_rule.public_members_pascal_case.symbols = public_member_symbols
@@ -228,7 +223,6 @@ dotnet_public_api_analyzer.require_api_files = true
 ####################################################################################################
 # C# Specific Settings
 ####################################################################################################
-
 
 # C# Unnecessary code rules
 csharp_style_unused_value_assignment_preference = discard_variable:suggestion
@@ -322,8 +316,6 @@ csharp_style_namespace_declarations = file_scoped:warning
 ####################################################################################################
 # .NET Style Preferences
 ####################################################################################################
-
-[*.{cs,csx,cake,vb,vbx}]
 
 # Language keywords instead of framework type names for type references
 dotnet_style_predefined_type_for_locals_parameters_members = true:warning
@@ -517,8 +509,6 @@ dotnet_diagnostic.CA1070.severity = warning
 # Part of dotNetDave's Editor Config Suite
 ####################################################################################################
 
-[*.{cs,vb}]
-
 # Avoid using cref tags with a prefix
 dotnet_diagnostic.CA1200.severity = suggestion
 
@@ -527,8 +517,6 @@ dotnet_diagnostic.CA1200.severity = suggestion
 # Globalization rules support world-ready libraries and applications
 # Part of dotNetDave's Editor Config Suite
 ####################################################################################################
-
-[*.{cs,vb}]
 
 # Do not pass literals as localized parameters
 dotnet_code_quality.CA1303.use_naming_heuristic = true
@@ -565,8 +553,6 @@ dotnet_diagnostic.CA2101.severity = warning
 # Part of dotNetDave's Editor Config Suite
 ####################################################################################################
 
-[*.{cs,vb}]
-
 # P/Invokes should not be visible
 dotnet_diagnostic.CA1401.severity = error
 
@@ -596,8 +582,6 @@ dotnet_diagnostic.CA1422.severity = warning
 # Maintainability rules support library and application maintenance
 # Part of dotNetDave's Editor Config Suite
 ####################################################################################################
-
-[*.{cs,vb}]
 
 # Avoid excessive inheritance
 dotnet_diagnostic.CA1501.severity = warning
@@ -643,8 +627,6 @@ dotnet_diagnostic.CA1515.severity = suggestion
 # Naming rules support adherence to the naming conventions of the .NET design guidelines
 # Part of dotNetDave's Editor Config Suite
 ####################################################################################################
-
-[*.{cs,vb}]
 
 # Namespace does not match folder structure
 dotnet_diagnostic.IDE0130.severity = warning
@@ -705,8 +687,6 @@ dotnet_diagnostic.CA1727.severity = error
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
 # Part of dotNetDave's Editor Config Suite
 ####################################################################################################
-
-[*.{cs,vb}]
 
 # Use Literals Where Appropriate
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
@@ -961,8 +941,6 @@ dotnet_diagnostic.CA1877.severity = warning
 # Part of dotNetDave's Editor Config Suite
 ####################################################################################################
 
-[*.{cs,vb}]
-
 # Dispose objects before losing scope
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
 dotnet_diagnostic.CA2000.severity = error
@@ -1027,8 +1005,6 @@ dotnet_diagnostic.CA2024.severity = warning
 # Security rules support safer libraries and applications
 # Part of dotNetDave's Editor Config Suite
 ####################################################################################################
-
-[*.{cs,vb}]
 
 # Review SQL queries for security vulnerabilities
 dotnet_diagnostic.CA2100.severity = error
@@ -1323,8 +1299,6 @@ dotnet_diagnostic.SEC001.severity = error
 # Part of dotNetDave's Editor Config Suite
 ####################################################################################################
 
-[*.{cs,vb}]
-
 # Avoid using accessing Assembly file path when publishing as a single-file
 dotnet_diagnostic.IL3000.severity = error
 
@@ -1345,8 +1319,6 @@ dotnet_diagnostic.IL3005.severity = error
 # Style rules support consistent code style in your codebase
 # Part of dotNetDave's Editor Config Suite
 ####################################################################################################
-
-[*.{cs,vb}]
 
 # Simplify name
 dotnet_diagnostic.IDE0001.severity = warning
@@ -1726,8 +1698,6 @@ dotnet_diagnostic.IDE0008.severity = warning
 # Usage rules support proper usage of .NET
 # Part of dotNetDave's Editor Config Suite
 ####################################################################################################
-
-[*.{cs,vb}]
 
 # Review unused parameters
 dotnet_diagnostic.CA1801.severity = warning
@@ -2148,8 +2118,6 @@ dotnet_diagnostic.MA0006.severity = suggestion
 # Rules for obsolete .NET APIs and platform-specific warnings
 # Part of dotNetDave's Editor Config Suite
 ####################################################################################################
-
-[*.{cs,vb}]
 
 # The UTF-7 encoding is insecure
 dotnet_diagnostic.SYSLIB0001.severity = error
