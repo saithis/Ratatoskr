@@ -13,10 +13,10 @@ internal static class GetInboxMessageHandlersEndpoint
 {
     internal static void Map(IEndpointRouteBuilder inboxGroup)
     {
-        inboxGroup.MapGet("/messages/{messageId}/handlers", Handle);
+        inboxGroup.MapGet("/messages/{messageId}/handlers", HandleAsync);
     }
 
-    private static async Task<Results<Ok<InboxMessageHandlers>, ProblemHttpResult>> Handle(
+    private static async Task<Results<Ok<InboxMessageHandlers>, ProblemHttpResult>> HandleAsync(
         string contextName,
         string messageId,
         EfCoreManagementDbContextLookup lookup,

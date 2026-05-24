@@ -13,10 +13,12 @@ internal static partial class ListPoisonedInboxEndpoint
 {
     internal static void Map(IEndpointRouteBuilder inboxGroup)
     {
-        inboxGroup.MapGet("/poisoned", Handle);
+        inboxGroup.MapGet("/poisoned", HandleAsync);
     }
 
-    private static async Task<Results<Ok<InboxPoisonedListResponse>, ProblemHttpResult>> Handle(
+    private static async Task<
+        Results<Ok<InboxPoisonedListResponse>, ProblemHttpResult>
+    > HandleAsync(
         string contextName,
         EfCoreManagementDbContextLookup lookup,
         ILoggerFactory loggerFactory,

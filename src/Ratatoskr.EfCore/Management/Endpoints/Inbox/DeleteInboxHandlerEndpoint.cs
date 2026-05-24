@@ -12,10 +12,10 @@ internal static class DeleteInboxHandlerEndpoint
 {
     internal static void Map(IEndpointRouteBuilder inboxGroup)
     {
-        inboxGroup.MapDelete("/poisoned/{handlerStatusId:guid}", Handle);
+        inboxGroup.MapDelete("/poisoned/{handlerStatusId:guid}", HandleAsync);
     }
 
-    private static async Task<Results<Ok, ProblemHttpResult>> Handle(
+    private static async Task<Results<Ok, ProblemHttpResult>> HandleAsync(
         string contextName,
         Guid handlerStatusId,
         EfCoreManagementDbContextLookup lookup,

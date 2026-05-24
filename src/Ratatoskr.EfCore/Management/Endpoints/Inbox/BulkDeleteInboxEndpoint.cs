@@ -13,11 +13,11 @@ internal static class BulkDeleteInboxEndpoint
 {
     internal static void Map(IEndpointRouteBuilder inboxGroup)
     {
-        inboxGroup.MapDelete("/poisoned", HandleByIds);
-        inboxGroup.MapDelete("/poisoned/all", HandleAll);
+        inboxGroup.MapDelete("/poisoned", HandleByIdsAsync);
+        inboxGroup.MapDelete("/poisoned/all", HandleAllAsync);
     }
 
-    private static async Task<Results<Ok, ProblemHttpResult>> HandleByIds(
+    private static async Task<Results<Ok, ProblemHttpResult>> HandleByIdsAsync(
         string contextName,
         [FromBody] BulkDeleteInboxRequest req,
         EfCoreManagementDbContextLookup lookup,
@@ -58,7 +58,7 @@ internal static class BulkDeleteInboxEndpoint
         return TypedResults.Ok();
     }
 
-    private static async Task<Results<Ok, ProblemHttpResult>> HandleAll(
+    private static async Task<Results<Ok, ProblemHttpResult>> HandleAllAsync(
         string contextName,
         EfCoreManagementDbContextLookup lookup,
         CancellationToken ct

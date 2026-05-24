@@ -14,10 +14,10 @@ internal static class GetOutboxDetailEndpoint
 {
     internal static void Map(IEndpointRouteBuilder outboxGroup)
     {
-        outboxGroup.MapGet("/poisoned/{id:guid}", Handle);
+        outboxGroup.MapGet("/poisoned/{id:guid}", HandleAsync);
     }
 
-    private static async Task<Results<Ok<OutboxPoisonedDetail>, ProblemHttpResult>> Handle(
+    private static async Task<Results<Ok<OutboxPoisonedDetail>, ProblemHttpResult>> HandleAsync(
         string contextName,
         Guid id,
         EfCoreManagementDbContextLookup lookup,

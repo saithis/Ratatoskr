@@ -12,10 +12,10 @@ internal static class DeleteOutboxEndpoint
 {
     internal static void Map(IEndpointRouteBuilder outboxGroup)
     {
-        outboxGroup.MapDelete("/poisoned/{id:guid}", Handle);
+        outboxGroup.MapDelete("/poisoned/{id:guid}", HandleAsync);
     }
 
-    private static async Task<Results<Ok, ProblemHttpResult>> Handle(
+    private static async Task<Results<Ok, ProblemHttpResult>> HandleAsync(
         string contextName,
         Guid id,
         EfCoreManagementDbContextLookup lookup,

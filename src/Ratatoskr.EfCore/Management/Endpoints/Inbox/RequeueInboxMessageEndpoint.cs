@@ -12,10 +12,12 @@ internal static class RequeueInboxMessageEndpoint
 {
     internal static void Map(IEndpointRouteBuilder inboxGroup)
     {
-        inboxGroup.MapPost("/messages/{messageId}/requeue", Handle);
+        inboxGroup.MapPost("/messages/{messageId}/requeue", HandleAsync);
     }
 
-    private static async Task<Results<Ok<RequeueInboxMessageResponse>, ProblemHttpResult>> Handle(
+    private static async Task<
+        Results<Ok<RequeueInboxMessageResponse>, ProblemHttpResult>
+    > HandleAsync(
         string contextName,
         string messageId,
         EfCoreManagementDbContextLookup lookup,

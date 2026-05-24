@@ -14,10 +14,10 @@ internal static class GetInboxHandlerDetailEndpoint
 {
     internal static void Map(IEndpointRouteBuilder inboxGroup)
     {
-        inboxGroup.MapGet("/poisoned/{handlerStatusId:guid}", Handle);
+        inboxGroup.MapGet("/poisoned/{handlerStatusId:guid}", HandleAsync);
     }
 
-    private static async Task<Results<Ok<InboxHandlerDetail>, ProblemHttpResult>> Handle(
+    private static async Task<Results<Ok<InboxHandlerDetail>, ProblemHttpResult>> HandleAsync(
         string contextName,
         Guid handlerStatusId,
         EfCoreManagementDbContextLookup lookup,

@@ -14,13 +14,13 @@ internal static class BulkRequeueOutboxEndpoint
 
     internal static void Map(IEndpointRouteBuilder outboxGroup)
     {
-        outboxGroup.MapPost("/poisoned/requeue", HandleByIds);
-        outboxGroup.MapPost("/poisoned/requeue/all", HandleAll);
+        outboxGroup.MapPost("/poisoned/requeue", HandleByIdsAsync);
+        outboxGroup.MapPost("/poisoned/requeue/all", HandleAllAsync);
     }
 
     private static async Task<
         Results<Ok<BulkRequeueOutboxResponse>, ProblemHttpResult>
-    > HandleByIds(
+    > HandleByIdsAsync(
         string contextName,
         BulkRequeueOutboxRequest req,
         EfCoreManagementDbContextLookup lookup,
@@ -69,7 +69,9 @@ internal static class BulkRequeueOutboxEndpoint
         return TypedResults.Ok(new BulkRequeueOutboxResponse(succeeded, failed));
     }
 
-    private static async Task<Results<Ok<BulkRequeueOutboxResponse>, ProblemHttpResult>> HandleAll(
+    private static async Task<
+        Results<Ok<BulkRequeueOutboxResponse>, ProblemHttpResult>
+    > HandleAllAsync(
         string contextName,
         EfCoreManagementDbContextLookup lookup,
         CancellationToken ct
