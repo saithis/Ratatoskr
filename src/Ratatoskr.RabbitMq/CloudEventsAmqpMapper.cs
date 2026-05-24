@@ -140,7 +140,7 @@ public partial class CloudEventsAmqpMapper(
         // Add CloudEvent extensions as headers
         foreach (var ext in props.CloudEventExtensions)
         {
-            SetCloudEventHeader(outgoing.Headers, ext.Key, ext.Value?.ToString());
+            SetCloudEventHeader(outgoing.Headers, ext.Key, ext.Value.ToString());
         }
 
         // Preserve Ratatoskr's own trace context in CloudEvents-prefixed headers.

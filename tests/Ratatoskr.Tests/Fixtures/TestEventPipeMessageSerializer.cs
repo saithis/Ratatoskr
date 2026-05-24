@@ -16,12 +16,8 @@ public sealed class TestEventPipeMessageSerializer : IMessageSerializer
             );
         }
 
-        var encodedId = Convert.ToBase64String(
-            Encoding.UTF8.GetBytes(testEvent.Id ?? string.Empty)
-        );
-        var encodedData = Convert.ToBase64String(
-            Encoding.UTF8.GetBytes(testEvent.Data ?? string.Empty)
-        );
+        var encodedId = Convert.ToBase64String(Encoding.UTF8.GetBytes(testEvent.Id));
+        var encodedData = Convert.ToBase64String(Encoding.UTF8.GetBytes(testEvent.Data));
         return Encoding.UTF8.GetBytes($"{encodedId}:{encodedData}");
     }
 

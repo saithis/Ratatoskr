@@ -14,8 +14,8 @@ public sealed class JsonSchemaGenerator
 {
     private readonly NullabilityInfoContext _nullabilityContext = new();
 
-    private static readonly HashSet<Type> _primitiveTypes = new()
-    {
+    private static readonly HashSet<Type> _primitiveTypes =
+    [
         typeof(bool),
         typeof(byte),
         typeof(sbyte),
@@ -37,13 +37,13 @@ public sealed class JsonSchemaGenerator
         typeof(TimeOnly),
         typeof(Uri),
         typeof(object),
-    };
+    ];
 
     /// <summary>
     /// Generates schemas for the given types, adding them to the provided components dictionary.
     /// Returns a $ref schema for the given root type.
     /// </summary>
-    public JsonSchema GenerateAndRegister(Type type, Dictionary<string, JsonSchema> components)
+    public JsonSchema GenerateAndRegister(Type type, IDictionary<string, JsonSchema> components)
     {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(components);
@@ -64,21 +64,21 @@ public sealed class JsonSchemaGenerator
         return JsonSchema.RefTo(name);
     }
 
-    private void GenerateObject(Type type, string name, Dictionary<string, JsonSchema> components)
+    private void GenerateObject(Type type, string name, IDictionary<string, JsonSchema> components)
     {
         // Placeholder prevents infinite recursion for self-referential types
         components[name] = new JsonSchema { Type = "object" };
         components[name] = BuildObjectSchema(type, components);
     }
 
-    private JsonSchema BuildObjectSchema(Type type, Dictionary<string, JsonSchema> components)
+    private JsonSchema BuildObjectSchema(Type type, IDictionary<string, JsonSchema> components)
     {
         if (type.IsEnum)
         {
             return BuildEnumSchema(type);
         }
 
-        var properties = new Dictionary<string, JsonSchema>();
+        var properties = new Dictionary<string, JsonSchema>(StringComparer.OrdinalIgnoreCase);
         var required = new List<string>();
 
         foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
@@ -98,7 +98,7 @@ public sealed class JsonSchemaGenerator
             var propName = GetPropertyName(prop);
             properties[propName] = BuildPropertySchema(prop, components);
 
-            if (prop.GetCustomAttribute<RequiredAttribute>() != null)
+            if (Attribute.IsDefined(prop, typeof(RequiredAttribute)))
             {
                 required.Add(propName);
             }
@@ -114,7 +114,7 @@ public sealed class JsonSchemaGenerator
 
     private JsonSchema BuildPropertySchema(
         PropertyInfo prop,
-        Dictionary<string, JsonSchema> components
+        IDictionary<string, JsonSchema> components
     )
     {
         var schema = BuildTypeSchema(prop.PropertyType, components, prop);
@@ -124,7 +124,7 @@ public sealed class JsonSchemaGenerator
 
     private JsonSchema BuildTypeSchema(
         Type type,
-        Dictionary<string, JsonSchema> components,
+        IDictionary<string, JsonSchema> components,
         PropertyInfo? propertyInfo = null
     )
     {
@@ -181,7 +181,7 @@ public sealed class JsonSchemaGenerator
         return refSchema;
     }
 
-    private JsonSchema BuildTypeSchemaRef(Type type, Dictionary<string, JsonSchema> components)
+    private JsonSchema BuildTypeSchemaRef(Type type, IDictionary<string, JsonSchema> components)
     {
         var underlying = UnwrapNullable(type);
         if (IsPrimitive(underlying))
@@ -289,22 +289,16 @@ public sealed class JsonSchemaGenerator
 
         if (prop.GetCustomAttribute<RangeAttribute>() is { } range)
         {
-            if (range.Minimum is not null)
-            {
-                schema.Minimum = Convert.ToDouble(range.Minimum, CultureInfo.InvariantCulture);
-            }
-            if (range.Maximum is not null)
-            {
-                schema.Maximum = Convert.ToDouble(range.Maximum, CultureInfo.InvariantCulture);
-            }
+            schema.Minimum = Convert.ToDouble(range.Minimum, CultureInfo.InvariantCulture);
+            schema.Maximum = Convert.ToDouble(range.Maximum, CultureInfo.InvariantCulture);
         }
 
-        if (prop.GetCustomAttribute<EmailAddressAttribute>() != null)
+        if (Attribute.IsDefined(prop, typeof(EmailAddressAttribute)))
         {
             schema.Format = "email";
         }
 
-        if (prop.GetCustomAttribute<UrlAttribute>() != null)
+        if (Attribute.IsDefined(prop, typeof(UrlAttribute)))
         {
             schema.Format = "uri";
         }
