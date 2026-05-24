@@ -26,21 +26,23 @@ public sealed class MessageRouter(
         var handlersAccepted = false;
         foreach (var interceptor in _interceptors)
         {
-            var interceptResult = await interceptor
-                .BeforeDispatchAsync(
-                    body,
-                    properties,
-                    transportName,
-                    channelName,
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
+            var interceptResult = await interceptor.BeforeDispatchAsync(
+                body,
+                properties,
+                transportName,
+                channelName,
+                cancellationToken
+            );
             handlersAccepted |= interceptResult.HandlersAccepted;
         }
 
-        var result = await dispatcher
-            .DispatchAsync(body, properties, cancellationToken, channelName, transportName)
-            .ConfigureAwait(false);
+        var result = await dispatcher.DispatchAsync(
+            body,
+            properties,
+            cancellationToken,
+            channelName,
+            transportName
+        );
 
         if (result == DispatchResult.NoHandlers && handlersAccepted)
         {

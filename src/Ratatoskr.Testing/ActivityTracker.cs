@@ -54,7 +54,7 @@ public class ActivityTracker
 
         try
         {
-            await action().ConfigureAwait(false);
+            await action();
 
             if (conditions.Count > 0)
             {
@@ -69,14 +69,14 @@ public class ActivityTracker
                     )
                 );
 
-                await Task.WhenAll(waitTasks).ConfigureAwait(false);
+                await Task.WhenAll(waitTasks);
             }
 
             return session;
         }
         catch
         {
-            await session.DisposeAsync().ConfigureAwait(false);
+            await session.DisposeAsync();
             throw;
         }
     }
@@ -104,25 +104,22 @@ public class ActivityTracker
         try
         {
             var bus = _services.GetRequiredService<IRatatoskr>();
-            await bus.PublishDirectAsync(message, props, cancellationToken).ConfigureAwait(false);
+            await bus.PublishDirectAsync(message, props, cancellationToken);
 
-            await _tracker
-                .WaitForAsync(
-                    a =>
-                        a.Stage == MessageStage.Dispatched
-                        && MessageTracker.ExtractTraceId(a.Properties.TraceParent)
-                            == session.TraceId
-                        && MessageTypeMatcher.Matches<T>(a),
-                    _timeout,
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
+            await _tracker.WaitForAsync(
+                a =>
+                    a.Stage == MessageStage.Dispatched
+                    && MessageTracker.ExtractTraceId(a.Properties.TraceParent) == session.TraceId
+                    && MessageTypeMatcher.Matches<T>(a),
+                _timeout,
+                cancellationToken
+            );
 
             return session;
         }
         catch
         {
-            await session.DisposeAsync().ConfigureAwait(false);
+            await session.DisposeAsync();
             throw;
         }
     }

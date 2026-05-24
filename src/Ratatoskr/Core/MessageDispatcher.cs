@@ -141,9 +141,12 @@ public sealed partial class MessageDispatcher(
         {
             try
             {
-                await handlerInvoker
-                    .InvokeAsync(handler.HandlerType, message, properties, cancellationToken)
-                    .ConfigureAwait(false);
+                await handlerInvoker.InvokeAsync(
+                    handler.HandlerType,
+                    message,
+                    properties,
+                    cancellationToken
+                );
 
                 LogHandlerProcessed(
                     logger,
@@ -184,27 +187,25 @@ public sealed partial class MessageDispatcher(
             );
         }
 
-        await _observers
-            .NotifyAsync(
-                new MessageActivity
+        await _observers.NotifyAsync(
+            new MessageActivity
+            {
+                Stage = MessageStage.Dispatched,
+                Properties = properties,
+                SerializedBody = body,
+                Message = message,
+                MessageType = messageType,
+                DispatchResult = result,
+                Exception = exceptions switch
                 {
-                    Stage = MessageStage.Dispatched,
-                    Properties = properties,
-                    SerializedBody = body,
-                    Message = message,
-                    MessageType = messageType,
-                    DispatchResult = result,
-                    Exception = exceptions switch
-                    {
-                        null => null,
-                        [var single] => single,
-                        _ => new AggregateException(exceptions),
-                    },
-                    Timestamp = timeProvider.GetUtcNow(),
+                    null => null,
+                    [var single] => single,
+                    _ => new AggregateException(exceptions),
                 },
-                logger
-            )
-            .ConfigureAwait(false);
+                Timestamp = timeProvider.GetUtcNow(),
+            },
+            logger
+        );
 
         return result;
     }

@@ -169,31 +169,29 @@ public sealed class MessageTrackingSession : IAsyncDisposable
         var traceId = TraceId;
 
         TrackedMessage? matched = null;
-        var activity = await _tracker
-            .WaitForAsync(
-                a =>
+        var activity = await _tracker.WaitForAsync(
+            a =>
+            {
+                if (
+                    a.Stage != stage
+                    || MessageTracker.ExtractTraceId(a.Properties.TraceParent) != traceId
+                    || !MessageTypeMatcher.Matches<T>(a)
+                )
                 {
-                    if (
-                        a.Stage != stage
-                        || MessageTracker.ExtractTraceId(a.Properties.TraceParent) != traceId
-                        || !MessageTypeMatcher.Matches<T>(a)
-                    )
-                    {
-                        return false;
-                    }
+                    return false;
+                }
 
-                    var tracked = new TrackedMessage(a);
-                    if (predicate != null && !predicate(tracked))
-                    {
-                        return false;
-                    }
+                var tracked = new TrackedMessage(a);
+                if (predicate != null && !predicate(tracked))
+                {
+                    return false;
+                }
 
-                    matched = tracked;
-                    return true;
-                },
-                effectiveTimeout
-            )
-            .ConfigureAwait(false);
+                matched = tracked;
+                return true;
+            },
+            effectiveTimeout
+        );
 
         return matched ?? new TrackedMessage(activity);
     }

@@ -75,9 +75,7 @@ public sealed partial class Ratatoskr(
             Exception? sendException = null;
             try
             {
-                await sender
-                    .SendAsync(serializedMessage, props, cancellationToken)
-                    .ConfigureAwait(false);
+                await sender.SendAsync(serializedMessage, props, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -87,22 +85,20 @@ public sealed partial class Ratatoskr(
                 exceptions.Add(ex);
             }
 
-            await _observers
-                .NotifyAsync(
-                    new MessageActivity
-                    {
-                        Stage = MessageStage.Published,
-                        Properties = props,
-                        SerializedBody = serializedMessage,
-                        Message = message,
-                        MessageType = typeof(TMessage),
-                        TransportName = sender.TransportName,
-                        Exception = sendException,
-                        Timestamp = timeProvider.GetUtcNow(),
-                    },
-                    logger
-                )
-                .ConfigureAwait(false);
+            await _observers.NotifyAsync(
+                new MessageActivity
+                {
+                    Stage = MessageStage.Published,
+                    Properties = props,
+                    SerializedBody = serializedMessage,
+                    Message = message,
+                    MessageType = typeof(TMessage),
+                    TransportName = sender.TransportName,
+                    Exception = sendException,
+                    Timestamp = timeProvider.GetUtcNow(),
+                },
+                logger
+            );
         }
 
         if (!matchedAny)

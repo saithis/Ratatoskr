@@ -1,0 +1,16 @@
+[*.{cs,vb}]
+
+# CS1591: Missing XML comment for publicly visible type or member
+dotnet_diagnostic.CS1591.severity = none
+
+# ASYNC0001: Append asynchronous method name with Async
+dotnet_diagnostic.ASYNC0001.severity = none
+
+# CA1707: Remove the underscores from member name
+dotnet_diagnostic.CA1707.severity = none
+
+# VSTHRD200: Use "Async" suffix in names of methods that return an awaitable type
+dotnet_diagnostic.VSTHRD200.severity = none
+
+# RCS1046: Add suffix 'Async' to asynchronous method name
+dotnet_diagnostic.RCS1046.severity = none

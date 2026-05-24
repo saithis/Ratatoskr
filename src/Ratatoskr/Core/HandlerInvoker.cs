@@ -24,24 +24,21 @@ public sealed class HandlerInvoker(IServiceScopeFactory scopeFactory)
         ArgumentNullException.ThrowIfNull(message);
         ArgumentNullException.ThrowIfNull(properties);
 
-        var scope = scopeFactory.CreateAsyncScope();
-        await using (scope.ConfigureAwait(false))
-        {
-            var handler = scope.ServiceProvider.GetRequiredService(handlerType);
-            var invoke = HandlerInvokerCache.Get(message.GetType());
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var handler = scope.ServiceProvider.GetRequiredService(handlerType);
+        var invoke = HandlerInvokerCache.Get(message.GetType());
 
-            if (timeout.HasValue)
-            {
-                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(
-                    cancellationToken
-                );
-                timeoutCts.CancelAfter(timeout.Value);
-                await invoke(handler, message, properties, timeoutCts.Token).ConfigureAwait(false);
-            }
-            else
-            {
-                await invoke(handler, message, properties, cancellationToken).ConfigureAwait(false);
-            }
+        if (timeout.HasValue)
+        {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken
+            );
+            timeoutCts.CancelAfter(timeout.Value);
+            await invoke(handler, message, properties, timeoutCts.Token);
+        }
+        else
+        {
+            await invoke(handler, message, properties, cancellationToken);
         }
     }
 }
