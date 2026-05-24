@@ -1102,6 +1102,15 @@ dotnet_diagnostic.RCS1049.severity = silent
 # Remove unnecessary 'Imports' or 'using' directive
 dotnet_diagnostic.RemoveUnnecessaryImportsFixable.severity = warning
 
+# Use method chaining
+dotnet_diagnostic.RCS1201.severity = none
+
+# Add region name to #endregion
+dotnet_diagnostic.RCS1189.severity = none
+
+# Use expression-bodied lambda
+dotnet_diagnostic.RCS1021.severity = suggestion
+
 ####################################################################################################
 # Meziantou Analyzer Rules (MA)
 ####################################################################################################
@@ -1114,6 +1123,12 @@ dotnet_diagnostic.MA0006.severity = suggestion # Meziantou default: warning
 
 # Make method static (deprecated, use CA1822 instead)
 dotnet_diagnostic.MA0038.severity = none # Meziantou default: warning
+
+# Make property static (deprecated, use CA1822 instead)
+dotnet_diagnostic.MA0041.severity = none
+
+# Meziantou method length configuration
+dotnet_code_quality.MA0051.maximum_lines = 120
 
 ####################################################################################################
 # Other Platform Diagnostics
