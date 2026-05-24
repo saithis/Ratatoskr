@@ -56,7 +56,7 @@ public abstract class ManagementTestBase(
         });
 
         await InitializeDatabase();
-        HttpClient.Dispose();
+        HttpClient?.Dispose();
         HttpClient = CreateHttpClient();
     }
 
@@ -75,7 +75,7 @@ public abstract class ManagementTestBase(
 
         if (disposing)
         {
-            HttpClient.Dispose();
+            HttpClient?.Dispose();
         }
 
         _disposed = true;
@@ -86,7 +86,7 @@ public abstract class ManagementTestBase(
         if (!_disposed)
         {
             _disposed = true;
-            HttpClient.Dispose();
+            HttpClient?.Dispose();
         }
 
         await base.DisposeAsyncCore();

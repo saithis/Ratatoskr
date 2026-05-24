@@ -363,7 +363,7 @@ public class OutboxDurabilityTests(
                 }
             );
             services.RemoveAll<IMessageSender>();
-            services.AddSingleton<BlockingMessageSender>();
+            services.AddSingleton(new BlockingMessageSender(RabbitMqConstants.TransportName));
             services.AddSingleton<IMessageSender>(sp =>
                 sp.GetRequiredService<BlockingMessageSender>()
             );

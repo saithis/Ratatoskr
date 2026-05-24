@@ -425,7 +425,9 @@ public class MessageDispatcherTests
 
         var channelHandlerRegistry = ChannelHandlerRegistry.Build(channelRegistry);
         var deserializer = new JsonMessageSerializer();
-        using var provider = services.BuildServiceProvider();
+#pragma warning disable IDISP001 // ServiceProvider must outlive the returned MessageDispatcher for the duration of each test.
+        var provider = services.BuildServiceProvider();
+#pragma warning restore IDISP001
         var serializerResolver = new MessageSerializerResolver(
             channelRegistry,
             deserializer,

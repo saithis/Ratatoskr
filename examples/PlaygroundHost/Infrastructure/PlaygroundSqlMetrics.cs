@@ -74,7 +74,7 @@ public static class PlaygroundSqlMetrics
         CancellationToken cancellationToken
     )
     {
-        await using var conn = db.Database.GetDbConnection();
+        var conn = db.Database.GetDbConnection();
         var opened = false;
         if (conn.State != ConnectionState.Open)
         {
