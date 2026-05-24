@@ -72,7 +72,6 @@ public sealed class ScenarioRunService(
         var runId = Guid.NewGuid();
         await WithPlaygroundDbAsync(async db =>
         {
-            await db.Database.EnsureCreatedAsync(cancellationToken);
             db.Runs.Add(
                 new PlaygroundRunEntity
                 {

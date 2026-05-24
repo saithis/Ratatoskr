@@ -12,13 +12,24 @@ namespace Ratatoskr.Tests.Examples;
 [ClassDataSource<RabbitMqContainerFixture, PostgresContainerFixture>(
     Shared = [SharedType.PerTestSession, SharedType.PerTestSession]
 )]
-public sealed class PlaygroundHostScenarioHttpTests(
-    RabbitMqContainerFixture rabbit,
-    PostgresContainerFixture postgres
-) : IAsyncDisposable
+public sealed class PlaygroundHostScenarioHttpTests : IAsyncDisposable
 {
     private static readonly SemaphoreSlim _factoryLock = new(1, 1);
+    private static int _sharedFactoryUsers;
     private static WebApplicationFactory<PlaygroundHostAppMarker>? _sharedFactory;
+
+    private readonly RabbitMqContainerFixture _rabbit;
+    private readonly PostgresContainerFixture _postgres;
+
+    public PlaygroundHostScenarioHttpTests(
+        RabbitMqContainerFixture rabbit,
+        PostgresContainerFixture postgres
+    )
+    {
+        _rabbit = rabbit;
+        _postgres = postgres;
+        Interlocked.Increment(ref _sharedFactoryUsers);
+    }
 
     private static async Task CreateDatabaseAsync(
         string maintenanceConnectionString,
@@ -69,24 +80,24 @@ public sealed class PlaygroundHostScenarioHttpTests(
                 return existing;
             }
 
-            var testId = "shared";
+            const string testId = "shared";
             var pubDb = $"ph_{testId}_pub";
             var conDb = $"ph_{testId}_con";
             var playDb = $"ph_{testId}_play";
-            var maint = MaintenanceConnectionString(postgres.ConnectionString);
+            var maint = MaintenanceConnectionString(_postgres.ConnectionString);
             await CreateDatabaseAsync(maint, pubDb);
             await CreateDatabaseAsync(maint, conDb);
             await CreateDatabaseAsync(maint, playDb);
 
-            var pubCs = new NpgsqlConnectionStringBuilder(postgres.ConnectionString)
+            var pubCs = new NpgsqlConnectionStringBuilder(_postgres.ConnectionString)
             {
                 Database = pubDb,
             }.ToString();
-            var conCs = new NpgsqlConnectionStringBuilder(postgres.ConnectionString)
+            var conCs = new NpgsqlConnectionStringBuilder(_postgres.ConnectionString)
             {
                 Database = conDb,
             }.ToString();
-            var playCs = new NpgsqlConnectionStringBuilder(postgres.ConnectionString)
+            var playCs = new NpgsqlConnectionStringBuilder(_postgres.ConnectionString)
             {
                 Database = playDb,
             }.ToString();
@@ -94,7 +105,7 @@ public sealed class PlaygroundHostScenarioHttpTests(
             var factory = new WebApplicationFactory<PlaygroundHostAppMarker>().WithWebHostBuilder(
                 builder =>
                 {
-                    builder.UseSetting("ConnectionStrings:rabbitmq", rabbit.ConnectionString);
+                    builder.UseSetting("ConnectionStrings:rabbitmq", _rabbit.ConnectionString);
                     builder.UseSetting("ConnectionStrings:publisherdb", pubCs);
                     builder.UseSetting("ConnectionStrings:consumerdb", conCs);
                     builder.UseSetting("ConnectionStrings:playgrounddb", playCs);
@@ -119,6 +130,12 @@ public sealed class PlaygroundHostScenarioHttpTests(
     private async Task<HttpClient> GetClientAsync() =>
         (await GetOrCreateSharedFactoryAsync()).CreateClient();
 
+    private async Task RunHttpTestAsync(Func<HttpClient, Task> test)
+    {
+        using var client = await GetClientAsync();
+        await test(client);
+    }
+
     [System.Diagnostics.CodeAnalysis.SuppressMessage(
         "Usage",
         "IDISP007:Don't dispose injected",
@@ -126,13 +143,18 @@ public sealed class PlaygroundHostScenarioHttpTests(
     )]
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Decrement(ref _sharedFactoryUsers) != 0)
+        {
+            return;
+        }
+
         await _factoryLock.WaitAsync();
         try
         {
-            if (_sharedFactory is not null)
+            var factory = Interlocked.Exchange(ref _sharedFactory, null);
+            if (factory is not null)
             {
-                await _sharedFactory.DisposeAsync();
-                _sharedFactory = null;
+                await factory.DisposeAsync();
             }
         }
         finally
@@ -188,64 +210,75 @@ public sealed class PlaygroundHostScenarioHttpTests(
     }
 
     [Test]
-    public async Task Catalog_Contains_AllScenarios()
-    {
-        using var client = await GetClientAsync();
-
-        var catalog = await client.GetFromJsonAsync<List<ScenarioCatalogDto>>(
-            "/api/playground/scenarios"
-        );
-        catalog.Should().NotBeNull();
-        var slugs = catalog.Select(c => c.Slug).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        slugs.Should().Contain("outbox-success");
-        slugs.Should().Contain("cancel-smoke");
-        slugs.Should().Contain("blocking-hold");
-    }
-
-    [Test]
-    public async Task ConcurrentStarts_TwoOutboxSuccessRuns_BothAccepted()
-    {
-        using var client = await GetClientAsync();
-
-        var a = client.PostAsync("/api/playground/scenarios/outbox-success/run", null);
-        var b = client.PostAsync("/api/playground/scenarios/outbox-success/run", null);
-        var responses = await Task.WhenAll(a, b);
-
-        responses
-            .Should()
-            .OnlyContain(r =>
-                r.StatusCode == HttpStatusCode.Accepted || r.StatusCode == HttpStatusCode.OK
+    public Task Catalog_Contains_AllScenarios() =>
+        RunHttpTestAsync(async client =>
+        {
+            var catalog = await client.GetFromJsonAsync<List<ScenarioCatalogDto>>(
+                "/api/playground/scenarios"
             );
-    }
+            catalog.Should().NotBeNull();
+            var slugs = catalog.Select(c => c.Slug).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            slugs.Should().Contain("outbox-success");
+            slugs.Should().Contain("cancel-smoke");
+            slugs.Should().Contain("blocking-hold");
+        });
 
     [Test]
-    public async Task CancelSmoke_AfterCancel_CompletesWithPassAndCancelledDetail()
-    {
-        var slug = "cancel-smoke";
-        using var client = await GetClientAsync();
+    public Task ConcurrentRuns_TwoOutboxSuccessRuns_BothPass() =>
+        RunHttpTestAsync(async client =>
+        {
+            var startA = client.PostAsync("/api/playground/scenarios/outbox-success/run", null);
+            var startB = client.PostAsync("/api/playground/scenarios/outbox-success/run", null);
+            using var runA = await startA;
+            using var runB = await startB;
 
-        var runId = await StartScenarioAsync(client, slug);
-        using var cancelRes = await client.PostAsync($"/api/playground/runs/{runId}/cancel", null);
-        cancelRes.StatusCode.Should().Be(HttpStatusCode.OK);
+            runA.StatusCode.Should().BeOneOf(HttpStatusCode.Accepted, HttpStatusCode.OK);
+            runB.StatusCode.Should().BeOneOf(HttpStatusCode.Accepted, HttpStatusCode.OK);
 
-        var status = await WaitForTerminalAsync(client, runId, 30);
-        status.State.Should().Be("Passed");
-        status.Detail.Should().Contain("Cancelled", $"detail was: {status.Detail}");
-    }
+            var idA = (await runA.Content.ReadFromJsonAsync<RunAcceptedDto>())!.RunId;
+            var idB = (await runB.Content.ReadFromJsonAsync<RunAcceptedDto>())!.RunId;
+            idA.Should().NotBe(idB);
+
+            var statusA = await WaitForTerminalAsync(client, idA, 30);
+            var statusB = await WaitForTerminalAsync(client, idB, 30);
+            statusA.State.Should().Be("Passed", statusA.Detail);
+            statusB.State.Should().Be("Passed", statusB.Detail);
+        });
 
     [Test]
-    public async Task BlockingHold_WithCancel_TerminatesAsCancelled()
-    {
-        var slug = "blocking-hold";
-        using var client = await GetClientAsync();
+    public Task CancelSmoke_AfterCancel_CompletesWithPassAndCancelledDetail() =>
+        RunHttpTestAsync(async client =>
+        {
+            const string slug = "cancel-smoke";
 
-        var runId = await StartScenarioAsync(client, slug, confirmDanger: true);
-        using var cancelRes = await client.PostAsync($"/api/playground/runs/{runId}/cancel", null);
-        cancelRes.StatusCode.Should().Be(HttpStatusCode.OK);
+            var runId = await StartScenarioAsync(client, slug);
+            using var cancelRes = await client.PostAsync(
+                $"/api/playground/runs/{runId}/cancel",
+                null
+            );
+            cancelRes.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var status = await WaitForTerminalAsync(client, runId, 30);
-        status.State.Should().Be("Cancelled");
-    }
+            var status = await WaitForTerminalAsync(client, runId, 30);
+            status.State.Should().Be("Passed");
+            status.Detail.Should().Contain("Cancelled", $"detail was: {status.Detail}");
+        });
+
+    [Test]
+    public Task BlockingHold_WithCancel_TerminatesAsCancelled() =>
+        RunHttpTestAsync(async client =>
+        {
+            const string slug = "blocking-hold";
+
+            var runId = await StartScenarioAsync(client, slug, confirmDanger: true);
+            using var cancelRes = await client.PostAsync(
+                $"/api/playground/runs/{runId}/cancel",
+                null
+            );
+            cancelRes.StatusCode.Should().Be(HttpStatusCode.OK);
+
+            var status = await WaitForTerminalAsync(client, runId, 30);
+            status.State.Should().Be("Cancelled");
+        });
 
     [Test]
     [Arguments("outbox-success")]
@@ -261,24 +294,26 @@ public sealed class PlaygroundHostScenarioHttpTests(
     [Arguments("direct-consume-dlq")]
     [Arguments("fanout-two-handlers-on-orderplaced")]
     [Arguments("efcore-internal-command")]
-    public async Task Scenario_EndsPassed(string slug)
-    {
-        using var client = await GetClientAsync();
-
-        var runId = await StartScenarioAsync(client, slug);
-        var status = await WaitForTerminalAsync(client, runId, 20);
-        status.State.Should().Be("Passed", $"slug={slug} detail={status.Detail}");
-    }
+    public Task Scenario_EndsPassed(string slug) =>
+        RunHttpTestAsync(async client =>
+        {
+            var runId = await StartScenarioAsync(client, slug);
+            var status = await WaitForTerminalAsync(client, runId, 20);
+            status.State.Should().Be("Passed", $"slug={slug} detail={status.Detail}");
+        });
 
     [Test]
-    public async Task BlockingHold_WithoutDangerConfirm_ReturnsBadRequest()
-    {
-        var slug = "blocking-hold";
-        using var client = await GetClientAsync();
+    public Task BlockingHold_WithoutDangerConfirm_ReturnsBadRequest() =>
+        RunHttpTestAsync(async client =>
+        {
+            const string slug = "blocking-hold";
 
-        using var runRes = await client.PostAsync($"/api/playground/scenarios/{slug}/run", null);
-        runRes.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-    }
+            using var runRes = await client.PostAsync(
+                $"/api/playground/scenarios/{slug}/run",
+                null
+            );
+            runRes.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        });
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage(
         "Reliability",
@@ -292,20 +327,20 @@ public sealed class PlaygroundHostScenarioHttpTests(
         var pubDb = $"ph_{testId}_pub";
         var conDb = $"ph_{testId}_con";
         var playDb = $"ph_{testId}_play";
-        var maint = MaintenanceConnectionString(postgres.ConnectionString);
+        var maint = MaintenanceConnectionString(_postgres.ConnectionString);
         await CreateDatabaseAsync(maint, pubDb);
         await CreateDatabaseAsync(maint, conDb);
         await CreateDatabaseAsync(maint, playDb);
 
-        var pubCs = new NpgsqlConnectionStringBuilder(postgres.ConnectionString)
+        var pubCs = new NpgsqlConnectionStringBuilder(_postgres.ConnectionString)
         {
             Database = pubDb,
         }.ToString();
-        var conCs = new NpgsqlConnectionStringBuilder(postgres.ConnectionString)
+        var conCs = new NpgsqlConnectionStringBuilder(_postgres.ConnectionString)
         {
             Database = conDb,
         }.ToString();
-        var playCs = new NpgsqlConnectionStringBuilder(postgres.ConnectionString)
+        var playCs = new NpgsqlConnectionStringBuilder(_postgres.ConnectionString)
         {
             Database = playDb,
         }.ToString();
@@ -313,7 +348,7 @@ public sealed class PlaygroundHostScenarioHttpTests(
         await using var factory =
             new WebApplicationFactory<PlaygroundHostAppMarker>().WithWebHostBuilder(builder =>
             {
-                builder.UseSetting("ConnectionStrings:rabbitmq", rabbit.ConnectionString);
+                builder.UseSetting("ConnectionStrings:rabbitmq", _rabbit.ConnectionString);
                 builder.UseSetting("ConnectionStrings:publisherdb", pubCs);
                 builder.UseSetting("ConnectionStrings:consumerdb", conCs);
                 builder.UseSetting("ConnectionStrings:playgrounddb", playCs);
