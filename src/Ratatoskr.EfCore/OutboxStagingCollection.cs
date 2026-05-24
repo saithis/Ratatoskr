@@ -6,7 +6,7 @@ namespace Ratatoskr.EfCore;
 /// Collection for staging messages to be sent via the outbox pattern.
 /// Messages added here will be persisted to the database and sent transactionally.
 /// </summary>
-public class OutboxStagingCollection
+public sealed class OutboxStagingCollection
 {
     internal readonly List<Item> StagedItems = new();
 

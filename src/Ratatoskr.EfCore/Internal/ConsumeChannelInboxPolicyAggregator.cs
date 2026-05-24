@@ -3,7 +3,7 @@ namespace Ratatoskr.EfCore.Internal;
 internal sealed class ConsumeChannelInboxPolicyAggregator
 {
     private readonly HashSet<string> _warnings = new(StringComparer.Ordinal);
-    private readonly object _sync = new();
+    private readonly Lock _sync = new();
 
     public ConsumeChannelInboxRequirement EffectiveRequirement { get; private set; } =
         ConsumeChannelInboxRequirement.None;

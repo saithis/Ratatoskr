@@ -202,9 +202,9 @@ dotnet_naming_rule.stylecop_instance_fields_must_be_private_rule.symbols = style
 dotnet_naming_symbols.stylecop_fields_must_be_private_group.applicable_accessibilities = public, internal, protected_internal, protected, private_protected
 dotnet_naming_symbols.stylecop_fields_must_be_private_group.applicable_kinds = field
 
-# Private fields must be camelCase
+# Private fields must be _camelCase
 dotnet_naming_rule.stylecop_private_fields_must_be_camel_case_rule.severity = warning
-dotnet_naming_rule.stylecop_private_fields_must_be_camel_case_rule.style = camel_case_style
+dotnet_naming_rule.stylecop_private_fields_must_be_camel_case_rule.style = camel_case_underscore_style
 dotnet_naming_rule.stylecop_private_fields_must_be_camel_case_rule.symbols = stylecop_private_fields_group
 dotnet_naming_symbols.stylecop_private_fields_group.applicable_accessibilities = private
 dotnet_naming_symbols.stylecop_private_fields_group.applicable_kinds = field
@@ -633,7 +633,7 @@ dotnet_diagnostic.CA1032.severity = suggestion
 dotnet_diagnostic.CA1033.severity = suggestion
 
 # Nested types should not be visible
-dotnet_diagnostic.CA1034.severity = error
+dotnet_diagnostic.CA1034.severity = none # false positives with new extension method syntax
 
 # Override methods on comparable types
 dotnet_diagnostic.CA1036.severity = suggestion
@@ -2220,7 +2220,7 @@ dotnet_diagnostic.SA1119.severity = suggestion
 dotnet_diagnostic.SA1120.severity = warning
 
 # DoNotUseRegions
-dotnet_diagnostic.SA1124.severity = warning
+dotnet_diagnostic.SA1124.severity = suggestion
 
 # UsingDirectivesMustBePlacedCorrectly
 dotnet_diagnostic.SA1200.severity = warning
@@ -2244,7 +2244,7 @@ dotnet_diagnostic.SA1303.severity = error
 
 # FieldNamesMustNotUseHungarianNotation
 # Examples in Rock Your Code: Coding Standards for Microsoft .NET
-dotnet_diagnostic.SA1305.severity = warning
+dotnet_diagnostic.SA1305.severity = none
 
 # VariableNamesMustNotBePrefixed
 dotnet_diagnostic.SA1308.severity = error
@@ -2489,7 +2489,7 @@ dotnet_diagnostic.IDISP026.severity = error
 
 # Asynchronous method names should end with Async
 # Examples in Rock Your Code: Coding Standards for Microsoft .NET
-dotnet_diagnostic.ASYNC0001.severity = error
+dotnet_diagnostic.ASYNC0001.severity = none # covered by VSTHRD200
 
 # Non asynchronous method names should not end with Async
 # Examples in Rock Your Code: Coding Standards for Microsoft .NET
@@ -2594,7 +2594,7 @@ dotnet_diagnostic.VSTHRD200.severity = error
 
 # Asynchronous method name should end with 'Async'
 # Examples in Rock Your Code: Coding Standards for Microsoft .NET
-dotnet_diagnostic.RCS1046.severity = error
+dotnet_diagnostic.RCS1046.severity = none # covered by VSTHRD200
 
 # Non-asynchronous method name should not end with 'Async'
 # Examples in Rock Your Code: Coding Standards for Microsoft .NET
@@ -3251,3 +3251,13 @@ dotnet_diagnostic.SA1204.severity = none # Static/Instance ordering
 # Disable spacing/formatting rules to avoid conflict with CSharpier
 dotnet_diagnostic.SA1513.severity = none # Closing brace followed by blank line
 dotnet_diagnostic.SA1519.severity = none # Braces around multi-line child statements
+
+# Disable pedantic XML comments and formatting rules
+dotnet_diagnostic.SA1512.severity = none # Single-line comments blank line
+dotnet_diagnostic.RCS1140.severity = none # Add exception to documentation comment - TODO think about enabling that later, together with proper exception types
+dotnet_diagnostic.SA1602.severity = none # Enumeration items should be documented
+dotnet_diagnostic.SA1601.severity = none # Partial elements should be documented
+dotnet_diagnostic.RCS1226.severity = none # Add paragraph to documentation comment
+
+# Prevent duplicate seal class warnings (Keep CLASS0001)
+dotnet_diagnostic.RCS1225.severity = none # Roslynator make class sealed

@@ -27,8 +27,8 @@ internal static class InboxConfigurationValidator
                 var firstHandler = inboxHandlers[0];
                 throw new InvalidOperationException(
                     $"Channel '{channel.ChannelName}' has inbox handler '{firstHandler.InboxKey}' "
-                        + $"but does not have UseInbox<TDbContext>() configured. "
-                        + $"Either add UseInbox<TDbContext>() to the channel or move fire-and-forget handlers to a separate channel without UseInbox."
+                        + "but does not have UseInbox<TDbContext>() configured. "
+                        + "Either add UseInbox<TDbContext>() to the channel or move fire-and-forget handlers to a separate channel without UseInbox."
                 );
             }
 
@@ -47,8 +47,8 @@ internal static class InboxConfigurationValidator
                         throw new InvalidOperationException(
                             $"Channel '{channel.ChannelName}' has UseInbox<TDbContext>() configured, "
                                 + $"but handler '{handler.HandlerType.Name}' was registered without a stable key. "
-                                + $"Provide a key via WithHandler<THandler>(\"key\") for inbox processing, "
-                                + $"or move fire-and-forget handlers to a separate channel without UseInbox."
+                                + "Provide a key via WithHandler<THandler>(\"key\") for inbox processing, "
+                                + "or move fire-and-forget handlers to a separate channel without UseInbox."
                         );
                     }
                 }
@@ -66,7 +66,7 @@ internal static class InboxConfigurationValidator
             {
                 throw new InvalidOperationException(
                     $"Inbox handler for '{handler.HandlerType.Name}' has an empty stable key. "
-                        + $"Provide a non-empty key via Consumes<TMsg>(m => m.WithHandler<THandler>(\"key\"))."
+                        + "Provide a non-empty key via Consumes<TMsg>(m => m.WithHandler<THandler>(\"key\"))."
                 );
             }
         }
@@ -93,7 +93,7 @@ internal static class InboxConfigurationValidator
 
         var message =
             $"Channel '{channel.ChannelName}' does not have UseInbox<TDbContext>() configured. "
-            + $"Either add UseInbox<TDbContext>() to the channel or explicitly opt out with AllowConsumeWithoutInbox().";
+            + "Either add UseInbox<TDbContext>() to the channel or explicitly opt out with AllowConsumeWithoutInbox().";
 
         if (policyAggregator.EffectiveRequirement == ConsumeChannelInboxRequirement.Fail)
         {

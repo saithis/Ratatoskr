@@ -47,7 +47,6 @@
     <PackageVersion Include="IDisposableAnalyzers" Version="4.0.8" />
     <PackageVersion Include="Roslynator.Analyzers" Version="4.13.0" />
     <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="17.13.2" />
-    <PackageVersion Include="AsyncUsageAnalyzers" Version="1.0.0-alpha003" />
-    <PackageVersion Include="Roslyn.Analyzers" Version="1.0.3.4" />
+    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.93" />
   </ItemGroup>
 </Project>

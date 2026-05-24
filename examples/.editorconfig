@@ -1,0 +1,7 @@
+[*.{cs,vb}]
+
+# CA1848: For improved performance, use the LoggerMessage delegates instead of calling 'LoggerExtensions.LogInformation(ILogger, string?, params object?[])'
+dotnet_diagnostic.CA1848.severity = none
+
+# CA1873: Evaluation of this argument may be expensive and unnecessary if logging is disabled
+dotnet_diagnostic.CA1873.severity = none
