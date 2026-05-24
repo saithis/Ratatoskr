@@ -1,6 +1,5 @@
 using AwesomeAssertions;
 using Ratatoskr.EfCore.Internal;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.EfCore;
 

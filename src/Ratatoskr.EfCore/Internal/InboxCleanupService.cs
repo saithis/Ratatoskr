@@ -8,7 +8,7 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr.EfCore.Internal;
 
-internal class InboxCleanupService<TDbContext>(
+internal partial class InboxCleanupService<TDbContext>(
     IServiceScopeFactory serviceScopeFactory,
     InboxOptionsHolder<TDbContext> optionsHolder,
     IDistributedLockProvider distributedLockProvider,
@@ -21,7 +21,7 @@ internal class InboxCleanupService<TDbContext>(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("Starting InboxCleanupService");
+        LogStartingInboxCleanupService(logger);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -33,11 +33,11 @@ internal class InboxCleanupService<TDbContext>(
             }
             catch (Exception e) when (!stoppingToken.IsCancellationRequested)
             {
-                logger.LogError(e, "InboxCleanupService encountered an error during cleanup");
+                LogInboxCleanupServiceError(logger, e);
             }
         }
 
-        logger.LogInformation("Stopped InboxCleanupService");
+        LogStoppedInboxCleanupService(logger);
     }
 
     internal async Task<bool> TryCleanupWithLockAsync(CancellationToken cancellationToken)
@@ -50,7 +50,7 @@ internal class InboxCleanupService<TDbContext>(
 
         if (dLock == null)
         {
-            logger.LogDebug("InboxCleanupService skipped — another instance holds the lock");
+            LogInboxCleanupServiceSkippedLock(logger);
             RatatoskrDiagnostics.LockAcquisitionFailure.Add(
                 1,
                 new TagList { { "processor", "InboxCleanupService" } }
@@ -85,7 +85,9 @@ internal class InboxCleanupService<TDbContext>(
                 .ExecuteDeleteAsync(cancellationToken);
 
             if (deleted > 0)
+            {
                 RatatoskrDiagnostics.InboxCleanupStatusCount.Add(deleted);
+            }
 
             totalStatusesDeleted += deleted;
         } while (deleted == _options.CleanupBatchSize);
@@ -107,7 +109,9 @@ internal class InboxCleanupService<TDbContext>(
                 .ExecuteDeleteAsync(cancellationToken);
 
             if (deleted > 0)
+            {
                 RatatoskrDiagnostics.InboxCleanupMessageCount.Add(deleted);
+            }
 
             totalMessagesDeleted += deleted;
         } while (deleted == _options.CleanupBatchSize);
@@ -117,12 +121,49 @@ internal class InboxCleanupService<TDbContext>(
         );
 
         if (totalStatusesDeleted > 0 || totalMessagesDeleted > 0)
-            logger.LogInformation(
-                "InboxCleanupService deleted {StatusCount} handler status(es) and {MessageCount} orphaned message(s)",
-                totalStatusesDeleted,
-                totalMessagesDeleted
-            );
+        {
+            LogInboxCleanupServiceDeleted(logger, totalStatusesDeleted, totalMessagesDeleted);
+        }
 
         return (totalStatusesDeleted, totalMessagesDeleted);
     }
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Information,
+        Message = "Starting InboxCleanupService"
+    )]
+    private static partial void LogStartingInboxCleanupService(ILogger logger);
+
+    [LoggerMessage(
+        EventId = 2,
+        Level = LogLevel.Error,
+        Message = "InboxCleanupService encountered an error during cleanup"
+    )]
+    private static partial void LogInboxCleanupServiceError(ILogger logger, Exception ex);
+
+    [LoggerMessage(
+        EventId = 3,
+        Level = LogLevel.Information,
+        Message = "Stopped InboxCleanupService"
+    )]
+    private static partial void LogStoppedInboxCleanupService(ILogger logger);
+
+    [LoggerMessage(
+        EventId = 4,
+        Level = LogLevel.Debug,
+        Message = "InboxCleanupService skipped — another instance holds the lock"
+    )]
+    private static partial void LogInboxCleanupServiceSkippedLock(ILogger logger);
+
+    [LoggerMessage(
+        EventId = 5,
+        Level = LogLevel.Information,
+        Message = "InboxCleanupService deleted {StatusCount} handler status(es) and {MessageCount} orphaned message(s)"
+    )]
+    private static partial void LogInboxCleanupServiceDeleted(
+        ILogger logger,
+        int statusCount,
+        int messageCount
+    );
 }

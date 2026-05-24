@@ -3,21 +3,22 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.Management;
 
 namespace Ratatoskr.EfCore.Management.Endpoints.Inbox;
 
-internal static class ListPoisonedInboxEndpoint
+internal static partial class ListPoisonedInboxEndpoint
 {
     internal static void Map(IEndpointRouteBuilder inboxGroup)
     {
-        inboxGroup.MapGet("/poisoned", Handle);
+        inboxGroup.MapGet("/poisoned", HandleAsync);
     }
 
-    private static async Task<Results<Ok<InboxPoisonedListResponse>, ProblemHttpResult>> Handle(
+    private static async Task<
+        Results<Ok<InboxPoisonedListResponse>, ProblemHttpResult>
+    > HandleAsync(
         string contextName,
         EfCoreManagementDbContextLookup lookup,
         ILoggerFactory loggerFactory,
@@ -34,7 +35,9 @@ internal static class ListPoisonedInboxEndpoint
             ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         pageSize = PaginationOptions.ClampPageSize(pageSize);
 
@@ -43,10 +46,7 @@ internal static class ListPoisonedInboxEndpoint
         {
             if (!CursorHelper.TryDecode(cursor, out var c))
             {
-                logger.LogInformation(
-                    "Rejecting management list request with malformed cursor (context {ContextName}).",
-                    contextName
-                );
+                LogRejectingMalformedCursor(logger, contextName);
                 return ManagementResults.BadRequest("Invalid pagination cursor.");
             }
             decodedCursor = c;
@@ -59,9 +59,15 @@ internal static class ListPoisonedInboxEndpoint
             select new { hs, msg };
 
         if (from.HasValue)
+        {
             filtered = filtered.Where(x => x.msg.ReceivedAt >= from.Value);
+        }
+
         if (to.HasValue)
+        {
             filtered = filtered.Where(x => x.msg.ReceivedAt <= to.Value);
+        }
+
         if (search is not null)
         {
             var pattern = ManagementHelpers.BuildSearchPattern(search);
@@ -98,7 +104,9 @@ internal static class ListPoisonedInboxEndpoint
 
         var hasNext = rows.Count > pageSize;
         if (hasNext)
+        {
             rows.RemoveAt(rows.Count - 1);
+        }
 
         var dtos = rows.Select(x => new InboxPoisonedListItem(
                 x.Id,
@@ -136,4 +144,11 @@ internal static class ListPoisonedInboxEndpoint
         long TotalCount,
         string? NextCursor
     );
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Information,
+        Message = "Rejecting management list request with malformed cursor (context {ContextName})."
+    )]
+    private static partial void LogRejectingMalformedCursor(ILogger logger, string contextName);
 }

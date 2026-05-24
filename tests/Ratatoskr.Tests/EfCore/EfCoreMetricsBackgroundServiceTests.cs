@@ -1,4 +1,3 @@
-using System.Reflection;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -82,9 +81,9 @@ public class EfCoreMetricsBackgroundServiceTests
             );
             outProcessed.MarkAsProcessed(timeProvider);
 
-            dbContext
+            await dbContext
                 .Set<OutboxMessageEntity>()
-                .AddRange(outPending1, outPending2, outPoisoned, outProcessed);
+                .AddRangeAsync(outPending1, outPending2, outPoisoned, outProcessed);
 
             // Add Inbox Statuses
             // 3 pending
@@ -124,9 +123,9 @@ public class EfCoreMetricsBackgroundServiceTests
             );
             inCompleted.MarkAsCompleted(timeProvider);
 
-            dbContext
+            await dbContext
                 .Set<InboxHandlerStatusEntity>()
-                .AddRange(
+                .AddRangeAsync(
                     inPending1,
                     inPending2,
                     inPending3,

@@ -7,7 +7,6 @@ using Microsoft.Extensions.Time.Testing;
 using Ratatoskr.EfCore;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.Tests.Fixtures;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.EfCore;
 
@@ -54,7 +53,7 @@ public class ProcessorHealthCheckTests
     {
         // Arrange
         var timeProvider = new FakeTimeProvider();
-        var processor = new TestProcessor(timeProvider);
+        using var processor = new TestProcessor(timeProvider);
 
         // Last success is exactly now.
         var healthCheck = new ProcessorHealthCheck<TestProcessor>(
@@ -77,7 +76,7 @@ public class ProcessorHealthCheckTests
         var timeProvider = new FakeTimeProvider();
 
         // When processor is created, LastSuccessfulProcessingAt is initialized to timeProvider.GetUtcNow()
-        var processor = new TestProcessor(timeProvider);
+        using var processor = new TestProcessor(timeProvider);
 
         var healthCheck = new ProcessorHealthCheck<TestProcessor>(
             processor,
@@ -95,11 +94,9 @@ public class ProcessorHealthCheckTests
         result.Status.Should().Be(HealthStatus.Unhealthy);
     }
 
-    private class TestProcessor : PollingBackgroundService
+    private sealed class TestProcessor(TimeProvider timeProvider)
+        : PollingBackgroundService(null!, timeProvider, NullLogger.Instance)
     {
-        public TestProcessor(TimeProvider timeProvider)
-            : base(default!, timeProvider, NullLogger.Instance) { }
-
         protected override string ProcessorName => "Test";
         protected override TimeSpan PollingInterval => TimeSpan.FromSeconds(1);
         protected override TimeSpan RestartDelay => TimeSpan.FromSeconds(1);

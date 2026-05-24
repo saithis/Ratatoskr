@@ -166,7 +166,9 @@ public class InboxScopeAndIsolationTests(
         {
             DbContextIds[name] = dbContextId;
             if (Interlocked.Increment(ref _handlerCount) >= 2)
+            {
                 _allDone.TrySetResult();
+            }
         }
 
         public Task WaitForBothHandlersAsync(TimeSpan timeout) => _allDone.Task.WaitAsync(timeout);

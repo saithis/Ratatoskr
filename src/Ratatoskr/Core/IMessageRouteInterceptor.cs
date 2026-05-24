@@ -11,7 +11,7 @@ public interface IMessageRouteInterceptor
     /// Called before a message is dispatched to handlers.
     /// </summary>
     /// <returns>Result indicating whether any handlers were accepted for deferred processing.</returns>
-    Task<RouteInterceptResult> BeforeDispatchAsync(
+    public Task<RouteInterceptResult> BeforeDispatchAsync(
         byte[] body,
         MessageProperties properties,
         string transportName,

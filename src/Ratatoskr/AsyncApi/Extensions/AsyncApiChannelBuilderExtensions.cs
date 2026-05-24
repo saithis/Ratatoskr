@@ -11,9 +11,11 @@ public static class AsyncApiChannelBuilderExtensions
         Action<AsyncApiChannelOptions> configure
     )
     {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(configure);
         var opts = new AsyncApiChannelOptions();
         configure(opts);
-        builder.WithExtension(opts);
+        _ = builder.WithExtension(opts);
         return builder;
     }
 
@@ -22,9 +24,11 @@ public static class AsyncApiChannelBuilderExtensions
         Action<AsyncApiChannelOptions> configure
     )
     {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(configure);
         var opts = new AsyncApiChannelOptions();
         configure(opts);
-        builder.WithExtension(opts);
+        _ = builder.WithExtension(opts);
         return builder;
     }
 

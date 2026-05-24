@@ -21,7 +21,7 @@ public class RabbitMqChannelOptions
     /// <summary>
     /// Whether the exchange is deleted when the last queue is unbound. Default: false.
     /// </summary>
-    public bool ExchangeAutoDelete { get; private set; } = false;
+    public bool ExchangeAutoDelete { get; private set; }
 
     // ── Queue / Consumer ─────────────────────────────────────────────
 
@@ -52,7 +52,7 @@ public class RabbitMqChannelOptions
     /// Whether the broker should auto-acknowledge messages on delivery.
     /// When true, messages cannot be retried on failure. Default: false.
     /// </summary>
-    public bool AutoAck { get; private set; } = false;
+    public bool AutoAck { get; private set; }
 
     /// <summary>
     /// Whether the queue survives broker restarts. Default: true.
@@ -62,16 +62,16 @@ public class RabbitMqChannelOptions
     /// <summary>
     /// Whether the queue is exclusive to this connection. Default: false.
     /// </summary>
-    public bool QueueExclusive { get; private set; } = false;
+    public bool QueueExclusive { get; private set; }
 
     /// <summary>
     /// Whether the queue is deleted when the last consumer disconnects. Default: false.
-    /// Not supported with <see cref="Config.QueueType.Quorum"/> queues.
+    /// Not supported with <see cref="QueueType.Quorum"/> queues.
     /// </summary>
-    public bool QueueAutoDelete { get; private set; } = false;
+    public bool QueueAutoDelete { get; private set; }
 
     /// <summary>
-    /// The queue implementation type. Default: <see cref="Config.QueueType.Quorum"/>.
+    /// The queue implementation type. Default: <see cref="QueueType.Quorum"/>.
     /// </summary>
     public QueueType QueueType { get; private set; } = QueueType.Quorum;
 
@@ -234,7 +234,10 @@ public class RabbitMqChannelOptions
     {
         Retry.WithMaxRetries(maxRetries);
         if (delay.HasValue)
+        {
             Retry.WithDelay(delay.Value);
+        }
+
         return this;
     }
 }

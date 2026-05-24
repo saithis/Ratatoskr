@@ -20,7 +20,7 @@ builder.Services.AddSingleton<IDistributedLockProvider>(
 );
 #endregion
 
-builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+builder.Services.AddSingleton(TimeProvider.System);
 
 #region AddRatatoskr
 builder.Services.AddRatatoskr(bus =>
@@ -167,4 +167,4 @@ app.MapPost(
 app.MapAsyncApi();
 #endregion
 
-app.Run();
+await app.RunAsync();

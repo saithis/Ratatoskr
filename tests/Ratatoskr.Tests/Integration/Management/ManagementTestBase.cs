@@ -1,7 +1,6 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -20,8 +19,9 @@ namespace Ratatoskr.Tests.Integration.Management;
 public abstract class ManagementTestBase(
     RabbitMqContainerFixture rabbitMq,
     PostgresContainerFixture postgres
-) : RatatoskrIntegrationTest(rabbitMq, postgres)
+) : RatatoskrIntegrationTest(rabbitMq, postgres), IDisposable
 {
+    private bool _disposed;
     protected HttpClient HttpClient { get; private set; } = null!;
 
     protected async Task StartManagementTestAsync(Action<IServiceCollection>? configure = null)
@@ -56,7 +56,40 @@ public abstract class ManagementTestBase(
         });
 
         await InitializeDatabase();
+        HttpClient?.Dispose();
         HttpClient = CreateHttpClient();
+    }
+
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            HttpClient?.Dispose();
+        }
+
+        _disposed = true;
+    }
+
+    protected override async ValueTask DisposeAsyncCore()
+    {
+        if (!_disposed)
+        {
+            _disposed = true;
+            HttpClient?.Dispose();
+        }
+
+        await base.DisposeAsyncCore();
     }
 
     /// <summary>Seeds a poisoned outbox message and returns its ID.</summary>
@@ -78,7 +111,10 @@ public abstract class ManagementTestBase(
             var entity = OutboxMessageEntity.Create(content, props, time, "efcore");
             // Poison it by reaching max retries (ErrorCount >= maxRetries sets IsPoisoned)
             for (var i = 0; i < 3; i++)
+            {
                 entity.PublishFailed("simulated error", time, 3, TimeSpan.FromSeconds(1));
+            }
+
             db.Set<OutboxMessageEntity>().Add(entity);
             await db.SaveChangesAsync();
             id = entity.Id;
@@ -92,7 +128,7 @@ public abstract class ManagementTestBase(
     )
     {
         string messageId = null!;
-        Guid handlerStatusId = Guid.Empty;
+        var handlerStatusId = Guid.Empty;
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
@@ -112,7 +148,10 @@ public abstract class ManagementTestBase(
 
             var handler = InboxHandlerStatusEntity.Create(msg.Id, "handler-a", time);
             for (var i = 0; i < 3; i++)
+            {
                 handler.MarkAsFailed("simulated inbox error", time, 3, TimeSpan.FromSeconds(1));
+            }
+
             db.Set<InboxHandlerStatusEntity>().Add(handler);
 
             await db.SaveChangesAsync();

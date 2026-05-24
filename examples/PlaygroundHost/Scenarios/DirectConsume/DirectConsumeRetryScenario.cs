@@ -19,29 +19,25 @@ public sealed class DirectConsumeRetryScenario : IPlaygroundScenario
     private static string QueueName { get; } =
         PlaygroundAmqpNames.QueueName(ScenarioSlug, "notifications");
 
-    public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues =>
-        [new("work", QueueName)];
+    public static IReadOnlyList<PlaygroundRabbitQueue> RabbitQueues => [new("work", QueueName)];
 
-    public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
-    {
+    public static void RegisterRatatoskrTopology(RatatoskrBuilder bus) =>
         bus.AddEventPublishChannel(
-            ExchangeName,
-            c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<RetryDemo>()
-        );
-
-        bus.AddEventConsumeChannel(
-            $"{ScenarioSlug}-work",
-            c =>
-                c.WithRabbitMq(r =>
-                        r.WithTopicExchange()
-                            .WithAmqpExchangeName(ExchangeName)
-                            .WithQueueName(QueueName)
-                            .WithQueueType(QueueType.Classic)
-                            .WithRetry(maxRetries: 2, delay: TimeSpan.FromSeconds(1))
-                    )
-                    .Consumes<RetryDemo>(m => m.WithHandler<RetryDemoHandler>())
-        );
-    }
+                ExchangeName,
+                c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<RetryDemo>()
+            )
+            .AddEventConsumeChannel(
+                $"{ScenarioSlug}-work",
+                c =>
+                    c.WithRabbitMq(r =>
+                            r.WithTopicExchange()
+                                .WithAmqpExchangeName(ExchangeName)
+                                .WithQueueName(QueueName)
+                                .WithQueueType(QueueType.Classic)
+                                .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(1))
+                        )
+                        .Consumes<RetryDemo>(m => m.WithHandler<RetryDemoHandler>())
+            );
 
     public string Slug => ScenarioSlug;
 
@@ -57,6 +53,12 @@ public sealed class DirectConsumeRetryScenario : IPlaygroundScenario
         CancellationToken cancellationToken
     )
     {
+        await PlaygroundRabbitQueues.PurgeMainAndRetryAsync(
+            context.RabbitMqConnectionString,
+            QueueName,
+            cancellationToken
+        );
+
         var order = this.AddPlacedOrderToContext(
             context.PublisherDb,
             context.TimeProvider,
@@ -91,7 +93,9 @@ public sealed class DirectConsumeRetryScenario : IPlaygroundScenario
         ILogger<RetryDemoHandler> logger
     ) : IMessageHandler<RetryDemo>
     {
-        private static readonly ConcurrentDictionary<string, int> Attempts = new();
+        private static readonly ConcurrentDictionary<string, int> _attempts = new(
+            StringComparer.OrdinalIgnoreCase
+        );
 
         public async Task HandleAsync(
             RetryDemo message,
@@ -99,27 +103,40 @@ public sealed class DirectConsumeRetryScenario : IPlaygroundScenario
             CancellationToken cancellationToken
         )
         {
-            var key = properties.Id ?? message.OrderId;
-            var n = Attempts.AddOrUpdate(key, 1, (_, old) => old + 1);
+            _ = properties;
+            var key = $"{message.ScenarioRunId}:{message.OrderId}";
+            var n = _attempts.AddOrUpdate(key, 1, (_, old) => old + 1);
             if (n <= 2)
+            {
                 throw new InvalidOperationException(
                     "Simulated Rabbit consumer failure (succeed-after-2)."
                 );
+            }
 
-            var order = await context.Orders.FirstOrDefaultAsync(
-                o => o.Id == Guid.Parse(message.OrderId),
-                cancellationToken
-            );
-            if (order is null)
-                return;
-            var now = timeProvider.GetUtcNow().UtcDateTime;
-            order.Status = OrderStatus.Fulfilled;
-            order.StatusChangedAt = now;
-            await context.SaveChangesAsync(cancellationToken);
-            logger.LogInformation(
-                "Order {OrderId} marked Fulfilled after Rabbit retries",
-                message.OrderId
-            );
+            try
+            {
+                var order = await context.Orders.FirstOrDefaultAsync(
+                    o => o.Id == Guid.Parse(message.OrderId),
+                    cancellationToken
+                );
+                if (order is null)
+                {
+                    return;
+                }
+
+                var now = timeProvider.GetUtcNow().UtcDateTime;
+                order.Status = OrderStatus.Fulfilled;
+                order.StatusChangedAt = now;
+                await context.SaveChangesAsync(cancellationToken);
+                logger.LogInformation(
+                    "Order {OrderId} marked Fulfilled after Rabbit retries",
+                    message.OrderId
+                );
+            }
+            finally
+            {
+                _attempts.TryRemove(key, out _);
+            }
         }
     }
 }

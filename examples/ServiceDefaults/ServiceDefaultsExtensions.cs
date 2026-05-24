@@ -14,6 +14,8 @@ public static class ServiceDefaultsExtensions
 {
     public static IHostApplicationBuilder AddServiceDefaults(this IHostApplicationBuilder builder)
     {
+        ArgumentNullException.ThrowIfNull(builder);
+
         builder.ConfigureOpenTelemetry();
         builder.AddDefaultHealthChecks();
 
@@ -31,6 +33,8 @@ public static class ServiceDefaultsExtensions
         this IHostApplicationBuilder builder
     )
     {
+        ArgumentNullException.ThrowIfNull(builder);
+
         builder.Logging.AddOpenTelemetry(logging =>
         {
             logging.IncludeFormattedMessage = true;
@@ -56,7 +60,9 @@ public static class ServiceDefaultsExtensions
             });
 
         if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
+        {
             builder.Services.AddOpenTelemetry().UseOtlpExporter();
+        }
 
         return builder;
     }
@@ -65,6 +71,8 @@ public static class ServiceDefaultsExtensions
         this IHostApplicationBuilder builder
     )
     {
+        ArgumentNullException.ThrowIfNull(builder);
+
         builder
             .Services.AddHealthChecks()
             .AddCheck("self", () => HealthCheckResult.Healthy(), ["live"]);
@@ -74,6 +82,8 @@ public static class ServiceDefaultsExtensions
 
     public static WebApplication MapDefaultEndpoints(this WebApplication app)
     {
+        ArgumentNullException.ThrowIfNull(app);
+
         if (app.Environment.IsDevelopment())
         {
             app.MapHealthChecks("/health");

@@ -45,6 +45,8 @@ public class ActivityTracker
     /// </summary>
     public async Task<MessageTrackingSession> ExecuteAndWaitAsync(Func<Task> action)
     {
+        ArgumentNullException.ThrowIfNull(action);
+
         var conditions = new List<WaitCondition>(_waitConditions);
         _waitConditions.Clear();
 

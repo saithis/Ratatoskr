@@ -2,7 +2,6 @@ using System.Net;
 using System.Text.Encodings.Web;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
@@ -45,10 +44,10 @@ public class ManagementAuthorizationTests(
         });
 
         await InitializeDatabase();
-        var client = CreateHttpClient();
+        using var client = CreateHttpClient();
 
         // No authentication → 401
-        var response = await client.GetAsync(
+        using var response = await client.GetAsync(
             "/ratatoskr/api/v1/efcore/contexts/TestDbContext/outbox/poisoned"
         );
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);

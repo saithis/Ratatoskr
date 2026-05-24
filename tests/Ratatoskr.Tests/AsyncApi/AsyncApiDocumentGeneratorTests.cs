@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AwesomeAssertions;
@@ -25,6 +26,11 @@ public class AsyncApiDocumentGeneratorTests
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
+    [SuppressMessage(
+        "IDisposableAnalyzers.Correctness",
+        "IDISP004:Don\'t ignore created IDisposable",
+        Justification = "We accept this small memory leak for the test duration"
+    )]
     private static AsyncApiDocumentGenerator BuildGenerator(
         Action<RatatoskrBuilder> busConfig,
         Action<AsyncApiOptions>? asyncApiConfig = null,
@@ -36,12 +42,12 @@ public class AsyncApiDocumentGeneratorTests
 
         services.AddRatatoskr(bus =>
         {
-            bus.ConfigureCloudEvents(ce => ce.ContentMode = contentMode);
-            bus.ConfigureAsyncApi(opts =>
-            {
-                opts.WithTitle("Test Service").WithVersion("1.0.0");
-                asyncApiConfig?.Invoke(opts);
-            });
+            bus.ConfigureCloudEvents(ce => ce.ContentMode = contentMode)
+                .ConfigureAsyncApi(opts =>
+                {
+                    opts.WithTitle("Test Service").WithVersion("1.0.0");
+                    asyncApiConfig?.Invoke(opts);
+                });
             busConfig(bus);
         });
 
@@ -419,7 +425,7 @@ public class AsyncApiDocumentGeneratorTests
 
         var channel = document.Channels["events.topic"];
         channel.Servers.Should().NotBeNull();
-        channel.Servers!.Count.Should().Be(1);
+        channel.Servers.Count.Should().Be(1);
     }
 
     [Test]
@@ -439,7 +445,7 @@ public class AsyncApiDocumentGeneratorTests
 
         var op = document.Operations["sendOrderCreatedEvent"];
         op.Tags.Should().NotBeNull();
-        op.Tags!.Count.Should().Be(2);
+        op.Tags.Count.Should().Be(2);
         op.Tags[0].Name.Should().Be("orders");
         op.Tags[1].Name.Should().Be("lifecycle");
     }

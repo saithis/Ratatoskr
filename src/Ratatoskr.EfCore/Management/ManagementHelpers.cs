@@ -5,7 +5,7 @@ using Ratatoskr.EfCore.Internal;
 
 namespace Ratatoskr.EfCore.Management;
 
-internal static class ManagementHelpers
+internal static partial class ManagementHelpers
 {
     /// <summary>
     /// Builds a SQL LIKE pattern for a general substring search against a serialized
@@ -15,7 +15,12 @@ internal static class ManagementHelpers
     /// <c>EF.Functions.Like</c>.
     /// </summary>
     internal static string BuildSearchPattern(string search) =>
-        "%" + search.Replace(@"\", @"\\").Replace("%", @"\%").Replace("_", @"\_") + "%";
+        "%"
+        + search
+            .Replace(@"\", @"\\", StringComparison.OrdinalIgnoreCase)
+            .Replace("%", @"\%", StringComparison.OrdinalIgnoreCase)
+            .Replace("_", @"\_", StringComparison.OrdinalIgnoreCase)
+        + "%";
 
     internal static string ExtractType(string serializedProperties, ILogger? logger = null)
     {
@@ -28,10 +33,10 @@ internal static class ManagementHelpers
         {
             // Corrupt serialized properties — surface to the operator while still
             // returning a sentinel so the UI can render the row.
-            logger?.LogWarning(
-                ex,
-                "Failed to parse serialized message properties; returning '(unknown)' type."
-            );
+            if (logger != null)
+            {
+                LogFailedToParseMessageProperties(logger, ex);
+            }
         }
         return "(unknown)";
     }
@@ -50,8 +55,25 @@ internal static class ManagementHelpers
         }
         catch (Exception ex)
         {
-            logger?.LogDebug(ex, "Message payload is not JSON; only base64 will be surfaced.");
+            if (logger != null)
+            {
+                LogPayloadNotJson(logger, ex);
+            }
             return (null, base64);
         }
     }
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Warning,
+        Message = "Failed to parse serialized message properties; returning '(unknown)' type."
+    )]
+    private static partial void LogFailedToParseMessageProperties(ILogger logger, Exception ex);
+
+    [LoggerMessage(
+        EventId = 2,
+        Level = LogLevel.Debug,
+        Message = "Message payload is not JSON; only base64 will be surfaced."
+    )]
+    private static partial void LogPayloadNotJson(ILogger logger, Exception ex);
 }

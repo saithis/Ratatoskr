@@ -12,7 +12,9 @@ public static class RabbitMqMessageExtensions
         {
             var existing = registration.GetExtension<RabbitMqMessageOptions>();
             if (existing != null)
+            {
                 return existing;
+            }
 
             var options = new RabbitMqMessageOptions();
             registration.SetExtension(options);
@@ -25,6 +27,7 @@ public static class RabbitMqMessageExtensions
 
     public static MessageBuilder WithRoutingKey(this MessageBuilder builder, string routingKey)
     {
+        ArgumentNullException.ThrowIfNull(builder);
         builder.MessageRegistration.EnsureRabbitMqOptions().WithRoutingKey(routingKey);
         return builder;
     }

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Threading;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Npgsql;
@@ -11,13 +12,24 @@ namespace Ratatoskr.Tests.Examples;
 [ClassDataSource<RabbitMqContainerFixture, PostgresContainerFixture>(
     Shared = [SharedType.PerTestSession, SharedType.PerTestSession]
 )]
-public sealed class PlaygroundHostScenarioHttpTests(
-    RabbitMqContainerFixture rabbit,
-    PostgresContainerFixture postgres
-) : IAsyncDisposable
+public sealed class PlaygroundHostScenarioHttpTests : IAsyncDisposable
 {
-    private static WebApplicationFactory<PlaygroundHostAppMarker>? _sharedFactory;
     private static readonly SemaphoreSlim _factoryLock = new(1, 1);
+    private static int _sharedFactoryUsers;
+    private static WebApplicationFactory<PlaygroundHostAppMarker>? _sharedFactory;
+
+    private readonly RabbitMqContainerFixture _rabbit;
+    private readonly PostgresContainerFixture _postgres;
+
+    public PlaygroundHostScenarioHttpTests(
+        RabbitMqContainerFixture rabbit,
+        PostgresContainerFixture postgres
+    )
+    {
+        _rabbit = rabbit;
+        _postgres = postgres;
+        Interlocked.Increment(ref _sharedFactoryUsers);
+    }
 
     private static async Task CreateDatabaseAsync(
         string maintenanceConnectionString,
@@ -44,57 +56,70 @@ public sealed class PlaygroundHostScenarioHttpTests(
         return b.ToString();
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Reliability",
+        "CA2000:Dispose objects before losing scope",
+        Justification = "WebApplicationFactory ownership is transferred to _sharedFactory and disposed in DisposeAsync."
+    )]
     private async Task<
         WebApplicationFactory<PlaygroundHostAppMarker>
     > GetOrCreateSharedFactoryAsync()
     {
-        if (_sharedFactory is not null)
-            return _sharedFactory;
+        var existing = Volatile.Read(ref _sharedFactory);
+        if (existing is not null)
+        {
+            return existing;
+        }
 
         await _factoryLock.WaitAsync();
         try
         {
-            if (_sharedFactory is not null)
-                return _sharedFactory;
+            existing = Volatile.Read(ref _sharedFactory);
+            if (existing is not null)
+            {
+                return existing;
+            }
 
-            var testId = "shared";
+            const string testId = "shared";
             var pubDb = $"ph_{testId}_pub";
             var conDb = $"ph_{testId}_con";
             var playDb = $"ph_{testId}_play";
-            var maint = MaintenanceConnectionString(postgres.ConnectionString);
+            var maint = MaintenanceConnectionString(_postgres.ConnectionString);
             await CreateDatabaseAsync(maint, pubDb);
             await CreateDatabaseAsync(maint, conDb);
             await CreateDatabaseAsync(maint, playDb);
 
-            var pubCs = new NpgsqlConnectionStringBuilder(postgres.ConnectionString)
+            var pubCs = new NpgsqlConnectionStringBuilder(_postgres.ConnectionString)
             {
                 Database = pubDb,
             }.ToString();
-            var conCs = new NpgsqlConnectionStringBuilder(postgres.ConnectionString)
+            var conCs = new NpgsqlConnectionStringBuilder(_postgres.ConnectionString)
             {
                 Database = conDb,
             }.ToString();
-            var playCs = new NpgsqlConnectionStringBuilder(postgres.ConnectionString)
+            var playCs = new NpgsqlConnectionStringBuilder(_postgres.ConnectionString)
             {
                 Database = playDb,
             }.ToString();
 
-            _sharedFactory =
-                new WebApplicationFactory<PlaygroundHostAppMarker>().WithWebHostBuilder(builder =>
+            var factory = new WebApplicationFactory<PlaygroundHostAppMarker>().WithWebHostBuilder(
+                builder =>
                 {
-                    builder.UseSetting("ConnectionStrings:rabbitmq", rabbit.ConnectionString);
+                    builder.UseSetting("ConnectionStrings:rabbitmq", _rabbit.ConnectionString);
                     builder.UseSetting("ConnectionStrings:publisherdb", pubCs);
                     builder.UseSetting("ConnectionStrings:consumerdb", conCs);
                     builder.UseSetting("ConnectionStrings:playgrounddb", playCs);
                     builder.UseSetting("Playground:Enabled", "true");
                     builder.UseSetting("ASPNETCORE_ENVIRONMENT", "Development");
-                });
+                }
+            );
 
             // WebApplicationFactory.EnsureServer is not safe against concurrent first access; parallel tests can
             // otherwise both start the deferred host and race EnsureCreated on the same databases (42P07).
-            _ = _sharedFactory.Server;
+            _ = factory.Server;
 
-            return _sharedFactory;
+            Volatile.Write(ref _sharedFactory, factory);
+            return factory;
         }
         finally
         {
@@ -105,9 +130,37 @@ public sealed class PlaygroundHostScenarioHttpTests(
     private async Task<HttpClient> GetClientAsync() =>
         (await GetOrCreateSharedFactoryAsync()).CreateClient();
 
-    public ValueTask DisposeAsync()
+    private async Task RunHttpTestAsync(Func<HttpClient, Task> test)
     {
-        return ValueTask.CompletedTask;
+        using var client = await GetClientAsync();
+        await test(client);
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Usage",
+        "IDISP007:Don't dispose injected",
+        Justification = "_sharedFactory is a session-scoped static resource owned by this test class, not DI-injected."
+    )]
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Decrement(ref _sharedFactoryUsers) != 0)
+        {
+            return;
+        }
+
+        await _factoryLock.WaitAsync();
+        try
+        {
+            var factory = Interlocked.Exchange(ref _sharedFactory, null);
+            if (factory is not null)
+            {
+                await factory.DisposeAsync();
+            }
+        }
+        finally
+        {
+            _factoryLock.Release();
+        }
     }
 
     private static async Task<ScenarioRunStatusDto> WaitForTerminalAsync(
@@ -123,13 +176,16 @@ public sealed class PlaygroundHostScenarioHttpTests(
             status = await client.GetFromJsonAsync<ScenarioRunStatusDto>(
                 $"/api/playground/runs/{runId}"
             );
-            if (status is { state: "Passed" or "Failed" or "Cancelled" })
+            if (status is { State: "Passed" or "Failed" or "Cancelled" })
+            {
                 break;
+            }
+
             await Task.Delay(250);
         }
 
         status.Should().NotBeNull();
-        return status!;
+        return status;
     }
 
     private static async Task<Guid> StartScenarioAsync(
@@ -139,80 +195,91 @@ public sealed class PlaygroundHostScenarioHttpTests(
     )
     {
         var q = confirmDanger ? "?confirmDanger=true" : "";
-        var runRes = await client.PostAsync(
+        using var runRes = await client.PostAsync(
             $"/api/playground/scenarios/{Uri.EscapeDataString(slug)}/run{q}",
             null
         );
         var errBody = await runRes.Content.ReadAsStringAsync();
-        var okStart =
-            runRes.StatusCode == HttpStatusCode.Accepted || runRes.StatusCode == HttpStatusCode.OK;
+        var okStart = runRes.StatusCode is HttpStatusCode.Accepted or HttpStatusCode.OK;
         okStart
             .Should()
             .BeTrue($"POST run failed for slug={slug}: {(int)runRes.StatusCode} {errBody}");
         var runBody = await runRes.Content.ReadFromJsonAsync<RunAcceptedDto>();
-        runBody!.runId.Should().NotBeEmpty();
-        return runBody.runId;
+        runBody!.RunId.Should().NotBeEmpty();
+        return runBody.RunId;
     }
 
     [Test]
-    public async Task Catalog_Contains_AllScenarios()
-    {
-        var client = await GetClientAsync();
-
-        var catalog = await client.GetFromJsonAsync<List<ScenarioCatalogDto>>(
-            "/api/playground/scenarios"
-        );
-        catalog.Should().NotBeNull();
-        var slugs = catalog!.Select(c => c.slug).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        slugs.Should().Contain("outbox-success");
-        slugs.Should().Contain("cancel-smoke");
-        slugs.Should().Contain("blocking-hold");
-    }
-
-    [Test]
-    public async Task ConcurrentStarts_TwoOutboxSuccessRuns_BothAccepted()
-    {
-        var client = await GetClientAsync();
-
-        var a = client.PostAsync("/api/playground/scenarios/outbox-success/run", null);
-        var b = client.PostAsync("/api/playground/scenarios/outbox-success/run", null);
-        var responses = await Task.WhenAll(a, b);
-
-        responses
-            .Should()
-            .OnlyContain(r =>
-                r.StatusCode == HttpStatusCode.Accepted || r.StatusCode == HttpStatusCode.OK
+    public Task Catalog_Contains_AllScenarios() =>
+        RunHttpTestAsync(async client =>
+        {
+            var catalog = await client.GetFromJsonAsync<List<ScenarioCatalogDto>>(
+                "/api/playground/scenarios"
             );
-    }
+            catalog.Should().NotBeNull();
+            var slugs = catalog.Select(c => c.Slug).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            slugs.Should().Contain("outbox-success");
+            slugs.Should().Contain("cancel-smoke");
+            slugs.Should().Contain("blocking-hold");
+        });
 
     [Test]
-    public async Task CancelSmoke_AfterCancel_CompletesWithPassAndCancelledDetail()
-    {
-        var slug = "cancel-smoke";
-        var client = await GetClientAsync();
+    [Retry(2)]
+    public Task ConcurrentRuns_TwoOutboxSuccessRuns_BothPass() =>
+        RunHttpTestAsync(async client =>
+        {
+            var startA = client.PostAsync("/api/playground/scenarios/outbox-success/run", null);
+            var startB = client.PostAsync("/api/playground/scenarios/outbox-success/run", null);
+            using var runA = await startA;
+            using var runB = await startB;
 
-        var runId = await StartScenarioAsync(client, slug);
-        var cancelRes = await client.PostAsync($"/api/playground/runs/{runId}/cancel", null);
-        cancelRes.StatusCode.Should().Be(HttpStatusCode.OK);
+            runA.StatusCode.Should().BeOneOf(HttpStatusCode.Accepted, HttpStatusCode.OK);
+            runB.StatusCode.Should().BeOneOf(HttpStatusCode.Accepted, HttpStatusCode.OK);
 
-        var status = await WaitForTerminalAsync(client, runId, 30);
-        status.state.Should().Be("Passed");
-        status.detail.Should().Contain("Cancelled", $"detail was: {status.detail}");
-    }
+            var idA = (await runA.Content.ReadFromJsonAsync<RunAcceptedDto>())!.RunId;
+            var idB = (await runB.Content.ReadFromJsonAsync<RunAcceptedDto>())!.RunId;
+            idA.Should().NotBe(idB);
+
+            var statusA = await WaitForTerminalAsync(client, idA, 30);
+            var statusB = await WaitForTerminalAsync(client, idB, 30);
+            statusA.State.Should().Be("Passed", statusA.Detail);
+            statusB.State.Should().Be("Passed", statusB.Detail);
+        });
 
     [Test]
-    public async Task BlockingHold_WithCancel_TerminatesAsCancelled()
-    {
-        var slug = "blocking-hold";
-        var client = await GetClientAsync();
+    public Task CancelSmoke_AfterCancel_CompletesWithPassAndCancelledDetail() =>
+        RunHttpTestAsync(async client =>
+        {
+            const string slug = "cancel-smoke";
 
-        var runId = await StartScenarioAsync(client, slug, confirmDanger: true);
-        var cancelRes = await client.PostAsync($"/api/playground/runs/{runId}/cancel", null);
-        cancelRes.StatusCode.Should().Be(HttpStatusCode.OK);
+            var runId = await StartScenarioAsync(client, slug);
+            using var cancelRes = await client.PostAsync(
+                $"/api/playground/runs/{runId}/cancel",
+                null
+            );
+            cancelRes.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var status = await WaitForTerminalAsync(client, runId, 30);
-        status.state.Should().Be("Cancelled");
-    }
+            var status = await WaitForTerminalAsync(client, runId, 30);
+            status.State.Should().Be("Passed");
+            status.Detail.Should().Contain("Cancelled", $"detail was: {status.Detail}");
+        });
+
+    [Test]
+    public Task BlockingHold_WithCancel_TerminatesAsCancelled() =>
+        RunHttpTestAsync(async client =>
+        {
+            const string slug = "blocking-hold";
+
+            var runId = await StartScenarioAsync(client, slug, confirmDanger: true);
+            using var cancelRes = await client.PostAsync(
+                $"/api/playground/runs/{runId}/cancel",
+                null
+            );
+            cancelRes.StatusCode.Should().Be(HttpStatusCode.OK);
+
+            var status = await WaitForTerminalAsync(client, runId, 30);
+            status.State.Should().Be("Cancelled");
+        });
 
     [Test]
     [Arguments("outbox-success")]
@@ -228,40 +295,93 @@ public sealed class PlaygroundHostScenarioHttpTests(
     [Arguments("direct-consume-dlq")]
     [Arguments("fanout-two-handlers-on-orderplaced")]
     [Arguments("efcore-internal-command")]
-    public async Task Scenario_EndsPassed(string slug)
-    {
-        var client = await GetClientAsync();
-
-        var runId = await StartScenarioAsync(client, slug);
-        var status = await WaitForTerminalAsync(client, runId, 20);
-        status.state.Should().Be("Passed", $"slug={slug} detail={status.detail}");
-    }
+    [Retry(2)]
+    public Task Scenario_EndsPassed(string slug) =>
+        RunHttpTestAsync(async client =>
+        {
+            var runId = await StartScenarioAsync(client, slug);
+            var status = await WaitForTerminalAsync(client, runId, 20);
+            status.State.Should().Be("Passed", $"slug={slug} detail={status.Detail}");
+        });
 
     [Test]
-    public async Task BlockingHold_WithoutDangerConfirm_ReturnsBadRequest()
-    {
-        var slug = "blocking-hold";
-        var client = await GetClientAsync();
+    public Task BlockingHold_WithoutDangerConfirm_ReturnsBadRequest() =>
+        RunHttpTestAsync(async client =>
+        {
+            const string slug = "blocking-hold";
 
-        var runRes = await client.PostAsync($"/api/playground/scenarios/{slug}/run", null);
-        runRes.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+            using var runRes = await client.PostAsync(
+                $"/api/playground/scenarios/{slug}/run",
+                null
+            );
+            runRes.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        });
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Reliability",
+        "CA2000:Dispose objects before losing scope",
+        Justification = "WebApplicationFactory is disposed via await using for this isolated host configuration."
+    )]
+    [Test]
+    public async Task BlockingHold_WithConfiguredRunTimeout_TerminatesAsTimedOut()
+    {
+        var testId = Guid.NewGuid().ToString("N")[..12];
+        var pubDb = $"ph_{testId}_pub";
+        var conDb = $"ph_{testId}_con";
+        var playDb = $"ph_{testId}_play";
+        var maint = MaintenanceConnectionString(_postgres.ConnectionString);
+        await CreateDatabaseAsync(maint, pubDb);
+        await CreateDatabaseAsync(maint, conDb);
+        await CreateDatabaseAsync(maint, playDb);
+
+        var pubCs = new NpgsqlConnectionStringBuilder(_postgres.ConnectionString)
+        {
+            Database = pubDb,
+        }.ToString();
+        var conCs = new NpgsqlConnectionStringBuilder(_postgres.ConnectionString)
+        {
+            Database = conDb,
+        }.ToString();
+        var playCs = new NpgsqlConnectionStringBuilder(_postgres.ConnectionString)
+        {
+            Database = playDb,
+        }.ToString();
+
+        await using var factory =
+            new WebApplicationFactory<PlaygroundHostAppMarker>().WithWebHostBuilder(builder =>
+            {
+                builder.UseSetting("ConnectionStrings:rabbitmq", _rabbit.ConnectionString);
+                builder.UseSetting("ConnectionStrings:publisherdb", pubCs);
+                builder.UseSetting("ConnectionStrings:consumerdb", conCs);
+                builder.UseSetting("ConnectionStrings:playgrounddb", playCs);
+                builder.UseSetting("Playground:Enabled", "true");
+                builder.UseSetting("Playground:RunTimeoutSeconds", "8");
+                builder.UseSetting("ASPNETCORE_ENVIRONMENT", "Development");
+            });
+        _ = factory.Server;
+
+        using var client = factory.CreateClient();
+        var runId = await StartScenarioAsync(client, "blocking-hold", confirmDanger: true);
+        var status = await WaitForTerminalAsync(client, runId, 20);
+        status.State.Should().Be("Failed");
+        status.Detail.Should().Contain("Timed out", $"detail was: {status.Detail}");
     }
 
     private sealed record ScenarioCatalogDto(
-        string slug,
-        string title,
-        string description,
-        string? topic
+        string Slug,
+        string Title,
+        string Description,
+        string? Topic
     );
 
-    private sealed record RunAcceptedDto(Guid runId, string? title);
+    private sealed record RunAcceptedDto(Guid RunId, string? Title);
 
     private sealed record ScenarioRunStatusDto(
-        Guid id,
-        string scenarioSlug,
-        string state,
-        DateTimeOffset startedAt,
-        DateTimeOffset? completedAt,
-        string? detail
+        Guid Id,
+        string ScenarioSlug,
+        string State,
+        DateTimeOffset StartedAt,
+        DateTimeOffset? CompletedAt,
+        string? Detail
     );
 }

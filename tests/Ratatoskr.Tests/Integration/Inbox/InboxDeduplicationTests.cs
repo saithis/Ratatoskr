@@ -1,4 +1,3 @@
-using System.Threading;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;

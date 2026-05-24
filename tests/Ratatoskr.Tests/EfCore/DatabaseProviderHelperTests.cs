@@ -1,9 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.Tests.Fixtures;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.EfCore;
 
@@ -41,15 +39,15 @@ public class DatabaseProviderHelperTests
 
         var outbox = context.Model.FindEntityType(typeof(OutboxMessageEntity));
         outbox.Should().NotBeNull();
-        var outboxIndex = outbox!.FindIndex("IX_OutboxMessages_Processing");
+        var outboxIndex = outbox.FindIndex("IX_OutboxMessages_Processing");
         outboxIndex.Should().NotBeNull();
-        outboxIndex!.GetFilter().Should().Be("\"ProcessedAt\" IS NULL AND \"IsPoisoned\" = false");
+        outboxIndex.GetFilter().Should().Be("\"ProcessedAt\" IS NULL AND \"IsPoisoned\" = false");
 
         var handlerStatus = context.Model.FindEntityType(typeof(InboxHandlerStatusEntity));
         handlerStatus.Should().NotBeNull();
-        var inboxIndex = handlerStatus!.FindIndex("IX_InboxHandlerStatuses_Processing");
+        var inboxIndex = handlerStatus.FindIndex("IX_InboxHandlerStatuses_Processing");
         inboxIndex.Should().NotBeNull();
-        inboxIndex!.GetFilter().Should().Be("\"CompletedAt\" IS NULL AND \"IsPoisoned\" = false");
+        inboxIndex.GetFilter().Should().Be("\"CompletedAt\" IS NULL AND \"IsPoisoned\" = false");
     }
 
     [Test]

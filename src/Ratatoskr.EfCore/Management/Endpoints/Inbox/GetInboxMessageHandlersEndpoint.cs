@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.Management;
@@ -14,10 +13,10 @@ internal static class GetInboxMessageHandlersEndpoint
 {
     internal static void Map(IEndpointRouteBuilder inboxGroup)
     {
-        inboxGroup.MapGet("/messages/{messageId}/handlers", Handle);
+        inboxGroup.MapGet("/messages/{messageId}/handlers", HandleAsync);
     }
 
-    private static async Task<Results<Ok<InboxMessageHandlers>, ProblemHttpResult>> Handle(
+    private static async Task<Results<Ok<InboxMessageHandlers>, ProblemHttpResult>> HandleAsync(
         string contextName,
         string messageId,
         EfCoreManagementDbContextLookup lookup,
@@ -30,13 +29,17 @@ internal static class GetInboxMessageHandlersEndpoint
             ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         var msg = await db.Set<InboxMessageEntity>()
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == messageId, ct);
         if (msg is null)
+        {
             return ManagementResults.NotFound($"Inbox message '{messageId}' was not found.");
+        }
 
         var handlers = await db.Set<InboxHandlerStatusEntity>()
             .AsNoTracking()

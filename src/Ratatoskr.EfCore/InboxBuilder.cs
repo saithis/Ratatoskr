@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Ratatoskr.EfCore.Internal;
 
 namespace Ratatoskr.EfCore;
 
@@ -29,11 +30,7 @@ public class InboxBuilder<TDbContext>
     /// </summary>
     public InboxBuilder<TDbContext> WithPollingInterval(TimeSpan interval)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(
-            interval,
-            TimeSpan.Zero,
-            nameof(interval)
-        );
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(interval, TimeSpan.Zero);
         Options.PollingInterval = interval;
         return this;
     }
@@ -43,7 +40,7 @@ public class InboxBuilder<TDbContext>
     /// </summary>
     public InboxBuilder<TDbContext> WithBatchSize(int batchSize)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(batchSize, 0, nameof(batchSize));
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(batchSize, 0);
         Options.BatchSize = batchSize;
         return this;
     }
@@ -54,7 +51,7 @@ public class InboxBuilder<TDbContext>
     /// </summary>
     public InboxBuilder<TDbContext> WithMaxRetries(int maxRetries)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(maxRetries, 0, nameof(maxRetries));
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(maxRetries, 0);
         Options.MaxRetries = maxRetries;
         return this;
     }
@@ -64,7 +61,7 @@ public class InboxBuilder<TDbContext>
     /// </summary>
     public InboxBuilder<TDbContext> WithMaxRetryDelay(TimeSpan delay)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(delay, TimeSpan.Zero, nameof(delay));
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(delay, TimeSpan.Zero);
         Options.MaxRetryDelay = delay;
         return this;
     }
@@ -74,11 +71,7 @@ public class InboxBuilder<TDbContext>
     /// </summary>
     public InboxBuilder<TDbContext> WithStuckMessageThreshold(TimeSpan threshold)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(
-            threshold,
-            TimeSpan.Zero,
-            nameof(threshold)
-        );
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(threshold, TimeSpan.Zero);
         Options.StuckMessageThreshold = threshold;
         return this;
     }
@@ -88,7 +81,7 @@ public class InboxBuilder<TDbContext>
     /// </summary>
     public InboxBuilder<TDbContext> WithRestartDelay(TimeSpan delay)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(delay, TimeSpan.Zero, nameof(delay));
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(delay, TimeSpan.Zero);
         Options.RestartDelay = delay;
         return this;
     }
@@ -98,7 +91,7 @@ public class InboxBuilder<TDbContext>
     /// </summary>
     public InboxBuilder<TDbContext> WithLockAcquireTimeout(TimeSpan timeout)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(timeout, TimeSpan.Zero, nameof(timeout));
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(timeout, TimeSpan.Zero);
         Options.LockAcquireTimeout = timeout;
         return this;
     }
@@ -119,7 +112,7 @@ public class InboxBuilder<TDbContext>
     /// </summary>
     public InboxBuilder<TDbContext> WithHandlerTimeout(TimeSpan timeout)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(timeout, TimeSpan.Zero, nameof(timeout));
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(timeout, TimeSpan.Zero);
         Options.HandlerTimeout = timeout;
         return this;
     }
@@ -131,7 +124,7 @@ public class InboxBuilder<TDbContext>
     /// </summary>
     public InboxBuilder<TDbContext> WithRetention(TimeSpan period)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(period, TimeSpan.Zero, nameof(period));
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(period, TimeSpan.Zero);
         Options.RetentionPeriod = period;
         return this;
     }
@@ -141,11 +134,7 @@ public class InboxBuilder<TDbContext>
     /// </summary>
     public InboxBuilder<TDbContext> WithCleanupInterval(TimeSpan interval)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(
-            interval,
-            TimeSpan.Zero,
-            nameof(interval)
-        );
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(interval, TimeSpan.Zero);
         Options.CleanupInterval = interval;
         return this;
     }
@@ -156,7 +145,7 @@ public class InboxBuilder<TDbContext>
     /// </summary>
     public InboxBuilder<TDbContext> WithCleanupBatchSize(int batchSize)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(batchSize, 0, nameof(batchSize));
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(batchSize, 0);
         Options.CleanupBatchSize = batchSize;
         return this;
     }
@@ -177,6 +166,7 @@ public class InboxBuilder<TDbContext>
     /// </summary>
     public InboxBuilder<TDbContext> Configure(Action<InboxOptions> configure)
     {
+        ArgumentNullException.ThrowIfNull(configure);
         configure(Options);
         return this;
     }

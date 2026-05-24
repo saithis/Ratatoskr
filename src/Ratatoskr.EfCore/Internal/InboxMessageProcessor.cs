@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Ratatoskr.Core;
@@ -67,7 +68,9 @@ internal class InboxMessageProcessor<TDbContext>(
             .ToArrayAsync(cancellationToken);
 
         if (statuses.Length == 0)
+        {
             return 0;
+        }
 
         InboxMessageProcessorLog.FoundStatusesToDeliver(logger, statuses.Length);
 
@@ -78,7 +81,9 @@ internal class InboxMessageProcessor<TDbContext>(
             .ToDictionaryAsync(m => m.Id, cancellationToken);
 
         foreach (var status in statuses)
+        {
             status.MarkAsProcessing(timeProvider);
+        }
 
         while (true)
         {
@@ -98,9 +103,11 @@ internal class InboxMessageProcessor<TDbContext>(
 
                 InboxMessageProcessorLog.SkippedConflicts(logger, conflictIds.Count);
 
-                statuses = statuses.Where(s => !conflictIds.Contains(s.Id)).ToArray();
+                statuses = [.. statuses.Where(s => !conflictIds.Contains(s.Id))];
                 if (statuses.Length == 0)
+                {
                     return 0;
+                }
             }
         }
 

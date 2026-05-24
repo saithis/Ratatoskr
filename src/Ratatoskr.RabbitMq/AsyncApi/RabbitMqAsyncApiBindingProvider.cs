@@ -25,10 +25,15 @@ public class RabbitMqAsyncApiBindingProvider(
         IEnumerable<ChannelRegistration> channels
     )
     {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(channels);
+
         if (rabbitMqOptions.ConnectionString is null)
+        {
             throw new InvalidOperationException(
                 "RabbitMQ connection string is not configured. Set RabbitMqOptions.ConnectionString."
             );
+        }
 
         document.Servers ??= new Dictionary<string, AsyncApiServer>();
 
@@ -47,18 +52,27 @@ public class RabbitMqAsyncApiBindingProvider(
             {
                 asyncApiChannel.Servers ??= new List<AsyncApiReference>();
                 if (asyncApiChannel.Servers.All(s => s.Ref != serverRef.Ref))
+                {
                     asyncApiChannel.Servers.Add(serverRef);
+                }
             }
         }
     }
 
     public void ConfigureChannel(ChannelRegistration channel, AsyncApiDocument document)
     {
+        ArgumentNullException.ThrowIfNull(channel);
+        ArgumentNullException.ThrowIfNull(document);
+
         if (!channel.IsRabbitMqChannel())
+        {
             return;
+        }
 
         if (!document.Channels.TryGetValue(channel.ChannelName, out var asyncApiChannel))
+        {
             return;
+        }
 
         var channelOpts = channel.GetRabbitMqChannelOptions() ?? new RabbitMqChannelOptions();
 
@@ -88,8 +102,13 @@ public class RabbitMqAsyncApiBindingProvider(
 
     public void ConfigureOperation(ChannelRegistration channel, AsyncApiOperation operation)
     {
+        ArgumentNullException.ThrowIfNull(channel);
+        ArgumentNullException.ThrowIfNull(operation);
+
         if (!channel.IsRabbitMqChannel())
+        {
             return;
+        }
 
         var binding = new AmqpOperationBinding
         {
@@ -105,12 +124,16 @@ public class RabbitMqAsyncApiBindingProvider(
             .ToList();
 
         if (routingKeys.Count > 0)
+        {
             binding.Cc = routingKeys;
+        }
 
         // Consumer-specific: acknowledge mode
         var channelOpts = channel.GetRabbitMqChannelOptions();
         if (channelOpts != null)
+        {
             binding.Ack = !channelOpts.AutoAck;
+        }
 
         operation.Bindings = new OperationBindings { Amqp = binding };
     }
@@ -121,8 +144,14 @@ public class RabbitMqAsyncApiBindingProvider(
         AsyncApiMessage asyncApiMessage
     )
     {
+        ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(channel);
+        ArgumentNullException.ThrowIfNull(asyncApiMessage);
+
         if (!channel.IsRabbitMqChannel())
+        {
             return;
+        }
 
         // Add CloudEvents binary mode headers schema (AMQP application-properties)
         if (cloudEventsOptions.ContentMode == CloudEventsContentMode.Binary)
@@ -220,7 +249,9 @@ public class RabbitMqAsyncApiBindingProvider(
 
         // Don't add if already present (e.g. multiple messages on same channel)
         if (document.Channels.ContainsKey(queueName))
+        {
             return;
+        }
 
         var queueChannel = new AsyncApiChannel
         {
@@ -250,9 +281,11 @@ public class RabbitMqAsyncApiBindingProvider(
     private string NormalizeVHost()
     {
         if (rabbitMqOptions.ConnectionString is null)
+        {
             throw new InvalidOperationException(
                 "RabbitMQ connection string is not configured. Set RabbitMqOptions.ConnectionString."
             );
+        }
 
         var path = rabbitMqOptions.ConnectionString.AbsolutePath.TrimStart('/');
         return string.IsNullOrEmpty(path) ? "/" : path;

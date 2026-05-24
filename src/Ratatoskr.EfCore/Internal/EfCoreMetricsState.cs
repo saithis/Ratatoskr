@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
 
 namespace Ratatoskr.EfCore.Internal;
@@ -16,9 +17,10 @@ internal readonly record struct DbContextMetrics(
 internal class EfCoreMetricsState
 {
     /// <summary>
-    /// Tracks metric state per DbContext type full name (see <see cref="System.Type.FullName"/>).
+    /// Tracks metric state per DbContext type full name (see <see cref="Type.FullName"/>).
     /// </summary>
-    public ConcurrentDictionary<string, DbContextMetrics> ContextMetrics { get; } = new();
+    public ConcurrentDictionary<string, DbContextMetrics> ContextMetrics { get; } =
+        new(StringComparer.Ordinal);
 
     public bool TryGetValue<TDbContext>(TDbContext _, out DbContextMetrics metrics)
         where TDbContext : DbContext

@@ -23,7 +23,7 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
     private static string InventoryQueueName { get; } =
         PlaygroundAmqpNames.QueueName(ScenarioSlug, "inventory");
 
-    public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues =>
+    public static IReadOnlyList<PlaygroundRabbitQueue> RabbitQueues =>
         [new("orders", OrdersQueueName), new("inventory", InventoryQueueName)];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
@@ -123,18 +123,29 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
             CancellationToken cancellationToken
         )
         {
-            var key = properties.Id ?? message.OrderId;
+            _ = properties;
+            var key = $"{message.ScenarioRunId}:{message.OrderId}";
             var n = DeliveryAttempts.AddOrUpdate(key, 1, (_, old) => old + 1);
             if (n <= 2)
+            {
                 throw new InvalidOperationException(
                     "Simulated consumer failure (succeed-after-2)."
                 );
-            var orderGuid = Guid.Parse(message.OrderId);
-            context.OutboxMessages.Add(
-                new OrderFulfilled(message.OrderId, message.ScenarioRunId),
-                new MessageProperties { Id = PlaygroundMessageIds.OrderFulfilled(orderGuid) }
-            );
-            await context.SaveChangesAsync(cancellationToken);
+            }
+
+            try
+            {
+                var orderGuid = Guid.Parse(message.OrderId);
+                context.OutboxMessages.Add(
+                    new OrderFulfilled(message.OrderId, message.ScenarioRunId),
+                    new MessageProperties { Id = PlaygroundMessageIds.OrderFulfilled(orderGuid) }
+                );
+                await context.SaveChangesAsync(cancellationToken);
+            }
+            finally
+            {
+                DeliveryAttempts.TryRemove(key, out _);
+            }
         }
     }
 

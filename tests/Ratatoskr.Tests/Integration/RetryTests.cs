@@ -1,22 +1,14 @@
-using System.Text;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Ratatoskr.CloudEvents;
-using Ratatoskr.Config;
-using Ratatoskr.Core;
-using Ratatoskr.RabbitMq;
 using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Tests.Fixtures;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.Integration;
 
 public class RetryTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture postgres)
     : RatatoskrIntegrationTest(rabbitMq, postgres)
 {
-    private string ExchangeName => $"retry-test-{TestId}";
     private string QueueName => $"retry-queue-{TestId}";
     private string RetryQueue => $"{QueueName}.retry";
     private string DlqName => $"{QueueName}.dlq";

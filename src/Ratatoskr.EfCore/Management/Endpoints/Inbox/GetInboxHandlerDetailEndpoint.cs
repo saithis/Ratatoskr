@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore.Internal;
@@ -15,10 +14,10 @@ internal static class GetInboxHandlerDetailEndpoint
 {
     internal static void Map(IEndpointRouteBuilder inboxGroup)
     {
-        inboxGroup.MapGet("/poisoned/{handlerStatusId:guid}", Handle);
+        inboxGroup.MapGet("/poisoned/{handlerStatusId:guid}", HandleAsync);
     }
 
-    private static async Task<Results<Ok<InboxHandlerDetail>, ProblemHttpResult>> Handle(
+    private static async Task<Results<Ok<InboxHandlerDetail>, ProblemHttpResult>> HandleAsync(
         string contextName,
         Guid handlerStatusId,
         EfCoreManagementDbContextLookup lookup,
@@ -31,7 +30,9 @@ internal static class GetInboxHandlerDetailEndpoint
             ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         var result = await (
             from hs in db.Set<InboxHandlerStatusEntity>().AsNoTracking()
@@ -41,10 +42,14 @@ internal static class GetInboxHandlerDetailEndpoint
         ).FirstOrDefaultAsync(ct);
 
         if (result is null)
+        {
             return ManagementResults.NotFound($"Handler status '{handlerStatusId}' was not found.");
+        }
 
         if (!result.hs.IsPoisoned)
+        {
             return ManagementResults.BadRequest("Handler status is not poisoned.");
+        }
 
         var props = result.msg.GetProperties();
         var (jsonPayload, base64) = ManagementHelpers.DecodeContent(result.msg.Content, logger);

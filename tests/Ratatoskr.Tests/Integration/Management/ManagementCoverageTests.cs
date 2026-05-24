@@ -4,7 +4,6 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Ratatoskr.EfCore.Internal;
 using Ratatoskr.EfCore.Management;
 using Ratatoskr.EfCore.Management.Endpoints.Inbox;
 using Ratatoskr.EfCore.Management.Endpoints.Outbox;
@@ -37,7 +36,9 @@ public class ManagementCoverageTests(
         const int total = 5;
         var seeded = new HashSet<Guid>();
         for (var i = 0; i < total; i++)
+        {
             seeded.Add(await SeedPoisonedOutboxAsync());
+        }
 
         var collected = new List<Guid>();
         string? cursor = null;
@@ -49,11 +50,11 @@ public class ManagementCoverageTests(
             var url =
                 $"{OutboxBaseUrl}/poisoned?pageSize=2"
                 + (cursor is null ? string.Empty : $"&cursor={Uri.EscapeDataString(cursor)}");
-            var response = await HttpClient.GetAsync(url);
+            using var response = await HttpClient.GetAsync(url);
             response.StatusCode.Should().Be(HttpStatusCode.OK);
             var body = await response.Content.ReadFromJsonAsync<JsonElement>();
 
-            var items = body.GetProperty("items").EnumerateArray().ToList();
+            var items = body.GetProperty("items").ToElementList();
             collected.AddRange(items.Select(i => i.GetProperty("id").GetGuid()));
 
             firstTotalCount ??= body.GetProperty("totalCount").GetInt64();
@@ -61,7 +62,7 @@ public class ManagementCoverageTests(
                 .GetInt64()
                 .Should()
                 .Be(
-                    firstTotalCount!.Value,
+                    firstTotalCount.Value,
                     "totalCount must reflect the full filtered set, not the remainder after the cursor"
                 );
 
@@ -83,9 +84,11 @@ public class ManagementCoverageTests(
         await StartManagementTestAsync();
         // Seed one more than the cap so the clamp is observable in the response.
         for (var i = 0; i < PaginationOptions.MaxPageSize + 1; i++)
+        {
             await SeedPoisonedOutboxAsync();
+        }
 
-        var response = await HttpClient.GetAsync($"{OutboxBaseUrl}/poisoned?pageSize=10000");
+        using var response = await HttpClient.GetAsync($"{OutboxBaseUrl}/poisoned?pageSize=10000");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -103,7 +106,9 @@ public class ManagementCoverageTests(
     {
         await StartManagementTestAsync();
 
-        var response = await HttpClient.GetAsync($"{OutboxBaseUrl}/poisoned?cursor=not-a-cursor");
+        using var response = await HttpClient.GetAsync(
+            $"{OutboxBaseUrl}/poisoned?cursor=not-a-cursor"
+        );
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
@@ -123,11 +128,11 @@ public class ManagementCoverageTests(
         await SeedPoisonedOutboxAsync("payment.failed");
 
         // "order" is a substring of "order.placed" but not "payment.failed"
-        var response = await HttpClient.GetAsync($"{OutboxBaseUrl}/poisoned?search=order");
+        using var response = await HttpClient.GetAsync($"{OutboxBaseUrl}/poisoned?search=order");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        var items = body.GetProperty("items").EnumerateArray().ToList();
+        var items = body.GetProperty("items").ToElementList();
         items.Should().HaveCount(1);
         items[0].GetProperty("messageType").GetString().Should().Be("order.placed");
         body.GetProperty("totalCount").GetInt64().Should().Be(1);
@@ -143,7 +148,7 @@ public class ManagementCoverageTests(
         // "%" is a SQL LIKE wildcard; if we forgot to escape it server-side, this query would
         // match both rows above. Escaped correctly, it matches zero rows because no message
         // has the literal string "order.%" in its serialized properties.
-        var response = await HttpClient.GetAsync(
+        using var response = await HttpClient.GetAsync(
             $"{OutboxBaseUrl}/poisoned?search={Uri.EscapeDataString("order.%")}"
         );
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -160,13 +165,13 @@ public class ManagementCoverageTests(
     {
         await StartManagementTestAsync();
 
-        var req = new HttpRequestMessage(HttpMethod.Post, $"{OutboxBaseUrl}/poisoned/requeue")
+        using var req = new HttpRequestMessage(HttpMethod.Post, $"{OutboxBaseUrl}/poisoned/requeue")
         {
             Content = JsonContent.Create(
                 new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest([])
             ),
         };
-        var response = await HttpClient.SendAsync(req);
+        using var response = await HttpClient.SendAsync(req);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
@@ -180,13 +185,13 @@ public class ManagementCoverageTests(
     {
         await StartManagementTestAsync();
 
-        var req = new HttpRequestMessage(HttpMethod.Post, $"{OutboxBaseUrl}/poisoned/requeue")
+        using var req = new HttpRequestMessage(HttpMethod.Post, $"{OutboxBaseUrl}/poisoned/requeue")
         {
             Content = JsonContent.Create(
                 new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest([Guid.Empty])
             ),
         };
-        var response = await HttpClient.SendAsync(req);
+        using var response = await HttpClient.SendAsync(req);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -202,13 +207,13 @@ public class ManagementCoverageTests(
             .Range(0, BulkRequestValidator.MaxIds + 1)
             .Select(_ => Guid.NewGuid())
             .ToList();
-        var req = new HttpRequestMessage(HttpMethod.Post, $"{OutboxBaseUrl}/poisoned/requeue")
+        using var req = new HttpRequestMessage(HttpMethod.Post, $"{OutboxBaseUrl}/poisoned/requeue")
         {
             Content = JsonContent.Create(
                 new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest(ids)
             ),
         };
-        var response = await HttpClient.SendAsync(req);
+        using var response = await HttpClient.SendAsync(req);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -220,13 +225,13 @@ public class ManagementCoverageTests(
     {
         await StartManagementTestAsync();
 
-        var req = new HttpRequestMessage(HttpMethod.Delete, $"{InboxBaseUrl}/poisoned")
+        using var req = new HttpRequestMessage(HttpMethod.Delete, $"{InboxBaseUrl}/poisoned")
         {
             Content = JsonContent.Create(
                 new BulkDeleteInboxEndpoint.BulkDeleteInboxRequest([Guid.Empty])
             ),
         };
-        var response = await HttpClient.SendAsync(req);
+        using var response = await HttpClient.SendAsync(req);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
@@ -237,7 +242,7 @@ public class ManagementCoverageTests(
     {
         await StartManagementTestAsync();
 
-        var response = await HttpClient.GetAsync(
+        using var response = await HttpClient.GetAsync(
             "/ratatoskr/api/v1/efcore/contexts/DoesNotExist/outbox/poisoned"
         );
 
@@ -303,7 +308,7 @@ public class ManagementCompositionTests
     private sealed class StubDescriptor(string shortName, string fullName)
         : IEfCoreManagementDbContextDescriptor
     {
-        public Type DbContextType { get; }
+        public Type DbContextType { get; } = null!;
         public string DbContextName => shortName;
         public string DbContextFullName => fullName;
         public bool HasOutbox => false;

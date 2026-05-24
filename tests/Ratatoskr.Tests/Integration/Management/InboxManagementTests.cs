@@ -5,7 +5,6 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.EfCore.Internal;
-using Ratatoskr.EfCore.Management;
 using Ratatoskr.EfCore.Management.Endpoints.Inbox;
 using Ratatoskr.Tests.Fixtures;
 
@@ -25,7 +24,7 @@ public class InboxManagementTests(
         await SeedPoisonedInboxAsync();
         await SeedPoisonedInboxAsync();
 
-        var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned");
+        using var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -39,7 +38,7 @@ public class InboxManagementTests(
         await StartManagementTestAsync();
         var (_, handlerStatusId) = await SeedPoisonedInboxAsync();
 
-        var response = await HttpClient.PostAsync(
+        using var response = await HttpClient.PostAsync(
             $"{BaseUrl}/poisoned/{handlerStatusId}/requeue",
             null
         );
@@ -72,7 +71,10 @@ public class InboxManagementTests(
             await db.SaveChangesAsync();
         });
 
-        var response = await HttpClient.PostAsync($"{BaseUrl}/messages/{messageId}/requeue", null);
+        using var response = await HttpClient.PostAsync(
+            $"{BaseUrl}/messages/{messageId}/requeue",
+            null
+        );
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         await InScopeAsync(async ctx =>
@@ -105,7 +107,7 @@ public class InboxManagementTests(
             await db.SaveChangesAsync();
         });
 
-        var response = await HttpClient.GetAsync($"{BaseUrl}/messages/{messageId}/handlers");
+        using var response = await HttpClient.GetAsync($"{BaseUrl}/messages/{messageId}/handlers");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -120,7 +122,7 @@ public class InboxManagementTests(
         var (messageId, handlerStatusId) = await SeedPoisonedInboxAsync();
 
         // Delete the only handler status
-        var response = await HttpClient.DeleteAsync($"{BaseUrl}/poisoned/{handlerStatusId}");
+        using var response = await HttpClient.DeleteAsync($"{BaseUrl}/poisoned/{handlerStatusId}");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         await InScopeAsync(async ctx =>
@@ -152,7 +154,7 @@ public class InboxManagementTests(
             await db.SaveChangesAsync();
         });
 
-        var response = await HttpClient.DeleteAsync($"{BaseUrl}/poisoned/{handlerStatusId}");
+        using var response = await HttpClient.DeleteAsync($"{BaseUrl}/poisoned/{handlerStatusId}");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         await InScopeAsync(async ctx =>
@@ -171,7 +173,7 @@ public class InboxManagementTests(
         var (messageId1, _) = await SeedPoisonedInboxAsync();
         var (messageId2, _) = await SeedPoisonedInboxAsync();
 
-        var response = await HttpClient.DeleteAsync($"{BaseUrl}/poisoned/all");
+        using var response = await HttpClient.DeleteAsync($"{BaseUrl}/poisoned/all");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         await InScopeAsync(async ctx =>
@@ -197,13 +199,13 @@ public class InboxManagementTests(
         await StartManagementTestAsync();
         var (messageId, handlerStatusId) = await SeedPoisonedInboxAsync();
 
-        var req = new HttpRequestMessage(HttpMethod.Delete, $"{BaseUrl}/poisoned")
+        using var req = new HttpRequestMessage(HttpMethod.Delete, $"{BaseUrl}/poisoned")
         {
             Content = JsonContent.Create(
                 new BulkDeleteInboxEndpoint.BulkDeleteInboxRequest([handlerStatusId])
             ),
         };
-        var response = await HttpClient.SendAsync(req);
+        using var response = await HttpClient.SendAsync(req);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         await InScopeAsync(async ctx =>
@@ -227,7 +229,7 @@ public class InboxManagementTests(
         var (messageId, poisonedHandlerStatusId) = await SeedPoisonedInboxAsync();
 
         // Add a second (completed) handler for the same message
-        Guid secondHandlerId = Guid.Empty;
+        var secondHandlerId = Guid.Empty;
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
@@ -240,7 +242,7 @@ public class InboxManagementTests(
         });
 
         // Delete only the poisoned handler
-        var req = new HttpRequestMessage(HttpMethod.Delete, $"{BaseUrl}/poisoned")
+        using var req = new HttpRequestMessage(HttpMethod.Delete, $"{BaseUrl}/poisoned")
         {
             Content = JsonContent.Create(
                 new BulkDeleteInboxEndpoint.BulkDeleteInboxRequest([poisonedHandlerStatusId])
@@ -269,11 +271,11 @@ public class InboxManagementTests(
         await SeedPoisonedInboxAsync("order.placed");
         await SeedPoisonedInboxAsync("payment.captured");
 
-        var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned?search=order.placed");
+        using var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned?search=order.placed");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        var items = body.GetProperty("items").EnumerateArray().ToList();
+        var items = body.GetProperty("items").ToElementList();
         items.Should().NotBeEmpty();
         items
             .Should()

@@ -6,7 +6,6 @@ using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.Tests.Fixtures;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.Core;
 
@@ -43,7 +42,13 @@ public class InboxConfigurationValidatorTests
 
         var handlers = new List<ChannelHandlerRegistration>
         {
-            new(typeof(TestEvent), typeof(TestEventHandler), IsInbox: true, InboxKey: ""),
+            new ChannelHandlerRegistration
+            {
+                MessageType = typeof(TestEvent),
+                HandlerType = typeof(TestEventHandler),
+                IsInbox = true,
+                InboxKey = "",
+            },
         };
         messageReg.SetExtension(new MessageHandlerRegistrations(handlers));
 

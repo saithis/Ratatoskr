@@ -1,8 +1,9 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 
 namespace Ratatoskr.AsyncApi.Model.Bindings;
 
-public class OperationBindings
+public sealed class OperationBindings
 {
     /// <summary>
     /// This object contains information about the operation representation in AMQP.
@@ -12,7 +13,17 @@ public class OperationBindings
     public AmqpOperationBinding? Amqp { get; set; }
 }
 
-public class AmqpOperationBinding
+[SuppressMessage(
+    "Design",
+    "CA1002:Do not expose generic lists",
+    Justification = "DTO for JSON serialization"
+)]
+[SuppressMessage(
+    "Usage",
+    "CA2227:CollectionPropertiesShouldBeReadOnly",
+    Justification = "DTO for JSON serialization"
+)]
+public sealed class AmqpOperationBinding
 {
     /// <summary>
     /// TTL (Time-To-Live) for the message. It MUST be greater than or equal to zero.
@@ -89,6 +100,9 @@ public class AmqpOperationBinding
 /// </summary>
 public enum AmqpDeliveryMode
 {
+    /// <summary>No delivery mode specified (0).</summary>
+    None = 0,
+
     /// <summary>Transient delivery mode (1). Messages may be lost on broker restart.</summary>
     Transient = 1,
 

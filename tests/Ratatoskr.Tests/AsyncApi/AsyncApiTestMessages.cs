@@ -1,7 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using Ratatoskr.AsyncApi.Attributes;
-using Ratatoskr.Core;
 
 namespace Ratatoskr.Tests.AsyncApi;
 

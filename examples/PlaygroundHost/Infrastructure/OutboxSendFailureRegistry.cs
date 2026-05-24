@@ -31,7 +31,9 @@ public sealed class OutboxSendFailureRegistry
     public void Unregister(string scenarioRunId)
     {
         if (!string.IsNullOrEmpty(scenarioRunId))
+        {
             _byScenarioRun.TryRemove(scenarioRunId, out _);
+        }
     }
 
     public bool TryConsumeSendFailure(MessageProperties props)
@@ -42,7 +44,9 @@ public sealed class OutboxSendFailureRegistry
                 out var ext
             )
         )
+        {
             return false;
+        }
 
         string? runId = ext as string;
         if (
@@ -55,10 +59,14 @@ public sealed class OutboxSendFailureRegistry
         }
 
         if (string.IsNullOrEmpty(runId))
+        {
             return false;
+        }
 
         if (!_byScenarioRun.TryGetValue(runId, out var policy))
+        {
             return false;
+        }
 
         return policy.TryConsumeFailure();
     }
@@ -66,7 +74,7 @@ public sealed class OutboxSendFailureRegistry
     private sealed class Policy
     {
         private readonly Lock _lock = new();
-        private OutboxSendFailureKind _mode;
+        private readonly OutboxSendFailureKind _mode;
         private int _failuresRemaining;
 
         public Policy(OutboxSendFailureKind mode, int failuresRemaining)

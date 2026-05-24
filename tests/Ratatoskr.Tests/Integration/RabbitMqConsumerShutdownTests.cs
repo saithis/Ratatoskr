@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -5,7 +6,6 @@ using Ratatoskr.Core;
 using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Tests.Fixtures;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.Integration;
 
@@ -24,9 +24,14 @@ file sealed class DrainGateTestEventHandler : IMessageHandler<TestEvent>
 
     public void Release() => _release.TrySetResult();
 
+    [SuppressMessage(
+        "Usage",
+        "VSTHRD003:Avoid awaiting foreign Tasks",
+        Justification = "Needed for this test"
+    )]
     public async Task HandleAsync(
         TestEvent message,
-        MessageProperties context,
+        MessageProperties properties,
         CancellationToken cancellationToken
     )
     {
@@ -35,31 +40,23 @@ file sealed class DrainGateTestEventHandler : IMessageHandler<TestEvent>
     }
 }
 
-file sealed class ConcurrentTrackingTestEventHandler : IMessageHandler<TestEvent>
+file sealed class ConcurrentTrackingTestEventHandler(int targetCount) : IMessageHandler<TestEvent>
 {
-    private readonly int _targetCount;
-    private int _currentConcurrency;
-    private int _maxConcurrency;
-    private int _processed;
     private readonly TaskCompletionSource _processedAll = new(
         TaskCreationOptions.RunContinuationsAsynchronously
     );
 
-    public ConcurrentTrackingTestEventHandler(int targetCount)
-    {
-        _targetCount = targetCount;
-    }
+    private int _currentConcurrency;
+    private int _maxConcurrency;
+    private int _processed;
 
     public int MaxConcurrency => Volatile.Read(ref _maxConcurrency);
 
-    public Task WaitUntilProcessedAsync(TimeSpan timeout)
-    {
-        return _processedAll.Task.WaitAsync(timeout);
-    }
+    public Task WaitUntilProcessedAsync(TimeSpan timeout) => _processedAll.Task.WaitAsync(timeout);
 
     public async Task HandleAsync(
         TestEvent message,
-        MessageProperties context,
+        MessageProperties properties,
         CancellationToken cancellationToken
     )
     {
@@ -73,7 +70,7 @@ file sealed class ConcurrentTrackingTestEventHandler : IMessageHandler<TestEvent
         finally
         {
             Interlocked.Decrement(ref _currentConcurrency);
-            if (Interlocked.Increment(ref _processed) >= _targetCount)
+            if (Interlocked.Increment(ref _processed) >= targetCount)
             {
                 _processedAll.TrySetResult();
             }
@@ -129,12 +126,16 @@ file sealed class ConcurrentAckStressEventHandler : IMessageHandler<TestEvent>
     )
     {
         if (Interlocked.Increment(ref _arrived) >= _total)
+        {
             _allArrived.TrySetResult();
+        }
 
         await _allArrived.Task.WaitAsync(cancellationToken);
 
         if (Interlocked.Increment(ref _processed) >= _total)
+        {
             _processedAll.TrySetResult();
+        }
     }
 }
 
@@ -323,11 +324,13 @@ public class RabbitMqConsumerShutdownTests(
         });
 
         for (var i = 0; i < 4; i++)
+        {
             await PublishToRabbitMqAsync(
                 exchange: "",
                 routingKey: BackpressureQueueName,
                 new TestEvent { Id = $"bp-{i}", Data = "x" }
             );
+        }
 
         await WaitForConditionAsync(
             () => handler.ActiveCount == concurrencyLimit,
@@ -381,11 +384,13 @@ public class RabbitMqConsumerShutdownTests(
         });
 
         for (var i = 0; i < totalMessages; i++)
+        {
             await PublishToRabbitMqAsync(
                 exchange: "",
                 routingKey: AckStressQueueName,
                 new TestEvent { Id = $"ack-{i}", Data = "x" }
             );
+        }
 
         await handler.WaitUntilAllProcessedAsync(TimeSpan.FromSeconds(20));
 

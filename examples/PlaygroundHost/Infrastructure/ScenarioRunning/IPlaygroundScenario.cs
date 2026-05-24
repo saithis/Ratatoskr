@@ -7,8 +7,8 @@ namespace PlaygroundHost.Infrastructure.ScenarioRunning;
 /// </summary>
 public interface IPlaygroundScenario : IScenario
 {
-    static abstract void RegisterRatatoskrTopology(RatatoskrBuilder bus);
+    public static abstract void RegisterRatatoskrTopology(RatatoskrBuilder bus);
 
     /// <summary>Main queues this scenario creates; empty when there is nothing to probe.</summary>
-    static abstract IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues { get; }
+    public static abstract IReadOnlyList<PlaygroundRabbitQueue> RabbitQueues { get; }
 }

@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Persistence;
 using PlaygroundHost.Persistence.Entities;
 
@@ -23,7 +22,9 @@ public static class ScenarioAssertions
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (await predicateAsync(cancellationToken))
+            {
                 return true;
+            }
 
             await Task.Delay(pollInterval, cancellationToken);
         }
@@ -63,10 +64,12 @@ public static class ScenarioAssertions
         );
 
         if (ok)
+        {
             return new ScenarioVerdict(
                 true,
                 details: new { before = baselineExclusive, after = capturedAfter!.Value }
             );
+        }
 
         var final = await readCountAsync(cancellationToken);
         return new ScenarioVerdict(
@@ -111,10 +114,12 @@ public static class ScenarioAssertions
         );
 
         if (ok)
+        {
             return new ScenarioVerdict(
                 true,
                 details: new { before = baselineExclusive, after = capturedAfter!.Value }
             );
+        }
 
         var final = await RabbitDlqDepthReader.GetDlqCountAsync(
             rabbitConnectionString,
@@ -146,7 +151,9 @@ public static class ScenarioAssertions
                 .Orders.AsNoTracking()
                 .FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken);
             if (order is { Status: var s } && s == expected)
+            {
                 return new ScenarioVerdict(true);
+            }
 
             await Task.Delay(ScenarioTiming.OrderPollInterval, cancellationToken);
         }

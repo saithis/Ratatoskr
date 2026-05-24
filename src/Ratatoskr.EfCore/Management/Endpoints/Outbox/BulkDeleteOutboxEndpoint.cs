@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.Management;
 
@@ -18,11 +17,13 @@ internal static class BulkDeleteOutboxEndpoint
         // client forgets to attach a body. Some HTTP intermediaries also strip request
         // bodies on DELETE, which would silently convert "delete these 5 ids" into
         // "delete everything" if the two operations shared a route.
-        outboxGroup.MapDelete("/poisoned", HandleByIds);
-        outboxGroup.MapDelete("/poisoned/all", HandleAll);
+        outboxGroup.MapDelete("/poisoned", HandleByIdsAsync);
+        outboxGroup.MapDelete("/poisoned/all", HandleAllAsync);
     }
 
-    private static async Task<Results<Ok<BulkDeleteOutboxResponse>, ProblemHttpResult>> HandleByIds(
+    private static async Task<
+        Results<Ok<BulkDeleteOutboxResponse>, ProblemHttpResult>
+    > HandleByIdsAsync(
         string contextName,
         [FromBody] BulkDeleteOutboxRequest req,
         EfCoreManagementDbContextLookup lookup,
@@ -33,10 +34,14 @@ internal static class BulkDeleteOutboxEndpoint
             ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         if (!BulkRequestValidator.TryValidateIds(req.Ids, out var error))
+        {
             return ManagementResults.BadRequest(error!);
+        }
 
         var deletedCount = await db.Set<OutboxMessageEntity>()
             .Where(x => req.Ids!.Contains(x.Id) && x.IsPoisoned)
@@ -45,7 +50,7 @@ internal static class BulkDeleteOutboxEndpoint
         return TypedResults.Ok(new BulkDeleteOutboxResponse(deletedCount));
     }
 
-    private static async Task<Results<Ok, ProblemHttpResult>> HandleAll(
+    private static async Task<Results<Ok, ProblemHttpResult>> HandleAllAsync(
         string contextName,
         EfCoreManagementDbContextLookup lookup,
         CancellationToken ct
@@ -55,7 +60,9 @@ internal static class BulkDeleteOutboxEndpoint
             ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         await db.Set<OutboxMessageEntity>().Where(x => x.IsPoisoned).ExecuteDeleteAsync(ct);
 

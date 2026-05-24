@@ -1,12 +1,8 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
-using Ratatoskr;
 using Ratatoskr.Core;
-using Ratatoskr.RabbitMq;
-using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Tests.Fixtures;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.Core;
 
@@ -28,7 +24,7 @@ public class ChannelRegistryTests
         // Assert
         var channel = builder.ChannelRegistry.GetPublishChannel("local.events");
         channel.Should().NotBeNull();
-        channel!.Intent.Should().Be(ChannelType.EventPublish);
+        channel.Intent.Should().Be(ChannelType.EventPublish);
         channel.Messages.Should().HaveCount(1);
         channel.Messages[0].MessageType.Should().Be(typeof(TestEvent));
     }
@@ -49,7 +45,7 @@ public class ChannelRegistryTests
 
         // Assert
         channel.Should().NotBeNull();
-        channel!.ChannelName.Should().Be("local.events");
+        channel.ChannelName.Should().Be("local.events");
     }
 
     [Test]
@@ -124,7 +120,7 @@ public class ChannelRegistryTests
 
         // Assert
         result.Should().NotBeNull();
-        result!.ChannelName.Should().Be("test.exchange");
+        result.ChannelName.Should().Be("test.exchange");
     }
 
     [Test]
@@ -141,7 +137,7 @@ public class ChannelRegistryTests
 
         // Assert
         result.Should().NotBeNull();
-        result!.Channel.ChannelName.Should().Be("test.exchange");
+        result.Channel.ChannelName.Should().Be("test.exchange");
         result.Message.MessageTypeName.Should().Be("test.event");
         result.Message.MessageType.Should().Be(typeof(TestEvent));
     }

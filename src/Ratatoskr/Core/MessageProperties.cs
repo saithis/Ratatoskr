@@ -1,6 +1,6 @@
 namespace Ratatoskr.Core;
 
-public class MessageProperties
+public sealed class MessageProperties
 {
     /// <summary>
     /// Unique identifier for this event. Auto-generated if not set.
@@ -57,21 +57,21 @@ public class MessageProperties
     /// <summary>
     /// Custom headers to include with the message.
     /// </summary>
-    public Dictionary<string, string> Headers { get; set; } = new();
+    public Dictionary<string, string> Headers { get; init; } = new();
 
     /// <summary>
     /// The transports this message should be sent over.
     /// </summary>
-    public HashSet<string> Transports { get; set; } = new();
+    public HashSet<string> Transports { get; init; } = new();
 
     /// <summary>
     /// Transport-specific metadata (e.g., RabbitMQ exchange/routing key).
     /// Not included in CloudEvents envelope.
     /// </summary>
-    public Dictionary<string, string> TransportMetadata { get; set; } = new();
+    public Dictionary<string, string> TransportMetadata { get; init; } = new();
 
     /// <summary>
     /// CloudEvents extension attributes (included in envelope).
     /// </summary>
-    public Dictionary<string, object> CloudEventExtensions { get; set; } = new();
+    public Dictionary<string, object> CloudEventExtensions { get; init; } = new();
 }

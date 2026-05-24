@@ -8,7 +8,6 @@ using Ratatoskr.Config;
 using Ratatoskr.Core;
 using Ratatoskr.Serializers.Json;
 using Ratatoskr.Tests.Fixtures;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.Core;
 
@@ -22,7 +21,7 @@ public class MessageDispatcherTests
         var dispatcher = CreateDispatcher(
             services =>
             {
-                services.AddScoped<TestEventHandler>(_ => handler);
+                services.AddScoped(_ => handler);
                 services.AddScoped<IMessageHandler<TestEvent>>(_ => handler);
             },
             registry =>
@@ -66,9 +65,9 @@ public class MessageDispatcherTests
         var dispatcher = CreateDispatcher(
             services =>
             {
-                services.AddScoped<TestEventHandler>(_ => handler1);
+                services.AddScoped(_ => handler1);
                 services.AddScoped<IMessageHandler<TestEvent>>(_ => handler1);
-                services.AddScoped<SecondTestEventHandler>(_ => handler2);
+                services.AddScoped(_ => handler2);
                 services.AddScoped<IMessageHandler<TestEvent>>(_ => handler2);
             },
             registry =>
@@ -145,7 +144,7 @@ public class MessageDispatcherTests
         var dispatcher = CreateDispatcher(
             services =>
             {
-                services.AddScoped<TestEventHandler>(_ => handler);
+                services.AddScoped(_ => handler);
                 services.AddScoped<IMessageHandler<TestEvent>>(_ => handler);
             },
             registry =>
@@ -184,7 +183,7 @@ public class MessageDispatcherTests
         var dispatcher = CreateDispatcher(
             services =>
             {
-                services.AddScoped<ThrowingTestEventHandler>(_ => handler);
+                services.AddScoped(_ => handler);
                 services.AddScoped<IMessageHandler<TestEvent>>(_ => handler);
             },
             registry =>
@@ -225,9 +224,9 @@ public class MessageDispatcherTests
         var dispatcher = CreateDispatcher(
             services =>
             {
-                services.AddScoped<TestEventHandler>(_ => goodHandler);
+                services.AddScoped(_ => goodHandler);
                 services.AddScoped<IMessageHandler<TestEvent>>(_ => goodHandler);
-                services.AddScoped<ThrowingTestEventHandler>(_ => badHandler);
+                services.AddScoped(_ => badHandler);
                 services.AddScoped<IMessageHandler<TestEvent>>(_ => badHandler);
             },
             registry =>
@@ -305,7 +304,7 @@ public class MessageDispatcherTests
         var dispatcher = CreateDispatcher(
             services =>
             {
-                services.AddScoped<ContextCapturingHandler>(_ => handler);
+                services.AddScoped(_ => handler);
                 services.AddScoped<IMessageHandler<TestEvent>>(_ => handler);
             },
             registry =>
@@ -331,7 +330,7 @@ public class MessageDispatcherTests
 
         // Assert
         handler.CapturedContext.Should().NotBeNull();
-        handler.CapturedContext!.Id.Should().Be("event-123");
+        handler.CapturedContext.Id.Should().Be("event-123");
         handler.CapturedContext.Type.Should().Be("test.event");
         handler.CapturedContext.Source.Should().Be("/test-source");
         handler.CapturedContext.Subject.Should().Be("test-subject");
@@ -365,7 +364,7 @@ public class MessageDispatcherTests
         };
 
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync();
 
         // Act
         var result = await dispatcher.DispatchAsync(body, context, cts.Token, "test", "test");
@@ -382,7 +381,7 @@ public class MessageDispatcherTests
         var dispatcher = CreateDispatcher(
             services =>
             {
-                services.AddScoped<TestEventHandler>(_ => handler);
+                services.AddScoped(_ => handler);
                 services.AddScoped<IMessageHandler<TestEvent>>(_ => handler);
             },
             registry =>
@@ -426,7 +425,9 @@ public class MessageDispatcherTests
 
         var channelHandlerRegistry = ChannelHandlerRegistry.Build(channelRegistry);
         var deserializer = new JsonMessageSerializer();
+#pragma warning disable IDISP001 // ServiceProvider must outlive the returned MessageDispatcher for the duration of each test.
         var provider = services.BuildServiceProvider();
+#pragma warning restore IDISP001
         var serializerResolver = new MessageSerializerResolver(
             channelRegistry,
             deserializer,
@@ -461,7 +462,7 @@ public class MessageDispatcherTests
         var dispatcher = CreateDispatcher(
             services =>
             {
-                services.AddScoped<TestEventHandler>(_ => handler);
+                services.AddScoped(_ => handler);
                 services.AddScoped<IMessageHandler<TestEvent>>(_ => handler);
             },
             registry =>
@@ -501,7 +502,7 @@ public class MessageDispatcherTests
         var dispatcher = CreateDispatcher(
             services =>
             {
-                services.AddScoped<TestEventHandler>(_ => handler);
+                services.AddScoped(_ => handler);
                 services.AddScoped<IMessageHandler<TestEvent>>(_ => handler);
             },
             registry =>
@@ -541,7 +542,7 @@ public class MessageDispatcherTests
         var dispatcher = CreateDispatcher(
             services =>
             {
-                services.AddScoped<TestEventHandler>(_ => handler);
+                services.AddScoped(_ => handler);
                 services.AddScoped<IMessageHandler<TestEvent>>(_ => handler);
             },
             registry =>
@@ -564,8 +565,7 @@ public class MessageDispatcherTests
         using var listener = new ActivityListener
         {
             ShouldListenTo = source => source.Name == RatatoskrDiagnostics.ActivitySourceName,
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) =>
-                ActivitySamplingResult.AllData,
+            Sample = (ref _) => ActivitySamplingResult.AllData,
             ActivityStopped = activity =>
             {
                 if (
@@ -573,7 +573,9 @@ public class MessageDispatcherTests
                     && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString()
                         == "dispatch-span-ok"
                 )
+                {
                     capturedActivity = activity;
+                }
             },
         };
         ActivitySource.AddActivityListener(listener);
@@ -583,7 +585,7 @@ public class MessageDispatcherTests
 
         // Assert
         capturedActivity.Should().NotBeNull();
-        capturedActivity!.OperationName.Should().Be("dispatch");
+        capturedActivity.OperationName.Should().Be("dispatch");
         capturedActivity.Kind.Should().Be(ActivityKind.Consumer);
         capturedActivity
             .GetTagItem(MessagingSemanticConventions.MessageId)
@@ -613,7 +615,7 @@ public class MessageDispatcherTests
         var dispatcher = CreateDispatcher(
             services =>
             {
-                services.AddScoped<ThrowingTestEventHandler>(_ => handler);
+                services.AddScoped(_ => handler);
                 services.AddScoped<IMessageHandler<TestEvent>>(_ => handler);
             },
             registry =>
@@ -636,8 +638,7 @@ public class MessageDispatcherTests
         using var listener = new ActivityListener
         {
             ShouldListenTo = source => source.Name == RatatoskrDiagnostics.ActivitySourceName,
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) =>
-                ActivitySamplingResult.AllData,
+            Sample = (ref _) => ActivitySamplingResult.AllData,
             ActivityStopped = activity =>
             {
                 if (
@@ -645,7 +646,9 @@ public class MessageDispatcherTests
                     && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString()
                         == "dispatch-span-err"
                 )
+                {
                     capturedActivity = activity;
+                }
             },
         };
         ActivitySource.AddActivityListener(listener);
@@ -662,7 +665,7 @@ public class MessageDispatcherTests
         // Assert
         result.Should().Be(DispatchResult.RecoverableError);
         capturedActivity.Should().NotBeNull();
-        capturedActivity!.Status.Should().Be(ActivityStatusCode.Error);
+        capturedActivity.Status.Should().Be(ActivityStatusCode.Error);
         capturedActivity.GetTagItem(MessagingSemanticConventions.ErrorType).Should().NotBeNull();
     }
 
@@ -680,7 +683,7 @@ public class MessageDispatcherTests
         var context = new MessageProperties
         {
             Id = messageId,
-            Type = null!,
+            Type = null,
             Source = "/test",
         };
 
@@ -688,8 +691,7 @@ public class MessageDispatcherTests
         using var listener = new ActivityListener
         {
             ShouldListenTo = source => source.Name == RatatoskrDiagnostics.ActivitySourceName,
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) =>
-                ActivitySamplingResult.AllData,
+            Sample = (ref _) => ActivitySamplingResult.AllData,
             ActivityStopped = activity =>
             {
                 if (
@@ -697,7 +699,9 @@ public class MessageDispatcherTests
                     && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString()
                         == messageId
                 )
+                {
                     capturedActivity = activity;
+                }
             },
         };
         ActivitySource.AddActivityListener(listener);
@@ -714,7 +718,7 @@ public class MessageDispatcherTests
         // Assert
         result.Should().Be(DispatchResult.PermanentError);
         capturedActivity.Should().NotBeNull();
-        capturedActivity!.Status.Should().Be(ActivityStatusCode.Error);
+        capturedActivity.Status.Should().Be(ActivityStatusCode.Error);
         capturedActivity.StatusDescription.Should().Be("Message has no type");
     }
 
@@ -740,8 +744,7 @@ public class MessageDispatcherTests
         using var listener = new ActivityListener
         {
             ShouldListenTo = source => source.Name == RatatoskrDiagnostics.ActivitySourceName,
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) =>
-                ActivitySamplingResult.AllData,
+            Sample = (ref _) => ActivitySamplingResult.AllData,
             ActivityStopped = activity =>
             {
                 if (
@@ -749,7 +752,9 @@ public class MessageDispatcherTests
                     && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString()
                         == messageId
                 )
+                {
                     capturedActivity = activity;
+                }
             },
         };
         ActivitySource.AddActivityListener(listener);
@@ -766,7 +771,7 @@ public class MessageDispatcherTests
         // Assert
         result.Should().Be(DispatchResult.NoHandlers);
         capturedActivity.Should().NotBeNull();
-        capturedActivity!.Status.Should().Be(ActivityStatusCode.Error);
+        capturedActivity.Status.Should().Be(ActivityStatusCode.Error);
         capturedActivity.StatusDescription.Should().Contain("unknown.type");
     }
 
@@ -778,7 +783,7 @@ public class MessageDispatcherTests
         var dispatcher = CreateDispatcher(
             services =>
             {
-                services.AddScoped<TestEventHandler>(_ => handler);
+                services.AddScoped(_ => handler);
                 services.AddScoped<IMessageHandler<TestEvent>>(_ => handler);
             },
             registry =>
@@ -800,8 +805,7 @@ public class MessageDispatcherTests
         using var listener = new ActivityListener
         {
             ShouldListenTo = source => source.Name == RatatoskrDiagnostics.ActivitySourceName,
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) =>
-                ActivitySamplingResult.AllData,
+            Sample = (ref _) => ActivitySamplingResult.AllData,
             ActivityStopped = activity =>
             {
                 if (
@@ -809,7 +813,9 @@ public class MessageDispatcherTests
                     && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString()
                         == messageId
                 )
+                {
                     capturedActivity = activity;
+                }
             },
         };
         ActivitySource.AddActivityListener(listener);
@@ -826,7 +832,7 @@ public class MessageDispatcherTests
         // Assert
         result.Should().Be(DispatchResult.PermanentError);
         capturedActivity.Should().NotBeNull();
-        capturedActivity!.Status.Should().Be(ActivityStatusCode.Error);
+        capturedActivity.Status.Should().Be(ActivityStatusCode.Error);
         capturedActivity.GetTagItem(MessagingSemanticConventions.ErrorType).Should().NotBeNull();
     }
 
@@ -845,7 +851,13 @@ public class MessageDispatcherTests
         if (handlerTypes.Length > 0)
         {
             var handlers = handlerTypes
-                .Select(h => new ChannelHandlerRegistration(typeof(TestEvent), h, false, null))
+                .Select(h => new ChannelHandlerRegistration
+                {
+                    MessageType = typeof(TestEvent),
+                    HandlerType = h,
+                    IsInbox = false,
+                    InboxKey = null,
+                })
                 .ToList();
             msgReg.SetExtension(new MessageHandlerRegistrations(handlers));
         }

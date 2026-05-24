@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Persistence;
 using PlaygroundHost.Persistence.Entities;
 using Ratatoskr.Core;
@@ -89,7 +88,10 @@ public static class IScenarioExtensions
             cancellationToken
         );
         if (order is null)
+        {
             return;
+        }
+
         order.Status = status;
         order.StatusChangedAt = time.GetUtcNow().UtcDateTime;
         await db.SaveChangesAsync(cancellationToken);

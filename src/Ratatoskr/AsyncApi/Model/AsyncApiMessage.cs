@@ -1,10 +1,21 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Ratatoskr.AsyncApi.Model.Bindings;
 
 namespace Ratatoskr.AsyncApi.Model;
 
-public class AsyncApiMessage
+[SuppressMessage(
+    "Design",
+    "CA1002:Do not expose generic lists",
+    Justification = "DTO for JSON serialization"
+)]
+[SuppressMessage(
+    "Usage",
+    "CA2227:CollectionPropertiesShouldBeReadOnly",
+    Justification = "DTO for JSON serialization"
+)]
+public sealed class AsyncApiMessage
 {
     [JsonPropertyName("name")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

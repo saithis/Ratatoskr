@@ -93,7 +93,7 @@ public class InboxCancellationAndTimeoutTests(
     public async Task Inbox_CancellationDuringHandler_DoesNotIncrementErrorCount()
     {
         var coordination = new CancellableHandlerCoordination();
-        var cts = new CancellationTokenSource();
+        using var cts = new CancellationTokenSource();
 
         await StartTestAsync(services =>
         {

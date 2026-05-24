@@ -30,9 +30,11 @@ internal class EfCoreMessageSender(
     )
     {
         if (props.Type == null)
+        {
             throw new InvalidOperationException(
                 "Cannot send via EF Core transport: message has no Type."
             );
+        }
 
         using var activity = telemetry.StartSendActivity(props, content.Length);
         var startTimestamp = Stopwatch.GetTimestamp();
@@ -44,16 +46,13 @@ internal class EfCoreMessageSender(
 
             foreach (var (channel, _) in consumeChannels)
             {
-                var inboxConfig = channel.GetExtension<ChannelInboxConfig>();
-                if (inboxConfig == null)
-                {
-                    throw new InvalidOperationException(
+                var inboxConfig =
+                    channel.GetExtension<ChannelInboxConfig>()
+                    ?? throw new InvalidOperationException(
                         $"Channel '{channel.ChannelName}' has no inbox configured. "
                             + $"The EF Core transport requires UseInbox<TDbContext>() on all consume channels. "
                             + $"Either add UseInbox<TDbContext>() or use a different transport."
                     );
-                }
-
                 if (!_acceptorMap.TryGetValue(inboxConfig.DbContextType, out var acceptor))
                 {
                     throw new InvalidOperationException(

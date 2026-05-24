@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
-namespace Ratatoskr.RabbitMq;
+namespace Ratatoskr.RabbitMq.Extensions;
 
 /// <summary>
 /// Extension methods for configuring health checks in Ratatoskr.RabbitMq.

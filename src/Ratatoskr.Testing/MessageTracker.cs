@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using Ratatoskr.Core;
 
 namespace Ratatoskr.Testing;
@@ -11,10 +12,12 @@ public class MessageTracker : IMessageActivityObserver
 {
     private readonly ConcurrentQueue<MessageActivity> _activities = new();
     private readonly List<Waiter> _waiters = new();
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
-    public ValueTask OnMessageActivity(MessageActivity activity)
+    public ValueTask OnMessageActivityAsync(MessageActivity activity)
     {
+        ArgumentNullException.ThrowIfNull(activity);
+
         _activities.Enqueue(activity);
         NotifyWaiters(activity);
         return ValueTask.CompletedTask;
@@ -26,7 +29,9 @@ public class MessageTracker : IMessageActivityObserver
     public IReadOnlyList<MessageActivity> GetActivities(string? traceId = null)
     {
         if (traceId == null)
+        {
             return _activities.ToArray();
+        }
 
         return _activities.Where(a => ExtractTraceId(a.Properties.TraceParent) == traceId).ToList();
     }
@@ -35,6 +40,11 @@ public class MessageTracker : IMessageActivityObserver
     /// Waits for a message activity matching the given predicate.
     /// Atomically checks existing activities and subscribes for new ones to avoid TOCTOU races.
     /// </summary>
+    [SuppressMessage(
+        "Reliability",
+        "CA2000:Dispose objects before losing scope",
+        Justification = "CTS is stored in the Waiter and disposed when the waiter is resolved, canceled, or cleared."
+    )]
     public Task<MessageActivity> WaitForAsync(
         Func<MessageActivity, bool> predicate,
         TimeSpan timeout,
@@ -46,7 +56,9 @@ public class MessageTracker : IMessageActivityObserver
             // Check existing activities while holding the lock
             var existing = _activities.FirstOrDefault(predicate);
             if (existing != null)
+            {
                 return Task.FromResult(existing);
+            }
 
             // Register waiter while still holding the lock — no activity can slip through
             var tcs = new TaskCompletionSource<MessageActivity>(
@@ -57,13 +69,17 @@ public class MessageTracker : IMessageActivityObserver
             cts.Token.Register(() =>
             {
                 if (cancellationToken.IsCancellationRequested)
+                {
                     tcs.TrySetCanceled(cancellationToken);
+                }
                 else
+                {
                     tcs.TrySetException(
                         new TimeoutException(
                             $"Timed out after {timeout.TotalSeconds}s waiting for message activity."
                         )
                     );
+                }
                 cts.Dispose();
             });
 
@@ -93,13 +109,20 @@ public class MessageTracker : IMessageActivityObserver
     internal static string? ExtractTraceId(string? traceParent)
     {
         if (string.IsNullOrEmpty(traceParent))
+        {
             return null;
+        }
 
         // W3C traceparent format: {version}-{trace-id}-{parent-id}-{trace-flags}
         var parts = traceParent.Split('-');
         return parts.Length >= 2 ? parts[1] : null;
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "Deliberately catch all predicate exceptions to prevent faulty waiter predicates from crashing the dispatcher thread."
+    )]
     private void NotifyWaiters(MessageActivity activity)
     {
         lock (_lock)

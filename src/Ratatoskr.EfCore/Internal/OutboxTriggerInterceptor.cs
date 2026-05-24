@@ -6,7 +6,7 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr.EfCore.Internal;
 
-internal class OutboxTriggerInterceptor<TDbContext>(
+internal partial class OutboxTriggerInterceptor<TDbContext>(
     OutboxProcessor<TDbContext> outboxProcessor,
     IMessageSerializerResolver serializerResolver,
     IMessagePropertiesEnricher enricher,
@@ -21,17 +21,17 @@ internal class OutboxTriggerInterceptor<TDbContext>(
     where TDbContext : DbContext, IOutboxDbContext
 {
     private readonly OutboxOptions _options = optionsHolder.Options;
-    private readonly IMessageActivityObserver[] _observers = observers.ToArray();
+    private readonly IMessageActivityObserver[] _observers = [.. observers];
 
     // Per-DbContext state for flags set in SavingChangesAsync and read in SavedChangesAsync.
     // ConditionalWeakTable ensures no memory leak — entries are collected when the DbContext is GC'd.
     // This is safe for a singleton interceptor shared across concurrent SaveChanges calls.
-    private static readonly ConditionalWeakTable<DbContext, StagedFlags> _perContextFlags = new();
+    private static readonly ConditionalWeakTable<DbContext, StagedFlags> PerContextFlags = new();
 
     private sealed class StagedFlags
     {
-        public bool OutboxEntitiesStaged;
-        public bool InboxEntitiesStaged;
+        public bool OutboxEntitiesStaged { get; set; }
+        public bool InboxEntitiesStaged { get; set; }
     }
 
     public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
@@ -40,22 +40,26 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         CancellationToken cancellationToken = default
     )
     {
-        DbContext? context = eventData.Context;
+        var context = eventData.Context;
         if (context == null)
         {
             return result;
         }
 
         if (context is not IOutboxDbContext outboxDbContext)
+        {
             throw new InvalidOperationException("Expected IOutboxDbContext");
+        }
 
-        var flags = _perContextFlags.GetOrCreateValue(context);
+        var flags = PerContextFlags.GetOrCreateValue(context);
         flags.OutboxEntitiesStaged = false;
         flags.InboxEntitiesStaged = false;
 
         var stagedItems = outboxDbContext.OutboxMessages.StagedItems;
         if (stagedItems.Count == 0)
+        {
             return result;
+        }
 
         // On retry after a failed SaveChanges, detach entities created by the previous attempt
         // to prevent duplicates. These types are internal — only this interceptor adds them.
@@ -83,10 +87,7 @@ internal class OutboxTriggerInterceptor<TDbContext>(
 
             if (enrichedProperties.Transports.Count == 0)
             {
-                logger.LogError(
-                    "No transports found for message '{MessageType}'",
-                    item.Message.GetType()
-                );
+                LogNoTransportsFound(logger, item.Message.GetType());
                 throw new InvalidOperationException(
                     $"No transports found for message '{item.Message.GetType()}'."
                 );
@@ -112,12 +113,7 @@ internal class OutboxTriggerInterceptor<TDbContext>(
 
                 if (sameDbCreated && hasCrossDbChannels)
                 {
-                    logger.LogWarning(
-                        "Message '{MessageId}' targets both same-DbContext and cross-DbContext inbox channels. "
-                            + "Same-DbContext entries were created in this transaction; an outbox entry will also be created "
-                            + "for cross-DbContext delivery. The inbox acceptor will deduplicate on delivery.",
-                        enrichedProperties.Id
-                    );
+                    LogTargetsBothSameAndCrossDb(logger, enrichedProperties.Id);
                 }
 
                 if (sameDbCreated)
@@ -141,7 +137,9 @@ internal class OutboxTriggerInterceptor<TDbContext>(
                 // Skip outbox entry for EF Core transport when ALL inbox channels are
                 // same-DbContext (entries already created in this transaction).
                 if (transport == EfCoreTransportConstants.TransportName && skipEfCoreOutbox)
+                {
                     continue;
+                }
 
                 var outboxMessage = OutboxMessageEntity.Create(
                     serializedMessage,
@@ -193,7 +191,9 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         {
             var inboxConfig = channel.GetExtension<ChannelInboxConfig>();
             if (inboxConfig == null)
+            {
                 continue;
+            }
 
             // Track cross-DbContext channels — they still need an outbox entry
             if (inboxConfig.DbContextType != typeof(TDbContext))
@@ -204,19 +204,25 @@ internal class OutboxTriggerInterceptor<TDbContext>(
 
             var msgReg = channel.GetMessage(enrichedProperties.Type!);
             if (msgReg == null)
+            {
                 continue;
+            }
 
             var inboxHandlers = channelHandlerRegistry.GetInboxHandlers(
                 channel.ChannelName,
                 msgReg.MessageType
             );
             if (inboxHandlers.Count == 0)
+            {
                 continue;
+            }
 
             if (string.IsNullOrWhiteSpace(enrichedProperties.Id))
+            {
                 throw new InvalidOperationException(
                     $"Inbox requires a non-empty message id for '{enrichedProperties.Type}'."
                 );
+            }
 
             if (!inboxEntriesCreated)
             {
@@ -248,8 +254,8 @@ internal class OutboxTriggerInterceptor<TDbContext>(
                     );
             }
 
-            logger.LogDebug(
-                "Created inbox entries for message '{MessageId}' on channel '{Channel}' with {HandlerCount} handler(s) in outbox transaction",
+            LogCreatedInboxEntries(
+                logger,
                 enrichedProperties.Id,
                 channel.ChannelName,
                 inboxHandlers.Count
@@ -267,14 +273,18 @@ internal class OutboxTriggerInterceptor<TDbContext>(
     {
         // Commit: clear staged items now that the transaction succeeded
         if (eventData.Context is IOutboxDbContext outboxDbContext)
+        {
             outboxDbContext.OutboxMessages.ClearStaged();
+        }
 
         if (eventData.EntitiesSavedCount == 0)
+        {
             return result;
+        }
 
         if (
             eventData.Context != null
-            && _perContextFlags.TryGetValue(eventData.Context, out var flags)
+            && PerContextFlags.TryGetValue(eventData.Context, out var flags)
         )
         {
             if (flags.OutboxEntitiesStaged)
@@ -287,7 +297,7 @@ internal class OutboxTriggerInterceptor<TDbContext>(
                 await inboxProcessorTrigger.TriggerAsync(cancellationToken);
             }
 
-            _perContextFlags.Remove(eventData.Context);
+            PerContextFlags.Remove(eventData.Context);
         }
 
         return result;
@@ -299,7 +309,35 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         foreach (var entry in context.ChangeTracker.Entries<TEntity>().ToList())
         {
             if (entry.State == EntityState.Added)
+            {
                 entry.State = EntityState.Detached;
+            }
         }
     }
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Error,
+        Message = "No transports found for message '{MessageType}'"
+    )]
+    private static partial void LogNoTransportsFound(ILogger logger, Type messageType);
+
+    [LoggerMessage(
+        EventId = 2,
+        Level = LogLevel.Warning,
+        Message = "Message '{MessageId}' targets both same-DbContext and cross-DbContext inbox channels. Same-DbContext entries were created in this transaction; an outbox entry will also be created for cross-DbContext delivery. The inbox acceptor will deduplicate on delivery."
+    )]
+    private static partial void LogTargetsBothSameAndCrossDb(ILogger logger, string messageId);
+
+    [LoggerMessage(
+        EventId = 3,
+        Level = LogLevel.Debug,
+        Message = "Created inbox entries for message '{MessageId}' on channel '{Channel}' with {HandlerCount} handler(s) in outbox transaction"
+    )]
+    private static partial void LogCreatedInboxEntries(
+        ILogger logger,
+        string messageId,
+        string channel,
+        int handlerCount
+    );
 }

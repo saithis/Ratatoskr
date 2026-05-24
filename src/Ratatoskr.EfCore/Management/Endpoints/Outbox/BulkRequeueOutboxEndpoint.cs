@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.Management;
 
@@ -15,13 +14,13 @@ internal static class BulkRequeueOutboxEndpoint
 
     internal static void Map(IEndpointRouteBuilder outboxGroup)
     {
-        outboxGroup.MapPost("/poisoned/requeue", HandleByIds);
-        outboxGroup.MapPost("/poisoned/requeue/all", HandleAll);
+        outboxGroup.MapPost("/poisoned/requeue", HandleByIdsAsync);
+        outboxGroup.MapPost("/poisoned/requeue/all", HandleAllAsync);
     }
 
     private static async Task<
         Results<Ok<BulkRequeueOutboxResponse>, ProblemHttpResult>
-    > HandleByIds(
+    > HandleByIdsAsync(
         string contextName,
         BulkRequeueOutboxRequest req,
         EfCoreManagementDbContextLookup lookup,
@@ -32,10 +31,14 @@ internal static class BulkRequeueOutboxEndpoint
             ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         if (!BulkRequestValidator.TryValidateIds(req.Ids, out var error))
+        {
             return ManagementResults.BadRequest(error!);
+        }
 
         var succeeded = new List<Guid>();
         var failed = new List<BulkRequeueOutboxFailure>();
@@ -57,13 +60,18 @@ internal static class BulkRequeueOutboxEndpoint
         );
 
         foreach (var entity in entities)
+        {
             entity.Requeue();
+        }
+
         await SaveBatchAsync(db, entities, succeeded, failed, ct);
 
         return TypedResults.Ok(new BulkRequeueOutboxResponse(succeeded, failed));
     }
 
-    private static async Task<Results<Ok<BulkRequeueOutboxResponse>, ProblemHttpResult>> HandleAll(
+    private static async Task<
+        Results<Ok<BulkRequeueOutboxResponse>, ProblemHttpResult>
+    > HandleAllAsync(
         string contextName,
         EfCoreManagementDbContextLookup lookup,
         CancellationToken ct
@@ -73,7 +81,9 @@ internal static class BulkRequeueOutboxEndpoint
             ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         var succeeded = new List<Guid>();
         var failed = new List<BulkRequeueOutboxFailure>();
@@ -93,18 +103,25 @@ internal static class BulkRequeueOutboxEndpoint
                 .ToListAsync(ct);
 
             if (batch.Count == 0)
+            {
                 break;
+            }
 
             var succeededBefore = succeeded.Count;
             foreach (var entity in batch)
+            {
                 entity.Requeue();
+            }
+
             await SaveBatchAsync(db, batch, succeeded, failed, ct);
             db.ChangeTracker.Clear();
 
             if (succeeded.Count == succeededBefore)
             {
                 if (++consecutiveNoProgress >= 3)
+                {
                     break; // give up; return what we have
+                }
             }
             else
             {

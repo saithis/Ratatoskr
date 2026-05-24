@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -10,7 +10,7 @@ namespace Ratatoskr.RabbitMq;
 /// <summary>
 /// Handles retry logic for failed messages.
 /// </summary>
-internal class RabbitMqRetryHandler(
+internal partial class RabbitMqRetryHandler(
     RabbitMqTelemetry telemetry,
     RabbitMqOptions options,
     TimeProvider timeProvider,
@@ -32,12 +32,9 @@ internal class RabbitMqRetryHandler(
         var messageId = ea.BasicProperties.MessageId ?? "unknown";
 
         // Permanent errors go straight to DLQ
-        if (result == DispatchResult.PermanentError || result == DispatchResult.NoHandlers)
+        if (result is DispatchResult.PermanentError or DispatchResult.NoHandlers)
         {
-            logger.LogWarning(
-                "Permanent error for message '{MessageId}', sending to DLQ",
-                messageId
-            );
+            LogPermanentErrorSendingToDlq(logger, messageId);
             await RejectToDlqAsync(channel, ea, config, queueName, cancellationToken);
             return;
         }
@@ -47,21 +44,12 @@ internal class RabbitMqRetryHandler(
 
         if (retryCount >= config.Retry.MaxRetries)
         {
-            logger.LogError(
-                "Message '{MessageId}' exceeded max retries ({MaxRetries}), sending to DLQ",
-                messageId,
-                config.Retry.MaxRetries
-            );
+            LogMessageExceededMaxRetries(logger, messageId, config.Retry.MaxRetries);
             await RejectToDlqAsync(channel, ea, config, queueName, cancellationToken);
         }
         else
         {
-            logger.LogInformation(
-                "Message '{MessageId}' will be retried (attempt {RetryCount}/{MaxRetries})",
-                messageId,
-                retryCount + 1,
-                config.Retry.MaxRetries
-            );
+            LogMessageWillBeRetried(logger, messageId, retryCount + 1, config.Retry.MaxRetries);
 
             // Reject without requeue - DLX will route to retry queue
             await channel.BasicNackAsync(ea.DeliveryTag, false, false, cancellationToken);
@@ -81,7 +69,7 @@ internal class RabbitMqRetryHandler(
         // Need to manually publish to DLQ since we can't conditionally route via DLX
         if (config.Retry.UseManaged)
         {
-            var dlqName = $"{queueName}{config.Retry.DeadLetterSuffix}";
+            var dlqName = queueName + config.Retry.DeadLetterSuffix;
 
             // Copy properties and add metadata about failure
             var props = new BasicProperties
@@ -123,7 +111,9 @@ internal class RabbitMqRetryHandler(
     private static int GetRetryCount(IDictionary<string, object?>? headers)
     {
         if (headers == null)
+        {
             return 0;
+        }
 
         // Use x-death header to track retry attempts (automatically managed by RabbitMQ DLX)
         if (
@@ -134,18 +124,16 @@ internal class RabbitMqRetryHandler(
             long totalCount = 0;
             foreach (var entryObj in xDeathList)
             {
-                if (entryObj is IDictionary<string, object> entry)
+                if (
+                    entryObj is IDictionary<string, object> entry
+                    && entry.TryGetValue("count", out var countObj)
+                    && entry.TryGetValue("reason", out var reasonObj)
+                )
                 {
-                    if (
-                        entry.TryGetValue("count", out var countObj)
-                        && entry.TryGetValue("reason", out var reasonObj)
-                    )
+                    var reason = RabbitMqHeaderHelper.ConvertHeaderToString(reasonObj);
+                    if (reason == "rejected")
                     {
-                        var reason = RabbitMqHeaderHelper.ConvertHeaderToString(reasonObj);
-                        if (reason == "rejected")
-                        {
-                            totalCount += Convert.ToInt64(countObj);
-                        }
+                        totalCount += Convert.ToInt64(countObj, CultureInfo.InvariantCulture);
                     }
                 }
             }
@@ -154,4 +142,34 @@ internal class RabbitMqRetryHandler(
 
         return 0;
     }
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Warning,
+        Message = "Permanent error for message '{MessageId}', sending to DLQ"
+    )]
+    private static partial void LogPermanentErrorSendingToDlq(ILogger logger, string messageId);
+
+    [LoggerMessage(
+        EventId = 2,
+        Level = LogLevel.Error,
+        Message = "Message '{MessageId}' exceeded max retries ({MaxRetries}), sending to DLQ"
+    )]
+    private static partial void LogMessageExceededMaxRetries(
+        ILogger logger,
+        string messageId,
+        int maxRetries
+    );
+
+    [LoggerMessage(
+        EventId = 3,
+        Level = LogLevel.Information,
+        Message = "Message '{MessageId}' will be retried (attempt {RetryCount}/{MaxRetries})"
+    )]
+    private static partial void LogMessageWillBeRetried(
+        ILogger logger,
+        string messageId,
+        int retryCount,
+        int maxRetries
+    );
 }

@@ -3,7 +3,7 @@ namespace Ratatoskr.CloudEvents;
 /// <summary>
 /// Options for CloudEvents protocol binding.
 /// </summary>
-public class CloudEventsOptions
+public sealed class CloudEventsOptions
 {
     /// <summary>
     /// Content mode for CloudEvents serialization. Default is Binary (more efficient).

@@ -1,0 +1,37 @@
+[*.cs]
+
+# CS1591: Missing XML comment for publicly visible type or member
+dotnet_diagnostic.CS1591.severity = none
+
+# ASYNC0001: Append asynchronous method name with Async
+dotnet_diagnostic.ASYNC0001.severity = none
+
+# CA1707: Remove the underscores from member name
+dotnet_diagnostic.CA1707.severity = none
+
+# VSTHRD200: Use "Async" suffix in names of methods that return an awaitable type
+dotnet_diagnostic.VSTHRD200.severity = none
+
+# RCS1046: Add suffix 'Async' to asynchronous method name
+dotnet_diagnostic.RCS1046.severity = none
+
+# Do not expose generic lists
+dotnet_diagnostic.CA1002.severity = none
+
+# Review SQL queries for security vulnerabilities
+dotnet_diagnostic.CA2100.severity = none
+
+# Validate arguments of public methods
+dotnet_diagnostic.CA1062.severity = none
+
+# Seal internal types
+dotnet_diagnostic.CA1852.severity = none
+
+# Identifiers should not have incorrect suffix
+dotnet_diagnostic.CA1711.severity = none
+
+# Use an overload with a CancellationToken
+dotnet_diagnostic.MA0040.severity = suggestion
+
+# Pass System.Uri objects instead of strings
+dotnet_diagnostic.CA2234.severity = none

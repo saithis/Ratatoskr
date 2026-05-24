@@ -29,7 +29,7 @@ public abstract class OpenTelemetryTestBase(
     )
         where THandler : class, IMessageHandler<TestEvent>
     {
-        services.AddSingleton<THandler>(handler);
+        services.AddSingleton(handler);
         services.AddRatatoskr(bus =>
         {
             bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
@@ -73,25 +73,25 @@ public abstract class OpenTelemetryTestBase(
         );
     }
 
-    protected IEnumerable<(
+    protected (
         string InstrumentName,
         double Value,
         KeyValuePair<string, object?>[] Tags
-    )> GetRelevantMetrics(
+    )[] GetRelevantMetrics(
         IEnumerable<(
             string InstrumentName,
             double Value,
             KeyValuePair<string, object?>[] Tags
         )> metrics,
         string exchangeName
-    )
-    {
-        return metrics.Where(m =>
-            m.Tags.Any(t =>
-                t.Key == "messaging.destination.name" && (string?)t.Value == exchangeName
+    ) =>
+        metrics
+            .Where(m =>
+                m.Tags.Any(t =>
+                    t.Key == "messaging.destination.name" && (string?)t.Value == exchangeName
+                )
             )
-        );
-    }
+            .ToArray();
 
     protected MeterListener CreateMeterListener(
         ConcurrentBag<(
@@ -140,14 +140,16 @@ public abstract class OpenTelemetryTestBase(
         // Filter directly by message ID to isolate activities for this test's message.
         // Trace-based grouping is unreliable when tests run in parallel because a shared
         // ambient Activity.Current can cause multiple tests to share the same TraceId.
-        return activities
-            .Where(a =>
-                a.TagObjects.Any(t =>
-                    t.Key == "messaging.message.id" && (string?)t.Value == eventId
+        return
+        [
+            .. activities
+                .Where(a =>
+                    a.TagObjects.Any(t =>
+                        t.Key == "messaging.message.id" && (string?)t.Value == eventId
+                    )
                 )
-            )
-            .OrderBy(a => a.StartTimeUtc)
-            .ToList();
+                .OrderBy(a => a.StartTimeUtc),
+        ];
     }
 
     protected void AssertActivityTags(

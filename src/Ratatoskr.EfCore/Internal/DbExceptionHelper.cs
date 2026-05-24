@@ -15,19 +15,25 @@ internal static class DbExceptionHelper
     {
         var inner = ex.InnerException;
         if (inner == null)
+        {
             return false;
+        }
 
         // Check provider-specific exception types first (more reliable than message sniffing).
         // PostgreSQL: Npgsql.PostgresException has a SqlState property.
         var exType = inner.GetType();
         var sqlStateProp = exType.GetProperty("SqlState");
         if (sqlStateProp?.GetValue(inner) is string sqlState && sqlState == "23505")
+        {
             return true;
+        }
 
         // SQL Server: Microsoft.Data.SqlClient.SqlException has a Number property.
         var numberProp = exType.GetProperty("Number");
         if (numberProp?.GetValue(inner) is int errorNumber && errorNumber is 2601 or 2627)
+        {
             return true;
+        }
 
         // SQLite fallback: check message for UNIQUE constraint text.
         var msg = inner.Message;

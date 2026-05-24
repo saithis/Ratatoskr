@@ -1,6 +1,8 @@
 using TUnit.Core.Interfaces;
 
-[assembly: ParallelLimiter<ProcessorCountLimit>]
+[assembly: ParallelLimiter<Ratatoskr.Tests.ProcessorCountLimit>]
+
+namespace Ratatoskr.Tests;
 
 public class ProcessorCountLimit : IParallelLimit
 {

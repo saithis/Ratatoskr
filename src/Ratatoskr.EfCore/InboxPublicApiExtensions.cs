@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.Config;
 using Ratatoskr.EfCore.Internal;
 
@@ -16,6 +15,7 @@ public static class InboxPublicApiExtensions
     /// </summary>
     public static ConsumeChannelBuilder AllowConsumeWithoutInbox(this ConsumeChannelBuilder builder)
     {
+        ArgumentNullException.ThrowIfNull(builder);
         builder.Channel.SetExtension(new ConsumeChannelInboxRequirementOptOut());
         return builder;
     }
@@ -28,6 +28,7 @@ public static class InboxPublicApiExtensions
     public static ConsumeChannelBuilder UseInbox<TDbContext>(this ConsumeChannelBuilder builder)
         where TDbContext : DbContext, IInboxDbContext
     {
+        ArgumentNullException.ThrowIfNull(builder);
         builder.Channel.SetExtension(new ChannelInboxConfig(typeof(TDbContext)));
 
         // Deferred validation: ensure AddEfCoreDurability<TDbContext>(d => d.UseInbox()) was called
@@ -36,11 +37,13 @@ public static class InboxPublicApiExtensions
         builder.RatatoskrBuilder.AddValidator(_ =>
         {
             if (!services.Any(d => d.ServiceType == typeof(InboxOptionsHolder<TDbContext>)))
+            {
                 throw new InvalidOperationException(
                     $"Channel '{channelName}' uses UseInbox<{typeof(TDbContext).Name}>() "
                         + $"but AddEfCoreDurability<{typeof(TDbContext).Name}>(d => d.UseInbox()) was not configured. "
                         + $"Call AddEfCoreDurability before configuring consume channels."
                 );
+            }
         });
 
         return builder;

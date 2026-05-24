@@ -144,7 +144,7 @@ public class TopologyTests(RabbitMqContainerFixture rabbitMq, PostgresContainerF
             CancellationToken cancellationToken
         )
         {
-            throw new Exception("Force DLQ");
+            throw new InvalidOperationException("Force DLQ");
         }
     }
 }

@@ -5,7 +5,7 @@ namespace PlaygroundHost.Scenarios.Tests;
 
 public sealed class BlockingHoldScenario : IPlaygroundScenario
 {
-    public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues => [];
+    public static IReadOnlyList<PlaygroundRabbitQueue> RabbitQueues => [];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus) { }
 

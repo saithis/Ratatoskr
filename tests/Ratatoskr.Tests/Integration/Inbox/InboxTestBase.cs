@@ -45,7 +45,9 @@ public abstract class InboxTestBase(
             var count = await processor.ProcessBatchAsync(includeStuckDetection, cancellationToken);
             total += count;
             if (count == 0)
+            {
                 break;
+            }
         }
         return total;
     }
@@ -94,7 +96,10 @@ public abstract class InboxTestBase(
         {
             var attempt = counter.Increment();
             if (attempt <= FailuresBeforeSuccess)
+            {
                 throw new InvalidOperationException($"Transient failure (attempt {attempt})");
+            }
+
             return Task.CompletedTask;
         }
     }

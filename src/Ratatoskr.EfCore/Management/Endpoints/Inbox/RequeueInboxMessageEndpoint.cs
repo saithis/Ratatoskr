@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.Management;
 
@@ -13,10 +12,12 @@ internal static class RequeueInboxMessageEndpoint
 {
     internal static void Map(IEndpointRouteBuilder inboxGroup)
     {
-        inboxGroup.MapPost("/messages/{messageId}/requeue", Handle);
+        inboxGroup.MapPost("/messages/{messageId}/requeue", HandleAsync);
     }
 
-    private static async Task<Results<Ok<RequeueInboxMessageResponse>, ProblemHttpResult>> Handle(
+    private static async Task<
+        Results<Ok<RequeueInboxMessageResponse>, ProblemHttpResult>
+    > HandleAsync(
         string contextName,
         string messageId,
         EfCoreManagementDbContextLookup lookup,
@@ -27,25 +28,31 @@ internal static class RequeueInboxMessageEndpoint
             ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         var handlers = await db.Set<InboxHandlerStatusEntity>()
             .Where(x => x.MessageId == messageId && x.IsPoisoned)
             .ToListAsync(ct);
 
         if (handlers.Count == 0)
+        {
             return ManagementResults.NotFound(
                 $"No poisoned handlers found for inbox message '{messageId}'."
             );
+        }
 
         foreach (var h in handlers)
+        {
             h.Requeue();
+        }
 
         try
         {
             await db.SaveChangesAsync(ct);
             return TypedResults.Ok(
-                new RequeueInboxMessageResponse(handlers.Select(h => h.Id).ToList())
+                new RequeueInboxMessageResponse([.. handlers.Select(h => h.Id)])
             );
         }
         catch (DbUpdateConcurrencyException)

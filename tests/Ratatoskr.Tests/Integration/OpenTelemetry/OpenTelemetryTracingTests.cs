@@ -67,8 +67,8 @@ public class OpenTelemetryTracingTests(
 
         // Verify Hierarchy — RabbitMQ.Client 7.x inserts a transport-level span between
         // send and process, so we verify trace continuity rather than direct parent-child.
-        sendActivity!.ParentId.Should().Be(outboxActivity!.Id);
-        processActivity!.TraceId.Should().Be(sendActivity.TraceId);
+        sendActivity.ParentId.Should().Be(outboxActivity.Id);
+        processActivity.TraceId.Should().Be(sendActivity.TraceId);
 
         // Verify Kinds
         outboxActivity.Kind.Should().Be(ActivityKind.Producer);
@@ -166,8 +166,8 @@ public class OpenTelemetryTracingTests(
 
         // Verify Hierarchy — RabbitMQ.Client 7.x inserts a transport-level span between
         // send and process, so we verify trace continuity rather than direct parent-child.
-        sendActivity!.ParentId.Should().Be(publishActivity!.Id);
-        processActivity!.TraceId.Should().Be(sendActivity.TraceId);
+        sendActivity.ParentId.Should().Be(publishActivity.Id);
+        processActivity.TraceId.Should().Be(sendActivity.TraceId);
 
         // Verify Kinds
         publishActivity.Kind.Should().Be(ActivityKind.Producer);

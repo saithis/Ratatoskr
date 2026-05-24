@@ -6,12 +6,12 @@ namespace Ratatoskr.Tests.Fixtures;
 /// <summary>
 /// Test DbContext that implements IOutboxDbContext and IInboxDbContext for integration tests.
 /// </summary>
-public class TestDbContext : DbContext, IOutboxDbContext, IInboxDbContext
+public class TestDbContext(DbContextOptions<TestDbContext> options)
+    : DbContext(options),
+        IOutboxDbContext,
+        IInboxDbContext
 {
-    public TestDbContext(DbContextOptions<TestDbContext> options)
-        : base(options) { }
-
-    public DbSet<TestEntity> TestEntities { get; set; } = null!;
+    public DbSet<TestEntity> TestEntities { get; set; }
 
     public OutboxStagingCollection OutboxMessages { get; } = new();
 

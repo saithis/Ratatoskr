@@ -8,7 +8,7 @@ namespace Ratatoskr.Config;
 /// Fluent builder for registering handlers within a <c>Consumes&lt;T&gt;()</c> call on a consume channel.
 /// Handlers with a stable key are inbox-managed; handlers without a key are fire-and-forget.
 /// </summary>
-public class MessageConsumptionBuilder<TMessage>
+public sealed class MessageConsumptionBuilder<TMessage>
     where TMessage : notnull
 {
     private readonly IServiceCollection _services;
@@ -43,8 +43,11 @@ public class MessageConsumptionBuilder<TMessage>
         where THandler : class, IMessageHandler<TMessage>
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(stableKey);
+        ArgumentNullException.ThrowIfNull(legacyKeys);
         foreach (var legacyKey in legacyKeys)
+        {
             ArgumentException.ThrowIfNullOrWhiteSpace(legacyKey);
+        }
         AddHandler<THandler>(isInbox: true, inboxKey: stableKey, legacyKeys: legacyKeys);
         return this;
     }
@@ -70,13 +73,14 @@ public class MessageConsumptionBuilder<TMessage>
         _services.TryAddScoped<THandler>();
 
         HandlerRegistrations.Add(
-            new ChannelHandlerRegistration(
-                typeof(TMessage),
-                typeof(THandler),
-                isInbox,
-                inboxKey,
-                legacyKeys
-            )
+            new ChannelHandlerRegistration
+            {
+                MessageType = typeof(TMessage),
+                HandlerType = typeof(THandler),
+                IsInbox = isInbox,
+                InboxKey = inboxKey,
+                LegacyKeys = legacyKeys,
+            }
         );
     }
 }

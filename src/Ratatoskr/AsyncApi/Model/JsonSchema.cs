@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 
 namespace Ratatoskr.AsyncApi.Model;
@@ -5,7 +6,17 @@ namespace Ratatoskr.AsyncApi.Model;
 /// <summary>
 /// Represents a JSON Schema object used for message payload and header schemas.
 /// </summary>
-public class JsonSchema
+[SuppressMessage(
+    "Design",
+    "CA1002:Do not expose generic lists",
+    Justification = "DTO for JSON serialization"
+)]
+[SuppressMessage(
+    "Usage",
+    "CA2227:CollectionPropertiesShouldBeReadOnly",
+    Justification = "DTO for JSON serialization"
+)]
+public sealed class JsonSchema
 {
     /// <summary>JSON Schema $ref to another schema definition.</summary>
     [JsonPropertyName("$ref")]

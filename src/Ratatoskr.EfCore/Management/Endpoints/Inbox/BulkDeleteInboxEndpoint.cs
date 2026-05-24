@@ -13,11 +13,11 @@ internal static class BulkDeleteInboxEndpoint
 {
     internal static void Map(IEndpointRouteBuilder inboxGroup)
     {
-        inboxGroup.MapDelete("/poisoned", HandleByIds);
-        inboxGroup.MapDelete("/poisoned/all", HandleAll);
+        inboxGroup.MapDelete("/poisoned", HandleByIdsAsync);
+        inboxGroup.MapDelete("/poisoned/all", HandleAllAsync);
     }
 
-    private static async Task<Results<Ok, ProblemHttpResult>> HandleByIds(
+    private static async Task<Results<Ok, ProblemHttpResult>> HandleByIdsAsync(
         string contextName,
         [FromBody] BulkDeleteInboxRequest req,
         EfCoreManagementDbContextLookup lookup,
@@ -28,10 +28,14 @@ internal static class BulkDeleteInboxEndpoint
             ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         if (!BulkRequestValidator.TryValidateIds(req.Ids, out var error))
+        {
             return ManagementResults.BadRequest(error!);
+        }
 
         // Whole operation must be atomic: if orphaned-parent cleanup fails after the
         // handler rows are deleted, rolling back keeps the poisoned handler rows in
@@ -54,7 +58,7 @@ internal static class BulkDeleteInboxEndpoint
         return TypedResults.Ok();
     }
 
-    private static async Task<Results<Ok, ProblemHttpResult>> HandleAll(
+    private static async Task<Results<Ok, ProblemHttpResult>> HandleAllAsync(
         string contextName,
         EfCoreManagementDbContextLookup lookup,
         CancellationToken ct
@@ -64,7 +68,9 @@ internal static class BulkDeleteInboxEndpoint
             ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
@@ -93,7 +99,9 @@ internal static class BulkDeleteInboxEndpoint
     )
     {
         if (messageIds.Count == 0)
+        {
             return;
+        }
 
         await db.Set<InboxMessageEntity>()
             .Where(msg =>

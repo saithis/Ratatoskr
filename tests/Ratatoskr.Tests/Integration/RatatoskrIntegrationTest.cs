@@ -29,11 +29,15 @@ public abstract class RatatoskrIntegrationTest(
         _factory?.Services
         ?? throw new InvalidOperationException("StartTestAsync has not been called yet.");
 
-    // Unique ID for this test instance to isolate resources
+    /// <summary>
+    /// Unique ID for this test instance to isolate resources
+    /// </summary>
     protected string TestId { get; } = Guid.NewGuid().ToString("N");
     protected string RabbitMqConnectionString => rabbitMq.ConnectionString;
 
-    // Override the connection string to point to the unique database for this test
+    /// <summary>
+    /// Override the connection string to point to the unique database for this test
+    /// </summary>
     protected string PostgresConnectionString
     {
         get
@@ -47,6 +51,11 @@ public abstract class RatatoskrIntegrationTest(
         }
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Reliability",
+        "CA2000:Dispose objects before losing scope",
+        Justification = "WebApplicationFactory ownership is transferred to _factory and disposed in DisposeAsyncCore."
+    )]
     public virtual async Task StartTestAsync(Action<IServiceCollection>? configure = null)
     {
         await CreateDatabaseAsync();
@@ -54,8 +63,13 @@ public abstract class RatatoskrIntegrationTest(
         // EnsureCreated must run before the host is built so tables exist on first poll.
         await EnsureTestDatabaseSchemaAsync();
 
-        // Custom configuration for the factory if needed
-        _factory = new RatatoskrTestFactory(rabbitMq, postgres).WithWebHostBuilder(builder =>
+        if (_factory != null)
+        {
+            await _factory.DisposeAsync();
+            _factory = null;
+        }
+
+        _factory = new RatatoskrTestFactory().WithWebHostBuilder(builder =>
         {
             builder.ConfigureServices(services =>
             {
@@ -65,7 +79,7 @@ public abstract class RatatoskrIntegrationTest(
         });
 
         // Create the scope from the factory's services
-        using var scope = _factory.Services.CreateScope();
+        await using var scope = _factory.Services.CreateAsyncScope();
         var topologyManager = scope.ServiceProvider.GetService<RabbitMqTopologyManager>();
         if (topologyManager != null)
         {
@@ -98,7 +112,7 @@ public abstract class RatatoskrIntegrationTest(
     protected virtual void ConfigureServices(IServiceCollection services)
     {
         services.AddLogging();
-        services.AddSingleton<TimeProvider>(TimeProvider.System);
+        services.AddSingleton(TimeProvider.System);
 
         var lockFileDirectory = new DirectoryInfo(
             Path.Combine(Environment.CurrentDirectory, TestId)
@@ -116,14 +130,26 @@ public abstract class RatatoskrIntegrationTest(
     protected HttpClient CreateHttpClient()
     {
         if (_factory is null)
+        {
             throw new InvalidOperationException("StartTestAsync has not been called yet.");
+        }
+
         return _factory.CreateClient();
     }
 
     public async ValueTask DisposeAsync()
     {
+        await DisposeAsyncCore();
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual async ValueTask DisposeAsyncCore()
+    {
         if (_factory != null)
+        {
             await _factory.DisposeAsync();
+            _factory = null;
+        }
 
         await DropDatabaseAsync();
     }
@@ -157,34 +183,39 @@ public abstract class RatatoskrIntegrationTest(
 
     protected async Task InScopeAsync(Func<ScopeContext, Task> arrange)
     {
-        using var scope = _factory.Services.CreateScope();
+        if (_factory == null)
+        {
+            throw new InvalidOperationException($"Call {nameof(StartTestAsync)} first");
+        }
+
+        await using var scope = _factory.Services.CreateAsyncScope();
         await arrange(new ScopeContext { ServiceProvider = scope.ServiceProvider });
     }
 
-    protected async Task InScopeAsync(Action<ScopeContext> arrange)
-    {
+    protected async Task InScopeAsync(Action<ScopeContext> arrange) =>
         await InScopeAsync(ctx =>
         {
             arrange(ctx);
             return Task.CompletedTask;
         });
-    }
 
     protected async Task<TRes> InScopeAsync<TRes>(Func<ScopeContext, Task<TRes>> arrange)
     {
-        using var scope = _factory.Services.CreateScope();
-        TRes result = await arrange(new ScopeContext { ServiceProvider = scope.ServiceProvider });
-        return result;
+        if (_factory == null)
+        {
+            throw new InvalidOperationException($"Call {nameof(StartTestAsync)} first");
+        }
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        return await arrange(new ScopeContext { ServiceProvider = scope.ServiceProvider });
     }
 
-    protected async Task<TRes> InScopeAsync<TRes>(Func<ScopeContext, TRes> arrange)
-    {
-        return await InScopeAsync(ctx =>
+    protected async Task<TRes> InScopeAsync<TRes>(Func<ScopeContext, TRes> arrange) =>
+        await InScopeAsync(ctx =>
         {
-            TRes result = arrange(ctx);
+            var result = arrange(ctx);
             return Task.FromResult(result);
         });
-    }
 
     protected async Task PublishToRabbitMqAsync<T>(
         string exchange,
@@ -210,7 +241,9 @@ public abstract class RatatoskrIntegrationTest(
                         typeof(T)
                     )
                     ?.Type
-                ?? throw new NullReferenceException(),
+                ?? throw new InvalidOperationException(
+                    $"Message type is required for {typeof(T).Name}."
+                ),
             ContentType = "application/json",
             DeliveryMode = DeliveryModes.Persistent,
         };
@@ -264,25 +297,20 @@ public abstract class RatatoskrIntegrationTest(
         }
     }
 
-    protected async Task InitializeDatabase()
-    {
+    protected async Task InitializeDatabase() =>
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             await db.Database.EnsureCreatedAsync();
         });
-    }
 
     protected Task WaitForConditionAsync(
         Func<bool> condition,
         TimeSpan timeout,
         string? message = null
-    )
-    {
-        return WaitForConditionAsync(() => Task.FromResult(condition()), timeout, message);
-    }
+    ) => WaitForConditionAsync(() => Task.FromResult(condition()), timeout, message);
 
-    protected async Task WaitForConditionAsync(
+    protected static async Task WaitForConditionAsync(
         Func<Task<bool>> condition,
         TimeSpan timeout,
         string? message = null
@@ -292,7 +320,10 @@ public abstract class RatatoskrIntegrationTest(
         while (!await condition())
         {
             if (DateTime.UtcNow - start > timeout)
+            {
                 throw new TimeoutException(message ?? "Condition not met within timeout.");
+            }
+
             await Task.Delay(10);
         }
     }

@@ -1,5 +1,4 @@
 using Ratatoskr.Config;
-using Ratatoskr.Core;
 using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Tests.Fixtures;
@@ -34,7 +33,7 @@ public abstract class MessageTrackingTestBase(
                             .WithTransientQueue()
                             .WithQueueType(QueueType.Classic)
                     )
-                    .Consumes<TestEvent>(configureHandler ?? (_ => { }))
+                    .Consumes(configureHandler ?? (_ => { }))
         );
     }
 }

@@ -4,7 +4,7 @@ namespace Ratatoskr.AsyncApi.Config;
 /// AsyncAPI documentation options for a message registration.
 /// Configure via <c>.WithAsyncApi(x => x.WithVersion("1.0.0"))</c> on a MessageBuilder.
 /// </summary>
-public class AsyncApiMessageOptions
+public sealed class AsyncApiMessageOptions
 {
     /// <summary>Optional title for the message in the AsyncAPI document.</summary>
     public string? Title { get; private set; }

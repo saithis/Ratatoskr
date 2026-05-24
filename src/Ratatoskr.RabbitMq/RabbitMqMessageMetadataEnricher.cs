@@ -9,6 +9,9 @@ public class RabbitMqMessageMetadataEnricher : ITransportMessageMetadataEnricher
 
     public void Enrich(PublishInformation publishInformation, MessageProperties properties)
     {
+        ArgumentNullException.ThrowIfNull(publishInformation);
+        ArgumentNullException.ThrowIfNull(properties);
+
         var messageOptions = publishInformation.Message.GetRabbitMqOptions();
         properties.SetExchange(publishInformation.Channel.ChannelName);
         properties.SetRoutingKey(

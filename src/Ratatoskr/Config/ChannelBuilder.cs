@@ -3,8 +3,11 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr.Config;
 
-public class ChannelBuilder(ChannelRegistration channel)
+public abstract class ChannelBuilder(ChannelRegistration channel)
 {
+    /// <summary>The underlying channel registration.</summary>
+    internal ChannelRegistration Channel { get; } = channel;
+
     /// <summary>
     /// Sets a typed extension on the channel registration.
     /// Used by transport providers to attach transport-specific configuration.
@@ -12,7 +15,7 @@ public class ChannelBuilder(ChannelRegistration channel)
     protected internal ChannelBuilder WithExtension<T>(T value)
         where T : class
     {
-        channel.SetExtension(value);
+        Channel.SetExtension(value);
         return this;
     }
 
@@ -23,7 +26,7 @@ public class ChannelBuilder(ChannelRegistration channel)
     protected internal ChannelBuilder AddTransport(string transportName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(transportName);
-        channel.Transports.Add(transportName);
+        _ = Channel.Transports.Add(transportName);
         return this;
     }
 
@@ -32,10 +35,12 @@ public class ChannelBuilder(ChannelRegistration channel)
         var type = typeof(T);
         typeName ??= GetMessageTypeName(type);
 
-        if (channel.Messages.Any(r => r.MessageType == type))
+        if (Channel.Messages.Any(r => r.MessageType == type))
+        {
             throw new InvalidOperationException(
                 $"Message type '{type.FullName}' is already registered on this channel."
             );
+        }
 
         var registration = new MessageRegistration(type, typeName);
         registration.DataSchema = GetDataSchema(type);
@@ -46,7 +51,7 @@ public class ChannelBuilder(ChannelRegistration channel)
             configure(builder);
         }
 
-        channel.Messages.Add(registration);
+        Channel.Messages.Add(registration);
     }
 
     private static string GetMessageTypeName(Type type)

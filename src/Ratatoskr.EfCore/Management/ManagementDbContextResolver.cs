@@ -43,7 +43,10 @@ internal static class ManagementDbContextResolver
     )
     {
         if (EnsureContext(lookup, contextName, out dbContext) is { } error)
+        {
             return error;
+        }
+
         if (!dbContext.GetType().IsAssignableTo(typeof(IOutboxDbContext)))
         {
             dbContext = null!;
@@ -61,7 +64,10 @@ internal static class ManagementDbContextResolver
     )
     {
         if (EnsureContext(lookup, contextName, out dbContext) is { } error)
+        {
             return error;
+        }
+
         if (!dbContext.GetType().IsAssignableTo(typeof(IInboxDbContext)))
         {
             dbContext = null!;

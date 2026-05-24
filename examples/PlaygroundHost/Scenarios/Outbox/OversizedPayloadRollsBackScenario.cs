@@ -13,7 +13,7 @@ public sealed class OversizedPayloadRollsBackScenario : IPlaygroundScenario
     private static string ExchangeName { get; } =
         PlaygroundAmqpNames.ExchangeName(ScenarioSlug, "events");
 
-    public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues => [];
+    public static IReadOnlyList<PlaygroundRabbitQueue> RabbitQueues => [];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
     {

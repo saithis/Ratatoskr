@@ -1,9 +1,15 @@
+using System.Diagnostics.CodeAnalysis;
 using Ratatoskr.Config;
 using Ratatoskr.Core;
 using Ratatoskr.RabbitMq.Config;
 
 namespace Ratatoskr.RabbitMq.Extensions;
 
+[SuppressMessage(
+    "Naming",
+    "CA1708:Identifiers should differ by more than case",
+    Justification = "False positive"
+)]
 public static class RabbitMqChannelExtensions
 {
     extension(ChannelRegistration registration)
@@ -24,6 +30,9 @@ public static class RabbitMqChannelExtensions
         /// </summary>
         public PublishChannelBuilder WithRabbitMq(Action<RabbitMqExchangeOptions> configure)
         {
+            ArgumentNullException.ThrowIfNull(builder);
+            ArgumentNullException.ThrowIfNull(configure);
+
             var inner = new RabbitMqChannelOptions();
             var options = new RabbitMqExchangeOptions(inner);
             configure(options);
@@ -41,6 +50,9 @@ public static class RabbitMqChannelExtensions
         /// </summary>
         public ConsumeChannelBuilder WithRabbitMq(Action<RabbitMqConsumeOptions> configure)
         {
+            ArgumentNullException.ThrowIfNull(builder);
+            ArgumentNullException.ThrowIfNull(configure);
+
             var inner = new RabbitMqChannelOptions();
             var options = new RabbitMqConsumeOptions(inner);
             configure(options);

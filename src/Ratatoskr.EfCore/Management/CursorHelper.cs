@@ -22,7 +22,10 @@ internal static class CursorHelper
         BinaryPrimitives.WriteInt64LittleEndian(bytes[..8], time.Ticks);
         BinaryPrimitives.WriteInt16LittleEndian(bytes.Slice(8, 2), (short)time.Offset.TotalMinutes);
         if (!id.TryWriteBytes(bytes.Slice(10, 16)))
+        {
             throw new InvalidOperationException("Unexpected failure encoding Guid for cursor.");
+        }
+
         return Base64UrlEncode(bytes);
     }
 
@@ -35,11 +38,15 @@ internal static class CursorHelper
     {
         value = default;
         if (string.IsNullOrEmpty(cursor))
+        {
             return false;
+        }
 
         Span<byte> bytes = stackalloc byte[CursorByteLength];
         if (!TryBase64UrlDecode(cursor, bytes, out var written) || written != CursorByteLength)
+        {
             return false;
+        }
 
         var ticks = BinaryPrimitives.ReadInt64LittleEndian(bytes[..8]);
         var offsetMinutes = BinaryPrimitives.ReadInt16LittleEndian(bytes.Slice(8, 2));
@@ -74,10 +81,15 @@ internal static class CursorHelper
 
         Span<byte> decoded = stackalloc byte[CursorByteLength + 4];
         if (!Convert.TryFromBase64String(normalized, decoded, out var written))
+        {
             return false;
+        }
 
         if (written > destination.Length)
+        {
             return false;
+        }
+
         decoded[..written].CopyTo(destination);
         bytesWritten = written;
         return true;

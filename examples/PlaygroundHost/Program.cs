@@ -1,21 +1,17 @@
 // Local development example only. See examples/README.md.
 using Medallion.Threading;
 using Medallion.Threading.FileSystem;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using PlaygroundHost;
 using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Infrastructure.ScenarioRunning;
 using PlaygroundHost.Persistence;
-using PlaygroundHost.Persistence.Entities;
 using RabbitMQ.Client;
 using Ratatoskr;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.Management;
-using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 using ServiceDefaults;
 
@@ -28,7 +24,7 @@ builder.Services.AddSingleton<IDistributedLockProvider>(
     _ => new FileDistributedSynchronizationProvider(lockFileDirectory)
 );
 
-builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<OutboxSendFailureRegistry>();
 builder.Services.AddSingleton<PlaygroundActivityRecorder>();
 builder.Services.AddSingleton<IMessageActivityObserver>(sp =>
@@ -118,6 +114,10 @@ builder.Services.AddDbContext<ConsumerDbContext>(
 
 builder.Services.AddDbContext<PlaygroundDbContext>(options => options.UseNpgsql(playgroundCs));
 
+builder.Services.Configure<PlaygroundOptions>(
+    builder.Configuration.GetSection(PlaygroundOptions.SectionName)
+);
+
 PlaygroundScenarioManifest.RegisterScenarioServices(builder.Services);
 builder.Services.AddSingleton<ScenarioRunService>();
 
@@ -138,7 +138,7 @@ app.MapGet(
         return TypedResults.Ok(
             new
             {
-                playgroundHostUrl = string.IsNullOrEmpty(self) ? (string?)null : self.TrimEnd('/'),
+                playgroundHostUrl = string.IsNullOrEmpty(self) ? null : self.TrimEnd('/'),
                 managementBasePath = mgmtBase,
                 publisherManagementPath = $"{mgmtBase}/PublisherDbContext",
                 consumerManagementPath = $"{mgmtBase}/ConsumerDbContext",
@@ -171,6 +171,7 @@ app.MapGet(
             var config = http.RequestServices.GetRequiredService<IConfiguration>();
             var cs = config.GetConnectionString("rabbitmq");
             if (string.IsNullOrEmpty(cs))
+            {
                 return TypedResults.Ok(
                     new
                     {
@@ -179,6 +180,7 @@ app.MapGet(
                         note = "rabbitmq connection string missing.",
                     }
                 );
+            }
 
             var factory = new ConnectionFactory { Uri = new Uri(cs) };
             await using var connection = await factory.CreateConnectionAsync(cancellationToken);
@@ -272,9 +274,15 @@ playground.MapGet(
     ([FromServices] PlaygroundActivityRecorder recorder, Guid? orderId, string? scenarioRunId) =>
     {
         if (!string.IsNullOrEmpty(scenarioRunId))
+        {
             return TypedResults.Ok(recorder.GetEntriesForScenarioRun(scenarioRunId));
+        }
+
         if (orderId is { } id)
+        {
             return TypedResults.Ok(recorder.GetEntriesForOrder(id));
+        }
+
         return TypedResults.Ok(recorder.GetRecentEntries());
     }
 );
@@ -329,7 +337,10 @@ playground.MapPost(
     {
         var result = await runs.StartRunAsync(slug, confirmDanger, http.RequestAborted);
         if (result.Error is { } err)
+        {
             return TypedResults.BadRequest(new { error = err });
+        }
+
         return TypedResults.Accepted(
             $"/api/playground/runs/{result.RunId}",
             new { runId = result.RunId, title = result.Title }
@@ -343,7 +354,10 @@ playground.MapGet(
     {
         var row = await runs.GetStatusAsync(runId, http.RequestAborted);
         if (row is null)
+        {
             return TypedResults.NotFound();
+        }
+
         return TypedResults.Ok(row);
     }
 );
@@ -360,7 +374,7 @@ playground.MapPost(
 app.UseStaticFiles();
 app.MapFallbackToFile("index.html");
 
-app.Run();
+await app.RunAsync();
 
 static async Task<uint> SafeMessageCountAsync(
     IChannel channel,

@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.Management;
 
@@ -13,10 +12,10 @@ internal static class DeleteInboxHandlerEndpoint
 {
     internal static void Map(IEndpointRouteBuilder inboxGroup)
     {
-        inboxGroup.MapDelete("/poisoned/{handlerStatusId:guid}", Handle);
+        inboxGroup.MapDelete("/poisoned/{handlerStatusId:guid}", HandleAsync);
     }
 
-    private static async Task<Results<Ok, ProblemHttpResult>> Handle(
+    private static async Task<Results<Ok, ProblemHttpResult>> HandleAsync(
         string contextName,
         Guid handlerStatusId,
         EfCoreManagementDbContextLookup lookup,
@@ -27,17 +26,24 @@ internal static class DeleteInboxHandlerEndpoint
             ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         var entity = await db.Set<InboxHandlerStatusEntity>()
             .SingleOrDefaultAsync(x => x.Id == handlerStatusId, ct);
 
         if (entity is null)
+        {
             return ManagementResults.NotFound(
                 $"Inbox handler status '{handlerStatusId}' was not found."
             );
+        }
+
         if (!entity.IsPoisoned)
+        {
             return ManagementResults.BadRequest("Handler status is not poisoned.");
+        }
 
         var messageId = entity.MessageId;
         db.Set<InboxHandlerStatusEntity>().Remove(entity);

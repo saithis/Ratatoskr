@@ -2,7 +2,7 @@ using RabbitMQ.Client;
 
 namespace Ratatoskr.RabbitMq;
 
-public class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposable
+public sealed class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposable
 {
     private readonly SemaphoreSlim _connectionLock = new(1, 1);
     private readonly SemaphoreSlim _sendChannelLock = new(1, 1);
@@ -10,7 +10,7 @@ public class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposab
     private IChannel? _sendChannel;
 
     /// <summary>
-    /// Returns <c>true</c> if an AMQP connection is currently open.
+    /// Returns <see langword="true"/> if an AMQP connection is currently open.
     /// </summary>
     public bool IsConnected => _connection is { IsOpen: true };
 
@@ -44,13 +44,17 @@ public class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposab
     )
     {
         if (_sendChannel is { IsOpen: true })
+        {
             return _sendChannel;
+        }
 
         await _sendChannelLock.WaitAsync(cancellationToken);
         try
         {
             if (_sendChannel is { IsOpen: true })
+            {
                 return _sendChannel;
+            }
 
             if (_sendChannel != null)
             {
@@ -89,13 +93,22 @@ public class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposab
     private async Task<IConnection> GetOrCreateConnectionAsync(CancellationToken cancellationToken)
     {
         if (_connection is { IsOpen: true })
+        {
             return _connection;
+        }
 
         await _connectionLock.WaitAsync(cancellationToken);
         try
         {
             if (_connection is { IsOpen: true })
+            {
                 return _connection;
+            }
+
+            if (_connection != null)
+            {
+                await _connection.DisposeAsync();
+            }
 
             var factory = CreateConnectionFactory();
             _connection = await factory.CreateConnectionAsync(cancellationToken);
@@ -110,9 +123,11 @@ public class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposab
     private ConnectionFactory CreateConnectionFactory()
     {
         if (options.ConnectionString is null)
+        {
             throw new InvalidOperationException(
                 "RabbitMQ connection string is not configured. Set RabbitMqOptions.ConnectionString."
             );
+        }
 
         return new ConnectionFactory
         {
@@ -129,7 +144,10 @@ public class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposab
         if (_sendChannel != null)
         {
             if (_sendChannel.IsOpen)
+            {
                 await _sendChannel.CloseAsync();
+            }
+
             _sendChannel.Dispose();
             _sendChannel = null;
         }

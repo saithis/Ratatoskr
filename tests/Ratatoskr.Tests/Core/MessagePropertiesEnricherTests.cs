@@ -3,7 +3,6 @@ using Microsoft.Extensions.Time.Testing;
 using Ratatoskr.CloudEvents;
 using Ratatoskr.Core;
 using Ratatoskr.Tests.Fixtures;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.Core;
 

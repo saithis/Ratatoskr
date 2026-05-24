@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Ratatoskr.AsyncApi.Generation;
@@ -16,10 +15,13 @@ public static class ServiceCollectionExtensions
     )
     {
         if (services.Any(d => d.ServiceType == typeof(RatatoskrMarker)))
+        {
             throw new InvalidOperationException(
                 "AddRatatoskr has already been called. It must only be called once per IServiceCollection."
             );
-        services.AddSingleton<RatatoskrMarker>();
+        }
+
+        _ = services.AddSingleton<RatatoskrMarker>();
 
         var builder = new RatatoskrBuilder(services);
         configure?.Invoke(builder);
@@ -31,20 +33,20 @@ public static class ServiceCollectionExtensions
         // Run all registered validators (e.g. RabbitMQ configuration validation)
         builder.Validate();
 
-        services.AddSingleton(builder.CloudEventsOptions);
+        _ = services.AddSingleton(builder.CloudEventsOptions);
 
         // Register TimeProvider if not already registered (allows test overrides)
         services.TryAddSingleton(TimeProvider.System);
 
         // Register message properties enricher
-        services.AddSingleton<IMessagePropertiesEnricher, MessagePropertiesEnricher>();
+        _ = services.AddSingleton<IMessagePropertiesEnricher, MessagePropertiesEnricher>();
 
         // Register ChannelRegistry and ChannelHandlerRegistry
         builder.ChannelRegistry.Freeze();
-        services.AddSingleton(builder.ChannelRegistry);
+        _ = services.AddSingleton(builder.ChannelRegistry);
         var handlerRegistry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
         builder.ValidateHandlers(handlerRegistry);
-        services.AddSingleton(handlerRegistry);
+        _ = services.AddSingleton(handlerRegistry);
 
         // Register serializer (TryAdd so users can pre-register a custom IMessageSerializer)
         services.TryAddSingleton<IMessageSerializer>(
@@ -53,17 +55,17 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IMessageSerializerResolver, MessageSerializerResolver>();
 
         services.TryAddSingleton<HandlerInvoker>();
-        services.AddSingleton<IRatatoskr, Ratatoskr>();
+        _ = services.AddSingleton<IRatatoskr, RatatoskrClient>();
 
         // AsyncAPI document generation
-        services.AddSingleton(builder.AsyncApiOptions);
+        _ = services.AddSingleton(builder.AsyncApiOptions);
         services.TryAddEnumerable(
             ServiceDescriptor.Singleton<
                 IAsyncApiTransportBindingProvider,
                 NullTransportBindingProvider
             >()
         );
-        services.AddSingleton<AsyncApiDocumentGenerator>();
+        _ = services.AddSingleton<AsyncApiDocumentGenerator>();
 
         return services;
     }

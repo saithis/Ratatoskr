@@ -1,5 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Ratatoskr.Core;
 
 namespace PlaygroundHost.Infrastructure;
@@ -10,7 +8,9 @@ internal static class PlaygroundMessageSenderDecoration
     {
         var descriptors = services.Where(d => d.ServiceType == typeof(IMessageSender)).ToList();
         foreach (var d in descriptors)
+        {
             services.Remove(d);
+        }
 
         foreach (var original in descriptors)
         {
@@ -26,11 +26,19 @@ internal static class PlaygroundMessageSenderDecoration
     private static IMessageSender CreateInner(IServiceProvider sp, ServiceDescriptor sd)
     {
         if (sd.ImplementationInstance is IMessageSender direct)
+        {
             return direct;
+        }
+
         if (sd.ImplementationFactory is { } factory)
+        {
             return (IMessageSender)factory(sp);
+        }
+
         if (sd.ImplementationType is { } type)
+        {
             return (IMessageSender)ActivatorUtilities.CreateInstance(sp, type);
+        }
 
         throw new InvalidOperationException($"Cannot materialize IMessageSender from {sd}.");
     }

@@ -8,9 +8,9 @@ namespace Ratatoskr.EfCore.Internal;
 /// </summary>
 internal interface IEfCoreInboxAcceptor
 {
-    Type DbContextType { get; }
+    public Type DbContextType { get; }
 
-    Task<InboxAcceptOutcome> AcceptAsync(
+    public Task<InboxAcceptOutcome> AcceptAsync(
         byte[] body,
         MessageProperties properties,
         string transportName,

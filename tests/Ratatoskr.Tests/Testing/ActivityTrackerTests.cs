@@ -11,13 +11,13 @@ public class ActivityTrackerTests
     public async Task PublishAndWaitAsync_WithWaitConditions_ThrowsInvalidOperationException()
     {
         // Arrange
-        var services = new ServiceCollection().BuildServiceProvider();
+        await using var services = new ServiceCollection().BuildServiceProvider();
         var tracker = new MessageTracker();
         var activity = new ActivityTracker(services, tracker);
 
         // Act
         activity.WaitForMessage<TestMessage>(MessageStage.Dispatched);
-        var act = () => activity.PublishAndWaitAsync(new TestMessage());
+        var act = async () => await activity.PublishAndWaitAsync(new TestMessage());
 
         // Assert
         await act.Should().ThrowAsync<InvalidOperationException>();

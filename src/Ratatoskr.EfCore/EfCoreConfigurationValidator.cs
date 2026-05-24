@@ -15,7 +15,9 @@ internal static class EfCoreConfigurationValidator
         foreach (var publishChannel in channelRegistry.GetPublishChannels())
         {
             if (!publishChannel.Transports.Contains(EfCoreTransportConstants.TransportName))
+            {
                 continue;
+            }
 
             foreach (var message in publishChannel.Messages)
             {
@@ -24,7 +26,9 @@ internal static class EfCoreConfigurationValidator
         }
 
         if (efCorePublishedTypes.Count == 0)
+        {
             return;
+        }
 
         // Check all consume channels that consume EF Core-published types
         foreach (var consumeChannel in channelRegistry.GetConsumeChannels())
@@ -34,7 +38,9 @@ internal static class EfCoreConfigurationValidator
             foreach (var message in consumeChannel.Messages)
             {
                 if (!efCorePublishedTypes.Contains(message.MessageTypeName))
+                {
                     continue;
+                }
 
                 if (inboxConfig == null)
                 {

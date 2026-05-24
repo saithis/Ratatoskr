@@ -1,5 +1,6 @@
 using System.Collections;
 using System.ComponentModel.DataAnnotations;
+using System.Globalization;
 using System.Reflection;
 using System.Text.Json.Serialization;
 using Ratatoskr.AsyncApi.Model;
@@ -9,12 +10,12 @@ namespace Ratatoskr.AsyncApi.Schema;
 /// <summary>
 /// Generates JSON Schema objects from CLR types, respecting System.ComponentModel.DataAnnotations attributes.
 /// </summary>
-public class JsonSchemaGenerator
+public sealed class JsonSchemaGenerator
 {
     private readonly NullabilityInfoContext _nullabilityContext = new();
 
-    private static readonly HashSet<Type> _primitiveTypes = new()
-    {
+    private static readonly HashSet<Type> _primitiveTypes =
+    [
         typeof(bool),
         typeof(byte),
         typeof(sbyte),
@@ -36,60 +37,71 @@ public class JsonSchemaGenerator
         typeof(TimeOnly),
         typeof(Uri),
         typeof(object),
-    };
+    ];
 
     /// <summary>
     /// Generates schemas for the given types, adding them to the provided components dictionary.
     /// Returns a $ref schema for the given root type.
     /// </summary>
-    public JsonSchema GenerateAndRegister(Type type, Dictionary<string, JsonSchema> components)
+    public JsonSchema GenerateAndRegister(Type type, IDictionary<string, JsonSchema> components)
     {
+        ArgumentNullException.ThrowIfNull(type);
+        ArgumentNullException.ThrowIfNull(components);
+
         var coreType = UnwrapNullable(type);
 
         if (IsPrimitive(coreType))
+        {
             return BuildPrimitiveSchema(coreType, type != coreType);
+        }
 
         var name = GetSchemaName(coreType);
         if (!components.ContainsKey(name))
+        {
             GenerateObject(coreType, name, components);
+        }
 
         return JsonSchema.RefTo(name);
     }
 
-    private void GenerateObject(Type type, string name, Dictionary<string, JsonSchema> components)
+    private void GenerateObject(Type type, string name, IDictionary<string, JsonSchema> components)
     {
         // Placeholder prevents infinite recursion for self-referential types
         components[name] = new JsonSchema { Type = "object" };
-        var schema = BuildObjectSchema(type, components);
-        components[name] = schema;
+        components[name] = BuildObjectSchema(type, components);
     }
 
-    private JsonSchema BuildObjectSchema(Type type, Dictionary<string, JsonSchema> components)
+    private JsonSchema BuildObjectSchema(Type type, IDictionary<string, JsonSchema> components)
     {
         if (type.IsEnum)
         {
             return BuildEnumSchema(type);
         }
 
-        var properties = new Dictionary<string, JsonSchema>();
+        var properties = new Dictionary<string, JsonSchema>(StringComparer.OrdinalIgnoreCase);
         var required = new List<string>();
 
         foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
             if (!prop.CanRead)
+            {
                 continue;
+            }
             if (
                 prop.GetCustomAttribute<JsonIgnoreAttribute>() is
                 { Condition: JsonIgnoreCondition.Always }
             )
+            {
                 continue;
+            }
 
             var propName = GetPropertyName(prop);
-            var propSchema = BuildPropertySchema(prop, components);
-            properties[propName] = propSchema;
+            properties[propName] = BuildPropertySchema(prop, components);
 
-            if (prop.GetCustomAttribute<RequiredAttribute>() != null)
+            if (Attribute.IsDefined(prop, typeof(RequiredAttribute)))
+            {
                 required.Add(propName);
+            }
         }
 
         return new JsonSchema
@@ -102,7 +114,7 @@ public class JsonSchemaGenerator
 
     private JsonSchema BuildPropertySchema(
         PropertyInfo prop,
-        Dictionary<string, JsonSchema> components
+        IDictionary<string, JsonSchema> components
     )
     {
         var schema = BuildTypeSchema(prop.PropertyType, components, prop);
@@ -112,12 +124,12 @@ public class JsonSchemaGenerator
 
     private JsonSchema BuildTypeSchema(
         Type type,
-        Dictionary<string, JsonSchema> components,
+        IDictionary<string, JsonSchema> components,
         PropertyInfo? propertyInfo = null
     )
     {
         var underlying = UnwrapNullable(type);
-        bool isNullable =
+        var isNullable =
             propertyInfo != null
                 ? IsPropertyNullable(propertyInfo)
                 : underlying != type || !type.IsValueType;
@@ -128,7 +140,9 @@ public class JsonSchemaGenerator
             var valueSchema = BuildTypeSchemaRef(valueType!, components);
             var dictSchema = new JsonSchema { Type = "object", AdditionalProperties = valueSchema };
             if (isNullable)
+            {
                 return new JsonSchema { OneOf = [dictSchema, new JsonSchema { Type = "null" }] };
+            }
             return dictSchema;
         }
 
@@ -141,32 +155,39 @@ public class JsonSchemaGenerator
             var itemSchema = BuildTypeSchemaRef(elementType!, components);
             var arraySchema = new JsonSchema { Type = "array", Items = itemSchema };
             if (isNullable)
+            {
                 return new JsonSchema { OneOf = [arraySchema, new JsonSchema { Type = "null" }] };
+            }
             return arraySchema;
         }
 
         if (IsPrimitive(underlying))
         {
-            var s = BuildPrimitiveSchema(underlying, isNullable);
-            return s;
+            return BuildPrimitiveSchema(underlying, isNullable);
         }
 
         // Complex object — use $ref
         var name = GetSchemaName(underlying);
         if (!components.ContainsKey(name))
+        {
             GenerateObject(underlying, name, components);
+        }
 
         var refSchema = JsonSchema.RefTo(name);
         if (isNullable)
+        {
             return new JsonSchema { OneOf = [refSchema, new JsonSchema { Type = "null" }] };
+        }
         return refSchema;
     }
 
-    private JsonSchema BuildTypeSchemaRef(Type type, Dictionary<string, JsonSchema> components)
+    private JsonSchema BuildTypeSchemaRef(Type type, IDictionary<string, JsonSchema> components)
     {
         var underlying = UnwrapNullable(type);
         if (IsPrimitive(underlying))
+        {
             return BuildPrimitiveSchema(underlying, underlying != type);
+        }
         return BuildTypeSchema(type, components);
     }
 
@@ -214,19 +235,23 @@ public class JsonSchemaGenerator
         };
 
         if (nullable && schema.Type is string typeName)
+        {
             schema.Type = new[] { typeName, "null" };
+        }
 
         return schema;
     }
 
     private static JsonSchema BuildEnumSchema(Type type)
     {
-        var underlyingType = System.Enum.GetUnderlyingType(type);
-        var names = System.Enum.GetNames(type);
-        var values = System.Enum.GetValues(type);
+        var underlyingType = Enum.GetUnderlyingType(type);
+        var names = Enum.GetNames(type);
+        var values = Enum.GetValues(type);
         var enumValues = new List<object>(values.Length);
         foreach (var v in values)
-            enumValues.Add(Convert.ChangeType(v, underlyingType));
+        {
+            enumValues.Add(Convert.ChangeType(v, underlyingType, CultureInfo.InvariantCulture));
+        }
 
         var format =
             underlyingType == typeof(long) || underlyingType == typeof(ulong) ? "int64" : "int32";
@@ -236,42 +261,52 @@ public class JsonSchemaGenerator
             Type = "integer",
             Format = format,
             Enum = enumValues,
-            XEnumNames = names.ToList(),
-            XEnumVarnames = names.ToList(),
+            XEnumNames = [.. names],
+            XEnumVarnames = [.. names],
         };
     }
 
     private static void ApplyDataAnnotations(PropertyInfo prop, JsonSchema schema)
     {
         if (prop.GetCustomAttribute<MaxLengthAttribute>() is { } maxLen)
+        {
             schema.MaxLength = maxLen.Length;
+        }
 
         if (prop.GetCustomAttribute<MinLengthAttribute>() is { } minLen)
+        {
             schema.MinLength = minLen.Length;
+        }
 
         if (prop.GetCustomAttribute<StringLengthAttribute>() is { } strLen)
         {
             schema.MaxLength = strLen.MaximumLength;
             if (strLen.MinimumLength > 0)
+            {
                 schema.MinLength = strLen.MinimumLength;
+            }
         }
 
         if (prop.GetCustomAttribute<RangeAttribute>() is { } range)
         {
-            if (range.Minimum is not null)
-                schema.Minimum = Convert.ToDouble(range.Minimum);
-            if (range.Maximum is not null)
-                schema.Maximum = Convert.ToDouble(range.Maximum);
+            schema.Minimum = Convert.ToDouble(range.Minimum, CultureInfo.InvariantCulture);
+            schema.Maximum = Convert.ToDouble(range.Maximum, CultureInfo.InvariantCulture);
         }
 
-        if (prop.GetCustomAttribute<EmailAddressAttribute>() != null)
+        if (Attribute.IsDefined(prop, typeof(EmailAddressAttribute)))
+        {
             schema.Format = "email";
+        }
 
-        if (prop.GetCustomAttribute<UrlAttribute>() != null)
+        if (Attribute.IsDefined(prop, typeof(UrlAttribute)))
+        {
             schema.Format = "uri";
+        }
 
         if (prop.GetCustomAttribute<RegularExpressionAttribute>() is { } regex)
+        {
             schema.Pattern = regex.Pattern;
+        }
     }
 
     private static bool TryGetDictionaryValueType(Type type, out Type? valueType)
@@ -311,7 +346,7 @@ public class JsonSchemaGenerator
     {
         if (type.IsArray)
         {
-            elementType = type.GetElementType()!;
+            elementType = type.GetElementType();
             return true;
         }
 
@@ -362,9 +397,13 @@ public class JsonSchemaGenerator
     {
         var type = prop.PropertyType;
         if (Nullable.GetUnderlyingType(type) != null)
+        {
             return true;
+        }
         if (type.IsValueType)
+        {
             return false;
+        }
         var info = _nullabilityContext.Create(prop);
         return info.ReadState != NullabilityState.NotNull;
     }
@@ -373,8 +412,8 @@ public class JsonSchemaGenerator
     {
         if (type.IsGenericType)
         {
-            var baseName = type.Name[..type.Name.IndexOf('`')];
-            var args = string.Join("", type.GetGenericArguments().Select(GetSchemaName));
+            var baseName = type.Name[..type.Name.IndexOf('`', StringComparison.Ordinal)];
+            var args = string.Concat(type.GetGenericArguments().Select(GetSchemaName));
             return $"{baseName}Of{args}";
         }
         return type.Name;
@@ -384,7 +423,9 @@ public class JsonSchemaGenerator
     {
         var jsonAttr = prop.GetCustomAttribute<JsonPropertyNameAttribute>();
         if (jsonAttr != null)
+        {
             return jsonAttr.Name;
+        }
 
         // camelCase by default (matches STJ default behavior)
         var name = prop.Name;

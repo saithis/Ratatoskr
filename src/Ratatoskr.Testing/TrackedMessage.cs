@@ -80,13 +80,17 @@ public class TrackedMessage
         where T : notnull
     {
         if (Activity.Message == null)
+        {
             throw new InvalidOperationException(
                 $"Message object is not available at the {Stage} stage. "
                     + "Deserialized messages are available at Published, OutboxStaged, and Dispatched stages."
             );
+        }
 
         if (Activity.Message is T typed)
+        {
             return typed;
+        }
 
         throw new InvalidOperationException(
             $"Message is of type {Activity.Message.GetType().Name}, not {typeof(T).Name}."

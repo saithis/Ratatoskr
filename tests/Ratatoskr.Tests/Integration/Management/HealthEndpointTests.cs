@@ -22,7 +22,7 @@ public class HealthEndpointTests(
         await SeedPoisonedInboxAsync();
         await RefreshMetricsAsync();
 
-        var response = await HttpClient.GetAsync(
+        using var response = await HttpClient.GetAsync(
             "/ratatoskr/api/v1/efcore/contexts/TestDbContext/health"
         );
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -46,7 +46,7 @@ public class HealthEndpointTests(
     {
         await StartManagementTestAsync();
 
-        var response = await HttpClient.GetAsync(
+        using var response = await HttpClient.GetAsync(
             "/ratatoskr/api/v1/efcore/contexts/TestDbContext/health"
         );
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -74,14 +74,14 @@ public class HealthEndpointTests(
     {
         await StartManagementTestAsync();
 
-        var response = await HttpClient.GetAsync("/ratatoskr/api/v1/efcore/contexts");
+        using var response = await HttpClient.GetAsync("/ratatoskr/api/v1/efcore/contexts");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.TryGetProperty("contexts", out var contexts).Should().BeTrue();
         contexts.GetArrayLength().Should().BeGreaterThan(0);
 
-        var first = contexts.EnumerateArray().First();
+        var first = contexts.FirstElement();
         first.GetProperty("name").GetString().Should().Be("TestDbContext");
         first.GetProperty("hasOutbox").GetBoolean().Should().BeTrue();
         first.GetProperty("hasInbox").GetBoolean().Should().BeTrue();
@@ -92,7 +92,7 @@ public class HealthEndpointTests(
     {
         await StartManagementTestAsync();
 
-        var response = await HttpClient.GetAsync(
+        using var response = await HttpClient.GetAsync(
             "/ratatoskr/api/v1/efcore/contexts/NonExistentContext/health"
         );
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);

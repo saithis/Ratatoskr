@@ -6,5 +6,5 @@ namespace Ratatoskr.Core;
 /// </summary>
 public interface IMessageSerializerResolver
 {
-    IMessageSerializer GetSerializer(Type messageType);
+    public IMessageSerializer GetSerializer(Type messageType);
 }

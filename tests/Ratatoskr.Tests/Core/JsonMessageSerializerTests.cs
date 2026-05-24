@@ -1,10 +1,8 @@
 using System.Text;
 using System.Text.Json;
 using AwesomeAssertions;
-using Ratatoskr.Core;
 using Ratatoskr.Serializers.Json;
 using Ratatoskr.Tests.Fixtures;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.Core;
 
@@ -204,7 +202,7 @@ public class JsonMessageSerializerTests
 
         // Assert
         result.Should().NotBeNull();
-        result!.Id.Should().Be("456");
+        result.Id.Should().Be("456");
         result.Data.Should().Be("camel case data");
     }
 }

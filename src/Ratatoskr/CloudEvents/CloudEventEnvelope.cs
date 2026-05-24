@@ -7,7 +7,7 @@ namespace Ratatoskr.CloudEvents;
 /// CloudEvents envelope in structured content mode.
 /// See: <see href="https://github.com/cloudevents/spec/blob/main/cloudevents/spec.md#context-attributes" />
 /// </summary>
-public class CloudEventEnvelope
+public sealed class CloudEventEnvelope
 {
     /// <summary>
     /// [REQUIRED] The version of the CloudEvents specification which the event uses.
@@ -101,7 +101,7 @@ public class CloudEventEnvelope
                 value = element.Deserialize<T>();
                 return true;
             }
-            catch
+            catch (JsonException)
             {
                 // Ignore deserialization errors and return false
             }

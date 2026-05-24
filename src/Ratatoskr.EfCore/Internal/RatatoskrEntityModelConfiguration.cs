@@ -28,7 +28,9 @@ internal static class RatatoskrEntityModelConfiguration
 
             var filter = DatabaseProviderHelper.GetOutboxProcessingFilter(database);
             if (filter != null)
+            {
                 index.HasFilter(filter);
+            }
 
             entity.Property(e => e.Error).HasMaxLength(2000);
             entity.Property(e => e.Content).IsRequired();
@@ -73,7 +75,9 @@ internal static class RatatoskrEntityModelConfiguration
 
             var filter = DatabaseProviderHelper.GetInboxProcessingFilter(database);
             if (filter != null)
+            {
                 processingIndex.HasFilter(filter);
+            }
 
             entity.Property(e => e.HandlerKey).HasMaxLength(200).IsRequired();
             entity.Property(e => e.LastError).HasMaxLength(2000);

@@ -2,8 +2,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
-using Ratatoskr.RabbitMq;
-using TUnit.Core;
+using Ratatoskr.RabbitMq.Extensions;
 
 namespace Ratatoskr.Tests.RabbitMq;
 
@@ -19,7 +18,7 @@ public class RabbitMqHealthCheckTests
         services.AddHealthChecks().AddRatatoskrRabbitMq("my-rabbit");
 
         // Assert
-        var provider = services.BuildServiceProvider();
+        using var provider = services.BuildServiceProvider();
         var options = provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value;
 
         options.Registrations.Should().Contain(r => r.Name == "my-rabbit");

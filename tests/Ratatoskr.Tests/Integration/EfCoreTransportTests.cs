@@ -10,7 +10,6 @@ using Ratatoskr.EfCore.Internal;
 using Ratatoskr.Testing;
 using Ratatoskr.Tests.Fixtures;
 using Ratatoskr.Tests.Integration.Inbox;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.Integration;
 
@@ -186,14 +185,14 @@ public class EfCoreTransportTests(
         });
 
         // Assert — Published and Sent stages should fire
-        var published = await session.WaitForPublished<TestEvent>(TimeSpan.FromSeconds(5));
+        var published = await session.WaitForPublishedAsync<TestEvent>(TimeSpan.FromSeconds(5));
         published.Properties.Id.Should().Be("msg-track-1");
 
-        var sent = await session.WaitForSent<TestEvent>(TimeSpan.FromSeconds(5));
+        var sent = await session.WaitForSentAsync<TestEvent>(TimeSpan.FromSeconds(5));
         sent.TransportName.Should().Be(EfCoreTransportConstants.TransportName);
 
         // InboxQueued should also fire
-        var queued = await session.WaitForInboxQueued<TestEvent>(TimeSpan.FromSeconds(5));
+        var queued = await session.WaitForInboxQueuedAsync<TestEvent>(TimeSpan.FromSeconds(5));
         queued.TransportName.Should().Be(EfCoreTransportConstants.TransportName);
     }
 
@@ -312,7 +311,9 @@ public class EfCoreTransportTests(
         meterListener.InstrumentPublished = (instrument, listener) =>
         {
             if (instrument.Meter.Name == "Ratatoskr")
+            {
                 listener.EnableMeasurementEvents(instrument);
+            }
         };
         meterListener.SetMeasurementEventCallback<double>(
             (instrument, measurement, tags, _) =>

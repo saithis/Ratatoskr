@@ -1,9 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
-using Ratatoskr;
 using Ratatoskr.Core;
 using Ratatoskr.Tests.Fixtures;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.Core;
 
@@ -22,7 +20,7 @@ public class RatatoskrBuilderTests
         // Assert
         var channel = builder.ChannelRegistry.GetConsumeChannel("test-channel");
         channel.Should().NotBeNull();
-        channel!.Intent.Should().Be(ChannelType.EventConsume);
+        channel.Intent.Should().Be(ChannelType.EventConsume);
     }
 
     [Test]
@@ -38,7 +36,7 @@ public class RatatoskrBuilderTests
         // Assert
         var channel = builder.ChannelRegistry.GetPublishChannel("pub-channel");
         channel.Should().NotBeNull();
-        channel!.Intent.Should().Be(ChannelType.EventPublish);
+        channel.Intent.Should().Be(ChannelType.EventPublish);
     }
 
     [Test]
@@ -57,9 +55,9 @@ public class RatatoskrBuilderTests
         // Assert
         var channel = builder.ChannelRegistry.GetConsumeChannel("test-channel");
         channel.Should().NotBeNull();
-        var msg = channel!.GetMessage(typeof(TestEvent));
+        var msg = channel.GetMessage(typeof(TestEvent));
         msg.Should().NotBeNull();
-        msg!.MessageTypeName.Should().Be("test.event");
+        msg.MessageTypeName.Should().Be("test.event");
     }
 
     [Test]
@@ -75,7 +73,7 @@ public class RatatoskrBuilderTests
         // Assert
         var channel = builder.ChannelRegistry.GetPublishChannel("pub-channel");
         channel.Should().NotBeNull();
-        var msg = channel!.GetMessage(typeof(TestEvent));
+        var msg = channel.GetMessage(typeof(TestEvent));
         msg.Should().NotBeNull();
     }
 
@@ -91,7 +89,7 @@ public class RatatoskrBuilderTests
             "test-channel",
             c => c.Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
         );
-        var provider = services.BuildServiceProvider();
+        using var provider = services.BuildServiceProvider();
 
         // Assert - Can resolve as concrete type
         using (var scope = provider.CreateScope())

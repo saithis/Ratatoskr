@@ -23,10 +23,12 @@ internal class InboxMessageEntity : BaseMessageEntity
     public static void ValidateIdLength(string messageId)
     {
         if (messageId.Length > MaxIdLength)
+        {
             throw new InvalidOperationException(
                 $"Message ID exceeds the maximum length of {MaxIdLength} characters (actual: {messageId.Length}). "
                     + $"ID: '{messageId[..50]}...'"
             );
+        }
     }
 
     private InboxMessageEntity() { }
@@ -45,10 +47,13 @@ internal class InboxMessageEntity : BaseMessageEntity
         ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
         ArgumentException.ThrowIfNullOrWhiteSpace(transportName);
         if (transportName.Length > 50)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(transportName),
                 "TransportName must be 50 characters or fewer."
             );
+        }
+
         ValidateIdLength(messageId);
         return new InboxMessageEntity
         {

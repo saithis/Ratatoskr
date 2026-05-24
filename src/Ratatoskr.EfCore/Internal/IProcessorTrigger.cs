@@ -6,5 +6,5 @@ namespace Ratatoskr.EfCore.Internal;
 /// </summary>
 internal interface IProcessorTrigger
 {
-    ValueTask TriggerAsync(CancellationToken cancellationToken = default);
+    public ValueTask TriggerAsync(CancellationToken cancellationToken = default);
 }

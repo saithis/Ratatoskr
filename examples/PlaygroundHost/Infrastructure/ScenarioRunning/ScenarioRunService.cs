@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Persistence;
 
 namespace PlaygroundHost.Infrastructure.ScenarioRunning;
@@ -8,21 +10,27 @@ public sealed class ScenarioRunService(
     IServiceScopeFactory scopeFactory,
     ILogger<ScenarioRunService> logger,
     IEnumerable<IScenario> scenarios,
-    TimeProvider time
+    TimeProvider time,
+    IOptions<PlaygroundOptions> playgroundOptions,
+    IHostApplicationLifetime hostLifetime
 )
 {
+    private readonly TimeSpan _runTimeout = TimeSpan.FromSeconds(
+        Math.Max(1, playgroundOptions.Value.RunTimeoutSeconds)
+    );
+
     private readonly Dictionary<string, IScenario> _bySlug = scenarios.ToDictionary(
         s => s.Slug,
         StringComparer.OrdinalIgnoreCase
     );
 
-    private async Task<T> WithPlaygroundDb<T>(Func<PlaygroundDbContext, Task<T>> work)
+    private async Task<T> WithPlaygroundDbAsync<T>(Func<PlaygroundDbContext, Task<T>> work)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         return await work(scope.ServiceProvider.GetRequiredService<PlaygroundDbContext>());
     }
 
-    private async Task WithPlaygroundDb(Func<PlaygroundDbContext, Task> work)
+    private async Task WithPlaygroundDbAsync(Func<PlaygroundDbContext, Task> work)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         await work(scope.ServiceProvider.GetRequiredService<PlaygroundDbContext>());
@@ -48,19 +56,22 @@ public sealed class ScenarioRunService(
     )
     {
         if (!_bySlug.TryGetValue(slug, out var scenario))
+        {
             return new ScenarioStartResult(null, null, $"Unknown scenario '{slug}'.");
+        }
 
         if (scenario.RequiresDangerConfirmation && !confirmDanger)
+        {
             return new ScenarioStartResult(
                 null,
                 null,
                 "This scenario requires confirmDanger=true (acknowledge the risk in the dashboard)."
             );
+        }
 
         var runId = Guid.NewGuid();
-        await WithPlaygroundDb(async db =>
+        await WithPlaygroundDbAsync(async db =>
         {
-            await db.Database.EnsureCreatedAsync(cancellationToken);
             db.Runs.Add(
                 new PlaygroundRunEntity
                 {
@@ -75,22 +86,19 @@ public sealed class ScenarioRunService(
             await db.SaveChangesAsync(cancellationToken);
         });
 
-        var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(30));
-        var executionCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token);
+        _ = RunInBackgroundAsync(runId, scenario);
 
-        _ = RunInBackgroundAsync(runId, scenario, executionCts, timeoutCts);
-
-        return new ScenarioStartResult(runId, scenario.Title, null);
+        return new ScenarioStartResult(runId, scenario.Title, Error: null);
     }
 
-    private async Task RunInBackgroundAsync(
-        Guid runId,
-        IScenario scenario,
-        CancellationTokenSource executionCts,
-        CancellationTokenSource timeoutCts
-    )
+    private async Task RunInBackgroundAsync(Guid runId, IScenario scenario)
     {
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(
+            hostLifetime.ApplicationStopping
+        );
+        timeoutCts.CancelAfter(_runTimeout);
+        using var executionCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token);
+
         using var pollShutdown = new CancellationTokenSource();
         using var pollLoopCts = CancellationTokenSource.CreateLinkedTokenSource(
             timeoutCts.Token,
@@ -107,7 +115,7 @@ public sealed class ScenarioRunService(
             var verdict = await scenario.ExecuteAsync(ctx, executionCts.Token);
             // Persist terminal state without the execution token: cooperative cancel sets executionCts
             // cancelled while scenarios like cancel-smoke still return a normal Passed verdict.
-            await WithPlaygroundDb(async db =>
+            await WithPlaygroundDbAsync(async db =>
             {
                 var row = await db.Runs.FirstAsync(r => r.Id == runId, CancellationToken.None);
                 row.State = verdict.Passed ? "Passed" : "Failed";
@@ -140,9 +148,6 @@ public sealed class ScenarioRunService(
             {
                 // Poll loop may observe linked-token cancellation or a disposed scope factory during host teardown.
             }
-
-            executionCts.Dispose();
-            timeoutCts.Dispose();
         }
     }
 
@@ -185,7 +190,7 @@ public sealed class ScenarioRunService(
         Guid runId,
         CancellationToken cancellationToken
     ) =>
-        WithPlaygroundDb(async db =>
+        WithPlaygroundDbAsync(async db =>
         {
             var row = await db
                 .Runs.AsNoTracking()
@@ -196,11 +201,14 @@ public sealed class ScenarioRunService(
         });
 
     private Task MarkTerminalAsync(Guid runId, string state, string? detail) =>
-        WithPlaygroundDb(async db =>
+        WithPlaygroundDbAsync(async db =>
         {
             var row = await db.Runs.FirstOrDefaultAsync(r => r.Id == runId);
             if (row is null)
+            {
                 return;
+            }
+
             row.State = state;
             row.CompletedAt = time.GetUtcNow();
             row.Detail = detail;
@@ -211,13 +219,16 @@ public sealed class ScenarioRunService(
         Guid runId,
         CancellationToken cancellationToken
     ) =>
-        WithPlaygroundDb(async db =>
+        WithPlaygroundDbAsync(async db =>
         {
             var row = await db
                 .Runs.AsNoTracking()
                 .FirstOrDefaultAsync(r => r.Id == runId, cancellationToken);
             if (row is null)
+            {
                 return null;
+            }
+
             return new ScenarioRunStatusDto(
                 row.Id,
                 row.ScenarioSlug,
@@ -229,11 +240,14 @@ public sealed class ScenarioRunService(
         });
 
     public Task<bool> RequestCancelAsync(Guid runId, CancellationToken cancellationToken) =>
-        WithPlaygroundDb(async db =>
+        WithPlaygroundDbAsync(async db =>
         {
             var row = await db.Runs.FirstOrDefaultAsync(r => r.Id == runId, cancellationToken);
             if (row is null || row.State is "Passed" or "Failed" or "Cancelled")
+            {
                 return false;
+            }
+
             row.CancelRequested = true;
             await db.SaveChangesAsync(cancellationToken);
             return true;

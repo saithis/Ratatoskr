@@ -3,21 +3,22 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.Management;
 
 namespace Ratatoskr.EfCore.Management.Endpoints.Outbox;
 
-internal static class ListPoisonedOutboxEndpoint
+internal static partial class ListPoisonedOutboxEndpoint
 {
     internal static void Map(IEndpointRouteBuilder outboxGroup)
     {
-        outboxGroup.MapGet("/poisoned", Handle);
+        outboxGroup.MapGet("/poisoned", HandleAsync);
     }
 
-    private static async Task<Results<Ok<OutboxPoisonedListResponse>, ProblemHttpResult>> Handle(
+    private static async Task<
+        Results<Ok<OutboxPoisonedListResponse>, ProblemHttpResult>
+    > HandleAsync(
         string contextName,
         EfCoreManagementDbContextLookup lookup,
         ILoggerFactory loggerFactory,
@@ -34,7 +35,9 @@ internal static class ListPoisonedOutboxEndpoint
             ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         pageSize = PaginationOptions.ClampPageSize(pageSize);
 
@@ -45,10 +48,7 @@ internal static class ListPoisonedOutboxEndpoint
             {
                 // Info, not warning: likely a malformed/stale cursor copied from an older
                 // client. Surface it once so an operator can correlate 400s to their UI.
-                logger.LogInformation(
-                    "Rejecting management list request with malformed cursor (context {ContextName}).",
-                    contextName
-                );
+                LogRejectingMalformedCursor(logger, contextName);
                 return ManagementResults.BadRequest("Invalid pagination cursor.");
             }
             decodedCursor = c;
@@ -56,9 +56,15 @@ internal static class ListPoisonedOutboxEndpoint
 
         var filtered = db.Set<OutboxMessageEntity>().AsNoTracking().Where(x => x.IsPoisoned);
         if (from.HasValue)
+        {
             filtered = filtered.Where(x => x.CreatedAt >= from.Value);
+        }
+
         if (to.HasValue)
+        {
             filtered = filtered.Where(x => x.CreatedAt <= to.Value);
+        }
+
         if (search is not null)
         {
             var pattern = ManagementHelpers.BuildSearchPattern(search);
@@ -96,7 +102,9 @@ internal static class ListPoisonedOutboxEndpoint
 
         var hasNext = items.Count > pageSize;
         if (hasNext)
+        {
             items.RemoveAt(items.Count - 1);
+        }
 
         var dtos = items
             .Select(x => new OutboxPoisonedListItem(
@@ -133,4 +141,11 @@ internal static class ListPoisonedOutboxEndpoint
         long TotalCount,
         string? NextCursor
     );
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Information,
+        Message = "Rejecting management list request with malformed cursor (context {ContextName})."
+    )]
+    private static partial void LogRejectingMalformedCursor(ILogger logger, string contextName);
 }

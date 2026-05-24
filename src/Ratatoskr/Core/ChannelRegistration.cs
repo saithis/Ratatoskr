@@ -1,6 +1,8 @@
+using System.Collections.ObjectModel;
+
 namespace Ratatoskr.Core;
 
-public class ChannelRegistration(string channelName, ChannelType intent)
+public sealed class ChannelRegistration(string channelName, ChannelType intent)
 {
     public string ChannelName { get; } = channelName;
     public ChannelType Intent { get; } = intent;
@@ -17,9 +19,11 @@ public class ChannelRegistration(string channelName, ChannelType intent)
 
     public HashSet<string> Transports { get; } = new(StringComparer.OrdinalIgnoreCase);
 
-    public List<MessageRegistration> Messages { get; } = new();
+    public Collection<MessageRegistration> Messages { get; } = new();
 
-    // O(1) lookup indexes — populated by ChannelRegistry.Freeze()
+    /// <summary>
+    /// O(1) lookup indexes — populated by ChannelRegistry.Freeze()
+    /// </summary>
     internal Dictionary<Type, MessageRegistration> MessagesByType { get; } = new();
     internal Dictionary<string, MessageRegistration> MessagesByTypeName { get; } =
         new(StringComparer.Ordinal);
@@ -38,14 +42,18 @@ public class ChannelRegistration(string channelName, ChannelType intent)
     public MessageRegistration? GetMessage(Type messageType)
     {
         if (MessagesByType.Count > 0)
+        {
             return MessagesByType.GetValueOrDefault(messageType);
+        }
         return Messages.FirstOrDefault(m => m.MessageType == messageType);
     }
 
     public MessageRegistration? GetMessage(string messageTypeName)
     {
         if (MessagesByTypeName.Count > 0)
+        {
             return MessagesByTypeName.GetValueOrDefault(messageTypeName);
+        }
         return Messages.FirstOrDefault(m => m.MessageTypeName == messageTypeName);
     }
 }

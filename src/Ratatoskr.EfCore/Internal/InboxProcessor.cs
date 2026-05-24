@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Ratatoskr.EfCore.Internal;
 
-internal class InboxProcessor<TDbContext>(
+internal partial class InboxProcessor<TDbContext>(
     IServiceScopeFactory serviceScopeFactory,
     IDistributedLockProvider distributedLockProvider,
     TimeProvider timeProvider,
@@ -32,14 +32,23 @@ internal class InboxProcessor<TDbContext>(
                 InboxMessageProcessor<TDbContext>
             >();
 
-            logger.LogDebug("Checking inbox for pending handler deliveries");
+            LogCheckingInboxPending(logger);
             var processed = await processor.ProcessBatchAsync(
                 includeStuckMessageDetection: true,
                 cancellationToken
             );
 
             if (processed == 0)
+            {
                 return;
+            }
         }
     }
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Debug,
+        Message = "Checking inbox for pending handler deliveries"
+    )]
+    private static partial void LogCheckingInboxPending(ILogger logger);
 }

@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -27,11 +26,15 @@ public static class PublicApiExtensions
         )
             where TDbContext : DbContext, IInboxDbContext, IOutboxDbContext
         {
+            ArgumentNullException.ThrowIfNull(configure);
+
             // Idempotency: skip if already registered for this DbContext type
             if (builder.Services.Any(d => d.ServiceType == typeof(DurabilityMarker<TDbContext>)))
+            {
                 throw new InvalidOperationException(
                     $"AddEfCoreDurability<{typeof(TDbContext).Name}>() was called more than once. Merge UseInbox()/UseOutbox() into a single registration."
                 );
+            }
 
             builder.Services.AddSingleton<DurabilityMarker<TDbContext>>();
             builder.Services.TryAddSingleton<EfCoreMetricsState>();
@@ -41,15 +44,21 @@ public static class PublicApiExtensions
             configure(durabilityBuilder);
 
             if (durabilityBuilder.InboxBuilder == null && durabilityBuilder.OutboxBuilder == null)
+            {
                 throw new InvalidOperationException(
                     $"AddEfCoreDurability<{typeof(TDbContext).Name}>() requires at least UseInbox() or UseOutbox() to be called."
                 );
+            }
 
             if (durabilityBuilder.InboxBuilder != null)
+            {
                 RegisterInboxServices<TDbContext>(builder, durabilityBuilder.InboxBuilder);
+            }
 
             if (durabilityBuilder.OutboxBuilder != null)
+            {
                 RegisterOutboxServices<TDbContext>(builder, durabilityBuilder.OutboxBuilder);
+            }
 
             builder.Services.AddSingleton(_ => new EfCoreMetricsSettings<TDbContext>(
                 durabilityBuilder.MetricsPollingInterval,
@@ -80,9 +89,14 @@ public static class PublicApiExtensions
             where TDbContext : DbContext, IInboxDbContext, IOutboxDbContext
         {
             if (inboxBuilder.Options.LockName == InboxOptions.DefaultLockName)
+            {
                 inboxBuilder.Options.LockName = $"InboxProcessor_{typeof(TDbContext).Name}";
+            }
+
             if (inboxBuilder.Options.CleanupLockName == InboxOptions.DefaultCleanupLockName)
+            {
                 inboxBuilder.Options.CleanupLockName = $"InboxCleanup_{typeof(TDbContext).Name}";
+            }
 
             ratatoskrBuilder.Services.AddSingleton(
                 new InboxOptionsHolder<TDbContext>(inboxBuilder.Options)
@@ -99,10 +113,12 @@ public static class PublicApiExtensions
                     sp.GetRequiredService<InboxProcessor<TDbContext>>()
                 );
                 if (inboxBuilder.Options.RetentionPeriod.HasValue)
+                {
                     ratatoskrBuilder.Services.AddSingleton<
                         IHostedService,
                         InboxCleanupService<TDbContext>
                     >();
+                }
             }
             ratatoskrBuilder.Services.AddSingleton<InboxAcceptor<TDbContext>>();
             ratatoskrBuilder.Services.AddSingleton<IEfCoreInboxAcceptor>(sp =>
@@ -154,7 +170,9 @@ public static class PublicApiExtensions
                 .OfType<ConsumeChannelInboxPolicyAggregator>()
                 .FirstOrDefault();
             if (existing != null)
+            {
                 return existing;
+            }
 
             var aggregator = new ConsumeChannelInboxPolicyAggregator();
             services.AddSingleton(aggregator);
@@ -168,9 +186,14 @@ public static class PublicApiExtensions
             where TDbContext : DbContext, IInboxDbContext, IOutboxDbContext
         {
             if (outboxBuilder.Options.LockName == OutboxOptions.DefaultLockName)
+            {
                 outboxBuilder.Options.LockName = $"OutboxProcessor_{typeof(TDbContext).Name}";
+            }
+
             if (outboxBuilder.Options.CleanupLockName == OutboxOptions.DefaultCleanupLockName)
+            {
                 outboxBuilder.Options.CleanupLockName = $"OutboxCleanup_{typeof(TDbContext).Name}";
+            }
 
             ratatoskrBuilder.Services.AddSingleton(
                 new OutboxOptionsHolder<TDbContext>(outboxBuilder.Options)
@@ -191,10 +214,12 @@ public static class PublicApiExtensions
                     sp.GetRequiredService<OutboxProcessor<TDbContext>>()
                 );
                 if (outboxBuilder.Options.RetentionPeriod.HasValue)
+                {
                     ratatoskrBuilder.Services.AddSingleton<
                         IHostedService,
                         OutboxCleanupService<TDbContext>
                     >();
+                }
             }
 
             ratatoskrBuilder.AddValidator(EfCoreConfigurationValidator.Validate);
@@ -210,6 +235,8 @@ public static class PublicApiExtensions
     )
         where TDbContext : DbContext, IOutboxDbContext
     {
+        ArgumentNullException.ThrowIfNull(builder);
+
         var interceptor = serviceProvider.GetRequiredService<
             OutboxTriggerInterceptor<TDbContext>
         >();

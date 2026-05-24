@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Ratatoskr.EfCore.Internal;
 
-internal class OutboxProcessor<TDbContext>(
+internal partial class OutboxProcessor<TDbContext>(
     IServiceScopeFactory serviceScopeFactory,
     IDistributedLockProvider distributedLockProvider,
     TimeProvider timeProvider,
@@ -31,14 +31,23 @@ internal class OutboxProcessor<TDbContext>(
                 OutboxMessageProcessor<TDbContext>
             >();
 
-            logger.LogDebug("Checking outbox for unsent messages");
+            LogCheckingOutboxUnsent(logger);
             var processedCount = await processor.ProcessBatchAsync(
                 includeStuckMessageDetection: true,
                 cancellationToken
             );
 
             if (processedCount == 0)
+            {
                 return;
+            }
         }
     }
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Debug,
+        Message = "Checking outbox for unsent messages"
+    )]
+    private static partial void LogCheckingOutboxUnsent(ILogger logger);
 }

@@ -1,8 +1,14 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 
 namespace Ratatoskr.AsyncApi.Model;
 
-public class AsyncApiComponents
+[SuppressMessage(
+    "Usage",
+    "CA2227:CollectionPropertiesShouldBeReadOnly",
+    Justification = "DTO for JSON serialization"
+)]
+public sealed class AsyncApiComponents
 {
     [JsonPropertyName("schemas")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

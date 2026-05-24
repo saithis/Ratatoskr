@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Ratatoskr.EfCore.Internal;
 
-internal sealed class ConsumeChannelInboxWarningHostedService(
+internal sealed partial class ConsumeChannelInboxWarningHostedService(
     ConsumeChannelInboxPolicyAggregator policyAggregator,
     ILogger<ConsumeChannelInboxWarningHostedService> logger
 ) : IHostedService
@@ -11,10 +11,15 @@ internal sealed class ConsumeChannelInboxWarningHostedService(
     public Task StartAsync(CancellationToken cancellationToken)
     {
         foreach (var warning in policyAggregator.DrainWarnings())
-            logger.LogWarning("{Warning}", warning);
+        {
+            LogInboxPolicyWarning(logger, warning);
+        }
 
         return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "{Warning}")]
+    private static partial void LogInboxPolicyWarning(ILogger logger, string warning);
 }

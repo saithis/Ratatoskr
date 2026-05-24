@@ -28,7 +28,7 @@ internal static class HandlerInvokerCache
         var ctParam = Expression.Parameter(typeof(CancellationToken), "ct");
 
         var interfaceType = typeof(IMessageHandler<>).MakeGenericType(messageType);
-        var handleMethod = interfaceType.GetMethod(nameof(IMessageHandler<object>.HandleAsync))!;
+        var handleMethod = interfaceType.GetMethod(nameof(IMessageHandler<>.HandleAsync))!;
 
         var typedHandler = Expression.Convert(handlerParam, interfaceType);
         var typedMessage = Expression.Convert(messageParam, messageType);

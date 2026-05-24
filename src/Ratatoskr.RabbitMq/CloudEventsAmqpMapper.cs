@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
@@ -14,7 +15,7 @@ namespace Ratatoskr.RabbitMq;
 /// Default implementation of IRabbitMqEnvelopeMapper that follows the CloudEvents AMQP protocol binding.
 /// See: https://github.com/cloudevents/spec/blob/main/cloudevents/bindings/amqp-protocol-binding.md
 /// </summary>
-public class CloudEventsAmqpMapper(
+public partial class CloudEventsAmqpMapper(
     CloudEventsOptions options,
     ILogger<CloudEventsAmqpMapper> logger
 ) : IRabbitMqEnvelopeMapper
@@ -25,6 +26,10 @@ public class CloudEventsAmqpMapper(
         BasicProperties outgoing
     )
     {
+        ArgumentNullException.ThrowIfNull(serializedData);
+        ArgumentNullException.ThrowIfNull(props);
+        ArgumentNullException.ThrowIfNull(outgoing);
+
         // Ensure required CloudEvents fields are set
         if (string.IsNullOrEmpty(props.Id))
         {
@@ -51,12 +56,18 @@ public class CloudEventsAmqpMapper(
         {
             CloudEventsContentMode.Binary => MapBinaryMode(serializedData, props, outgoing),
             CloudEventsContentMode.Structured => MapStructuredMode(serializedData, props, outgoing),
-            _ => throw new ArgumentOutOfRangeException(),
+            _ => throw new InvalidEnumArgumentException(
+                $"{nameof(options)}.{nameof(options.ContentMode)}",
+                (int)options.ContentMode,
+                typeof(CloudEventsContentMode)
+            ),
         };
     }
 
     public (byte[] body, MessageProperties props) MapIncoming(BasicDeliverEventArgs incoming)
     {
+        ArgumentNullException.ThrowIfNull(incoming);
+
         // Detect content mode based on content type
         var contentType = incoming.BasicProperties.ContentType;
         var isStructured =
@@ -129,7 +140,7 @@ public class CloudEventsAmqpMapper(
         // Add CloudEvent extensions as headers
         foreach (var ext in props.CloudEventExtensions)
         {
-            SetCloudEventHeader(outgoing.Headers, ext.Key, ext.Value?.ToString());
+            SetCloudEventHeader(outgoing.Headers, ext.Key, ext.Value.ToString());
         }
 
         // Preserve Ratatoskr's own trace context in CloudEvents-prefixed headers.
@@ -259,11 +270,7 @@ public class CloudEventsAmqpMapper(
         if (id is null)
         {
             id = Guid.NewGuid().ToString();
-            logger.LogWarning(
-                "Incoming binary CloudEvent has no id (AMQP message-id and cloudEvents_id are missing). "
-                    + "Generated id {GeneratedEventId}. Per CloudEvents spec, id is required; inbox deduplication will not treat replays of this message as duplicates.",
-                id
-            );
+            LogIncomingBinaryCloudEventHasNoId(logger, id);
         }
 
         var type =
@@ -417,11 +424,9 @@ public class CloudEventsAmqpMapper(
     )
     {
         // Parse CloudEvents envelope
-        var cloudEvent = JsonSerializer.Deserialize<CloudEventEnvelope>(incoming.Body.ToArray());
-        if (cloudEvent == null)
-        {
-            throw new InvalidOperationException("Failed to deserialize CloudEvents envelope");
-        }
+        var cloudEvent =
+            JsonSerializer.Deserialize<CloudEventEnvelope>(incoming.Body.ToArray())
+            ?? throw new InvalidOperationException("Failed to deserialize CloudEvents envelope");
 
         // Extract data and re-serialize it for the deserializer
         byte[] dataBytes;
@@ -605,4 +610,14 @@ public class CloudEventsAmqpMapper(
             _ => value.ToString() ?? "",
         };
     }
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Warning,
+        Message = "Incoming binary CloudEvent has no id (AMQP message-id and cloudEvents_id are missing). Generated id {GeneratedEventId}. Per CloudEvents spec, id is required; inbox deduplication will not treat replays of this message as duplicates."
+    )]
+    private static partial void LogIncomingBinaryCloudEventHasNoId(
+        ILogger logger,
+        string generatedEventId
+    );
 }

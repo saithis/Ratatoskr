@@ -69,17 +69,34 @@ internal static class RabbitMqTransportMessageSnapshotFactory
 
         // Standard AMQP properties
         if (props.ContentType != null)
+        {
             headers["content-type"] = props.ContentType;
+        }
+
         if (props.MessageId != null)
+        {
             headers["message-id"] = props.MessageId;
+        }
+
         if (props.Type != null)
+        {
             headers["type"] = props.Type;
+        }
+
         if (props.AppId != null)
+        {
             headers["app-id"] = props.AppId;
+        }
+
         if (props.Timestamp.UnixTime > 0)
+        {
             headers["timestamp"] = props.Timestamp.UnixTime;
+        }
+
         if (props.IsDeliveryModePresent())
+        {
             headers["delivery-mode"] = (int)props.DeliveryMode;
+        }
 
         // Custom headers (standard AMQP properties take precedence on collision)
         if (props.Headers != null)
@@ -112,7 +129,10 @@ internal static class RabbitMqTransportMessageSnapshotFactory
             var decoded = Encoding.UTF8.GetString(bytes);
             // Verify round-trip: re-encode and compare to detect replacement characters
             if (Encoding.UTF8.GetBytes(decoded).AsSpan().SequenceEqual(bytes))
+            {
                 return decoded;
+            }
+
             return bytes;
         }
         catch (DecoderFallbackException)

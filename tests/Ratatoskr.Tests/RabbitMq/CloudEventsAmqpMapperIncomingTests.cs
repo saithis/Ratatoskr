@@ -6,7 +6,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using Ratatoskr.CloudEvents;
-using Ratatoskr.Core;
 using Ratatoskr.RabbitMq;
 
 namespace Ratatoskr.Tests.RabbitMq;
@@ -398,9 +397,8 @@ public class CloudEventsAmqpMapperIncomingTests
     public void MapIncoming_BinaryMode_MissingId_LogsWarning()
     {
         var warnings = new List<string>();
-        using var factory = LoggerFactory.Create(b =>
-            b.AddProvider(new WarningCaptureLoggerProvider(warnings))
-        );
+        using var provider = new WarningCaptureLoggerProvider(warnings);
+        using var factory = LoggerFactory.Create(b => b.AddProvider(provider));
         var mapper = new CloudEventsAmqpMapper(
             new CloudEventsOptions(),
             factory.CreateLogger<CloudEventsAmqpMapper>()

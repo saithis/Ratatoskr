@@ -1,7 +1,11 @@
-﻿namespace Ratatoskr.Core;
+namespace Ratatoskr.Core;
 
 public interface IMessageSender
 {
-    string TransportName { get; }
-    Task SendAsync(byte[] content, MessageProperties props, CancellationToken cancellationToken);
+    public string TransportName { get; }
+    public Task SendAsync(
+        byte[] content,
+        MessageProperties props,
+        CancellationToken cancellationToken
+    );
 }

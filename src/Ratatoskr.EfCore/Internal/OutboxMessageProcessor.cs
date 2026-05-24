@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Ratatoskr.Core;
@@ -21,7 +22,7 @@ internal class OutboxMessageProcessor<TDbContext>(
     where TDbContext : DbContext, IOutboxDbContext
 {
     private readonly OutboxOptions _options = optionsHolder.Options;
-    private Dictionary<string, IMessageSender> _senderMap = senders.ToDictionary(x =>
+    private readonly Dictionary<string, IMessageSender> _senderMap = senders.ToDictionary(x =>
         x.TransportName
     );
 
@@ -29,6 +30,11 @@ internal class OutboxMessageProcessor<TDbContext>(
     /// Processes a single batch of outbox messages.
     /// Returns the number of messages successfully processed.
     /// </summary>
+    [SuppressMessage(
+        "Maintainability",
+        "CA1502:AvoidExcessiveComplexity",
+        Justification = "Orchestrator class coordinating many components"
+    )]
     public async Task<int> ProcessBatchAsync(
         bool includeStuckMessageDetection,
         CancellationToken cancellationToken
@@ -68,7 +74,9 @@ internal class OutboxMessageProcessor<TDbContext>(
         OutboxMessageProcessorLog.FoundMessagesToSend(logger, messages.Length);
 
         if (messages.Length == 0)
+        {
             return 0;
+        }
 
         foreach (var message in messages)
         {
@@ -93,9 +101,11 @@ internal class OutboxMessageProcessor<TDbContext>(
 
                 OutboxMessageProcessorLog.SkippedConflicts(logger, conflictIds.Count);
 
-                messages = messages.Where(m => !conflictIds.Contains(m.Id)).ToArray();
+                messages = [.. messages.Where(m => !conflictIds.Contains(m.Id))];
                 if (messages.Length == 0)
+                {
                     return 0;
+                }
             }
         }
 
@@ -198,7 +208,9 @@ internal class OutboxMessageProcessor<TDbContext>(
                 OutboxMessageProcessorLog.SkippedConflictsDuringSave(logger, conflictIds.Count);
 
                 if (conflictIds.Contains(message.Id))
+                {
                     continue;
+                }
             }
 
             // Record telemetry only after persistence succeeds

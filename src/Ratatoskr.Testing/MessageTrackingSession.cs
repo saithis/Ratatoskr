@@ -8,7 +8,7 @@ namespace Ratatoskr.Testing;
 /// for correlating messages. All messages published within this session's
 /// scope are tagged with the session's trace ID, enabling parallel test isolation.
 /// </summary>
-public class MessageTrackingSession : IAsyncDisposable
+public sealed class MessageTrackingSession : IAsyncDisposable
 {
     private readonly MessageTracker _tracker;
     private readonly Activity _activity;
@@ -89,76 +89,76 @@ public class MessageTrackingSession : IAsyncDisposable
     /// <summary>
     /// Waits for a message of the specified type to reach the Published stage.
     /// </summary>
-    public Task<TrackedMessage> WaitForPublished<T>(
+    public Task<TrackedMessage> WaitForPublishedAsync<T>(
         TimeSpan? timeout = null,
         Func<TrackedMessage, bool>? predicate = null
     )
-        where T : notnull => WaitForStage<T>(MessageStage.Published, timeout, predicate);
+        where T : notnull => WaitForStageAsync<T>(MessageStage.Published, timeout, predicate);
 
     /// <summary>
     /// Waits for a message of the specified type to reach the Sent stage.
     /// </summary>
-    public Task<TrackedMessage> WaitForSent<T>(
+    public Task<TrackedMessage> WaitForSentAsync<T>(
         TimeSpan? timeout = null,
         Func<TrackedMessage, bool>? predicate = null
     )
-        where T : notnull => WaitForStage<T>(MessageStage.Sent, timeout, predicate);
+        where T : notnull => WaitForStageAsync<T>(MessageStage.Sent, timeout, predicate);
 
     /// <summary>
     /// Waits for a message of the specified type to reach the Received stage.
     /// </summary>
-    public Task<TrackedMessage> WaitForReceived<T>(
+    public Task<TrackedMessage> WaitForReceivedAsync<T>(
         TimeSpan? timeout = null,
         Func<TrackedMessage, bool>? predicate = null
     )
-        where T : notnull => WaitForStage<T>(MessageStage.Received, timeout, predicate);
+        where T : notnull => WaitForStageAsync<T>(MessageStage.Received, timeout, predicate);
 
     /// <summary>
     /// Waits for a message of the specified type to reach the Dispatched stage.
     /// </summary>
-    public Task<TrackedMessage> WaitForDispatched<T>(
+    public Task<TrackedMessage> WaitForDispatchedAsync<T>(
         TimeSpan? timeout = null,
         Func<TrackedMessage, bool>? predicate = null
     )
-        where T : notnull => WaitForStage<T>(MessageStage.Dispatched, timeout, predicate);
+        where T : notnull => WaitForStageAsync<T>(MessageStage.Dispatched, timeout, predicate);
 
     /// <summary>
     /// Waits for a message of the specified type to reach the InboxQueued stage.
     /// </summary>
-    public Task<TrackedMessage> WaitForInboxQueued<T>(
+    public Task<TrackedMessage> WaitForInboxQueuedAsync<T>(
         TimeSpan? timeout = null,
         Func<TrackedMessage, bool>? predicate = null
     )
-        where T : notnull => WaitForStage<T>(MessageStage.InboxQueued, timeout, predicate);
+        where T : notnull => WaitForStageAsync<T>(MessageStage.InboxQueued, timeout, predicate);
 
     /// <summary>
     /// Waits for a message of the specified type to reach the InboxDispatched stage.
     /// </summary>
-    public Task<TrackedMessage> WaitForInboxDispatched<T>(
+    public Task<TrackedMessage> WaitForInboxDispatchedAsync<T>(
         TimeSpan? timeout = null,
         Func<TrackedMessage, bool>? predicate = null
     )
-        where T : notnull => WaitForStage<T>(MessageStage.InboxDispatched, timeout, predicate);
+        where T : notnull => WaitForStageAsync<T>(MessageStage.InboxDispatched, timeout, predicate);
 
     /// <summary>
     /// Waits for a message of the specified type to reach the InboxPoisoned stage.
     /// </summary>
-    public Task<TrackedMessage> WaitForInboxPoisoned<T>(
+    public Task<TrackedMessage> WaitForInboxPoisonedAsync<T>(
         TimeSpan? timeout = null,
         Func<TrackedMessage, bool>? predicate = null
     )
-        where T : notnull => WaitForStage<T>(MessageStage.InboxPoisoned, timeout, predicate);
+        where T : notnull => WaitForStageAsync<T>(MessageStage.InboxPoisoned, timeout, predicate);
 
     /// <summary>
     /// Waits for a message of the specified type to reach the OutboxPoisoned stage.
     /// </summary>
-    public Task<TrackedMessage> WaitForOutboxPoisoned<T>(
+    public Task<TrackedMessage> WaitForOutboxPoisonedAsync<T>(
         TimeSpan? timeout = null,
         Func<TrackedMessage, bool>? predicate = null
     )
-        where T : notnull => WaitForStage<T>(MessageStage.OutboxPoisoned, timeout, predicate);
+        where T : notnull => WaitForStageAsync<T>(MessageStage.OutboxPoisoned, timeout, predicate);
 
-    private async Task<TrackedMessage> WaitForStage<T>(
+    private async Task<TrackedMessage> WaitForStageAsync<T>(
         MessageStage stage,
         TimeSpan? timeout,
         Func<TrackedMessage, bool>? predicate
@@ -177,11 +177,15 @@ public class MessageTrackingSession : IAsyncDisposable
                     || MessageTracker.ExtractTraceId(a.Properties.TraceParent) != traceId
                     || !MessageTypeMatcher.Matches<T>(a)
                 )
+                {
                     return false;
+                }
 
                 var tracked = new TrackedMessage(a);
                 if (predicate != null && !predicate(tracked))
+                {
                     return false;
+                }
 
                 matched = tracked;
                 return true;
@@ -195,7 +199,9 @@ public class MessageTrackingSession : IAsyncDisposable
     private MessageCollection GetCollection(MessageStage stage)
     {
         if (_collections.TryGetValue(stage, out var cached))
+        {
             return cached;
+        }
 
         var traceId = TraceId;
         var collection = new MessageCollection(() =>
@@ -212,7 +218,9 @@ public class MessageTrackingSession : IAsyncDisposable
     public ValueTask DisposeAsync()
     {
         if (_disposed)
+        {
             return ValueTask.CompletedTask;
+        }
 
         _disposed = true;
         _activity.Stop();

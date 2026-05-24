@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.Management;
 
@@ -15,11 +14,13 @@ internal static class BulkRequeueInboxEndpoint
 
     internal static void Map(IEndpointRouteBuilder inboxGroup)
     {
-        inboxGroup.MapPost("/poisoned/requeue", HandleByIds);
-        inboxGroup.MapPost("/poisoned/requeue/all", HandleAll);
+        inboxGroup.MapPost("/poisoned/requeue", HandleByIdsAsync);
+        inboxGroup.MapPost("/poisoned/requeue/all", HandleAllAsync);
     }
 
-    private static async Task<Results<Ok<BulkRequeueInboxResponse>, ProblemHttpResult>> HandleByIds(
+    private static async Task<
+        Results<Ok<BulkRequeueInboxResponse>, ProblemHttpResult>
+    > HandleByIdsAsync(
         string contextName,
         BulkRequeueInboxRequest req,
         EfCoreManagementDbContextLookup lookup,
@@ -30,10 +31,14 @@ internal static class BulkRequeueInboxEndpoint
             ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         if (!BulkRequestValidator.TryValidateIds(req.Ids, out var error))
+        {
             return ManagementResults.BadRequest(error!);
+        }
 
         var succeeded = new List<Guid>();
         var failed = new List<BulkRequeueInboxFailure>();
@@ -52,13 +57,18 @@ internal static class BulkRequeueInboxEndpoint
         );
 
         foreach (var entity in entities)
+        {
             entity.Requeue();
+        }
+
         await SaveBatchAsync(db, entities, succeeded, failed, ct);
 
         return TypedResults.Ok(new BulkRequeueInboxResponse(succeeded, failed));
     }
 
-    private static async Task<Results<Ok<BulkRequeueInboxResponse>, ProblemHttpResult>> HandleAll(
+    private static async Task<
+        Results<Ok<BulkRequeueInboxResponse>, ProblemHttpResult>
+    > HandleAllAsync(
         string contextName,
         EfCoreManagementDbContextLookup lookup,
         CancellationToken ct
@@ -68,7 +78,9 @@ internal static class BulkRequeueInboxEndpoint
             ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         var succeeded = new List<Guid>();
         var failed = new List<BulkRequeueInboxFailure>();
@@ -83,10 +95,15 @@ internal static class BulkRequeueInboxEndpoint
                 .ToListAsync(ct);
 
             if (batch.Count == 0)
+            {
                 break;
+            }
 
             foreach (var entity in batch)
+            {
                 entity.Requeue();
+            }
+
             await SaveBatchAsync(db, batch, succeeded, failed, ct);
             db.ChangeTracker.Clear();
         }

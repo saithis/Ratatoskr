@@ -1,4 +1,6 @@
 using System.Data;
+using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 
 namespace PlaygroundHost.Infrastructure;
@@ -64,8 +66,14 @@ public static class PlaygroundSqlMetrics
             cancellationToken
         );
 
-    private static string EscapeLike(string s) => s.Replace("'", "''");
+    private static string EscapeLike(string s) =>
+        s.Replace("'", "''", StringComparison.OrdinalIgnoreCase);
 
+    [SuppressMessage(
+        "IDisposableAnalyzers",
+        "IDISP001:Dispose created",
+        Justification = "The connection is owned by the DbContext; disposing it would break subsequent EF operations on the same context."
+    )]
     private static async Task<int> ExecuteScalarIntAsync(
         DbContext db,
         string sql,
@@ -83,14 +91,19 @@ public static class PlaygroundSqlMetrics
         try
         {
             await using var cmd = conn.CreateCommand();
+#pragma warning disable CA2100
+            // This is just a demo, so it is fine
             cmd.CommandText = sql;
+#pragma warning restore CA2100
             var o = await cmd.ExecuteScalarAsync(cancellationToken);
-            return Convert.ToInt32(o);
+            return Convert.ToInt32(o, CultureInfo.InvariantCulture);
         }
         finally
         {
             if (opened)
+            {
                 await conn.CloseAsync();
+            }
         }
     }
 }

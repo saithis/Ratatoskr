@@ -1,4 +1,3 @@
-using System.Net.Http.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -90,7 +89,7 @@ public class RequeuedCountTests(
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var e = await db.Set<OutboxMessageEntity>().FindAsync(id);
             e.Should().NotBeNull();
-            e!.IsPoisoned.Should().BeTrue();
+            e.IsPoisoned.Should().BeTrue();
         });
     }
 }

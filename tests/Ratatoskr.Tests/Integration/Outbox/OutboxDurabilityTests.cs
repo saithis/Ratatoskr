@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -8,10 +9,8 @@ using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.RabbitMq;
-using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Tests.Fixtures;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.Integration.Outbox;
 
@@ -329,12 +328,16 @@ public class OutboxDurabilityTests(
     }
 
     [Test]
+    [SuppressMessage(
+        "Usage",
+        "VSTHRD003:Avoid awaiting foreign Tasks",
+        Justification = "Needed for this test"
+    )]
     public async Task Outbox_CallerCancellation_PropagatesInsteadOfRecordingFailure()
     {
         // Verifies that when the caller's cancellation token fires during send,
         // the OperationCanceledException propagates (not treated as a transport failure).
         var fakeTime = new FakeTimeProvider(new DateTimeOffset(2023, 1, 1, 0, 0, 0, TimeSpan.Zero));
-        var blockingSender = new BlockingMessageSender(RabbitMqConstants.TransportName);
 
         await StartTestAsync(services =>
         {
@@ -360,10 +363,14 @@ public class OutboxDurabilityTests(
                 }
             );
             services.RemoveAll<IMessageSender>();
-            services.AddSingleton<IMessageSender>(blockingSender);
+            services.AddSingleton(new BlockingMessageSender(RabbitMqConstants.TransportName));
+            services.AddSingleton<IMessageSender>(sp =>
+                sp.GetRequiredService<BlockingMessageSender>()
+            );
         });
 
         await InitializeDatabase();
+        var blockingSender = Services.GetRequiredService<BlockingMessageSender>();
 
         // Stage a message
         await InScopeAsync(async ctx =>
@@ -776,7 +783,7 @@ public class OutboxDurabilityTests(
         var body = await WaitForMessageAsync(QueueName);
         body.Should().NotBeNull();
         System
-            .Text.Encoding.UTF8.GetString(body!.Body.ToArray())
+            .Text.Encoding.UTF8.GetString(body.Body.ToArray())
             .Should()
             .Contain("non-generic-add");
     }
@@ -822,7 +829,10 @@ public class OutboxDurabilityTests(
         {
             _callCount++;
             if (_callCount > successesBeforeFailure)
+            {
                 throw new InvalidOperationException($"Simulated failure (attempt {_callCount})");
+            }
+
             return Task.CompletedTask;
         }
     }
@@ -849,7 +859,7 @@ public class OutboxDurabilityTests(
     /// Sender that blocks until explicitly unblocked, propagating the cancellation token.
     /// Used to test caller cancellation behavior.
     /// </summary>
-    private class BlockingMessageSender(string transportName) : IMessageSender
+    private sealed class BlockingMessageSender(string transportName) : IMessageSender, IDisposable
     {
         private readonly SemaphoreSlim _sendStarted = new(0, 1);
         private readonly SemaphoreSlim _gate = new(0, 1);
@@ -867,6 +877,12 @@ public class OutboxDurabilityTests(
             _sendStarted.Release();
             await _gate.WaitAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        public void Dispose()
+        {
+            _sendStarted.Dispose();
+            _gate.Dispose();
         }
     }
 }

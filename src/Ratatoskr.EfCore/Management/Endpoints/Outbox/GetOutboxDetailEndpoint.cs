@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore.Internal;
@@ -15,10 +14,10 @@ internal static class GetOutboxDetailEndpoint
 {
     internal static void Map(IEndpointRouteBuilder outboxGroup)
     {
-        outboxGroup.MapGet("/poisoned/{id:guid}", Handle);
+        outboxGroup.MapGet("/poisoned/{id:guid}", HandleAsync);
     }
 
-    private static async Task<Results<Ok<OutboxPoisonedDetail>, ProblemHttpResult>> Handle(
+    private static async Task<Results<Ok<OutboxPoisonedDetail>, ProblemHttpResult>> HandleAsync(
         string contextName,
         Guid id,
         EfCoreManagementDbContextLookup lookup,
@@ -31,7 +30,9 @@ internal static class GetOutboxDetailEndpoint
             ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         var entity = await db.Set<OutboxMessageEntity>()
             .AsNoTracking()
@@ -39,7 +40,9 @@ internal static class GetOutboxDetailEndpoint
             .FirstOrDefaultAsync(ct);
 
         if (entity is null)
+        {
             return ManagementResults.NotFound($"Poisoned outbox message '{id}' was not found.");
+        }
 
         var props = entity.GetProperties();
         var (jsonPayload, base64) = ManagementHelpers.DecodeContent(entity.Content, logger);

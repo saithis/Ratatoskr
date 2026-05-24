@@ -49,7 +49,9 @@ public abstract class OutboxTestBase(
             );
             totalProcessed += batchProcessed;
             if (batchProcessed == 0)
+            {
                 break;
+            }
         }
         return totalProcessed;
     }
