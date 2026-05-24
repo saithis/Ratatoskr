@@ -1130,6 +1130,9 @@ dotnet_diagnostic.MA0041.severity = none
 # Disable filename must match type name rule (idiomatic to group small enums/helpers in the same file)
 dotnet_diagnostic.MA0048.severity = suggestion # Meziantou default: warning
 
+# Disable make class sealed rule (duplicate of suppressed RCS1225 rule)
+dotnet_diagnostic.MA0053.severity = suggestion # Meziantou default: warning
+
 # Meziantou method length configuration
 dotnet_code_quality.MA0051.maximum_lines = 120
 
