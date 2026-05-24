@@ -2503,12 +2503,6 @@ dotnet_diagnostic.ASYNC0003.severity = warning
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
 dotnet_diagnostic.ASYNC0004.severity = none
 
-# Use ConfigureAwait(false) (Meziantou)
-dotnet_diagnostic.MA0004.severity = none
-
-# Do not use blocking call (make method async)
-dotnet_diagnostic.MA0045.severity = none
-
 # Call 'ConfigureAwait(false)'
 # Examples in Rock Your Code: Coding Standards for Microsoft .NET
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
@@ -2661,131 +2655,17 @@ dotnet_diagnostic.RCS1049.severity = silent
 dotnet_diagnostic.RemoveUnnecessaryImportsFixable.severity = warning
 
 ####################################################################################################
-# MSTest Analyzer Rules (MSTEST)
+# Meziantou Analyzer Rules (MA)
 ####################################################################################################
 
-# Explicitly enable or disable tests parallelization
-dotnet_diagnostic.MSTEST0001.severity = warning
+# Use ConfigureAwait(false) (Meziantou)
+dotnet_diagnostic.MA0004.severity = none
 
-# Test classes should have valid layout
-dotnet_diagnostic.MSTEST0002.severity = warning
+# Do not use blocking call (make method async)
+dotnet_diagnostic.MA0045.severity = none
 
-# Test methods should have valid layout
-dotnet_diagnostic.MSTEST0003.severity = warning
-
-# Public types should be test classes
-dotnet_diagnostic.MSTEST0004.severity = none
-
-# Test context property should have valid layout
-dotnet_diagnostic.MSTEST0005.severity = warning
-
-# Avoid [ExpectedException]
-dotnet_diagnostic.MSTEST0006.severity = warning
-
-# Use test attributes only on test methods
-dotnet_diagnostic.MSTEST0007.severity = warning
-
-# TestInitialize method should have valid layout
-dotnet_diagnostic.MSTEST0008.severity = warning
-
-# TestCleanup method should have valid layout
-dotnet_diagnostic.MSTEST0009.severity = warning
-
-# ClassInitialize method should have valid layout
-dotnet_diagnostic.MSTEST0010.severity = warning
-
-# ClassCleanup method should have valid layout
-dotnet_diagnostic.MSTEST0011.severity = warning
-
-# AssemblyInitialize method should have valid layout
-dotnet_diagnostic.MSTEST0012.severity = warning
-
-# AssemblyCleanup method should have valid layout
-dotnet_diagnostic.MSTEST0013.severity = warning
-
-# DataRow should be valid
-dotnet_diagnostic.MSTEST0014.severity = warning
-
-# Test method should not be ignored
-dotnet_diagnostic.MSTEST0015.severity = warning
-
-# Test class should have test method
-dotnet_diagnostic.MSTEST0016.severity = warning
-
-# Assertion arguments should be passed in the correct order
-dotnet_diagnostic.MSTEST0017.severity = warning
-
-# DynamicData should be valid
-dotnet_diagnostic.MSTEST0018.severity = warning
-
-# Prefer TestInitialize methods over constructors
-dotnet_diagnostic.MSTEST0019.severity = warning
-
-# Prefer constructors over TestInitialize methods
-dotnet_diagnostic.MSTEST0020.severity = warning
-
-# Prefer Dispose over TestCleanup methods
-dotnet_diagnostic.MSTEST0021.severity = warning
-
-# Prefer TestCleanup methods over Dispose
-dotnet_diagnostic.MSTEST0022.severity = warning
-
-# Do not negate boolean assertions
-dotnet_diagnostic.MSTEST0023.severity = warning
-
-# Do not store TestContext in a static member
-dotnet_diagnostic.MSTEST0024.severity = warning
-
-# Use 'Assert.Fail' instead of an always-failing assert
-dotnet_diagnostic.MSTEST0025.severity = warning
-
-# Avoid conditional access in assertions
-dotnet_diagnostic.MSTEST0026.severity = warning
-
-# Non-nullable reference not initialized suppressor
-dotnet_diagnostic.MSTEST0027.severity = none
-
-# Non-nullable reference not initialized suppressor
-dotnet_diagnostic.MSTEST0028.severity = none
-
-# Public method should be test method
-dotnet_diagnostic.MSTEST0029.severity = warning
-
-# Type containing [TestMethod] should be marked with [TestClass]
-dotnet_diagnostic.MSTEST0030.severity = warning
-
-# System.ComponentModel.DescriptionAttribute has no effect on test methods
-dotnet_diagnostic.MSTEST0031.severity = warning
-
-# Review or remove the assertion as its condition is known to be always true
-dotnet_diagnostic.MSTEST0032.severity = warning
-
-# Non-nullable reference not initialized suppressor
-dotnet_diagnostic.MSTEST0033.severity = none
-
-# Use ClassCleanupBehavior.EndOfClass with the [ClassCleanup]
-dotnet_diagnostic.MSTEST0034.severity = warning
-
-# [DeploymentItem] can be specified only on test class or test method
-dotnet_diagnostic.MSTEST0035.severity = warning
-
-# Do not use shadowing inside test class
-dotnet_diagnostic.MSTEST0036.severity = warning
-
-# Use proper 'Assert' methods
-dotnet_diagnostic.MSTEST0037.severity = warning
-
-# Don't use 'Assert.AreSame' or 'Assert.AreNotSame' with value types
-dotnet_diagnostic.MSTEST0038.severity = warning
-
-# Use newer 'Assert.Throws' methods
-dotnet_diagnostic.MSTEST0039.severity = warning
-
-# Do not assert inside 'async void' contexts
-dotnet_diagnostic.MSTEST0040.severity = warning
-
-# Use 'ConditionBaseAttribute' on test classes
-dotnet_diagnostic.MSTEST0041.severity = warning
+# Use String.Equals instead of equality operator (Meziantou)
+dotnet_diagnostic.MA0006.severity = suggestion
 
 ####################################################################################################
 # Obsolete API Rules (SYSLIB)
