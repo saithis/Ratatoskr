@@ -15,7 +15,14 @@ internal sealed class RabbitMqEndpointConfigurator : IRatatoskrEndpointConfigura
             (
                 [FromServices] RabbitMqConnectionManager conn,
                 [FromServices] RabbitMqConsumer consumer
-            ) => TypedResults.Ok(new RabbitMqHealthDto(conn.IsConnected, consumer.IsHealthy, null))
+            ) =>
+                TypedResults.Ok(
+                    new RabbitMqHealthDto(
+                        conn.IsConnected,
+                        consumer.IsHealthy,
+                        ConnectionError: null
+                    )
+                )
         );
     }
 }

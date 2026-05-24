@@ -33,7 +33,7 @@ internal static class RabbitMqExchangeTypeExtensions
             RabbitMqExchangeType.Direct => ExchangeType.Direct,
             RabbitMqExchangeType.Fanout => ExchangeType.Fanout,
             RabbitMqExchangeType.Headers => ExchangeType.Headers,
-            _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
+            _ => throw new ArgumentOutOfRangeException(nameof(type), type, message: null),
         };
 
     /// <summary>
@@ -46,6 +46,6 @@ internal static class RabbitMqExchangeTypeExtensions
             RabbitMqExchangeType.Direct => AmqpExchangeType.Direct,
             RabbitMqExchangeType.Fanout => AmqpExchangeType.Fanout,
             RabbitMqExchangeType.Headers => AmqpExchangeType.Headers,
-            _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
+            _ => throw new ArgumentOutOfRangeException(nameof(type), type, message: null),
         };
 }

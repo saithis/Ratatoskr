@@ -26,7 +26,7 @@ public partial class RabbitMqTopologyManager(
         try
         {
             await using var channel = await connectionManager.CreateChannelAsync(
-                true,
+                enablePublisherConfirms: true,
                 cancellationToken
             );
 
