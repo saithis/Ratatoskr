@@ -123,7 +123,8 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
             CancellationToken cancellationToken
         )
         {
-            var key = properties.Id ?? message.OrderId;
+            _ = properties;
+            var key = $"{message.ScenarioRunId}:{message.OrderId}";
             var n = DeliveryAttempts.AddOrUpdate(key, 1, (_, old) => old + 1);
             if (n <= 2)
             {
@@ -132,12 +133,19 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
                 );
             }
 
-            var orderGuid = Guid.Parse(message.OrderId);
-            context.OutboxMessages.Add(
-                new OrderFulfilled(message.OrderId, message.ScenarioRunId),
-                new MessageProperties { Id = PlaygroundMessageIds.OrderFulfilled(orderGuid) }
-            );
-            await context.SaveChangesAsync(cancellationToken);
+            try
+            {
+                var orderGuid = Guid.Parse(message.OrderId);
+                context.OutboxMessages.Add(
+                    new OrderFulfilled(message.OrderId, message.ScenarioRunId),
+                    new MessageProperties { Id = PlaygroundMessageIds.OrderFulfilled(orderGuid) }
+                );
+                await context.SaveChangesAsync(cancellationToken);
+            }
+            finally
+            {
+                DeliveryAttempts.TryRemove(key, out _);
+            }
         }
     }
 
