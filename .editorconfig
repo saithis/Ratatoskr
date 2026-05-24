@@ -215,7 +215,7 @@ dotnet_code_quality.require_explicit_visibility = true
 dotnet_code_quality.require_variable_declaration_for_explicit_type = false
 dotnet_code_quality_unused_parameters = all:warning
 dotnet_enable_roslyn_analyzers = true
-dotnet_remove_unnecessary_suppression_exclusions = none
+dotnet_remove_unnecessary_suppression_exclusions = true
 
 # RS0016: Add public types and members to the declared API
 dotnet_public_api_analyzer.require_api_files = true
