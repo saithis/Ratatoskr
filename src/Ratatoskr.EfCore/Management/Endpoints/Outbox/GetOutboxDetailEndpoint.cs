@@ -31,7 +31,9 @@ internal static class GetOutboxDetailEndpoint
             ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         var entity = await db.Set<OutboxMessageEntity>()
             .AsNoTracking()
@@ -39,7 +41,9 @@ internal static class GetOutboxDetailEndpoint
             .FirstOrDefaultAsync(ct);
 
         if (entity is null)
+        {
             return ManagementResults.NotFound($"Poisoned outbox message '{id}' was not found.");
+        }
 
         var props = entity.GetProperties();
         var (jsonPayload, base64) = ManagementHelpers.DecodeContent(entity.Content, logger);

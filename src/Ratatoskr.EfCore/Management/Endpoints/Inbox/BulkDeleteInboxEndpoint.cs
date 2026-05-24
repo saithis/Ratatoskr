@@ -28,10 +28,14 @@ internal static class BulkDeleteInboxEndpoint
             ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         if (!BulkRequestValidator.TryValidateIds(req.Ids, out var error))
+        {
             return ManagementResults.BadRequest(error!);
+        }
 
         // Whole operation must be atomic: if orphaned-parent cleanup fails after the
         // handler rows are deleted, rolling back keeps the poisoned handler rows in
@@ -64,7 +68,9 @@ internal static class BulkDeleteInboxEndpoint
             ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
@@ -93,7 +99,9 @@ internal static class BulkDeleteInboxEndpoint
     )
     {
         if (messageIds.Count == 0)
+        {
             return;
+        }
 
         await db.Set<InboxMessageEntity>()
             .Where(msg =>

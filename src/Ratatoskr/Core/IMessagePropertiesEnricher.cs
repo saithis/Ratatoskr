@@ -10,7 +10,7 @@ public interface IMessagePropertiesEnricher
     /// If properties is null, creates a new instance.
     /// Only populates missing values, never overwrites existing ones.
     /// </summary>
-    MessageProperties Enrich<TMessage>(MessageProperties? properties)
+    public MessageProperties Enrich<TMessage>(MessageProperties? properties)
         where TMessage : notnull;
 
     /// <summary>
@@ -18,5 +18,5 @@ public interface IMessagePropertiesEnricher
     /// If properties is null, creates a new instance.
     /// Only populates missing values, never overwrites existing ones.
     /// </summary>
-    MessageProperties Enrich(Type messageType, MessageProperties? properties);
+    public MessageProperties Enrich(Type messageType, MessageProperties? properties);
 }

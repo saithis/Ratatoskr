@@ -44,13 +44,17 @@ internal static class PlaygroundScenarioManifest
     internal static void RegisterScenarioServices(IServiceCollection services)
     {
         foreach (var e in _all)
+        {
             services.AddSingleton(typeof(IScenario), e.Scenario.GetType());
+        }
     }
 
     internal static void RegisterScenarioTopologies(RatatoskrBuilder bus)
     {
         foreach (var e in _all)
+        {
             e.RegisterTopology(bus);
+        }
     }
 
     internal static IEnumerable<(

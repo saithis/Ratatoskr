@@ -56,17 +56,21 @@ internal sealed class RabbitMqConsumer(
         {
             var channelOptions = reg.GetRabbitMqChannelOptions() ?? new RabbitMqChannelOptions();
             if (string.IsNullOrEmpty(channelOptions.QueueName))
+            {
                 continue;
+            }
 
             ValidateChannelConcurrency(reg.ChannelName, channelOptions);
 
             if (channelOptions is { AutoAck: true, ConcurrencyLimit: > 1 })
+            {
                 logger.LogWarning(
                     "Channel '{Channel}': AutoAck=true disables broker-side prefetch limiting; with "
                         + "ConcurrencyLimit={Limit} messages may accumulate faster than handlers process them.",
                     reg.ChannelName,
                     channelOptions.ConcurrencyLimit
                 );
+            }
         }
 
         await ProvisionAndConsumeAsync(stoppingToken);
@@ -203,11 +207,13 @@ internal sealed class RabbitMqConsumer(
             try
             {
                 if (entry.Channel.IsOpen)
+                {
                     await entry.Channel.BasicCancelAsync(
                         entry.ConsumerTag,
                         noWait: false,
                         cancellationToken
                     );
+                }
             }
             catch (OperationCanceledException)
             {
@@ -230,7 +236,9 @@ internal sealed class RabbitMqConsumer(
     {
         var timeout = options.ShutdownDrainTimeout;
         if (timeout <= TimeSpan.Zero)
+        {
             return;
+        }
 
         var deadline = timeProvider.GetUtcNow() + timeout;
         while (Volatile.Read(ref _inFlightHandlers) > 0)
@@ -281,7 +289,10 @@ internal sealed class RabbitMqConsumer(
             try
             {
                 if (channel.IsOpen)
+                {
                     await channel.CloseAsync();
+                }
+
                 channel.Dispose();
                 concurrencyGate.Dispose();
                 ackLock.Dispose();

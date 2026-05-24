@@ -102,16 +102,21 @@ public sealed class DirectConsumeRetryScenario : IPlaygroundScenario
             var key = properties.Id ?? message.OrderId;
             var n = Attempts.AddOrUpdate(key, 1, (_, old) => old + 1);
             if (n <= 2)
+            {
                 throw new InvalidOperationException(
                     "Simulated Rabbit consumer failure (succeed-after-2)."
                 );
+            }
 
             var order = await context.Orders.FirstOrDefaultAsync(
                 o => o.Id == Guid.Parse(message.OrderId),
                 cancellationToken
             );
             if (order is null)
+            {
                 return;
+            }
+
             var now = timeProvider.GetUtcNow().UtcDateTime;
             order.Status = OrderStatus.Fulfilled;
             order.StatusChangedAt = now;

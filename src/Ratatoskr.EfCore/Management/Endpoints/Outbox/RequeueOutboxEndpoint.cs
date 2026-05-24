@@ -27,14 +27,21 @@ internal static class RequeueOutboxEndpoint
             ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         var entity = await db.Set<OutboxMessageEntity>().SingleOrDefaultAsync(x => x.Id == id, ct);
 
         if (entity is null)
+        {
             return ManagementResults.NotFound($"Outbox message '{id}' was not found.");
+        }
+
         if (!entity.IsPoisoned)
+        {
             return ManagementResults.BadRequest("Outbox message is not poisoned.");
+        }
 
         entity.Requeue();
 

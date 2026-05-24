@@ -85,7 +85,9 @@ internal class InboxCleanupService<TDbContext>(
                 .ExecuteDeleteAsync(cancellationToken);
 
             if (deleted > 0)
+            {
                 RatatoskrDiagnostics.InboxCleanupStatusCount.Add(deleted);
+            }
 
             totalStatusesDeleted += deleted;
         } while (deleted == _options.CleanupBatchSize);
@@ -107,7 +109,9 @@ internal class InboxCleanupService<TDbContext>(
                 .ExecuteDeleteAsync(cancellationToken);
 
             if (deleted > 0)
+            {
                 RatatoskrDiagnostics.InboxCleanupMessageCount.Add(deleted);
+            }
 
             totalMessagesDeleted += deleted;
         } while (deleted == _options.CleanupBatchSize);
@@ -117,11 +121,13 @@ internal class InboxCleanupService<TDbContext>(
         );
 
         if (totalStatusesDeleted > 0 || totalMessagesDeleted > 0)
+        {
             logger.LogInformation(
                 "InboxCleanupService deleted {StatusCount} handler status(es) and {MessageCount} orphaned message(s)",
                 totalStatusesDeleted,
                 totalMessagesDeleted
             );
+        }
 
         return (totalStatusesDeleted, totalMessagesDeleted);
     }

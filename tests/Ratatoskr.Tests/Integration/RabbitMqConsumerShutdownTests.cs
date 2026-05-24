@@ -129,12 +129,16 @@ file sealed class ConcurrentAckStressEventHandler : IMessageHandler<TestEvent>
     )
     {
         if (Interlocked.Increment(ref _arrived) >= _total)
+        {
             _allArrived.TrySetResult();
+        }
 
         await _allArrived.Task.WaitAsync(cancellationToken);
 
         if (Interlocked.Increment(ref _processed) >= _total)
+        {
             _processedAll.TrySetResult();
+        }
     }
 }
 
@@ -323,11 +327,13 @@ public class RabbitMqConsumerShutdownTests(
         });
 
         for (var i = 0; i < 4; i++)
+        {
             await PublishToRabbitMqAsync(
                 exchange: "",
                 routingKey: BackpressureQueueName,
                 new TestEvent { Id = $"bp-{i}", Data = "x" }
             );
+        }
 
         await WaitForConditionAsync(
             () => handler.ActiveCount == concurrencyLimit,
@@ -381,11 +387,13 @@ public class RabbitMqConsumerShutdownTests(
         });
 
         for (var i = 0; i < totalMessages; i++)
+        {
             await PublishToRabbitMqAsync(
                 exchange: "",
                 routingKey: AckStressQueueName,
                 new TestEvent { Id = $"ack-{i}", Data = "x" }
             );
+        }
 
         await handler.WaitUntilAllProcessedAsync(TimeSpan.FromSeconds(20));
 

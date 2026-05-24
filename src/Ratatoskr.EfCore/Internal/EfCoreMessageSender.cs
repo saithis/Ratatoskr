@@ -30,9 +30,11 @@ internal class EfCoreMessageSender(
     )
     {
         if (props.Type == null)
+        {
             throw new InvalidOperationException(
                 "Cannot send via EF Core transport: message has no Type."
             );
+        }
 
         using var activity = telemetry.StartSendActivity(props, content.Length);
         var startTimestamp = Stopwatch.GetTimestamp();

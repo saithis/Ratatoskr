@@ -27,19 +27,25 @@ internal static class RequeueInboxMessageEndpoint
             ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         var handlers = await db.Set<InboxHandlerStatusEntity>()
             .Where(x => x.MessageId == messageId && x.IsPoisoned)
             .ToListAsync(ct);
 
         if (handlers.Count == 0)
+        {
             return ManagementResults.NotFound(
                 $"No poisoned handlers found for inbox message '{messageId}'."
             );
+        }
 
         foreach (var h in handlers)
+        {
             h.Requeue();
+        }
 
         try
         {

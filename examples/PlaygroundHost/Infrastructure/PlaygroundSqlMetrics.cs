@@ -90,7 +90,9 @@ public static class PlaygroundSqlMetrics
         finally
         {
             if (opened)
+            {
                 await conn.CloseAsync();
+            }
         }
     }
 }

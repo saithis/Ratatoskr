@@ -49,13 +49,17 @@ public sealed class PlaygroundHostScenarioHttpTests(
     > GetOrCreateSharedFactoryAsync()
     {
         if (_sharedFactory is not null)
+        {
             return _sharedFactory;
+        }
 
         await _factoryLock.WaitAsync();
         try
         {
             if (_sharedFactory is not null)
+            {
                 return _sharedFactory;
+            }
 
             var testId = "shared";
             var pubDb = $"ph_{testId}_pub";
@@ -124,7 +128,10 @@ public sealed class PlaygroundHostScenarioHttpTests(
                 $"/api/playground/runs/{runId}"
             );
             if (status is { state: "Passed" or "Failed" or "Cancelled" })
+            {
                 break;
+            }
+
             await Task.Delay(250);
         }
 

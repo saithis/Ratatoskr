@@ -60,7 +60,10 @@ internal abstract class PollingBackgroundService(
             catch (Exception e)
             {
                 if (stoppingToken.IsCancellationRequested)
+                {
                     break;
+                }
+
                 logger.LogCritical(
                     e,
                     "{Processor} crashed, trying to restart in {Delay}",
@@ -69,7 +72,9 @@ internal abstract class PollingBackgroundService(
                 );
                 await Task.Delay(RestartDelay, timeProvider, stoppingToken);
                 if (stoppingToken.IsCancellationRequested)
+                {
                     break;
+                }
             }
         }
 

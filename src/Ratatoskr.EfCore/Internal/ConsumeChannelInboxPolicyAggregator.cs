@@ -13,20 +13,26 @@ internal sealed class ConsumeChannelInboxPolicyAggregator
         get
         {
             lock (_sync)
+            {
                 return _warnings.Count;
+            }
         }
     }
 
     public void MergeRequirement(ConsumeChannelInboxRequirement requirement)
     {
         if (requirement > EffectiveRequirement)
+        {
             EffectiveRequirement = requirement;
+        }
     }
 
     public void AddWarning(string warning)
     {
         lock (_sync)
+        {
             _warnings.Add(warning);
+        }
     }
 
     public string[] DrainWarnings()

@@ -67,7 +67,9 @@ internal class InboxMessageProcessor<TDbContext>(
             .ToArrayAsync(cancellationToken);
 
         if (statuses.Length == 0)
+        {
             return 0;
+        }
 
         InboxMessageProcessorLog.FoundStatusesToDeliver(logger, statuses.Length);
 
@@ -78,7 +80,9 @@ internal class InboxMessageProcessor<TDbContext>(
             .ToDictionaryAsync(m => m.Id, cancellationToken);
 
         foreach (var status in statuses)
+        {
             status.MarkAsProcessing(timeProvider);
+        }
 
         while (true)
         {
@@ -100,7 +104,9 @@ internal class InboxMessageProcessor<TDbContext>(
 
                 statuses = statuses.Where(s => !conflictIds.Contains(s.Id)).ToArray();
                 if (statuses.Length == 0)
+                {
                     return 0;
+                }
             }
         }
 

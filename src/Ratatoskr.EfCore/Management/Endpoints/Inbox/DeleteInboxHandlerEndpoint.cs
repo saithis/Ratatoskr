@@ -27,17 +27,24 @@ internal static class DeleteInboxHandlerEndpoint
             ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         var entity = await db.Set<InboxHandlerStatusEntity>()
             .SingleOrDefaultAsync(x => x.Id == handlerStatusId, ct);
 
         if (entity is null)
+        {
             return ManagementResults.NotFound(
                 $"Inbox handler status '{handlerStatusId}' was not found."
             );
+        }
+
         if (!entity.IsPoisoned)
+        {
             return ManagementResults.BadRequest("Handler status is not poisoned.");
+        }
 
         var messageId = entity.MessageId;
         db.Set<InboxHandlerStatusEntity>().Remove(entity);

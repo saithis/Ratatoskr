@@ -44,13 +44,17 @@ public class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposab
     )
     {
         if (_sendChannel is { IsOpen: true })
+        {
             return _sendChannel;
+        }
 
         await _sendChannelLock.WaitAsync(cancellationToken);
         try
         {
             if (_sendChannel is { IsOpen: true })
+            {
                 return _sendChannel;
+            }
 
             if (_sendChannel != null)
             {
@@ -89,13 +93,17 @@ public class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposab
     private async Task<IConnection> GetOrCreateConnectionAsync(CancellationToken cancellationToken)
     {
         if (_connection is { IsOpen: true })
+        {
             return _connection;
+        }
 
         await _connectionLock.WaitAsync(cancellationToken);
         try
         {
             if (_connection is { IsOpen: true })
+            {
                 return _connection;
+            }
 
             var factory = CreateConnectionFactory();
             _connection = await factory.CreateConnectionAsync(cancellationToken);
@@ -110,9 +118,11 @@ public class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposab
     private ConnectionFactory CreateConnectionFactory()
     {
         if (options.ConnectionString is null)
+        {
             throw new InvalidOperationException(
                 "RabbitMQ connection string is not configured. Set RabbitMqOptions.ConnectionString."
             );
+        }
 
         return new ConnectionFactory
         {
@@ -129,7 +139,10 @@ public class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposab
         if (_sendChannel != null)
         {
             if (_sendChannel.IsOpen)
+            {
                 await _sendChannel.CloseAsync();
+            }
+
             _sendChannel.Dispose();
             _sendChannel = null;
         }

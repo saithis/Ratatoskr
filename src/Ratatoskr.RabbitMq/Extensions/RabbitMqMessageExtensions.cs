@@ -12,7 +12,9 @@ public static class RabbitMqMessageExtensions
         {
             var existing = registration.GetExtension<RabbitMqMessageOptions>();
             if (existing != null)
+            {
                 return existing;
+            }
 
             var options = new RabbitMqMessageOptions();
             registration.SetExtension(options);

@@ -37,7 +37,9 @@ public class ManagementCoverageTests(
         const int total = 5;
         var seeded = new HashSet<Guid>();
         for (var i = 0; i < total; i++)
+        {
             seeded.Add(await SeedPoisonedOutboxAsync());
+        }
 
         var collected = new List<Guid>();
         string? cursor = null;
@@ -83,7 +85,9 @@ public class ManagementCoverageTests(
         await StartManagementTestAsync();
         // Seed one more than the cap so the clamp is observable in the response.
         for (var i = 0; i < PaginationOptions.MaxPageSize + 1; i++)
+        {
             await SeedPoisonedOutboxAsync();
+        }
 
         var response = await HttpClient.GetAsync($"{OutboxBaseUrl}/poisoned?pageSize=10000");
         response.StatusCode.Should().Be(HttpStatusCode.OK);

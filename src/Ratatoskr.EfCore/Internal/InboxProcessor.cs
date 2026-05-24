@@ -39,7 +39,9 @@ internal class InboxProcessor<TDbContext>(
             );
 
             if (processed == 0)
+            {
                 return;
+            }
         }
     }
 }

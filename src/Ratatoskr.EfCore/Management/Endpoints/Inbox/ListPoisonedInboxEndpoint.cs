@@ -34,7 +34,9 @@ internal static class ListPoisonedInboxEndpoint
             ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         pageSize = PaginationOptions.ClampPageSize(pageSize);
 
@@ -59,9 +61,15 @@ internal static class ListPoisonedInboxEndpoint
             select new { hs, msg };
 
         if (from.HasValue)
+        {
             filtered = filtered.Where(x => x.msg.ReceivedAt >= from.Value);
+        }
+
         if (to.HasValue)
+        {
             filtered = filtered.Where(x => x.msg.ReceivedAt <= to.Value);
+        }
+
         if (search is not null)
         {
             var pattern = ManagementHelpers.BuildSearchPattern(search);
@@ -98,7 +106,9 @@ internal static class ListPoisonedInboxEndpoint
 
         var hasNext = rows.Count > pageSize;
         if (hasNext)
+        {
             rows.RemoveAt(rows.Count - 1);
+        }
 
         var dtos = rows.Select(x => new InboxPoisonedListItem(
                 x.Id,

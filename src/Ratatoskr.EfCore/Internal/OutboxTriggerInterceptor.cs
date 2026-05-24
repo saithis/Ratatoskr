@@ -47,7 +47,9 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         }
 
         if (context is not IOutboxDbContext outboxDbContext)
+        {
             throw new InvalidOperationException("Expected IOutboxDbContext");
+        }
 
         var flags = _perContextFlags.GetOrCreateValue(context);
         flags.OutboxEntitiesStaged = false;
@@ -55,7 +57,9 @@ internal class OutboxTriggerInterceptor<TDbContext>(
 
         var stagedItems = outboxDbContext.OutboxMessages.StagedItems;
         if (stagedItems.Count == 0)
+        {
             return result;
+        }
 
         // On retry after a failed SaveChanges, detach entities created by the previous attempt
         // to prevent duplicates. These types are internal — only this interceptor adds them.
@@ -141,7 +145,9 @@ internal class OutboxTriggerInterceptor<TDbContext>(
                 // Skip outbox entry for EF Core transport when ALL inbox channels are
                 // same-DbContext (entries already created in this transaction).
                 if (transport == EfCoreTransportConstants.TransportName && skipEfCoreOutbox)
+                {
                     continue;
+                }
 
                 var outboxMessage = OutboxMessageEntity.Create(
                     serializedMessage,
@@ -193,7 +199,9 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         {
             var inboxConfig = channel.GetExtension<ChannelInboxConfig>();
             if (inboxConfig == null)
+            {
                 continue;
+            }
 
             // Track cross-DbContext channels — they still need an outbox entry
             if (inboxConfig.DbContextType != typeof(TDbContext))
@@ -204,19 +212,25 @@ internal class OutboxTriggerInterceptor<TDbContext>(
 
             var msgReg = channel.GetMessage(enrichedProperties.Type!);
             if (msgReg == null)
+            {
                 continue;
+            }
 
             var inboxHandlers = channelHandlerRegistry.GetInboxHandlers(
                 channel.ChannelName,
                 msgReg.MessageType
             );
             if (inboxHandlers.Count == 0)
+            {
                 continue;
+            }
 
             if (string.IsNullOrWhiteSpace(enrichedProperties.Id))
+            {
                 throw new InvalidOperationException(
                     $"Inbox requires a non-empty message id for '{enrichedProperties.Type}'."
                 );
+            }
 
             if (!inboxEntriesCreated)
             {
@@ -267,10 +281,14 @@ internal class OutboxTriggerInterceptor<TDbContext>(
     {
         // Commit: clear staged items now that the transaction succeeded
         if (eventData.Context is IOutboxDbContext outboxDbContext)
+        {
             outboxDbContext.OutboxMessages.ClearStaged();
+        }
 
         if (eventData.EntitiesSavedCount == 0)
+        {
             return result;
+        }
 
         if (
             eventData.Context != null
@@ -299,7 +317,9 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         foreach (var entry in context.ChangeTracker.Entries<TEntity>().ToList())
         {
             if (entry.State == EntityState.Added)
+            {
                 entry.State = EntityState.Detached;
+            }
         }
     }
 }

@@ -38,7 +38,9 @@ internal class OutboxProcessor<TDbContext>(
             );
 
             if (processedCount == 0)
+            {
                 return;
+            }
         }
     }
 }

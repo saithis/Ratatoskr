@@ -29,7 +29,10 @@ internal class EfCoreMetricsBackgroundService<TDbContext>(
             catch (Exception ex)
             {
                 if (stoppingToken.IsCancellationRequested)
+                {
                     break;
+                }
+
                 logger.LogError(ex, "Error updating EF Core metrics for {DbContext}", _contextName);
             }
 
@@ -63,7 +66,7 @@ internal class EfCoreMetricsBackgroundService<TDbContext>(
                 {
                     var n = await db.Set<OutboxMessageEntity>()
                         .CountAsync(x => x.ProcessedAt == null && !x.IsPoisoned, ct);
-                    return (long)n;
+                    return n;
                 }
             );
 
@@ -74,7 +77,7 @@ internal class EfCoreMetricsBackgroundService<TDbContext>(
                 {
                     var n = await db.Set<OutboxMessageEntity>()
                         .CountAsync(x => x.ProcessedAt == null && x.IsPoisoned, ct);
-                    return (long)n;
+                    return n;
                 }
             );
         }
@@ -88,7 +91,7 @@ internal class EfCoreMetricsBackgroundService<TDbContext>(
                 {
                     var n = await db.Set<InboxHandlerStatusEntity>()
                         .CountAsync(x => x.CompletedAt == null && !x.IsPoisoned, ct);
-                    return (long)n;
+                    return n;
                 }
             );
 
@@ -99,7 +102,7 @@ internal class EfCoreMetricsBackgroundService<TDbContext>(
                 {
                     var n = await db.Set<InboxHandlerStatusEntity>()
                         .CountAsync(x => x.CompletedAt == null && x.IsPoisoned, ct);
-                    return (long)n;
+                    return n;
                 }
             );
         }

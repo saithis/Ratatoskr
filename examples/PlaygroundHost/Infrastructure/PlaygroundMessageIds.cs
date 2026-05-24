@@ -17,16 +17,22 @@ public static class PlaygroundMessageIds
     {
         orderId = default;
         if (string.IsNullOrEmpty(messageId))
+        {
             return false;
+        }
 
         const string prefix = "order-";
         if (!messageId.StartsWith(prefix, StringComparison.Ordinal))
+        {
             return false;
+        }
 
         var rest = messageId.AsSpan(prefix.Length);
         var dash = rest.LastIndexOf('-');
         if (dash <= 0)
+        {
             return false;
+        }
 
         var guidPart = rest[..dash];
         return Guid.TryParse(guidPart, out orderId);

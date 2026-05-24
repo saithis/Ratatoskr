@@ -48,14 +48,18 @@ public sealed class ScenarioRunService(
     )
     {
         if (!_bySlug.TryGetValue(slug, out var scenario))
+        {
             return new ScenarioStartResult(null, null, $"Unknown scenario '{slug}'.");
+        }
 
         if (scenario.RequiresDangerConfirmation && !confirmDanger)
+        {
             return new ScenarioStartResult(
                 null,
                 null,
                 "This scenario requires confirmDanger=true (acknowledge the risk in the dashboard)."
             );
+        }
 
         var runId = Guid.NewGuid();
         await WithPlaygroundDb(async db =>
@@ -200,7 +204,10 @@ public sealed class ScenarioRunService(
         {
             var row = await db.Runs.FirstOrDefaultAsync(r => r.Id == runId);
             if (row is null)
+            {
                 return;
+            }
+
             row.State = state;
             row.CompletedAt = time.GetUtcNow();
             row.Detail = detail;
@@ -217,7 +224,10 @@ public sealed class ScenarioRunService(
                 .Runs.AsNoTracking()
                 .FirstOrDefaultAsync(r => r.Id == runId, cancellationToken);
             if (row is null)
+            {
                 return null;
+            }
+
             return new ScenarioRunStatusDto(
                 row.Id,
                 row.ScenarioSlug,
@@ -233,7 +243,10 @@ public sealed class ScenarioRunService(
         {
             var row = await db.Runs.FirstOrDefaultAsync(r => r.Id == runId, cancellationToken);
             if (row is null || row.State is "Passed" or "Failed" or "Cancelled")
+            {
                 return false;
+            }
+
             row.CancelRequested = true;
             await db.SaveChangesAsync(cancellationToken);
             return true;

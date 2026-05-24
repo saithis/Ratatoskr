@@ -411,11 +411,15 @@ public class ConsumeTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
                 );
                 var channel = c.Consumes<TestEvent>(configureHandler);
                 if (configureInbox != null)
+                {
                     channel.UseInbox<TestDbContext>();
+                }
             }
         );
         if (configureInbox != null)
+        {
             bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox(configureInbox));
+        }
     }
 
     private void ConfigureBusWithRetry(

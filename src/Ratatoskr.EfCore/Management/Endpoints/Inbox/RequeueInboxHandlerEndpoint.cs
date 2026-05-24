@@ -27,17 +27,24 @@ internal static class RequeueInboxHandlerEndpoint
             ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         var entity = await db.Set<InboxHandlerStatusEntity>()
             .SingleOrDefaultAsync(x => x.Id == handlerStatusId, ct);
 
         if (entity is null)
+        {
             return ManagementResults.NotFound(
                 $"Inbox handler status '{handlerStatusId}' was not found."
             );
+        }
+
         if (!entity.IsPoisoned)
+        {
             return ManagementResults.BadRequest("Handler status is not poisoned.");
+        }
 
         entity.Requeue();
 

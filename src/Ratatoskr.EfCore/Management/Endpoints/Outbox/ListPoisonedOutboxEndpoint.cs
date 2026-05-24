@@ -34,7 +34,9 @@ internal static class ListPoisonedOutboxEndpoint
             ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         pageSize = PaginationOptions.ClampPageSize(pageSize);
 
@@ -56,9 +58,15 @@ internal static class ListPoisonedOutboxEndpoint
 
         var filtered = db.Set<OutboxMessageEntity>().AsNoTracking().Where(x => x.IsPoisoned);
         if (from.HasValue)
+        {
             filtered = filtered.Where(x => x.CreatedAt >= from.Value);
+        }
+
         if (to.HasValue)
+        {
             filtered = filtered.Where(x => x.CreatedAt <= to.Value);
+        }
+
         if (search is not null)
         {
             var pattern = ManagementHelpers.BuildSearchPattern(search);
@@ -96,7 +104,9 @@ internal static class ListPoisonedOutboxEndpoint
 
         var hasNext = items.Count > pageSize;
         if (hasNext)
+        {
             items.RemoveAt(items.Count - 1);
+        }
 
         var dtos = items
             .Select(x => new OutboxPoisonedListItem(

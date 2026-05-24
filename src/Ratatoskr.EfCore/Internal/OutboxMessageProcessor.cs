@@ -68,7 +68,9 @@ internal class OutboxMessageProcessor<TDbContext>(
         OutboxMessageProcessorLog.FoundMessagesToSend(logger, messages.Length);
 
         if (messages.Length == 0)
+        {
             return 0;
+        }
 
         foreach (var message in messages)
         {
@@ -95,7 +97,9 @@ internal class OutboxMessageProcessor<TDbContext>(
 
                 messages = messages.Where(m => !conflictIds.Contains(m.Id)).ToArray();
                 if (messages.Length == 0)
+                {
                     return 0;
+                }
             }
         }
 
@@ -198,7 +202,9 @@ internal class OutboxMessageProcessor<TDbContext>(
                 OutboxMessageProcessorLog.SkippedConflictsDuringSave(logger, conflictIds.Count);
 
                 if (conflictIds.Contains(message.Id))
+                {
                     continue;
+                }
             }
 
             // Record telemetry only after persistence succeeds

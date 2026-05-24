@@ -573,7 +573,9 @@ public class MessageDispatcherTests
                     && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString()
                         == "dispatch-span-ok"
                 )
+                {
                     capturedActivity = activity;
+                }
             },
         };
         ActivitySource.AddActivityListener(listener);
@@ -645,7 +647,9 @@ public class MessageDispatcherTests
                     && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString()
                         == "dispatch-span-err"
                 )
+                {
                     capturedActivity = activity;
+                }
             },
         };
         ActivitySource.AddActivityListener(listener);
@@ -697,7 +701,9 @@ public class MessageDispatcherTests
                     && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString()
                         == messageId
                 )
+                {
                     capturedActivity = activity;
+                }
             },
         };
         ActivitySource.AddActivityListener(listener);
@@ -749,7 +755,9 @@ public class MessageDispatcherTests
                     && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString()
                         == messageId
                 )
+                {
                     capturedActivity = activity;
+                }
             },
         };
         ActivitySource.AddActivityListener(listener);
@@ -809,7 +817,9 @@ public class MessageDispatcherTests
                     && activity.GetTagItem(MessagingSemanticConventions.MessageId)?.ToString()
                         == messageId
                 )
+                {
                     capturedActivity = activity;
+                }
             },
         };
         ActivitySource.AddActivityListener(listener);

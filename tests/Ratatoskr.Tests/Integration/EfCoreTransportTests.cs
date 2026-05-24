@@ -312,7 +312,9 @@ public class EfCoreTransportTests(
         meterListener.InstrumentPublished = (instrument, listener) =>
         {
             if (instrument.Meter.Name == "Ratatoskr")
+            {
                 listener.EnableMeasurementEvents(instrument);
+            }
         };
         meterListener.SetMeasurementEventCallback<double>(
             (instrument, measurement, tags, _) =>

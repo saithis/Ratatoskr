@@ -448,22 +448,31 @@ public class InboxCleanupServiceTests(
         listener.InstrumentPublished = (instrument, meterListener) =>
         {
             if (instrument.Meter.Name == RatatoskrDiagnostics.MeterName)
+            {
                 meterListener.EnableMeasurementEvents(instrument);
+            }
         };
         listener.SetMeasurementEventCallback<long>(
             (instrument, measurement, _, _) =>
             {
                 if (instrument.Name == "ratatoskr.inbox.cleanup.status.count")
+                {
                     Interlocked.Add(ref statusCleanupCount, measurement);
+                }
+
                 if (instrument.Name == "ratatoskr.inbox.cleanup.message.count")
+                {
                     Interlocked.Add(ref messageCleanupCount, measurement);
+                }
             }
         );
         listener.SetMeasurementEventCallback<double>(
             (instrument, measurement, _, _) =>
             {
                 if (instrument.Name == "ratatoskr.inbox.cleanup.duration")
+                {
                     cleanupDuration = measurement;
+                }
             }
         );
         listener.Start();

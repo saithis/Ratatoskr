@@ -10,17 +10,17 @@ namespace Ratatoskr.EfCore.Management;
 /// </summary>
 internal interface IEfCoreManagementDbContextDescriptor
 {
-    string DbContextName { get; }
-    string DbContextFullName { get; }
-    Type DbContextType { get; }
-    bool HasOutbox { get; }
-    bool HasInbox { get; }
+    public string DbContextName { get; }
+    public string DbContextFullName { get; }
+    public Type DbContextType { get; }
+    public bool HasOutbox { get; }
+    public bool HasInbox { get; }
 
     /// <summary>Returns the typed DbContext from the given service provider scope.</summary>
-    DbContext GetDbContext(IServiceProvider serviceProvider);
+    public DbContext GetDbContext(IServiceProvider serviceProvider);
 
     // ── Health data (read-only properties, no DB access) ─────────────────────
 
-    DateTimeOffset? LastOutboxProcessingAt { get; }
-    DateTimeOffset? LastInboxProcessingAt { get; }
+    public DateTimeOffset? LastOutboxProcessingAt { get; }
+    public DateTimeOffset? LastInboxProcessingAt { get; }
 }

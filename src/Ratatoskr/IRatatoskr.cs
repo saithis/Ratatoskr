@@ -16,7 +16,7 @@ public interface IRatatoskr
     /// This does NOT use the outbox pattern. If you need transactional consistency
     /// with database operations, use <c>DbContext.OutboxMessages.Add()</c> instead.
     /// </remarks>
-    Task PublishDirectAsync<TMessage>(
+    public Task PublishDirectAsync<TMessage>(
         TMessage message,
         MessageProperties? props = null,
         CancellationToken cancellationToken = default

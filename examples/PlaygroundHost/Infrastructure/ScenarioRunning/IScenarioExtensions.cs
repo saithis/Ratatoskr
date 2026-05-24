@@ -89,7 +89,10 @@ public static class IScenarioExtensions
             cancellationToken
         );
         if (order is null)
+        {
             return;
+        }
+
         order.Status = status;
         order.StatusChangedAt = time.GetUtcNow().UtcDateTime;
         await db.SaveChangesAsync(cancellationToken);

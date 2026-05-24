@@ -685,7 +685,9 @@ public class MultiDbContextTests(
             var count = await processor.ProcessBatchAsync(true, CancellationToken.None);
             total += count;
             if (count == 0)
+            {
                 break;
+            }
         }
         return total;
     }
@@ -703,7 +705,9 @@ public class MultiDbContextTests(
             var count = await processor.ProcessBatchAsync(true, CancellationToken.None);
             total += count;
             if (count == 0)
+            {
                 break;
+            }
         }
         return total;
     }

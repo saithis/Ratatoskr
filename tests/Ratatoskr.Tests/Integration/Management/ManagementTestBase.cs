@@ -78,7 +78,10 @@ public abstract class ManagementTestBase(
             var entity = OutboxMessageEntity.Create(content, props, time, "efcore");
             // Poison it by reaching max retries (ErrorCount >= maxRetries sets IsPoisoned)
             for (var i = 0; i < 3; i++)
+            {
                 entity.PublishFailed("simulated error", time, 3, TimeSpan.FromSeconds(1));
+            }
+
             db.Set<OutboxMessageEntity>().Add(entity);
             await db.SaveChangesAsync();
             id = entity.Id;
@@ -112,7 +115,10 @@ public abstract class ManagementTestBase(
 
             var handler = InboxHandlerStatusEntity.Create(msg.Id, "handler-a", time);
             for (var i = 0; i < 3; i++)
+            {
                 handler.MarkAsFailed("simulated inbox error", time, 3, TimeSpan.FromSeconds(1));
+            }
+
             db.Set<InboxHandlerStatusEntity>().Add(handler);
 
             await db.SaveChangesAsync();

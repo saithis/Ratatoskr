@@ -30,13 +30,17 @@ internal static class GetInboxMessageHandlersEndpoint
             ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         var msg = await db.Set<InboxMessageEntity>()
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == messageId, ct);
         if (msg is null)
+        {
             return ManagementResults.NotFound($"Inbox message '{messageId}' was not found.");
+        }
 
         var handlers = await db.Set<InboxHandlerStatusEntity>()
             .AsNoTracking()

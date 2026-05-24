@@ -13,7 +13,7 @@ public interface IMessageHandler<in TMessage>
     /// <param name="message">The deserialized message</param>
     /// <param name="properties">Context about the message delivery</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    Task HandleAsync(
+    public Task HandleAsync(
         TMessage message,
         MessageProperties properties,
         CancellationToken cancellationToken

@@ -116,14 +116,19 @@ public abstract class RatatoskrIntegrationTest(
     protected HttpClient CreateHttpClient()
     {
         if (_factory is null)
+        {
             throw new InvalidOperationException("StartTestAsync has not been called yet.");
+        }
+
         return _factory.CreateClient();
     }
 
     public async ValueTask DisposeAsync()
     {
         if (_factory != null)
+        {
             await _factory.DisposeAsync();
+        }
 
         await DropDatabaseAsync();
     }
@@ -292,7 +297,10 @@ public abstract class RatatoskrIntegrationTest(
         while (!await condition())
         {
             if (DateTime.UtcNow - start > timeout)
+            {
                 throw new TimeoutException(message ?? "Condition not met within timeout.");
+            }
+
             await Task.Delay(10);
         }
     }

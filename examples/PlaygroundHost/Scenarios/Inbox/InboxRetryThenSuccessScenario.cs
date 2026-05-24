@@ -126,9 +126,12 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
             var key = properties.Id ?? message.OrderId;
             var n = DeliveryAttempts.AddOrUpdate(key, 1, (_, old) => old + 1);
             if (n <= 2)
+            {
                 throw new InvalidOperationException(
                     "Simulated consumer failure (succeed-after-2)."
                 );
+            }
+
             var orderGuid = Guid.Parse(message.OrderId);
             context.OutboxMessages.Add(
                 new OrderFulfilled(message.OrderId, message.ScenarioRunId),

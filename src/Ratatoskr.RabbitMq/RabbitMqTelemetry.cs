@@ -85,7 +85,9 @@ internal class RabbitMqTelemetry(RabbitMqOptions options, TimeProvider timeProvi
         };
 
         if (sendException != null)
+        {
             tags.Add(MessagingSemanticConventions.ErrorType, sendException.GetType().FullName);
+        }
 
         RatatoskrDiagnostics.ClientOperationDuration.Record(duration, tags);
         RatatoskrDiagnostics.ClientSentMessages.Add(1, tags);

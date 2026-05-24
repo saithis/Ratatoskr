@@ -11,7 +11,9 @@ internal sealed class ConsumeChannelInboxWarningHostedService(
     public Task StartAsync(CancellationToken cancellationToken)
     {
         foreach (var warning in policyAggregator.DrainWarnings())
+        {
             logger.LogWarning("{Warning}", warning);
+        }
 
         return Task.CompletedTask;
     }

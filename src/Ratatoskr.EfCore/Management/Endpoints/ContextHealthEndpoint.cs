@@ -23,7 +23,9 @@ internal static class ContextHealthEndpoint
             ManagementDbContextResolver.EnsureContext(lookup, contextName, out var dbContext) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         var descriptor = lookup.Find(contextName)!;
         metricsState.TryGetValue(dbContext.GetType(), out var metrics);

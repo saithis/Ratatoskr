@@ -30,10 +30,14 @@ internal static class BulkRequeueInboxEndpoint
             ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         if (!BulkRequestValidator.TryValidateIds(req.Ids, out var error))
+        {
             return ManagementResults.BadRequest(error!);
+        }
 
         var succeeded = new List<Guid>();
         var failed = new List<BulkRequeueInboxFailure>();
@@ -52,7 +56,10 @@ internal static class BulkRequeueInboxEndpoint
         );
 
         foreach (var entity in entities)
+        {
             entity.Requeue();
+        }
+
         await SaveBatchAsync(db, entities, succeeded, failed, ct);
 
         return TypedResults.Ok(new BulkRequeueInboxResponse(succeeded, failed));
@@ -68,7 +75,9 @@ internal static class BulkRequeueInboxEndpoint
             ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         var succeeded = new List<Guid>();
         var failed = new List<BulkRequeueInboxFailure>();
@@ -83,10 +92,15 @@ internal static class BulkRequeueInboxEndpoint
                 .ToListAsync(ct);
 
             if (batch.Count == 0)
+            {
                 break;
+            }
 
             foreach (var entity in batch)
+            {
                 entity.Requeue();
+            }
+
             await SaveBatchAsync(db, batch, succeeded, failed, ct);
             db.ChangeTracker.Clear();
         }

@@ -36,11 +36,13 @@ public static class InboxPublicApiExtensions
         builder.RatatoskrBuilder.AddValidator(_ =>
         {
             if (!services.Any(d => d.ServiceType == typeof(InboxOptionsHolder<TDbContext>)))
+            {
                 throw new InvalidOperationException(
                     $"Channel '{channelName}' uses UseInbox<{typeof(TDbContext).Name}>() "
                         + $"but AddEfCoreDurability<{typeof(TDbContext).Name}>(d => d.UseInbox()) was not configured. "
                         + $"Call AddEfCoreDurability before configuring consume channels."
                 );
+            }
         });
 
         return builder;

@@ -234,7 +234,10 @@ public class RabbitMqChannelOptions
     {
         Retry.WithMaxRetries(maxRetries);
         if (delay.HasValue)
+        {
             Retry.WithDelay(delay.Value);
+        }
+
         return this;
     }
 }

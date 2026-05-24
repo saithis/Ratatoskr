@@ -46,7 +46,10 @@ internal sealed class EfCoreManagementDbContextLookup
     {
         var descriptor = Find(contextName);
         if (descriptor is null)
+        {
             return null;
+        }
+
         return (DbContext?)_serviceProvider.GetService(descriptor.DbContextType);
     }
 

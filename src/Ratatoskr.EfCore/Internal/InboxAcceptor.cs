@@ -36,26 +36,36 @@ internal class InboxAcceptor<TDbContext>(
         // Check if this channel's inbox DbContext matches our TDbContext
         var channel = channelRegistry.GetConsumeChannel(channelName);
         if (channel == null)
+        {
             return InboxAcceptOutcome.NoHandlers;
+        }
 
         var inboxConfig = channel.GetExtension<ChannelInboxConfig>();
         if (inboxConfig == null || inboxConfig.DbContextType != typeof(TDbContext))
+        {
             return InboxAcceptOutcome.NoHandlers;
+        }
 
         // Resolve message CLR type from wire type name
         if (properties.Type == null)
+        {
             return InboxAcceptOutcome.NoHandlers;
+        }
 
         var msgReg = channel.GetMessage(properties.Type);
         if (msgReg == null)
+        {
             return InboxAcceptOutcome.NoHandlers;
+        }
 
         var inboxHandlers = channelHandlerRegistry.GetInboxHandlers(
             channelName,
             msgReg.MessageType
         );
         if (inboxHandlers.Count == 0)
+        {
             return InboxAcceptOutcome.NoHandlers;
+        }
 
         if (string.IsNullOrWhiteSpace(properties.Id))
         {

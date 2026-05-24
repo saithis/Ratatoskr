@@ -343,7 +343,7 @@ public class CloudEventsAmqpMapperOutgoingTests
         _mapper.MapOutgoing(body, props, outgoing);
 
         // Assert
-        foreach (var (key, value) in outgoing.Headers)
+        foreach (var (key, _) in outgoing.Headers)
         {
             key.Should().NotStartWith("x-ratatoskr-");
         }
@@ -376,7 +376,7 @@ public class CloudEventsAmqpMapperOutgoingTests
         // Assert
         if (outgoing.Headers != null)
         {
-            foreach (var (key, value) in outgoing.Headers)
+            foreach (var (key, _) in outgoing.Headers)
             {
                 key.Should().NotStartWith("x-ratatoskr-");
             }

@@ -41,7 +41,10 @@ public class RabbitMqTopologyManager(
             )
             {
                 if (!reg.IsRabbitMqChannel())
+                {
                     continue;
+                }
+
                 await ProvisionChannelAsync(channel, reg, cancellationToken);
             }
 

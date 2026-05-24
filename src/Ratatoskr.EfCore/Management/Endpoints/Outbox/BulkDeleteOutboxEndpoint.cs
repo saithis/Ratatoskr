@@ -33,10 +33,14 @@ internal static class BulkDeleteOutboxEndpoint
             ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         if (!BulkRequestValidator.TryValidateIds(req.Ids, out var error))
+        {
             return ManagementResults.BadRequest(error!);
+        }
 
         var deletedCount = await db.Set<OutboxMessageEntity>()
             .Where(x => req.Ids!.Contains(x.Id) && x.IsPoisoned)
@@ -55,7 +59,9 @@ internal static class BulkDeleteOutboxEndpoint
             ManagementDbContextResolver.EnsureOutbox(lookup, contextName, out var db) is
             { } resolveError
         )
+        {
             return resolveError;
+        }
 
         await db.Set<OutboxMessageEntity>().Where(x => x.IsPoisoned).ExecuteDeleteAsync(ct);
 

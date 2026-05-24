@@ -10,7 +10,10 @@ public static class PlaygroundCorrelation
     public static void AttachToMessageProperties(MessageProperties properties, string scenarioRunId)
     {
         if (string.IsNullOrEmpty(scenarioRunId))
+        {
             return;
+        }
+
         properties.CloudEventExtensions[CloudEventsExtensionKey] = scenarioRunId;
     }
 }

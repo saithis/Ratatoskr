@@ -276,20 +276,26 @@ public class OutboxCleanupServiceTests(
         listener.InstrumentPublished = (instrument, meterListener) =>
         {
             if (instrument.Meter.Name == RatatoskrDiagnostics.MeterName)
+            {
                 meterListener.EnableMeasurementEvents(instrument);
+            }
         };
         listener.SetMeasurementEventCallback<long>(
             (instrument, measurement, _, _) =>
             {
                 if (instrument.Name == "ratatoskr.outbox.cleanup.count")
+                {
                     Interlocked.Add(ref cleanupCount, measurement);
+                }
             }
         );
         listener.SetMeasurementEventCallback<double>(
             (instrument, measurement, _, _) =>
             {
                 if (instrument.Name == "ratatoskr.outbox.cleanup.duration")
+                {
                     cleanupDuration = measurement;
+                }
             }
         );
         listener.Start();

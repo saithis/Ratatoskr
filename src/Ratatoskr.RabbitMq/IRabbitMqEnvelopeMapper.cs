@@ -17,7 +17,11 @@ public interface IRabbitMqEnvelopeMapper
     /// <param name="props">Message properties to map.</param>
     /// <param name="outgoing">RabbitMQ properties to populate.</param>
     /// <returns>The message body to send.</returns>
-    byte[] MapOutgoing(byte[] serializedData, MessageProperties props, BasicProperties outgoing);
+    public byte[] MapOutgoing(
+        byte[] serializedData,
+        MessageProperties props,
+        BasicProperties outgoing
+    );
 
     /// <summary>
     /// Maps incoming RabbitMQ message to MessageProperties.
@@ -25,5 +29,5 @@ public interface IRabbitMqEnvelopeMapper
     /// </summary>
     /// <param name="incoming">The incoming RabbitMQ message.</param>
     /// <returns>A tuple containing the body to deserialize and the mapped properties.</returns>
-    (byte[] body, MessageProperties props) MapIncoming(BasicDeliverEventArgs incoming);
+    public (byte[] body, MessageProperties props) MapIncoming(BasicDeliverEventArgs incoming);
 }

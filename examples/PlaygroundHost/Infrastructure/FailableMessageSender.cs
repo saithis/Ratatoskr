@@ -16,9 +16,11 @@ internal sealed class FailableMessageSender(
     )
     {
         if (registry.TryConsumeSendFailure(props))
+        {
             throw new InvalidOperationException(
                 "Simulated transport send failure (playground per-run policy)."
             );
+        }
 
         return inner.SendAsync(content, props, cancellationToken);
     }

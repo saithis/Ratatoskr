@@ -123,7 +123,9 @@ internal class RabbitMqRetryHandler(
     private static int GetRetryCount(IDictionary<string, object?>? headers)
     {
         if (headers == null)
+        {
             return 0;
+        }
 
         // Use x-death header to track retry attempts (automatically managed by RabbitMQ DLX)
         if (
