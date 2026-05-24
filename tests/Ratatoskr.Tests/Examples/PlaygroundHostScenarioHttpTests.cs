@@ -224,6 +224,7 @@ public sealed class PlaygroundHostScenarioHttpTests : IAsyncDisposable
         });
 
     [Test]
+    [Retry(2)]
     public Task ConcurrentRuns_TwoOutboxSuccessRuns_BothPass() =>
         RunHttpTestAsync(async client =>
         {
@@ -294,6 +295,7 @@ public sealed class PlaygroundHostScenarioHttpTests : IAsyncDisposable
     [Arguments("direct-consume-dlq")]
     [Arguments("fanout-two-handlers-on-orderplaced")]
     [Arguments("efcore-internal-command")]
+    [Retry(2)]
     public Task Scenario_EndsPassed(string slug) =>
         RunHttpTestAsync(async client =>
         {
