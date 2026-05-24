@@ -72,7 +72,7 @@ public class RabbitMqConnectionManagerTests(RabbitMqContainerFixture rabbitMq)
         // Act - Create multiple channels concurrently
         var tasks = Enumerable
             .Range(0, 5)
-            .Select(_ => manager.CreateChannelAsync(enablePublisherConfirms: false))
+            .Select(async _ => await manager.CreateChannelAsync(enablePublisherConfirms: false))
             .ToArray();
 
         var channels = await Task.WhenAll(tasks);

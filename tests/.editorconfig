@@ -23,3 +23,9 @@ dotnet_diagnostic.CA2100.severity = none
 
 # Validate arguments of public methods
 dotnet_diagnostic.CA1062.severity = none
+
+# Seal internal types
+dotnet_diagnostic.CA1852.severity = none
+
+# Identifiers should not have incorrect suffix
+dotnet_diagnostic.CA1711.severity = none

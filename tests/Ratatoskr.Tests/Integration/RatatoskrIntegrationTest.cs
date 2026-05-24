@@ -54,6 +54,11 @@ public abstract class RatatoskrIntegrationTest(
         // EnsureCreated must run before the host is built so tables exist on first poll.
         await EnsureTestDatabaseSchemaAsync();
 
+        if (_factory != null)
+        {
+            await _factory.DisposeAsync();
+        }
+
         // Custom configuration for the factory if needed
         _factory = new RatatoskrTestFactory(rabbitMq, postgres).WithWebHostBuilder(builder =>
         {
@@ -131,6 +136,8 @@ public abstract class RatatoskrIntegrationTest(
         }
 
         await DropDatabaseAsync();
+
+        GC.SuppressFinalize(this);
     }
 
     private async Task DropDatabaseAsync()

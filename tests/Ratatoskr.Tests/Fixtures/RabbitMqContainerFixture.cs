@@ -7,7 +7,7 @@ namespace Ratatoskr.Tests.Fixtures;
 /// Shared RabbitMQ container for all tests in the session.
 /// Starts once and reused across all tests for performance.
 /// </summary>
-public class RabbitMqContainerFixture : IAsyncInitializer, IAsyncDisposable
+public sealed class RabbitMqContainerFixture : IAsyncInitializer, IAsyncDisposable
 {
     private RabbitMqContainer? _container;
 

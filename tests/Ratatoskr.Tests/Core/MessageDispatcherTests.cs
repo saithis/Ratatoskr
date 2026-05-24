@@ -364,7 +364,7 @@ public class MessageDispatcherTests
         };
 
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync();
 
         // Act
         var result = await dispatcher.DispatchAsync(body, context, cts.Token, "test", "test");

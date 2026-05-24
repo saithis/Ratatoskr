@@ -84,7 +84,7 @@ public class OutboxCleanupServiceTests(
         });
 
         var options = new OutboxOptions { RetentionPeriod = retentionPeriod };
-        var service = CreateCleanupService(options);
+        using var service = CreateCleanupService(options);
 
         // Act
         var deleted = await service.CleanupAsync(CancellationToken.None);
@@ -123,7 +123,7 @@ public class OutboxCleanupServiceTests(
         _timeProvider.Advance(TimeSpan.FromDays(365));
 
         var options = new OutboxOptions { RetentionPeriod = TimeSpan.FromDays(1) };
-        var service = CreateCleanupService(options);
+        using var service = CreateCleanupService(options);
 
         // Act
         var deleted = await service.CleanupAsync(CancellationToken.None);
@@ -163,7 +163,7 @@ public class OutboxCleanupServiceTests(
         _timeProvider.Advance(TimeSpan.FromDays(365));
 
         var options = new OutboxOptions { RetentionPeriod = TimeSpan.FromDays(1) };
-        var service = CreateCleanupService(options);
+        using var service = CreateCleanupService(options);
 
         // Act
         var deleted = await service.CleanupAsync(CancellationToken.None);
@@ -212,7 +212,7 @@ public class OutboxCleanupServiceTests(
             RetentionPeriod = TimeSpan.FromDays(1),
             CleanupBatchSize = 2,
         };
-        var service = CreateCleanupService(options);
+        using var service = CreateCleanupService(options);
 
         // Act
         var deleted = await service.CleanupAsync(CancellationToken.None);
@@ -253,7 +253,7 @@ public class OutboxCleanupServiceTests(
         _timeProvider.Advance(TimeSpan.FromDays(3));
 
         var options = new OutboxOptions { RetentionPeriod = TimeSpan.FromDays(7) };
-        var service = CreateCleanupService(options);
+        using var service = CreateCleanupService(options);
 
         // Act
         var deleted = await service.CleanupAsync(CancellationToken.None);
@@ -318,7 +318,7 @@ public class OutboxCleanupServiceTests(
         _timeProvider.Advance(TimeSpan.FromDays(10));
 
         var options = new OutboxOptions { RetentionPeriod = TimeSpan.FromDays(1) };
-        var service = CreateCleanupService(options);
+        using var service = CreateCleanupService(options);
 
         // Act
         await service.CleanupAsync(CancellationToken.None);
@@ -353,7 +353,7 @@ public class OutboxCleanupServiceTests(
         _timeProvider.Advance(TimeSpan.FromDays(10));
 
         var options = new OutboxOptions { RetentionPeriod = TimeSpan.FromDays(1) };
-        var service = CreateCleanupService(options);
+        using var service = CreateCleanupService(options);
 
         // Act
         var acquired = await service.TryCleanupWithLockAsync(CancellationToken.None);
@@ -392,7 +392,7 @@ public class OutboxCleanupServiceTests(
         _timeProvider.Advance(TimeSpan.FromDays(10));
 
         var options = new OutboxOptions { RetentionPeriod = TimeSpan.FromDays(1) };
-        var service = CreateCleanupService(options);
+        using var service = CreateCleanupService(options);
 
         // Hold the lock externally
         var lockProvider = Services.GetRequiredService<IDistributedLockProvider>();

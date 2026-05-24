@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using Ratatoskr.Testing;
 
@@ -6,6 +7,11 @@ namespace Ratatoskr.Tests.Testing;
 public class MessageTrackerTests
 {
     [Test]
+    [SuppressMessage(
+        "Usage",
+        "VSTHRD003:Avoid awaiting foreign Tasks",
+        Justification = "needed for this test"
+    )]
     public async Task Clear_CancelsPendingWaiters()
     {
         // Arrange

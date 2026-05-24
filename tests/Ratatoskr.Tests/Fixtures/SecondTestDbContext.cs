@@ -7,12 +7,12 @@ namespace Ratatoskr.Tests.Fixtures;
 /// Second DbContext for multi-DbContext integration tests.
 /// Represents a separate bounded context (e.g., shipping) that has its own inbox/outbox tables.
 /// </summary>
-public class SecondTestDbContext : DbContext, IOutboxDbContext, IInboxDbContext
+public class SecondTestDbContext(DbContextOptions<SecondTestDbContext> options)
+    : DbContext(options),
+        IOutboxDbContext,
+        IInboxDbContext
 {
-    public SecondTestDbContext(DbContextOptions<SecondTestDbContext> options)
-        : base(options) { }
-
-    public DbSet<TestEntity> TestEntities { get; set; } = null;
+    public DbSet<TestEntity> TestEntities { get; set; }
 
     public OutboxStagingCollection OutboxMessages { get; } = new();
 

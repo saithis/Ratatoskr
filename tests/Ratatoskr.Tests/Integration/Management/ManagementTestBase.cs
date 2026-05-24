@@ -55,6 +55,7 @@ public abstract class ManagementTestBase(
         });
 
         await InitializeDatabase();
+        HttpClient.Dispose();
         HttpClient = CreateHttpClient();
     }
 

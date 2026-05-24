@@ -7,7 +7,7 @@ namespace Ratatoskr.Tests.Fixtures;
 /// Shared PostgreSQL container for all tests in the session.
 /// Starts once and reused across all tests for performance.
 /// </summary>
-public class PostgresContainerFixture : IAsyncInitializer, IAsyncDisposable
+public sealed class PostgresContainerFixture : IAsyncInitializer, IAsyncDisposable
 {
     private PostgreSqlContainer? _container;
 

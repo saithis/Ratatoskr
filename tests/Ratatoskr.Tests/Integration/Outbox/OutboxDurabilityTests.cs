@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -327,6 +328,11 @@ public class OutboxDurabilityTests(
     }
 
     [Test]
+    [SuppressMessage(
+        "Usage",
+        "VSTHRD003:Avoid awaiting foreign Tasks",
+        Justification = "Needed for this test"
+    )]
     public async Task Outbox_CallerCancellation_PropagatesInsteadOfRecordingFailure()
     {
         // Verifies that when the caller's cancellation token fires during send,

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -23,6 +24,11 @@ file sealed class DrainGateTestEventHandler : IMessageHandler<TestEvent>
 
     public void Release() => _release.TrySetResult();
 
+    [SuppressMessage(
+        "Usage",
+        "VSTHRD003:Avoid awaiting foreign Tasks",
+        Justification = "Needed for this test"
+    )]
     public async Task HandleAsync(
         TestEvent message,
         MessageProperties properties,
