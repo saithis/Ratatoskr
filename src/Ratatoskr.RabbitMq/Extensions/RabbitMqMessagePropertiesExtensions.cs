@@ -16,7 +16,9 @@ public static class RabbitMqMessagePropertiesExtensions
         }
 
         public string? GetExchange() =>
-            props.TransportMetadata.GetValueOrDefault(ExchangeExtensionKey);
+            props.TransportMetadata.TryGetValue(ExchangeExtensionKey, out var exchange)
+                ? exchange
+                : null;
 
         public MessageProperties SetRoutingKey(string routingKey)
         {
@@ -25,6 +27,8 @@ public static class RabbitMqMessagePropertiesExtensions
         }
 
         public string? GetRoutingKey() =>
-            props.TransportMetadata.GetValueOrDefault(RoutingKeyExtensionKey);
+            props.TransportMetadata.TryGetValue(RoutingKeyExtensionKey, out var routingKey)
+                ? routingKey
+                : null;
     }
 }

@@ -78,7 +78,7 @@ public sealed class CloudEventEnvelope
     /// Extension attributes MUST follow the same naming convention and use the same type system as standard attributes.
     /// </summary>
     [JsonExtensionData]
-    public Dictionary<string, object>? Extensions { get; init; }
+    public IDictionary<string, object>? Extensions { get; init; }
 
     public bool TryGetExtension<T>(string keyName, out T? value)
     {
