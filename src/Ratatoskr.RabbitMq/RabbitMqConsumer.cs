@@ -378,9 +378,14 @@ internal sealed partial class RabbitMqConsumer(
 
             tags = telemetry.CreateConsumeTags(ea, props, queueName);
 
-            telemetry.RecordReceived(tags, messageTime, receivedTimestamp);
+            RabbitMqTelemetry.RecordReceived(tags, messageTime, receivedTimestamp);
 
-            activity = telemetry.StartConsumeActivity(props, tags, body.Length, ea.DeliveryTag);
+            activity = RabbitMqTelemetry.StartConsumeActivity(
+                props,
+                tags,
+                body.Length,
+                ea.DeliveryTag
+            );
 
             var result = await router.RouteAsync(
                 body,

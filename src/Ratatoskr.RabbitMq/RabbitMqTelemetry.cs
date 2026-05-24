@@ -145,7 +145,7 @@ internal class RabbitMqTelemetry(RabbitMqOptions options, TimeProvider timeProvi
         };
     }
 
-    public Activity? StartConsumeActivity(
+    public static Activity? StartConsumeActivity(
         MessageProperties props,
         TagList tags,
         int bodySize,
@@ -184,7 +184,7 @@ internal class RabbitMqTelemetry(RabbitMqOptions options, TimeProvider timeProvi
         return activity;
     }
 
-    public void RecordReceived(
+    public static void RecordReceived(
         TagList tags,
         DateTimeOffset? messageTime,
         DateTimeOffset receivedTimestamp
