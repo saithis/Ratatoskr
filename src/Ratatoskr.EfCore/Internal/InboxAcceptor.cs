@@ -26,11 +26,6 @@ internal partial class InboxAcceptor<TDbContext>(
 
     public Type DbContextType => typeof(TDbContext);
 
-    [SuppressMessage(
-        "Maintainability",
-        "CA1506:AvoidExcessiveClassCoupling",
-        Justification = "Orchestrator class coordinating many components"
-    )]
     public async Task<InboxAcceptOutcome> AcceptAsync(
         byte[] body,
         MessageProperties properties,

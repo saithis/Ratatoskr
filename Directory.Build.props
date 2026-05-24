@@ -28,11 +28,6 @@
 
   <ItemGroup Condition="'$(MSBuildProjectExtension)' == '.csproj'">
     <PackageReference
-      Include="StyleCop.Analyzers"
-      PrivateAssets="all"
-      IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive"
-    />
-    <PackageReference
       Include="IDisposableAnalyzers"
       PrivateAssets="all"
       IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive"

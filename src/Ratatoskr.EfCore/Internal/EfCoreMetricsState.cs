@@ -22,11 +22,6 @@ internal class EfCoreMetricsState
     public ConcurrentDictionary<string, DbContextMetrics> ContextMetrics { get; } =
         new(StringComparer.Ordinal);
 
-    [SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1313:Parameter names should begin with lower-case letter",
-        Justification = "False positive"
-    )]
     public bool TryGetValue<TDbContext>(TDbContext _, out DbContextMetrics metrics)
         where TDbContext : DbContext
     {

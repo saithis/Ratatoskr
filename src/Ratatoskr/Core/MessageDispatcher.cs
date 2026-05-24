@@ -8,11 +8,6 @@ namespace Ratatoskr.Core;
 /// Dispatches incoming messages to registered fire-and-forget handlers for the given channel.
 /// Uses <see cref="ChannelHandlerRegistry"/> for handler lookup instead of DI discovery.
 /// </summary>
-[SuppressMessage(
-    "Maintainability",
-    "CA1506:AvoidExcessiveClassCoupling",
-    Justification = "Orchestrator class coordinating many components"
-)]
 public sealed partial class MessageDispatcher(
     ChannelRegistry channelRegistry,
     ChannelHandlerRegistry channelHandlerRegistry,
