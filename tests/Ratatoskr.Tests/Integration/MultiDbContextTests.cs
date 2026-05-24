@@ -342,8 +342,6 @@ public class MultiDbContextTests(
             });
 
             // Manually register outbox components for both DbContexts (without hosted services)
-            services.AddSingleton<OutboxTelemetry>();
-            services.AddSingleton<EfCoreTelemetry>();
             services.AddSingleton<IMessageSender, EfCoreMessageSender>();
 
             services.AddSingleton(

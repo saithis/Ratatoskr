@@ -6,7 +6,7 @@ namespace Ratatoskr.EfCore.Internal;
 /// <summary>
 /// Centralizes all OpenTelemetry instrumentation (tracing and metrics) for the inbox processor.
 /// </summary>
-internal class InboxTelemetry
+internal static class InboxTelemetry
 {
     /// <summary>
     /// Starts a "deliver inbox" activity, restoring trace context from the message properties.

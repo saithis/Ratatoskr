@@ -7,7 +7,7 @@ namespace Ratatoskr.EfCore.Internal;
 /// Centralizes all OpenTelemetry instrumentation (tracing and metrics) for the EF Core transport.
 /// Covers the send (producer) side — messages written directly to inbox tables.
 /// </summary>
-internal class EfCoreTelemetry
+internal static class EfCoreTelemetry
 {
     /// <summary>
     /// Starts a "send efcore" activity and sets trace context on the message properties.

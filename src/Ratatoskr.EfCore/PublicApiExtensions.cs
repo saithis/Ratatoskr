@@ -101,7 +101,6 @@ public static class PublicApiExtensions
             ratatoskrBuilder.Services.AddSingleton(
                 new InboxOptionsHolder<TDbContext>(inboxBuilder.Options)
             );
-            ratatoskrBuilder.Services.TryAddSingleton<InboxTelemetry>();
             ratatoskrBuilder.Services.AddTransient<InboxMessageProcessor<TDbContext>>();
             ratatoskrBuilder.Services.AddSingleton<InboxProcessor<TDbContext>>();
             ratatoskrBuilder.Services.AddSingleton<IProcessorTrigger>(sp =>
@@ -144,7 +143,6 @@ public static class PublicApiExtensions
             }
 
             // EF Core transport services (registered once, idempotent)
-            ratatoskrBuilder.Services.TryAddSingleton<EfCoreTelemetry>();
             ratatoskrBuilder.Services.TryAddEnumerable(
                 ServiceDescriptor.Singleton<IMessageSender, EfCoreMessageSender>()
             );
@@ -198,10 +196,8 @@ public static class PublicApiExtensions
             ratatoskrBuilder.Services.AddSingleton(
                 new OutboxOptionsHolder<TDbContext>(outboxBuilder.Options)
             );
-            ratatoskrBuilder.Services.TryAddSingleton<OutboxTelemetry>();
 
             // EF Core transport services (registered once, idempotent — needed for outbox-only setups too)
-            ratatoskrBuilder.Services.TryAddSingleton<EfCoreTelemetry>();
             ratatoskrBuilder.Services.TryAddEnumerable(
                 ServiceDescriptor.Singleton<IMessageSender, EfCoreMessageSender>()
             );

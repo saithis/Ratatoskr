@@ -158,7 +158,6 @@ public class OutboxProcessingTests(
                 );
             });
             // Register outbox processor without hosted service for manual control
-            services.AddSingleton<OutboxTelemetry>();
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
@@ -261,7 +260,6 @@ public class OutboxProcessingTests(
                 );
             });
             // Register outbox processor without hosted service for manual control
-            services.AddSingleton<OutboxTelemetry>();
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();

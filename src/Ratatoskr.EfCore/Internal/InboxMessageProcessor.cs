@@ -15,7 +15,6 @@ internal class InboxMessageProcessor<TDbContext>(
     TDbContext dbContext,
     HandlerInvoker handlerInvoker,
     ChannelHandlerRegistry channelHandlerRegistry,
-    InboxTelemetry telemetry,
     TimeProvider timeProvider,
     InboxOptionsHolder<TDbContext> optionsHolder,
     IEnumerable<IMessageActivityObserver> observers,

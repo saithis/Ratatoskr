@@ -13,7 +13,6 @@ namespace Ratatoskr.EfCore.Internal;
 internal class OutboxMessageProcessor<TDbContext>(
     TDbContext dbContext,
     IEnumerable<IMessageSender> senders,
-    OutboxTelemetry telemetry,
     TimeProvider timeProvider,
     OutboxOptionsHolder<TDbContext> optionsHolder,
     IEnumerable<IMessageActivityObserver> observers,
