@@ -19,8 +19,9 @@ namespace Ratatoskr.Tests.Integration.Management;
 public abstract class ManagementTestBase(
     RabbitMqContainerFixture rabbitMq,
     PostgresContainerFixture postgres
-) : RatatoskrIntegrationTest(rabbitMq, postgres)
+) : RatatoskrIntegrationTest(rabbitMq, postgres), IDisposable
 {
+    private bool _disposed;
     protected HttpClient HttpClient { get; private set; } = null!;
 
     protected async Task StartManagementTestAsync(Action<IServiceCollection>? configure = null)
@@ -55,8 +56,40 @@ public abstract class ManagementTestBase(
         });
 
         await InitializeDatabase();
-        HttpClient.Dispose();
+        HttpClient?.Dispose();
         HttpClient = CreateHttpClient();
+    }
+
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            HttpClient?.Dispose();
+        }
+
+        _disposed = true;
+    }
+
+    protected override async ValueTask DisposeAsyncCore()
+    {
+        if (!_disposed)
+        {
+            _disposed = true;
+            HttpClient?.Dispose();
+        }
+
+        await base.DisposeAsyncCore();
     }
 
     /// <summary>Seeds a poisoned outbox message and returns its ID.</summary>

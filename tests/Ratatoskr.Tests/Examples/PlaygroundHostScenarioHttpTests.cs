@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Threading;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Npgsql;
@@ -16,8 +17,8 @@ public sealed class PlaygroundHostScenarioHttpTests(
     PostgresContainerFixture postgres
 ) : IAsyncDisposable
 {
-    private static WebApplicationFactory<PlaygroundHostAppMarker>? _sharedFactory;
     private static readonly SemaphoreSlim _factoryLock = new(1, 1);
+    private static WebApplicationFactory<PlaygroundHostAppMarker>? _sharedFactory;
 
     private static async Task CreateDatabaseAsync(
         string maintenanceConnectionString,
@@ -44,21 +45,28 @@ public sealed class PlaygroundHostScenarioHttpTests(
         return b.ToString();
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Reliability",
+        "CA2000:Dispose objects before losing scope",
+        Justification = "WebApplicationFactory ownership is transferred to _sharedFactory and disposed in DisposeAsync."
+    )]
     private async Task<
         WebApplicationFactory<PlaygroundHostAppMarker>
     > GetOrCreateSharedFactoryAsync()
     {
-        if (_sharedFactory is not null)
+        var existing = Volatile.Read(ref _sharedFactory);
+        if (existing is not null)
         {
-            return _sharedFactory;
+            return existing;
         }
 
         await _factoryLock.WaitAsync();
         try
         {
-            if (_sharedFactory is not null)
+            existing = Volatile.Read(ref _sharedFactory);
+            if (existing is not null)
             {
-                return _sharedFactory;
+                return existing;
             }
 
             var testId = "shared";
@@ -83,8 +91,8 @@ public sealed class PlaygroundHostScenarioHttpTests(
                 Database = playDb,
             }.ToString();
 
-            _sharedFactory =
-                new WebApplicationFactory<PlaygroundHostAppMarker>().WithWebHostBuilder(builder =>
+            var factory = new WebApplicationFactory<PlaygroundHostAppMarker>().WithWebHostBuilder(
+                builder =>
                 {
                     builder.UseSetting("ConnectionStrings:rabbitmq", rabbit.ConnectionString);
                     builder.UseSetting("ConnectionStrings:publisherdb", pubCs);
@@ -92,13 +100,15 @@ public sealed class PlaygroundHostScenarioHttpTests(
                     builder.UseSetting("ConnectionStrings:playgrounddb", playCs);
                     builder.UseSetting("Playground:Enabled", "true");
                     builder.UseSetting("ASPNETCORE_ENVIRONMENT", "Development");
-                });
+                }
+            );
 
             // WebApplicationFactory.EnsureServer is not safe against concurrent first access; parallel tests can
             // otherwise both start the deferred host and race EnsureCreated on the same databases (42P07).
-            _ = _sharedFactory.Server;
+            _ = factory.Server;
 
-            return _sharedFactory;
+            Volatile.Write(ref _sharedFactory, factory);
+            return factory;
         }
         finally
         {
@@ -109,9 +119,26 @@ public sealed class PlaygroundHostScenarioHttpTests(
     private async Task<HttpClient> GetClientAsync() =>
         (await GetOrCreateSharedFactoryAsync()).CreateClient();
 
-    public ValueTask DisposeAsync()
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Usage",
+        "IDISP007:Don't dispose injected",
+        Justification = "_sharedFactory is a session-scoped static resource owned by this test class, not DI-injected."
+    )]
+    public async ValueTask DisposeAsync()
     {
-        return ValueTask.CompletedTask;
+        await _factoryLock.WaitAsync();
+        try
+        {
+            if (_sharedFactory is not null)
+            {
+                await _sharedFactory.DisposeAsync();
+                _sharedFactory = null;
+            }
+        }
+        finally
+        {
+            _factoryLock.Release();
+        }
     }
 
     private static async Task<ScenarioRunStatusDto> WaitForTerminalAsync(
@@ -253,6 +280,11 @@ public sealed class PlaygroundHostScenarioHttpTests(
         runRes.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Reliability",
+        "CA2000:Dispose objects before losing scope",
+        Justification = "WebApplicationFactory is disposed via await using for this isolated host configuration."
+    )]
     [Test]
     public async Task BlockingHold_WithConfiguredRunTimeout_TerminatesAsTimedOut()
     {

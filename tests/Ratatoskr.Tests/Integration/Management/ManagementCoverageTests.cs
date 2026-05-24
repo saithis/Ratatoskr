@@ -54,7 +54,7 @@ public class ManagementCoverageTests(
             response.StatusCode.Should().Be(HttpStatusCode.OK);
             var body = await response.Content.ReadFromJsonAsync<JsonElement>();
 
-            var items = body.GetProperty("items").EnumerateArray().ToList();
+            var items = body.GetProperty("items").ToElementList();
             collected.AddRange(items.Select(i => i.GetProperty("id").GetGuid()));
 
             firstTotalCount ??= body.GetProperty("totalCount").GetInt64();
@@ -132,7 +132,7 @@ public class ManagementCoverageTests(
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        var items = body.GetProperty("items").EnumerateArray().ToList();
+        var items = body.GetProperty("items").ToElementList();
         items.Should().HaveCount(1);
         items[0].GetProperty("messageType").GetString().Should().Be("order.placed");
         body.GetProperty("totalCount").GetInt64().Should().Be(1);

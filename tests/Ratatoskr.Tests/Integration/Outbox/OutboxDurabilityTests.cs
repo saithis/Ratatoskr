@@ -338,7 +338,6 @@ public class OutboxDurabilityTests(
         // Verifies that when the caller's cancellation token fires during send,
         // the OperationCanceledException propagates (not treated as a transport failure).
         var fakeTime = new FakeTimeProvider(new DateTimeOffset(2023, 1, 1, 0, 0, 0, TimeSpan.Zero));
-        var blockingSender = new BlockingMessageSender(RabbitMqConstants.TransportName);
 
         await StartTestAsync(services =>
         {
@@ -364,10 +363,14 @@ public class OutboxDurabilityTests(
                 }
             );
             services.RemoveAll<IMessageSender>();
-            services.AddSingleton<IMessageSender>(blockingSender);
+            services.AddSingleton<BlockingMessageSender>();
+            services.AddSingleton<IMessageSender>(sp =>
+                sp.GetRequiredService<BlockingMessageSender>()
+            );
         });
 
         await InitializeDatabase();
+        var blockingSender = Services.GetRequiredService<BlockingMessageSender>();
 
         // Stage a message
         await InScopeAsync(async ctx =>
@@ -856,7 +859,7 @@ public class OutboxDurabilityTests(
     /// Sender that blocks until explicitly unblocked, propagating the cancellation token.
     /// Used to test caller cancellation behavior.
     /// </summary>
-    private class BlockingMessageSender(string transportName) : IMessageSender
+    private sealed class BlockingMessageSender(string transportName) : IMessageSender, IDisposable
     {
         private readonly SemaphoreSlim _sendStarted = new(0, 1);
         private readonly SemaphoreSlim _gate = new(0, 1);
@@ -874,6 +877,12 @@ public class OutboxDurabilityTests(
             _sendStarted.Release();
             await _gate.WaitAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        public void Dispose()
+        {
+            _sendStarted.Dispose();
+            _gate.Dispose();
         }
     }
 }

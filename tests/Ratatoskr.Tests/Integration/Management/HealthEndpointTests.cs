@@ -81,7 +81,7 @@ public class HealthEndpointTests(
         body.TryGetProperty("contexts", out var contexts).Should().BeTrue();
         contexts.GetArrayLength().Should().BeGreaterThan(0);
 
-        var first = contexts.EnumerateArray().First();
+        var first = contexts.FirstElement();
         first.GetProperty("name").GetString().Should().Be("TestDbContext");
         first.GetProperty("hasOutbox").GetBoolean().Should().BeTrue();
         first.GetProperty("hasInbox").GetBoolean().Should().BeTrue();

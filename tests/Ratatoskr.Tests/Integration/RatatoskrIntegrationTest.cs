@@ -47,6 +47,11 @@ public abstract class RatatoskrIntegrationTest(
         }
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Reliability",
+        "CA2000:Dispose objects before losing scope",
+        Justification = "WebApplicationFactory ownership is transferred to _factory and disposed in DisposeAsyncCore."
+    )]
     public virtual async Task StartTestAsync(Action<IServiceCollection>? configure = null)
     {
         await CreateDatabaseAsync();
@@ -57,10 +62,10 @@ public abstract class RatatoskrIntegrationTest(
         if (_factory != null)
         {
             await _factory.DisposeAsync();
+            _factory = null;
         }
 
-        // Custom configuration for the factory if needed
-        _factory = new RatatoskrTestFactory(rabbitMq, postgres).WithWebHostBuilder(builder =>
+        var factory = new RatatoskrTestFactory(rabbitMq, postgres).WithWebHostBuilder(builder =>
         {
             builder.ConfigureServices(services =>
             {
@@ -68,6 +73,7 @@ public abstract class RatatoskrIntegrationTest(
                 configure?.Invoke(services);
             });
         });
+        _factory = factory;
 
         // Create the scope from the factory's services
         using var scope = _factory.Services.CreateScope();
@@ -130,14 +136,19 @@ public abstract class RatatoskrIntegrationTest(
 
     public async ValueTask DisposeAsync()
     {
+        await DisposeAsyncCore();
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual async ValueTask DisposeAsyncCore()
+    {
         if (_factory != null)
         {
             await _factory.DisposeAsync();
+            _factory = null;
         }
 
         await DropDatabaseAsync();
-
-        GC.SuppressFinalize(this);
     }
 
     private async Task DropDatabaseAsync()
@@ -222,7 +233,9 @@ public abstract class RatatoskrIntegrationTest(
                         typeof(T)
                     )
                     ?.Type
-                ?? throw new NullReferenceException(),
+                ?? throw new InvalidOperationException(
+                    $"Message type is required for {typeof(T).Name}."
+                ),
             ContentType = "application/json",
             DeliveryMode = DeliveryModes.Persistent,
         };

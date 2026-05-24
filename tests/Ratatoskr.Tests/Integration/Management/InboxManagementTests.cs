@@ -275,7 +275,7 @@ public class InboxManagementTests(
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        var items = body.GetProperty("items").EnumerateArray().ToList();
+        var items = body.GetProperty("items").ToElementList();
         items.Should().NotBeEmpty();
         items
             .Should()
