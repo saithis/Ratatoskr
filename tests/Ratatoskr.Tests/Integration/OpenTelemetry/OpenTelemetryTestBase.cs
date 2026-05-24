@@ -73,25 +73,25 @@ public abstract class OpenTelemetryTestBase(
         );
     }
 
-    protected IEnumerable<(
+    protected (
         string InstrumentName,
         double Value,
         KeyValuePair<string, object?>[] Tags
-    )> GetRelevantMetrics(
+    )[] GetRelevantMetrics(
         IEnumerable<(
             string InstrumentName,
             double Value,
             KeyValuePair<string, object?>[] Tags
         )> metrics,
         string exchangeName
-    )
-    {
-        return metrics.Where(m =>
-            m.Tags.Any(t =>
-                t.Key == "messaging.destination.name" && (string?)t.Value == exchangeName
+    ) =>
+        metrics
+            .Where(m =>
+                m.Tags.Any(t =>
+                    t.Key == "messaging.destination.name" && (string?)t.Value == exchangeName
+                )
             )
-        );
-    }
+            .ToArray();
 
     protected MeterListener CreateMeterListener(
         ConcurrentBag<(
