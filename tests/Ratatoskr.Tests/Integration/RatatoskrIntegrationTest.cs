@@ -98,7 +98,7 @@ public abstract class RatatoskrIntegrationTest(
     protected virtual void ConfigureServices(IServiceCollection services)
     {
         services.AddLogging();
-        services.AddSingleton<TimeProvider>(TimeProvider.System);
+        services.AddSingleton(TimeProvider.System);
 
         var lockFileDirectory = new DirectoryInfo(
             Path.Combine(Environment.CurrentDirectory, TestId)
@@ -178,7 +178,7 @@ public abstract class RatatoskrIntegrationTest(
     protected async Task<TRes> InScopeAsync<TRes>(Func<ScopeContext, Task<TRes>> arrange)
     {
         using var scope = _factory.Services.CreateScope();
-        TRes result = await arrange(new ScopeContext { ServiceProvider = scope.ServiceProvider });
+        var result = await arrange(new ScopeContext { ServiceProvider = scope.ServiceProvider });
         return result;
     }
 
@@ -186,7 +186,7 @@ public abstract class RatatoskrIntegrationTest(
     {
         return await InScopeAsync(ctx =>
         {
-            TRes result = arrange(ctx);
+            var result = arrange(ctx);
             return Task.FromResult(result);
         });
     }

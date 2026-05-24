@@ -21,7 +21,7 @@ internal class OutboxTriggerInterceptor<TDbContext>(
     where TDbContext : DbContext, IOutboxDbContext
 {
     private readonly OutboxOptions _options = optionsHolder.Options;
-    private readonly IMessageActivityObserver[] _observers = observers.ToArray();
+    private readonly IMessageActivityObserver[] _observers = [.. observers];
 
     // Per-DbContext state for flags set in SavingChangesAsync and read in SavedChangesAsync.
     // ConditionalWeakTable ensures no memory leak — entries are collected when the DbContext is GC'd.
@@ -40,7 +40,7 @@ internal class OutboxTriggerInterceptor<TDbContext>(
         CancellationToken cancellationToken = default
     )
     {
-        DbContext? context = eventData.Context;
+        var context = eventData.Context;
         if (context == null)
         {
             return result;

@@ -66,12 +66,12 @@ public class RabbitMqChannelOptions
 
     /// <summary>
     /// Whether the queue is deleted when the last consumer disconnects. Default: false.
-    /// Not supported with <see cref="Config.QueueType.Quorum"/> queues.
+    /// Not supported with <see cref="QueueType.Quorum"/> queues.
     /// </summary>
     public bool QueueAutoDelete { get; private set; } = false;
 
     /// <summary>
-    /// The queue implementation type. Default: <see cref="Config.QueueType.Quorum"/>.
+    /// The queue implementation type. Default: <see cref="QueueType.Quorum"/>.
     /// </summary>
     public QueueType QueueType { get; private set; } = QueueType.Quorum;
 

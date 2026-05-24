@@ -97,7 +97,7 @@ public class CloudEventsAmqpMapperOutgoingTests
         // Assert
         var envelope = JsonSerializer.Deserialize<CloudEventEnvelope>(result);
         envelope.Should().NotBeNull();
-        envelope!.Id.Should().Be("evt-123");
+        envelope.Id.Should().Be("evt-123");
         envelope.Source.Should().Be("/orders-service");
         envelope.Type.Should().Be("order.created");
         envelope.SpecVersion.Should().Be("1.0");
@@ -261,7 +261,7 @@ public class CloudEventsAmqpMapperOutgoingTests
         var envelope = JsonSerializer.Deserialize<CloudEventEnvelope>(result);
 
         envelope.Should().NotBeNull();
-        envelope!.TryGetExtension<string>("traceparent", out var traceParent).Should().BeTrue();
+        envelope.TryGetExtension<string>("traceparent", out var traceParent).Should().BeTrue();
         traceParent.Should().Be("00-struct-traceparent-01");
         envelope.TryGetExtension<string>("tracestate", out var traceState).Should().BeTrue();
         traceState.Should().Be("struct=true");
@@ -318,7 +318,7 @@ public class CloudEventsAmqpMapperOutgoingTests
         // The cloudEvents-prefixed user headers should not appear as-is
         // (they would conflict with the protocol-level cloudEvents_ headers)
         var userCustomHeaders = outgoing
-            .Headers.Keys.Where(k => k == "cloudEvents_custom" || k == "cloudEvents:custom")
+            .Headers.Keys.Where(k => k is "cloudEvents_custom" or "cloudEvents:custom")
             .ToList();
         userCustomHeaders.Should().BeEmpty();
     }

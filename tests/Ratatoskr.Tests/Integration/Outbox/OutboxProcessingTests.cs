@@ -7,10 +7,8 @@ using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.RabbitMq;
-using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Tests.Fixtures;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.Integration.Outbox;
 
@@ -71,7 +69,7 @@ public class OutboxProcessingTests(
             var deserialized = serializer.Deserialize<TestEvent>(entity.Content);
 
             deserialized.Should().NotBeNull();
-            deserialized!.Id.Should().Be("outbox-pipe-1");
+            deserialized.Id.Should().Be("outbox-pipe-1");
             deserialized.Data.Should().Be("custom-body");
             entity.GetProperties().ContentType.Should().Be(serializer.ContentType);
         });

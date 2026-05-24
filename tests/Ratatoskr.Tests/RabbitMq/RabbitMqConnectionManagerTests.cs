@@ -1,7 +1,6 @@
 using AwesomeAssertions;
 using Ratatoskr.RabbitMq;
 using Ratatoskr.Tests.Fixtures;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.RabbitMq;
 

@@ -6,7 +6,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore.Internal;
-using Ratatoskr.EfCore.Management;
 using Ratatoskr.EfCore.Management.Endpoints.Outbox;
 using Ratatoskr.Tests.Fixtures;
 
@@ -46,7 +45,7 @@ public class OutboxManagementTests(
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
             var props = new MessageProperties { Type = "normal.event" };
-            var content = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new { });
+            var content = JsonSerializer.SerializeToUtf8Bytes(new { });
             var entity = OutboxMessageEntity.Create(content, props, time, "efcore");
             db.Set<OutboxMessageEntity>().Add(entity);
             await db.SaveChangesAsync();
@@ -157,7 +156,7 @@ public class OutboxManagementTests(
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
             var props = new MessageProperties { Type = "normal.event" };
-            var content = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new { });
+            var content = JsonSerializer.SerializeToUtf8Bytes(new { });
             var entity = OutboxMessageEntity.Create(content, props, time, "efcore");
             db.Set<OutboxMessageEntity>().Add(entity);
             await db.SaveChangesAsync();

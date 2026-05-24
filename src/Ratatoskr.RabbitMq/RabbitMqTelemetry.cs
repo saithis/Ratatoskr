@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using RabbitMQ.Client.Events;
 using Ratatoskr.Core;
-using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 
 namespace Ratatoskr.RabbitMq;

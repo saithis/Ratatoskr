@@ -46,16 +46,13 @@ internal class EfCoreMessageSender(
 
             foreach (var (channel, _) in consumeChannels)
             {
-                var inboxConfig = channel.GetExtension<ChannelInboxConfig>();
-                if (inboxConfig == null)
-                {
-                    throw new InvalidOperationException(
+                var inboxConfig =
+                    channel.GetExtension<ChannelInboxConfig>()
+                    ?? throw new InvalidOperationException(
                         $"Channel '{channel.ChannelName}' has no inbox configured. "
                             + $"The EF Core transport requires UseInbox<TDbContext>() on all consume channels. "
                             + $"Either add UseInbox<TDbContext>() or use a different transport."
                     );
-                }
-
                 if (!_acceptorMap.TryGetValue(inboxConfig.DbContextType, out var acceptor))
                 {
                     throw new InvalidOperationException(

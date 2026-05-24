@@ -84,12 +84,11 @@ internal abstract class PollingBackgroundService(
     private async Task ProcessWithLockAsync(CancellationToken stoppingToken)
     {
         logger.LogDebug("Trying to acquire distributed lock '{LockName}'", LockName);
-        await using IDistributedSynchronizationHandle? dLock =
-            await distributedLockProvider.TryAcquireLockAsync(
-                LockName,
-                LockAcquireTimeout,
-                stoppingToken
-            );
+        await using var dLock = await distributedLockProvider.TryAcquireLockAsync(
+            LockName,
+            LockAcquireTimeout,
+            stoppingToken
+        );
 
         if (dLock == null)
         {

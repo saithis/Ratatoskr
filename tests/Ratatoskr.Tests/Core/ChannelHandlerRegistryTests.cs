@@ -1,9 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
-using Ratatoskr.Config;
 using Ratatoskr.Core;
 using Ratatoskr.Tests.Fixtures;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.Core;
 
@@ -84,7 +82,7 @@ public class ChannelHandlerRegistryTests
         // Assert
         var handler = registry.GetInboxRegistrationByKey("handler-key");
         handler.Should().NotBeNull();
-        handler!.HandlerType.Should().Be(typeof(TestEventHandler));
+        handler.HandlerType.Should().Be(typeof(TestEventHandler));
         handler.InboxKey.Should().Be("handler-key");
     }
 

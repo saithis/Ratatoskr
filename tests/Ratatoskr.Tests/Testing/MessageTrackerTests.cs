@@ -28,7 +28,7 @@ public class MessageTrackerTests
         var tracker = new MessageTracker();
 
         // Act & Assert
-        var act = () => tracker.Clear();
+        var act = tracker.Clear;
         act.Should().NotThrow();
     }
 }

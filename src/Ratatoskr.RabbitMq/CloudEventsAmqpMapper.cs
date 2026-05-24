@@ -417,11 +417,9 @@ public class CloudEventsAmqpMapper(
     )
     {
         // Parse CloudEvents envelope
-        var cloudEvent = JsonSerializer.Deserialize<CloudEventEnvelope>(incoming.Body.ToArray());
-        if (cloudEvent == null)
-        {
-            throw new InvalidOperationException("Failed to deserialize CloudEvents envelope");
-        }
+        var cloudEvent =
+            JsonSerializer.Deserialize<CloudEventEnvelope>(incoming.Body.ToArray())
+            ?? throw new InvalidOperationException("Failed to deserialize CloudEvents envelope");
 
         // Extract data and re-serialize it for the deserializer
         byte[] dataBytes;

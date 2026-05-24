@@ -6,7 +6,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using Ratatoskr.CloudEvents;
-using Ratatoskr.Core;
 using Ratatoskr.RabbitMq;
 
 namespace Ratatoskr.Tests.RabbitMq;

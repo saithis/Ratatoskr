@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using PlaygroundHost.Infrastructure.ScenarioRunning;
 using PlaygroundHost.Scenarios.DirectConsume;
 using PlaygroundHost.Scenarios.Inbox;

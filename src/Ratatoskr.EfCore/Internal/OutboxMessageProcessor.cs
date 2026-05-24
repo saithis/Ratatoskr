@@ -21,7 +21,7 @@ internal class OutboxMessageProcessor<TDbContext>(
     where TDbContext : DbContext, IOutboxDbContext
 {
     private readonly OutboxOptions _options = optionsHolder.Options;
-    private Dictionary<string, IMessageSender> _senderMap = senders.ToDictionary(x =>
+    private readonly Dictionary<string, IMessageSender> _senderMap = senders.ToDictionary(x =>
         x.TransportName
     );
 
@@ -95,7 +95,7 @@ internal class OutboxMessageProcessor<TDbContext>(
 
                 OutboxMessageProcessorLog.SkippedConflicts(logger, conflictIds.Count);
 
-                messages = messages.Where(m => !conflictIds.Contains(m.Id)).ToArray();
+                messages = [.. messages.Where(m => !conflictIds.Contains(m.Id))];
                 if (messages.Length == 0)
                 {
                     return 0;

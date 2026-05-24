@@ -9,7 +9,6 @@ using Ratatoskr.RabbitMq;
 using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Tests.Fixtures;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.Integration.Outbox;
 
@@ -64,7 +63,7 @@ public class OutboxBasicTests(RabbitMqContainerFixture rabbitMq, PostgresContain
         // Assert - Wait for the background processor to deliver the message
         var message = await WaitForMessageAsync(QueueName);
         message.Should().NotBeNull();
-        message!.RoutingKey.Should().Be(DefaultRoutingKey);
+        message.RoutingKey.Should().Be(DefaultRoutingKey);
         Encoding.UTF8.GetString(message.Body.ToArray()).Should().Contain("outbox-1");
     }
 
@@ -75,7 +74,7 @@ public class OutboxBasicTests(RabbitMqContainerFixture rabbitMq, PostgresContain
         var handler = new TestEventHandler();
         await StartTestAsync(services =>
         {
-            services.AddSingleton<TestEventHandler>(handler);
+            services.AddSingleton(handler);
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));

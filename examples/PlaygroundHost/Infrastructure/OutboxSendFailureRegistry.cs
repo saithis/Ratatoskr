@@ -74,7 +74,7 @@ public sealed class OutboxSendFailureRegistry
     private sealed class Policy
     {
         private readonly Lock _lock = new();
-        private OutboxSendFailureKind _mode;
+        private readonly OutboxSendFailureKind _mode;
         private int _failuresRemaining;
 
         public Policy(OutboxSendFailureKind mode, int failuresRemaining)

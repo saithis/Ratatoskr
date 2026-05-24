@@ -5,7 +5,6 @@ using Microsoft.Extensions.DependencyInjection;
 using RabbitMQ.Client;
 using Ratatoskr.CloudEvents;
 using Ratatoskr.Config;
-using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.RabbitMq.Config;
@@ -27,7 +26,7 @@ public class ConsumeTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
 
         await StartTestAsync(services =>
         {
-            services.AddSingleton<TestEventHandler>(handler);
+            services.AddSingleton(handler);
             services.AddRatatoskr(bus =>
             {
                 ConfigureBus(bus, QueueName, c => c.WithHandler<TestEventHandler>());
@@ -59,8 +58,8 @@ public class ConsumeTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
 
         await StartTestAsync(services =>
         {
-            services.AddSingleton<TestEventHandler>(handler1);
-            services.AddSingleton<SecondTestEventHandler>(handler2);
+            services.AddSingleton(handler1);
+            services.AddSingleton(handler2);
             services.AddRatatoskr(bus =>
             {
                 ConfigureBus(
@@ -94,7 +93,7 @@ public class ConsumeTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
         var handler = new TestEventHandler();
         await StartTestAsync(services =>
         {
-            services.AddSingleton<TestEventHandler>(handler);
+            services.AddSingleton(handler);
             services.AddRatatoskr(bus =>
             {
                 ConfigureBus(bus, QueueName, c => c.WithHandler<TestEventHandler>());
@@ -124,7 +123,7 @@ public class ConsumeTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
         var handler = new TestEventHandler();
         await StartTestAsync(services =>
         {
-            services.AddSingleton<TestEventHandler>(handler);
+            services.AddSingleton(handler);
             services.AddRatatoskr(bus =>
             {
                 ConfigureBus(bus, QueueName, c => c.WithHandler<TestEventHandler>());
@@ -154,7 +153,7 @@ public class ConsumeTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
         var handler = new TestEventHandler();
         await StartTestAsync(services =>
         {
-            services.AddSingleton<TestEventHandler>(handler);
+            services.AddSingleton(handler);
             services.AddSingleton<TestEventPipeMessageSerializer>();
             services.AddRatatoskr(bus =>
             {
@@ -210,7 +209,7 @@ public class ConsumeTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
 
         await StartTestAsync(services =>
         {
-            services.AddSingleton<TestEventHandler>(handler);
+            services.AddSingleton(handler);
             services.AddRatatoskr(bus =>
             {
                 ConfigureBusWithRetry(
@@ -248,7 +247,7 @@ public class ConsumeTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
 
         await StartTestAsync(services =>
         {
-            services.AddSingleton<TestEventHandler>(handler);
+            services.AddSingleton(handler);
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o =>
@@ -300,7 +299,7 @@ public class ConsumeTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
 
         await StartTestAsync(services =>
         {
-            services.AddSingleton<ThrowingTestEventHandler>(handler);
+            services.AddSingleton(handler);
             services.AddRatatoskr(bus =>
             {
                 ConfigureBusWithRetry(
@@ -409,7 +408,7 @@ public class ConsumeTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
                         .WithTransientQueue()
                         .WithQueueType(QueueType.Classic)
                 );
-                var channel = c.Consumes<TestEvent>(configureHandler);
+                var channel = c.Consumes(configureHandler);
                 if (configureInbox != null)
                 {
                     channel.UseInbox<TestDbContext>();
@@ -443,7 +442,7 @@ public class ConsumeTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
                         .WithTransientQueue()
                         .WithQueueType(QueueType.Classic)
                 );
-                c.Consumes<TestEvent>(configureHandler);
+                c.Consumes(configureHandler);
             }
         );
     }

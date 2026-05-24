@@ -419,7 +419,7 @@ public class AsyncApiDocumentGeneratorTests
 
         var channel = document.Channels["events.topic"];
         channel.Servers.Should().NotBeNull();
-        channel.Servers!.Count.Should().Be(1);
+        channel.Servers.Count.Should().Be(1);
     }
 
     [Test]
@@ -439,7 +439,7 @@ public class AsyncApiDocumentGeneratorTests
 
         var op = document.Operations["sendOrderCreatedEvent"];
         op.Tags.Should().NotBeNull();
-        op.Tags!.Count.Should().Be(2);
+        op.Tags.Count.Should().Be(2);
         op.Tags[0].Name.Should().Be("orders");
         op.Tags[1].Name.Should().Be("lifecycle");
     }

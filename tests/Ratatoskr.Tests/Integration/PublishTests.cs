@@ -86,7 +86,7 @@ public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
         var message = await GetMessageAsync(queueName);
         message.Should().NotBeNull();
 
-        message!.BasicProperties.Headers.Should().NotBeNull();
+        message.BasicProperties.Headers.Should().NotBeNull();
         message.BasicProperties.Headers.Should().ContainKey("cloudEvents_specversion");
         message.BasicProperties.Headers.Should().ContainKey("cloudEvents_type");
     }
@@ -125,7 +125,7 @@ public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
         var message = await GetMessageAsync(queueName);
         message.Should().NotBeNull();
 
-        var body = Encoding.UTF8.GetString(message!.Body.ToArray());
+        var body = Encoding.UTF8.GetString(message.Body.ToArray());
         body.Should().Contain("\"specversion\"");
         body.Should().Contain("\"data\"");
         body.Should().Contain("structured mode");
@@ -165,7 +165,7 @@ public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
         var message = await GetMessageAsync(queueName);
         message.Should().NotBeNull();
 
-        var body = Encoding.UTF8.GetString(message!.Body.ToArray());
+        var body = Encoding.UTF8.GetString(message.Body.ToArray());
         body.Should().Contain("custom route");
     }
 
@@ -178,7 +178,7 @@ public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
 
         await StartTestAsync(services =>
         {
-            services.AddSingleton<ContextCapturingHandler>(handler);
+            services.AddSingleton(handler);
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
@@ -206,7 +206,7 @@ public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
         // Assert - Verify properties are preserved
         await WaitForConditionAsync(() => handler.CapturedContext != null, TimeSpan.FromSeconds(5));
         handler.CapturedContext.Should().NotBeNull();
-        handler.CapturedContext!.Subject.Should().Be("order-123");
+        handler.CapturedContext.Subject.Should().Be("order-123");
         handler.CapturedContext.Type.Should().Be("test.event");
     }
 

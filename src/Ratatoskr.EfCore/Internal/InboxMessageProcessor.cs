@@ -102,7 +102,7 @@ internal class InboxMessageProcessor<TDbContext>(
 
                 InboxMessageProcessorLog.SkippedConflicts(logger, conflictIds.Count);
 
-                statuses = statuses.Where(s => !conflictIds.Contains(s.Id)).ToArray();
+                statuses = [.. statuses.Where(s => !conflictIds.Contains(s.Id))];
                 if (statuses.Length == 0)
                 {
                     return 0;

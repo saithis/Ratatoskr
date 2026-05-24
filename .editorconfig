@@ -1773,7 +1773,7 @@ dotnet_diagnostic.IDE0057.severity = suggestion
 # Remove unnecessary expression value
 # Examples in Rock Your Code: Coding Standards for Microsoft .NET
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
-dotnet_diagnostic.IDE0058.severity = warning
+dotnet_diagnostic.IDE0058.severity = suggestion
 
 # Remove unnecessary value assignment
 # Examples in Rock Your Code: Coding Standards for Microsoft .NET
@@ -2502,6 +2502,9 @@ dotnet_diagnostic.ASYNC0003.severity = warning
 # Examples in Rock Your Code: Coding Standards for Microsoft .NET
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
 dotnet_diagnostic.ASYNC0004.severity = none
+
+# Use ConfigureAwait(false) (Meziantou)
+dotnet_diagnostic.MA0004.severity = none
 
 # Do not use blocking call (make method async)
 dotnet_diagnostic.MA0045.severity = none

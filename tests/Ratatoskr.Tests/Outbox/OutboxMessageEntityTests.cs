@@ -5,7 +5,6 @@ using Microsoft.Extensions.Time.Testing;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.EfCore.Internal;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.Outbox;
 
@@ -121,8 +120,8 @@ public class OutboxMessageEntityTests
         // Assert — NextAttemptAt should be within the jitter range
         entity.NextAttemptAt.Should().NotBeNull();
         var now1 = fakeTime.GetUtcNow();
-        entity.NextAttemptAt!.Value.Should().BeOnOrAfter(now1.AddSeconds(1));
-        entity.NextAttemptAt!.Value.Should().BeOnOrBefore(now1.AddSeconds(2));
+        entity.NextAttemptAt.Value.Should().BeOnOrAfter(now1.AddSeconds(1));
+        entity.NextAttemptAt.Value.Should().BeOnOrBefore(now1.AddSeconds(2));
 
         // Act - Second failure (base = 2^2 = 4s, jitter range = [2s, 4s))
         fakeTime.Advance(TimeSpan.FromSeconds(3));
@@ -131,8 +130,8 @@ public class OutboxMessageEntityTests
         // Assert
         entity.ErrorCount.Should().Be(2);
         var now2 = fakeTime.GetUtcNow();
-        entity.NextAttemptAt!.Value.Should().BeOnOrAfter(now2.AddSeconds(2));
-        entity.NextAttemptAt!.Value.Should().BeOnOrBefore(now2.AddSeconds(4));
+        entity.NextAttemptAt.Value.Should().BeOnOrAfter(now2.AddSeconds(2));
+        entity.NextAttemptAt.Value.Should().BeOnOrBefore(now2.AddSeconds(4));
 
         // Act - Third failure (base = 2^3 = 8s, jitter range = [4s, 8s))
         fakeTime.Advance(TimeSpan.FromSeconds(5));
@@ -141,8 +140,8 @@ public class OutboxMessageEntityTests
         // Assert
         entity.ErrorCount.Should().Be(3);
         var now3 = fakeTime.GetUtcNow();
-        entity.NextAttemptAt!.Value.Should().BeOnOrAfter(now3.AddSeconds(4));
-        entity.NextAttemptAt!.Value.Should().BeOnOrBefore(now3.AddSeconds(8));
+        entity.NextAttemptAt.Value.Should().BeOnOrAfter(now3.AddSeconds(4));
+        entity.NextAttemptAt.Value.Should().BeOnOrBefore(now3.AddSeconds(8));
     }
 
     [Test]
@@ -171,8 +170,8 @@ public class OutboxMessageEntityTests
 
         // Assert - Should be capped at maxDelay (10 seconds) with jitter: [5s, 10s)
         entity.NextAttemptAt.Should().NotBeNull();
-        entity.NextAttemptAt!.Value.Should().BeOnOrAfter(beforeFail.AddSeconds(5));
-        entity.NextAttemptAt!.Value.Should().BeOnOrBefore(beforeFail.AddSeconds(10));
+        entity.NextAttemptAt.Value.Should().BeOnOrAfter(beforeFail.AddSeconds(5));
+        entity.NextAttemptAt.Value.Should().BeOnOrBefore(beforeFail.AddSeconds(10));
     }
 
     [Test]

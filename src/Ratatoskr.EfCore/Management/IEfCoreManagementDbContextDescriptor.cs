@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Ratatoskr.EfCore.Internal;
 
 namespace Ratatoskr.EfCore.Management;
 

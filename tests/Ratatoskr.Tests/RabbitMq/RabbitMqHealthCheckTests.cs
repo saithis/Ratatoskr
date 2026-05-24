@@ -2,8 +2,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
-using Ratatoskr.RabbitMq;
-using TUnit.Core;
+using Ratatoskr.RabbitMq.Extensions;
 
 namespace Ratatoskr.Tests.RabbitMq;
 

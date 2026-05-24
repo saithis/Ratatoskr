@@ -5,7 +5,6 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.EfCore.Internal;
-using Ratatoskr.EfCore.Management;
 using Ratatoskr.EfCore.Management.Endpoints.Inbox;
 using Ratatoskr.Tests.Fixtures;
 
@@ -227,7 +226,7 @@ public class InboxManagementTests(
         var (messageId, poisonedHandlerStatusId) = await SeedPoisonedInboxAsync();
 
         // Add a second (completed) handler for the same message
-        Guid secondHandlerId = Guid.Empty;
+        var secondHandlerId = Guid.Empty;
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();

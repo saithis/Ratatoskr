@@ -12,7 +12,7 @@ public class SecondTestDbContext : DbContext, IOutboxDbContext, IInboxDbContext
     public SecondTestDbContext(DbContextOptions<SecondTestDbContext> options)
         : base(options) { }
 
-    public DbSet<TestEntity> TestEntities { get; set; } = null!;
+    public DbSet<TestEntity> TestEntities { get; set; } = null;
 
     public OutboxStagingCollection OutboxMessages { get; } = new();
 

@@ -22,7 +22,7 @@ internal static class BackoffCalculator
     {
         var baseDelay = Math.Max(0, Math.Min(Math.Pow(2, errorCount), maxRetryDelay.TotalSeconds));
         var delaySeconds =
-            baseDelay * 0.5 + baseDelay * 0.5 * (random ?? Random.Shared).NextDouble();
+            (baseDelay * 0.5) + (baseDelay * 0.5 * (random ?? Random.Shared).NextDouble());
         return TimeSpan.FromSeconds(delaySeconds);
     }
 }

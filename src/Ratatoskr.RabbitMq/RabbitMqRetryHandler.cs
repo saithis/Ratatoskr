@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -32,7 +31,7 @@ internal class RabbitMqRetryHandler(
         var messageId = ea.BasicProperties.MessageId ?? "unknown";
 
         // Permanent errors go straight to DLQ
-        if (result == DispatchResult.PermanentError || result == DispatchResult.NoHandlers)
+        if (result is DispatchResult.PermanentError or DispatchResult.NoHandlers)
         {
             logger.LogWarning(
                 "Permanent error for message '{MessageId}', sending to DLQ",

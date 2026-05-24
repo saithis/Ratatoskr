@@ -8,10 +8,8 @@ using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.RabbitMq;
-using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Tests.Fixtures;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.Integration.Outbox;
 
@@ -776,7 +774,7 @@ public class OutboxDurabilityTests(
         var body = await WaitForMessageAsync(QueueName);
         body.Should().NotBeNull();
         System
-            .Text.Encoding.UTF8.GetString(body!.Body.ToArray())
+            .Text.Encoding.UTF8.GetString(body.Body.ToArray())
             .Should()
             .Contain("non-generic-add");
     }

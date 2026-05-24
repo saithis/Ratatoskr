@@ -1,21 +1,17 @@
 // Local development example only. See examples/README.md.
 using Medallion.Threading;
 using Medallion.Threading.FileSystem;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using PlaygroundHost;
 using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Infrastructure.ScenarioRunning;
 using PlaygroundHost.Persistence;
-using PlaygroundHost.Persistence.Entities;
 using RabbitMQ.Client;
 using Ratatoskr;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.Management;
-using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 using ServiceDefaults;
 
@@ -28,7 +24,7 @@ builder.Services.AddSingleton<IDistributedLockProvider>(
     _ => new FileDistributedSynchronizationProvider(lockFileDirectory)
 );
 
-builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<OutboxSendFailureRegistry>();
 builder.Services.AddSingleton<PlaygroundActivityRecorder>();
 builder.Services.AddSingleton<IMessageActivityObserver>(sp =>

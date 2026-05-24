@@ -5,7 +5,6 @@ using Ratatoskr.Core;
 using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Tests.Fixtures;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.Integration;
 
@@ -26,7 +25,7 @@ file sealed class DrainGateTestEventHandler : IMessageHandler<TestEvent>
 
     public async Task HandleAsync(
         TestEvent message,
-        MessageProperties context,
+        MessageProperties properties,
         CancellationToken cancellationToken
     )
     {
@@ -35,31 +34,23 @@ file sealed class DrainGateTestEventHandler : IMessageHandler<TestEvent>
     }
 }
 
-file sealed class ConcurrentTrackingTestEventHandler : IMessageHandler<TestEvent>
+file sealed class ConcurrentTrackingTestEventHandler(int targetCount) : IMessageHandler<TestEvent>
 {
-    private readonly int _targetCount;
-    private int _currentConcurrency;
-    private int _maxConcurrency;
-    private int _processed;
     private readonly TaskCompletionSource _processedAll = new(
         TaskCreationOptions.RunContinuationsAsynchronously
     );
 
-    public ConcurrentTrackingTestEventHandler(int targetCount)
-    {
-        _targetCount = targetCount;
-    }
+    private int _currentConcurrency;
+    private int _maxConcurrency;
+    private int _processed;
 
     public int MaxConcurrency => Volatile.Read(ref _maxConcurrency);
 
-    public Task WaitUntilProcessedAsync(TimeSpan timeout)
-    {
-        return _processedAll.Task.WaitAsync(timeout);
-    }
+    public Task WaitUntilProcessedAsync(TimeSpan timeout) => _processedAll.Task.WaitAsync(timeout);
 
     public async Task HandleAsync(
         TestEvent message,
-        MessageProperties context,
+        MessageProperties properties,
         CancellationToken cancellationToken
     )
     {
@@ -73,7 +64,7 @@ file sealed class ConcurrentTrackingTestEventHandler : IMessageHandler<TestEvent
         finally
         {
             Interlocked.Decrement(ref _currentConcurrency);
-            if (Interlocked.Increment(ref _processed) >= _targetCount)
+            if (Interlocked.Increment(ref _processed) >= targetCount)
             {
                 _processedAll.TrySetResult();
             }

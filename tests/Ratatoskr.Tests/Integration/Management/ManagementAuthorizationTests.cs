@@ -2,7 +2,6 @@ using System.Net;
 using System.Text.Encodings.Web;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;

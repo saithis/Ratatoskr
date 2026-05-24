@@ -136,7 +136,7 @@ public sealed class PlaygroundHostScenarioHttpTests(
         }
 
         status.Should().NotBeNull();
-        return status!;
+        return status;
     }
 
     private static async Task<Guid> StartScenarioAsync(
@@ -151,8 +151,7 @@ public sealed class PlaygroundHostScenarioHttpTests(
             null
         );
         var errBody = await runRes.Content.ReadAsStringAsync();
-        var okStart =
-            runRes.StatusCode == HttpStatusCode.Accepted || runRes.StatusCode == HttpStatusCode.OK;
+        var okStart = runRes.StatusCode is HttpStatusCode.Accepted or HttpStatusCode.OK;
         okStart
             .Should()
             .BeTrue($"POST run failed for slug={slug}: {(int)runRes.StatusCode} {errBody}");
@@ -170,7 +169,7 @@ public sealed class PlaygroundHostScenarioHttpTests(
             "/api/playground/scenarios"
         );
         catalog.Should().NotBeNull();
-        var slugs = catalog!.Select(c => c.slug).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var slugs = catalog.Select(c => c.slug).ToHashSet(StringComparer.OrdinalIgnoreCase);
         slugs.Should().Contain("outbox-success");
         slugs.Should().Contain("cancel-smoke");
         slugs.Should().Contain("blocking-hold");

@@ -21,7 +21,7 @@ internal class InboxAcceptor<TDbContext>(
 ) : IEfCoreInboxAcceptor
     where TDbContext : DbContext, IInboxDbContext
 {
-    private readonly IMessageActivityObserver[] _observers = observers.ToArray();
+    private readonly IMessageActivityObserver[] _observers = [.. observers];
 
     public Type DbContextType => typeof(TDbContext);
 

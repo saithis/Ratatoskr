@@ -10,7 +10,6 @@ using Ratatoskr.EfCore.Internal;
 using Ratatoskr.Testing;
 using Ratatoskr.Tests.Fixtures;
 using Ratatoskr.Tests.Integration.Inbox;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.Integration;
 

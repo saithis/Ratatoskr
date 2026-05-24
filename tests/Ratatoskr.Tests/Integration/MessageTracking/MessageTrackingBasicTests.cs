@@ -60,7 +60,7 @@ public class MessageTrackingBasicTests(
         // Assert - Sent stage (on the wire)
         var sent = await session.WaitForSentAsync<TestEvent>(TimeSpan.FromSeconds(5));
         sent.RawBody.Should().NotBeNull();
-        Encoding.UTF8.GetString(sent.RawBody!).Should().Contain("track-pub-1");
+        Encoding.UTF8.GetString(sent.RawBody).Should().Contain("track-pub-1");
     }
 
     [Test]
@@ -71,7 +71,7 @@ public class MessageTrackingBasicTests(
 
         await StartTestAsync(services =>
         {
-            services.AddSingleton<TestEventHandler>(handler);
+            services.AddSingleton(handler);
             services.AddRatatoskr(bus =>
             {
                 ConfigureConsumeBus(bus, m => m.WithHandler<TestEventHandler>());
@@ -107,7 +107,7 @@ public class MessageTrackingBasicTests(
 
         await StartTestAsync(services =>
         {
-            services.AddSingleton<TestEventHandler>(handler);
+            services.AddSingleton(handler);
             services.AddRatatoskr(bus =>
             {
                 ConfigureConsumeBus(bus, m => m.WithHandler<TestEventHandler>());
@@ -146,7 +146,7 @@ public class MessageTrackingBasicTests(
 
         await StartTestAsync(services =>
         {
-            services.AddSingleton<TestEventHandler>(handler);
+            services.AddSingleton(handler);
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
@@ -208,7 +208,7 @@ public class MessageTrackingBasicTests(
 
         await StartTestAsync(services =>
         {
-            services.AddSingleton<TestEventHandler>(handler);
+            services.AddSingleton(handler);
             services.AddRatatoskr(bus =>
             {
                 ConfigureConsumeBus(bus, m => m.WithHandler<TestEventHandler>());
@@ -255,7 +255,7 @@ public class MessageTrackingBasicTests(
 
         await StartTestAsync(services =>
         {
-            services.AddSingleton<ThrowingTestEventHandler>(handler);
+            services.AddSingleton(handler);
             services.AddRatatoskr(bus =>
             {
                 bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
@@ -304,7 +304,7 @@ public class MessageTrackingBasicTests(
 
         await StartTestAsync(services =>
         {
-            services.AddSingleton<TestEventHandler>(handler);
+            services.AddSingleton(handler);
             services.AddRatatoskr(bus =>
             {
                 ConfigureConsumeBus(bus, m => m.WithHandler<TestEventHandler>());

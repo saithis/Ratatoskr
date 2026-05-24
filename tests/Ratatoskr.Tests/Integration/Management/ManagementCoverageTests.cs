@@ -4,7 +4,6 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Ratatoskr.EfCore.Internal;
 using Ratatoskr.EfCore.Management;
 using Ratatoskr.EfCore.Management.Endpoints.Inbox;
 using Ratatoskr.EfCore.Management.Endpoints.Outbox;
@@ -63,7 +62,7 @@ public class ManagementCoverageTests(
                 .GetInt64()
                 .Should()
                 .Be(
-                    firstTotalCount!.Value,
+                    firstTotalCount.Value,
                     "totalCount must reflect the full filtered set, not the remainder after the cursor"
                 );
 

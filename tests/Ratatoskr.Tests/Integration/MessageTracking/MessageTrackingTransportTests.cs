@@ -99,7 +99,7 @@ public class MessageTrackingTransportTests(
         published.GetMessage<TestEvent>().Id.Should().Be("neg-1");
 
         // Now it should throw
-        var act = () => session.Published.ShouldHaveNoMessage<TestEvent>();
+        var act = session.Published.ShouldHaveNoMessage<TestEvent>;
         act.Should().Throw<InvalidOperationException>();
     }
 
@@ -141,7 +141,7 @@ public class MessageTrackingTransportTests(
         var sent = await session.WaitForSentAsync<TestEvent>(TimeSpan.FromSeconds(5));
         sent.TransportMessage.Should().NotBeNull();
 
-        var headers = sent.TransportMessage!.Headers;
+        var headers = sent.TransportMessage.Headers;
         headers["content-type"].Should().Be("application/json");
         headers["message-id"].Should().Be(sent.Properties.Id);
         headers["type"].Should().Be("test.event");
@@ -171,7 +171,7 @@ public class MessageTrackingTransportTests(
 
         await StartTestAsync(services =>
         {
-            services.AddSingleton<TestEventHandler>(handler);
+            services.AddSingleton(handler);
             services.AddRatatoskr(bus =>
             {
                 ConfigureConsumeBus(bus, m => m.WithHandler<TestEventHandler>());
@@ -194,7 +194,7 @@ public class MessageTrackingTransportTests(
         var received = await session.WaitForReceivedAsync<TestEvent>(TimeSpan.FromSeconds(5));
         received.TransportMessage.Should().NotBeNull();
 
-        var headers = received.TransportMessage!.Headers;
+        var headers = received.TransportMessage.Headers;
         headers.Should().ContainKey("content-type");
         headers.Should().ContainKey("message-id");
         headers.Should().ContainKey("type");

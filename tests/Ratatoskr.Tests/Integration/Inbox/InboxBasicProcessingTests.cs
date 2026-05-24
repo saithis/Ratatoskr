@@ -344,7 +344,7 @@ public class InboxBasicProcessingTests(
             var deserialized =
                 serializer.Deserialize(inboxMsg.Content, typeof(TestEvent)) as TestEvent;
             deserialized.Should().NotBeNull();
-            deserialized!.Id.Should().Be(businessId, "business ID preserved in serialized content");
+            deserialized.Id.Should().Be(businessId, "business ID preserved in serialized content");
             deserialized.Data.Should().Be(data);
         });
     }

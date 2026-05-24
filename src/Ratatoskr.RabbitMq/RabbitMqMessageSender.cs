@@ -2,7 +2,6 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using Ratatoskr.Core;
-using Ratatoskr.RabbitMq.Config;
 using Ratatoskr.RabbitMq.Extensions;
 
 namespace Ratatoskr.RabbitMq;
@@ -18,7 +17,7 @@ internal class RabbitMqMessageSender(
     ILogger<RabbitMqMessageSender> logger
 ) : IMessageSender, IAsyncDisposable
 {
-    private readonly IMessageActivityObserver[] _observers = observers.ToArray();
+    private readonly IMessageActivityObserver[] _observers = [.. observers];
     private readonly SemaphoreSlim _publishLock = new(1, 1);
 
     public string TransportName => RabbitMqConstants.TransportName;

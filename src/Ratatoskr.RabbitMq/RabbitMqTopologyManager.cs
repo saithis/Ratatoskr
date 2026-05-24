@@ -67,7 +67,7 @@ public class RabbitMqTopologyManager(
 
         await DeclareOrValidateExchangeAsync(channel, reg, channelOpts, token);
 
-        if (reg.Intent == ChannelType.CommandConsume || reg.Intent == ChannelType.EventConsume)
+        if (reg.Intent is ChannelType.CommandConsume or ChannelType.EventConsume)
         {
             await ProvisionQueueAndBindingsAsync(channel, reg, channelOpts, token);
         }
@@ -86,7 +86,7 @@ public class RabbitMqTopologyManager(
     )
     {
         var exchangeName = ResolveAmqpExchangeName(reg, channelOpts);
-        if (reg.Intent == ChannelType.EventPublish || reg.Intent == ChannelType.CommandConsume)
+        if (reg.Intent is ChannelType.EventPublish or ChannelType.CommandConsume)
         {
             // We OWN the exchange -> Declare it
             logger.LogInformation(
@@ -212,7 +212,7 @@ public class RabbitMqTopologyManager(
         // 1. Declare DLQ Exchange (Fanout)
         await channel.ExchangeDeclareAsync(
             exchange: dlqName,
-            type: RabbitMQ.Client.ExchangeType.Fanout,
+            type: ExchangeType.Fanout,
             durable: true,
             autoDelete: false,
             arguments: null,

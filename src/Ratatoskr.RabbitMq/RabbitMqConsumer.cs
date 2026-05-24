@@ -176,7 +176,7 @@ internal sealed class RabbitMqConsumer(
             );
 
             var consumerTag = await channel.BasicConsumeAsync(
-                queue: channelOptions.QueueName!,
+                queue: channelOptions.QueueName,
                 autoAck: channelOptions.AutoAck,
                 consumer: consumer,
                 cancellationToken: stoppingToken
@@ -517,6 +517,8 @@ internal sealed class RabbitMqConsumer(
                         result,
                         cancellationToken
                     );
+                    break;
+                default:
                     break;
             }
         }

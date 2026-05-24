@@ -1,4 +1,3 @@
-using RabbitMQ.Client;
 using Testcontainers.RabbitMq;
 using TUnit.Core.Interfaces;
 

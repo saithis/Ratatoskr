@@ -12,7 +12,7 @@ public class MessageTracker : IMessageActivityObserver
 {
     private readonly ConcurrentQueue<MessageActivity> _activities = new();
     private readonly List<Waiter> _waiters = new();
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     public ValueTask OnMessageActivityAsync(MessageActivity activity)
     {

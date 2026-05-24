@@ -16,7 +16,7 @@ internal readonly record struct DbContextMetrics(
 internal class EfCoreMetricsState
 {
     /// <summary>
-    /// Tracks metric state per DbContext type full name (see <see cref="System.Type.FullName"/>).
+    /// Tracks metric state per DbContext type full name (see <see cref="Type.FullName"/>).
     /// </summary>
     public ConcurrentDictionary<string, DbContextMetrics> ContextMetrics { get; } = new();
 
