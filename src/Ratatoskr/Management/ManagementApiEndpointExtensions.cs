@@ -18,6 +18,7 @@ public static class ManagementApiEndpointExtensions
     /// Maps all registered Ratatoskr management endpoints under <paramref name="basePath"/>,
     /// applying <paramref name="policyName"/> authorization and disabling antiforgery.
     /// </summary>
+    /// <exception cref="InvalidOperationException"></exception>
     public static IEndpointRouteBuilder MapRatatoskrManagementApi(
         this IEndpointRouteBuilder endpoints,
         string policyName,

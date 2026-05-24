@@ -3,7 +3,7 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr.Config;
 
-public class ChannelBuilder(ChannelRegistration channel)
+public sealed class ChannelBuilder(ChannelRegistration channel)
 {
     /// <summary>The underlying channel registration.</summary>
     internal ChannelRegistration Channel { get; } = channel;
@@ -26,7 +26,7 @@ public class ChannelBuilder(ChannelRegistration channel)
     protected internal ChannelBuilder AddTransport(string transportName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(transportName);
-        Channel.Transports.Add(transportName);
+        _ = Channel.Transports.Add(transportName);
         return this;
     }
 

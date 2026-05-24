@@ -31,7 +31,7 @@ internal static partial class ObserverNotifier
         {
             try
             {
-                await observer.OnMessageActivityAsync(activity).ConfigureAwait(false);
+                await observer.OnMessageActivity(activity).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

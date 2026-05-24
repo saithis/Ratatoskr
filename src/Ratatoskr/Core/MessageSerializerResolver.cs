@@ -1,5 +1,4 @@
 using System.Collections.Frozen;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Ratatoskr.Core;
 
@@ -108,13 +107,12 @@ internal sealed class MessageSerializerResolver(
                 continue;
             }
 
-            var serializer = ResolveConfiguredSerializer(
+            serializerByMessageType[messageType] = ResolveConfiguredSerializer(
                 configuredSerializerType,
                 defaultSerializer,
                 serializerCandidates,
                 serviceProvider
             );
-            serializerByMessageType[messageType] = serializer;
         }
 
         try

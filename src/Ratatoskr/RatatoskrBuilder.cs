@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Ratatoskr.AsyncApi.Config;
 using Ratatoskr.CloudEvents;
 using Ratatoskr.Config;
@@ -8,7 +7,7 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr;
 
-public class RatatoskrBuilder
+public sealed class RatatoskrBuilder
 {
     public IServiceCollection Services { get; }
     internal CloudEventsOptions CloudEventsOptions { get; } = new();
@@ -69,8 +68,6 @@ public class RatatoskrBuilder
             validator(ChannelRegistry, handlerRegistry);
         }
     }
-
-    #region New Channel Config
 
     public RatatoskrBuilder AddEventPublishChannel(
         string channelName,
@@ -135,8 +132,6 @@ public class RatatoskrBuilder
         ChannelRegistry.Register(channel);
         return this;
     }
-
-    #endregion
 
     /// <summary>
     /// Configures CloudEvents format options.

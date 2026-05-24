@@ -4,7 +4,7 @@ namespace Ratatoskr.AsyncApi.Config;
 /// AsyncAPI documentation options for a channel.
 /// Configure via <c>.WithAsyncApi(x => x.WithDescription("..."))</c> on a ChannelBuilder.
 /// </summary>
-public class AsyncApiChannelOptions
+public sealed class AsyncApiChannelOptions
 {
     // --- Channel metadata ---
 

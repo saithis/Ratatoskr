@@ -6,8 +6,8 @@ namespace Ratatoskr.AsyncApi.Model;
 public enum EventCatalogRole
 {
     /// <summary>The service produces/publishes this message.</summary>
-    Provider,
+    Provider = 0,
 
     /// <summary>The service consumes/subscribes to this message.</summary>
-    Client,
+    Client = 1,
 }

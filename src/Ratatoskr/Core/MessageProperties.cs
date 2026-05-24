@@ -1,6 +1,6 @@
 namespace Ratatoskr.Core;
 
-public class MessageProperties
+public sealed class MessageProperties
 {
     /// <summary>
     /// Unique identifier for this event. Auto-generated if not set.

@@ -15,7 +15,7 @@ namespace Ratatoskr.AsyncApi.Model;
     "CA2227:CollectionPropertiesShouldBeReadOnly",
     Justification = "DTO for JSON serialization"
 )]
-public class AsyncApiChannel
+public sealed class AsyncApiChannel
 {
     [JsonPropertyName("address")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

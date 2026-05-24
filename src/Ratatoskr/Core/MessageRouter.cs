@@ -8,12 +8,12 @@ namespace Ratatoskr.Core;
 /// interceptors and <see cref="MessageDispatcher"/> separately.
 /// </para>
 /// </summary>
-public class MessageRouter(
+public sealed class MessageRouter(
     MessageDispatcher dispatcher,
     IEnumerable<IMessageRouteInterceptor> interceptors
 )
 {
-    private readonly IMessageRouteInterceptor[] _interceptors = interceptors.ToArray();
+    private readonly IMessageRouteInterceptor[] _interceptors = [.. interceptors];
 
     public async Task<DispatchResult> RouteAsync(
         byte[] body,

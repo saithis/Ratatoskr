@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace Ratatoskr.AsyncApi.Model.Bindings;
 
-public class MessageBindings
+public sealed class MessageBindings
 {
     /// <summary>
     /// This object contains information about the message representation in AMQP.
@@ -12,7 +12,7 @@ public class MessageBindings
     public AmqpMessageBinding? Amqp { get; set; }
 }
 
-public class AmqpMessageBinding
+public sealed class AmqpMessageBinding
 {
     /// <summary>
     /// A MIME encoding for the message content. (example: gzip)

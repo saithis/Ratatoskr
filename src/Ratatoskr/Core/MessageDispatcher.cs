@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Ratatoskr.Core;
@@ -14,7 +13,7 @@ namespace Ratatoskr.Core;
     "CA1506:AvoidExcessiveClassCoupling",
     Justification = "Orchestrator class coordinating many components"
 )]
-public partial class MessageDispatcher(
+public sealed class MessageDispatcher(
     ChannelRegistry channelRegistry,
     ChannelHandlerRegistry channelHandlerRegistry,
     IMessageSerializerResolver serializerResolver,
@@ -24,7 +23,7 @@ public partial class MessageDispatcher(
     ILogger<MessageDispatcher> logger
 )
 {
-    private readonly IMessageActivityObserver[] _observers = observers.ToArray();
+    private readonly IMessageActivityObserver[] _observers = [.. observers];
 
     /// <summary>
     /// Dispatches a message to all registered fire-and-forget handlers for the channel, each in its own DI scope.
@@ -50,20 +49,20 @@ public partial class MessageDispatcher(
         );
         if (activity != null)
         {
-            activity.SetTag(MessagingSemanticConventions.OperationName, "dispatch");
-            activity.SetTag(
+            _ = activity.SetTag(MessagingSemanticConventions.OperationName, "dispatch");
+            _ = activity.SetTag(
                 MessagingSemanticConventions.OperationType,
                 MessagingSemanticConventions.OperationTypeProcess
             );
-            activity.SetTag(MessagingSemanticConventions.System, "ratatoskr");
-            activity.SetTag(MessagingSemanticConventions.DestinationName, channelName);
-            activity.SetTag(MessagingSemanticConventions.MessageId, properties.Id);
+            _ = activity.SetTag(MessagingSemanticConventions.System, "ratatoskr");
+            _ = activity.SetTag(MessagingSemanticConventions.DestinationName, channelName);
+            _ = activity.SetTag(MessagingSemanticConventions.MessageId, properties.Id);
         }
 
         if (properties.Type == null)
         {
             LogReceivedMessageWithoutType(logger);
-            activity?.SetStatus(ActivityStatusCode.Error, "Message has no type");
+            _ = (activity?.SetStatus(ActivityStatusCode.Error, "Message has no type"));
             return DispatchResult.PermanentError;
         }
 
@@ -91,9 +90,11 @@ public partial class MessageDispatcher(
         if (messageType == null)
         {
             LogNoRegistrationFound(logger, properties.Type);
-            activity?.SetStatus(
-                ActivityStatusCode.Error,
-                $"No registration found for event type '{properties.Type}'"
+            _ = (
+                activity?.SetStatus(
+                    ActivityStatusCode.Error,
+                    $"No registration found for event type '{properties.Type}'"
+                )
             );
             return DispatchResult.NoHandlers;
         }
@@ -108,16 +109,18 @@ public partial class MessageDispatcher(
         catch (Exception ex)
         {
             LogDeserializationFailed(logger, ex, properties.Type);
-            activity?.SetTag(MessagingSemanticConventions.ErrorType, ex.GetType().FullName);
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            _ = (activity?.SetTag(MessagingSemanticConventions.ErrorType, ex.GetType().FullName));
+            _ = (activity?.SetStatus(ActivityStatusCode.Error, ex.Message));
             return DispatchResult.PermanentError;
         }
         if (message == null)
         {
             LogDeserializedToNull(logger, properties.Type);
-            activity?.SetStatus(
-                ActivityStatusCode.Error,
-                $"Message of type '{properties.Type}' deserialized to null"
+            _ = (
+                activity?.SetStatus(
+                    ActivityStatusCode.Error,
+                    $"Message of type '{properties.Type}' deserialized to null"
+                )
             );
             return DispatchResult.PermanentError;
         }
@@ -167,13 +170,13 @@ public partial class MessageDispatcher(
 
         if (result == DispatchResult.RecoverableError && activity != null)
         {
-            activity.SetTag(
+            _ = activity.SetTag(
                 MessagingSemanticConventions.ErrorType,
                 exceptions!.Count == 1
                     ? exceptions[0].GetType().FullName
                     : typeof(AggregateException).FullName
             );
-            activity.SetStatus(
+            _ = activity.SetStatus(
                 ActivityStatusCode.Error,
                 exceptions.Count == 1
                     ? exceptions[0].Message
@@ -275,14 +278,14 @@ public partial class MessageDispatcher(
 public enum DispatchResult
 {
     /// <summary>All handlers completed successfully.</summary>
-    Success,
+    Success = 0,
 
     /// <summary>No handlers found for the message.</summary>
-    NoHandlers,
+    NoHandlers = 1,
 
     /// <summary>One or more handlers failed but may succeed on retry.</summary>
-    RecoverableError,
+    RecoverableError = 2,
 
     /// <summary>Message could not be processed (deserialization failure, etc.).</summary>
-    PermanentError,
+    PermanentError = 3,
 }

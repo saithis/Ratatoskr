@@ -1,5 +1,3 @@
-using Ratatoskr.AsyncApi.Config;
-
 namespace Ratatoskr.AsyncApi.Attributes;
 
 /// <summary>

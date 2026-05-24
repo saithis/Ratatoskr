@@ -6,7 +6,7 @@ namespace Ratatoskr.Core;
 /// <summary>
 /// Default implementation that enriches MessageProperties with metadata from the ChannelRegistry.
 /// </summary>
-public class MessagePropertiesEnricher(
+public sealed class MessagePropertiesEnricher(
     ChannelRegistry registry,
     CloudEventsOptions options,
     TimeProvider timeProvider,
@@ -16,12 +16,14 @@ public class MessagePropertiesEnricher(
     private readonly Dictionary<string, ITransportMessageMetadataEnricher> _enrichersByTransport =
         transportEnrichers.ToDictionary(e => e.TransportName);
 
+    /// <inheritdoc/>
     public MessageProperties Enrich<TMessage>(MessageProperties? properties)
         where TMessage : notnull
     {
         return Enrich(typeof(TMessage), properties);
     }
 
+    /// <inheritdoc/>
     public MessageProperties Enrich(Type messageType, MessageProperties? properties)
     {
         properties ??= new MessageProperties();
@@ -59,7 +61,7 @@ public class MessagePropertiesEnricher(
         {
             foreach (var transport in publishInfo.Channel.Transports)
             {
-                properties.Transports.Add(transport);
+                _ = properties.Transports.Add(transport);
                 if (_enrichersByTransport.TryGetValue(transport, out var transportEnricher))
                 {
                     transportEnricher.Enrich(publishInfo, properties);
@@ -85,7 +87,7 @@ public class MessagePropertiesEnricher(
     {
         if (!string.IsNullOrEmpty(publishInfo?.Message.DataSchema))
         {
-            return publishInfo!.Message.DataSchema;
+            return publishInfo.Message.DataSchema;
         }
 
         var attr = messageType.GetCustomAttribute<RatatoskrMessageAttribute>();

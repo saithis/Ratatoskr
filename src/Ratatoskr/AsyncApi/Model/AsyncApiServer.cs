@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace Ratatoskr.AsyncApi.Model;
 
-public class AsyncApiServer
+public sealed class AsyncApiServer
 {
     [JsonPropertyName("host")]
     public string Host { get; set; } = "";

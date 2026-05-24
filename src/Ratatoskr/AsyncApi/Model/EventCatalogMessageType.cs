@@ -2,6 +2,6 @@ namespace Ratatoskr.AsyncApi.Model;
 
 public enum EventCatalogMessageType
 {
-    Event,
-    Command,
+    Event = 0,
+    Command = 1,
 }

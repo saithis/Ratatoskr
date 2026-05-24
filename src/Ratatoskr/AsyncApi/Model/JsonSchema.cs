@@ -16,7 +16,7 @@ namespace Ratatoskr.AsyncApi.Model;
     "CA2227:CollectionPropertiesShouldBeReadOnly",
     Justification = "DTO for JSON serialization"
 )]
-public class JsonSchema
+public sealed class JsonSchema
 {
     /// <summary>JSON Schema $ref to another schema definition.</summary>
     [JsonPropertyName("$ref")]

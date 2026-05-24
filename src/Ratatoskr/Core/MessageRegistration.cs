@@ -1,6 +1,6 @@
 namespace Ratatoskr.Core;
 
-public class MessageRegistration(Type messageType, string messageTypeName)
+public sealed class MessageRegistration(Type messageType, string messageTypeName)
 {
     public Type MessageType { get; } = messageType;
     public string MessageTypeName { get; internal set; } = messageTypeName;

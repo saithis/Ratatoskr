@@ -14,7 +14,7 @@ namespace Ratatoskr.AsyncApi.Model;
     "CA2227:CollectionPropertiesShouldBeReadOnly",
     Justification = "DTO for JSON serialization"
 )]
-public class AsyncApiOperation
+public sealed class AsyncApiOperation
 {
     /// <summary>"send" for publish, "receive" for consume.</summary>
     [JsonPropertyName("action")]

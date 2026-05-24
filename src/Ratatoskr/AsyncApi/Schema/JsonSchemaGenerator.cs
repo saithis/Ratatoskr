@@ -10,7 +10,7 @@ namespace Ratatoskr.AsyncApi.Schema;
 /// <summary>
 /// Generates JSON Schema objects from CLR types, respecting System.ComponentModel.DataAnnotations attributes.
 /// </summary>
-public class JsonSchemaGenerator
+public sealed class JsonSchemaGenerator
 {
     private readonly NullabilityInfoContext _nullabilityContext = new();
 
@@ -68,8 +68,7 @@ public class JsonSchemaGenerator
     {
         // Placeholder prevents infinite recursion for self-referential types
         components[name] = new JsonSchema { Type = "object" };
-        var schema = BuildObjectSchema(type, components);
-        components[name] = schema;
+        components[name] = BuildObjectSchema(type, components);
     }
 
     private JsonSchema BuildObjectSchema(Type type, Dictionary<string, JsonSchema> components)
@@ -97,8 +96,7 @@ public class JsonSchemaGenerator
             }
 
             var propName = GetPropertyName(prop);
-            var propSchema = BuildPropertySchema(prop, components);
-            properties[propName] = propSchema;
+            properties[propName] = BuildPropertySchema(prop, components);
 
             if (prop.GetCustomAttribute<RequiredAttribute>() != null)
             {
@@ -131,7 +129,7 @@ public class JsonSchemaGenerator
     )
     {
         var underlying = UnwrapNullable(type);
-        bool isNullable =
+        var isNullable =
             propertyInfo != null
                 ? IsPropertyNullable(propertyInfo)
                 : underlying != type || !type.IsValueType;
@@ -165,8 +163,7 @@ public class JsonSchemaGenerator
 
         if (IsPrimitive(underlying))
         {
-            var s = BuildPrimitiveSchema(underlying, isNullable);
-            return s;
+            return BuildPrimitiveSchema(underlying, isNullable);
         }
 
         // Complex object — use $ref
@@ -247,9 +244,9 @@ public class JsonSchemaGenerator
 
     private static JsonSchema BuildEnumSchema(Type type)
     {
-        var underlyingType = System.Enum.GetUnderlyingType(type);
-        var names = System.Enum.GetNames(type);
-        var values = System.Enum.GetValues(type);
+        var underlyingType = Enum.GetUnderlyingType(type);
+        var names = Enum.GetNames(type);
+        var values = Enum.GetValues(type);
         var enumValues = new List<object>(values.Length);
         foreach (var v in values)
         {
@@ -264,8 +261,8 @@ public class JsonSchemaGenerator
             Type = "integer",
             Format = format,
             Enum = enumValues,
-            XEnumNames = names.ToList(),
-            XEnumVarnames = names.ToList(),
+            XEnumNames = [.. names],
+            XEnumVarnames = [.. names],
         };
     }
 
@@ -355,7 +352,7 @@ public class JsonSchemaGenerator
     {
         if (type.IsArray)
         {
-            elementType = type.GetElementType()!;
+            elementType = type.GetElementType();
             return true;
         }
 
@@ -422,7 +419,7 @@ public class JsonSchemaGenerator
         if (type.IsGenericType)
         {
             var baseName = type.Name[..type.Name.IndexOf('`', StringComparison.Ordinal)];
-            var args = string.Join("", type.GetGenericArguments().Select(GetSchemaName));
+            var args = string.Concat(type.GetGenericArguments().Select(GetSchemaName));
             return $"{baseName}Of{args}";
         }
         return type.Name;

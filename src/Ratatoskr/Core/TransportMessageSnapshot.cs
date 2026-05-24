@@ -5,7 +5,7 @@ namespace Ratatoskr.Core;
 /// For the Sent stage, this captures the state after envelope mapping (outgoing).
 /// For the Received stage, this captures the state before envelope mapping (incoming).
 /// </summary>
-public class TransportMessageSnapshot
+public sealed class TransportMessageSnapshot
 {
     /// <summary>
     /// The transport name the message is sent over.

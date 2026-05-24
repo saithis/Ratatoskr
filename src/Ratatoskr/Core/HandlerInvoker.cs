@@ -7,7 +7,7 @@ namespace Ratatoskr.Core;
 /// Shared by <see cref="MessageDispatcher"/> (for non-inbox handlers) and the inbox
 /// processor (for inbox-managed handlers with per-handler retry and timeout).
 /// </summary>
-public class HandlerInvoker(IServiceScopeFactory scopeFactory)
+public sealed class HandlerInvoker(IServiceScopeFactory scopeFactory)
 {
     /// <summary>
     /// Resolves a handler by type in a fresh DI scope and invokes it via a compiled delegate.

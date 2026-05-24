@@ -1,12 +1,14 @@
 namespace Ratatoskr.Core;
 
-public class ChannelRegistry
+public sealed class ChannelRegistry
 {
     private readonly Dictionary<string, ChannelRegistration> _publishChannels = new();
     private readonly Dictionary<string, ChannelRegistration> _consumeChannels = new();
     private bool _frozen;
 
-    // O(1) lookup indexes — populated by Freeze()
+    /// <summary>
+    /// O(1) lookup indexes — populated by Freeze()
+    /// </summary>
     private Dictionary<Type, PublishInformation>? _publishByType;
     private Dictionary<string, PublishInformation>? _publishByTypeName;
     private Dictionary<
@@ -36,13 +38,13 @@ public class ChannelRegistry
 
     public ChannelRegistration? GetPublishChannel(string channelName)
     {
-        _publishChannels.TryGetValue(channelName, out var channel);
+        _ = _publishChannels.TryGetValue(channelName, out var channel);
         return channel;
     }
 
     public ChannelRegistration? GetConsumeChannel(string channelName)
     {
-        _consumeChannels.TryGetValue(channelName, out var channel);
+        _ = _consumeChannels.TryGetValue(channelName, out var channel);
         return channel;
     }
 
@@ -71,8 +73,8 @@ public class ChannelRegistry
             foreach (var msg in channel.Messages)
             {
                 var info = new PublishInformation { Channel = channel, Message = msg };
-                publishByType.TryAdd(msg.MessageType, info);
-                publishByTypeName.TryAdd(msg.MessageTypeName, info);
+                _ = publishByType.TryAdd(msg.MessageType, info);
+                _ = publishByTypeName.TryAdd(msg.MessageTypeName, info);
             }
         }
         _publishByType = publishByType;
@@ -168,7 +170,7 @@ public class ChannelRegistry
     }
 }
 
-public class PublishInformation
+public sealed class PublishInformation
 {
     public required ChannelRegistration Channel { get; init; }
     public required MessageRegistration Message { get; init; }

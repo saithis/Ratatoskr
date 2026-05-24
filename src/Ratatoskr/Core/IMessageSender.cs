@@ -1,4 +1,4 @@
-﻿namespace Ratatoskr.Core;
+namespace Ratatoskr.Core;
 
 public interface IMessageSender
 {

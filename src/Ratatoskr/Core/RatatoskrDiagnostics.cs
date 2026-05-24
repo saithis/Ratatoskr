@@ -39,14 +39,15 @@ public static class RatatoskrDiagnostics
     /// </summary>
     public static readonly Meter Meter = new(MeterName);
 
-    // Standard OTEL Messaging Metrics
-    public static readonly Histogram<double> ClientOperationDuration =
-        Meter.CreateHistogram<double>(
-            "messaging.client.operation.duration",
-            "s",
-            "Duration of messaging operation initiated by a producer or consumer client.",
-            advice: new InstrumentAdvice<double> { HistogramBucketBoundaries = DurationBuckets }
-        );
+    /// <summary>
+    /// Standard OTEL Messaging Metrics
+    /// </summary>
+    public static readonly Histogram<double> ClientOperationDuration = Meter.CreateHistogram(
+        "messaging.client.operation.duration",
+        "s",
+        "Duration of messaging operation initiated by a producer or consumer client.",
+        advice: new InstrumentAdvice<double> { HistogramBucketBoundaries = DurationBuckets }
+    );
 
     public static readonly Counter<long> ClientSentMessages = Meter.CreateCounter<long>(
         "messaging.client.sent.messages",
@@ -60,14 +61,16 @@ public static class RatatoskrDiagnostics
         "Number of messages that were delivered to the application."
     );
 
-    public static readonly Histogram<double> ProcessDuration = Meter.CreateHistogram<double>(
+    public static readonly Histogram<double> ProcessDuration = Meter.CreateHistogram(
         "messaging.process.duration",
         "s",
         "Duration of processing operation.",
         advice: new InstrumentAdvice<double> { HistogramBucketBoundaries = DurationBuckets }
     );
 
-    // Custom Ratatoskr metrics (no OTEL standard equivalent)
+    /// <summary>
+    /// Custom Ratatoskr metrics (no OTEL standard equivalent)
+    /// </summary>
     public static readonly Histogram<double> ReceiveLag = Meter.CreateHistogram<double>(
         "ratatoskr.receive.lag",
         "s",
@@ -79,7 +82,9 @@ public static class RatatoskrDiagnostics
         "Duration from message creation (sent) to completion of processing."
     );
 
-    // Reliability Metrics
+    /// <summary>
+    /// Reliability Metrics
+    /// </summary>
     public static readonly Counter<long> RetryMessages = Meter.CreateCounter<long>(
         "ratatoskr.retry.messages",
         "{message}",
@@ -91,7 +96,9 @@ public static class RatatoskrDiagnostics
         "Number of messages sent to DLQ."
     );
 
-    // Outbox Metrics
+    /// <summary>
+    /// Outbox Metrics
+    /// </summary>
     public static readonly Counter<long> OutboxProcessCount = Meter.CreateCounter<long>(
         "ratatoskr.outbox.process.count",
         "{message}",
@@ -113,7 +120,9 @@ public static class RatatoskrDiagnostics
         "Number of messages picked up in a batch."
     );
 
-    // Inbox Metrics
+    /// <summary>
+    /// Inbox Metrics
+    /// </summary>
     public static readonly Counter<long> InboxDeliverCount = Meter.CreateCounter<long>(
         "ratatoskr.inbox.deliver.count",
         "{message}",
@@ -135,7 +144,9 @@ public static class RatatoskrDiagnostics
         "Number of inbox handler statuses picked up in a batch."
     );
 
-    // Cleanup Metrics
+    /// <summary>
+    /// Cleanup Metrics
+    /// </summary>
     private static readonly double[] CleanupDurationBuckets =
     [
         0.1,
@@ -153,7 +164,7 @@ public static class RatatoskrDiagnostics
         "{message}",
         "Number of processed outbox messages deleted by cleanup."
     );
-    public static readonly Histogram<double> OutboxCleanupDuration = Meter.CreateHistogram<double>(
+    public static readonly Histogram<double> OutboxCleanupDuration = Meter.CreateHistogram(
         "ratatoskr.outbox.cleanup.duration",
         "s",
         "Duration of outbox cleanup operation.",
@@ -169,14 +180,16 @@ public static class RatatoskrDiagnostics
         "{message}",
         "Number of orphaned inbox messages deleted by cleanup."
     );
-    public static readonly Histogram<double> InboxCleanupDuration = Meter.CreateHistogram<double>(
+    public static readonly Histogram<double> InboxCleanupDuration = Meter.CreateHistogram(
         "ratatoskr.inbox.cleanup.duration",
         "s",
         "Duration of inbox cleanup operation.",
         advice: new InstrumentAdvice<double> { HistogramBucketBoundaries = CleanupDurationBuckets }
     );
 
-    // Distributed Lock Metrics
+    /// <summary>
+    /// Distributed Lock Metrics
+    /// </summary>
     public static readonly Counter<long> LockAcquisitionFailure = Meter.CreateCounter<long>(
         "ratatoskr.lock.acquisition.failure",
         "{attempt}",

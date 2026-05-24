@@ -9,60 +9,60 @@ public enum MessageStage
     /// Fired once per transport after each IMessageSender.SendAsync attempt during PublishDirectAsync.
     /// Includes TransportName and Exception (null on success) so observers can see per-transport outcomes.
     /// </summary>
-    Published,
+    Published = 0,
 
     /// <summary>
     /// IMessageSender.SendAsync completed - bytes are on the wire.
     /// </summary>
-    Sent,
+    Sent = 1,
 
     /// <summary>
     /// Message serialized into outbox entity during SaveChanges.
     /// </summary>
-    OutboxStaged,
+    OutboxStaged = 2,
 
     /// <summary>
     /// Outbox processor sent message to transport.
     /// </summary>
-    OutboxSent,
+    OutboxSent = 3,
 
     /// <summary>
     /// Consumer received message from transport, before dispatch.
     /// </summary>
-    Received,
+    Received = 4,
 
     /// <summary>
     /// MessageDispatcher completed handler invocation.
     /// </summary>
-    Dispatched,
+    Dispatched = 5,
 
     /// <summary>
     /// Message accepted into the inbox (persisted to DB). Inbox-managed handlers will be
     /// invoked asynchronously by the InboxProcessor.
     /// </summary>
-    InboxQueued,
+    InboxQueued = 6,
 
     /// <summary>
     /// InboxProcessor completed invocation of a single inbox-managed handler.
     /// Fired once per handler per delivery attempt.
     /// </summary>
-    InboxDispatched,
+    InboxDispatched = 7,
 
     /// <summary>
     /// A handler status has been marked as poisoned after exceeding the maximum retry count.
     /// </summary>
-    InboxPoisoned,
+    InboxPoisoned = 8,
 
     /// <summary>
     /// An outbox message has been marked as poisoned after exceeding the maximum retry count.
     /// </summary>
-    OutboxPoisoned,
+    OutboxPoisoned = 9,
 }
 
 /// <summary>
 /// Represents an observed message activity at a specific pipeline stage.
 /// </summary>
-public class MessageActivity
+public sealed class MessageActivity
 {
     /// <summary>
     /// The pipeline stage where this activity was captured.
@@ -136,5 +136,5 @@ public interface IMessageActivityObserver
     /// <summary>
     /// Called when a message activity occurs at any pipeline stage.
     /// </summary>
-    public ValueTask OnMessageActivityAsync(MessageActivity activity);
+    public ValueTask OnMessageActivity(MessageActivity activity);
 }

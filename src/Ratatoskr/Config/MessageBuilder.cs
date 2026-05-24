@@ -2,7 +2,7 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr.Config;
 
-public class MessageBuilder(MessageRegistration message)
+public sealed class MessageBuilder(MessageRegistration message)
 {
     internal MessageRegistration MessageRegistration => message;
 

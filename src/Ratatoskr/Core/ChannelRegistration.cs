@@ -2,7 +2,7 @@ using System.Collections.ObjectModel;
 
 namespace Ratatoskr.Core;
 
-public class ChannelRegistration(string channelName, ChannelType intent)
+public sealed class ChannelRegistration(string channelName, ChannelType intent)
 {
     public string ChannelName { get; } = channelName;
     public ChannelType Intent { get; } = intent;
@@ -21,7 +21,9 @@ public class ChannelRegistration(string channelName, ChannelType intent)
 
     public Collection<MessageRegistration> Messages { get; } = new();
 
-    // O(1) lookup indexes — populated by ChannelRegistry.Freeze()
+    /// <summary>
+    /// O(1) lookup indexes — populated by ChannelRegistry.Freeze()
+    /// </summary>
     internal Dictionary<Type, MessageRegistration> MessagesByType { get; } = new();
     internal Dictionary<string, MessageRegistration> MessagesByTypeName { get; } =
         new(StringComparer.Ordinal);

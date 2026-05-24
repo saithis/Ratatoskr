@@ -3,7 +3,6 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.AsyncApi.Generation;
 
 namespace Ratatoskr.AsyncApi.Extensions;
@@ -29,7 +28,7 @@ public static class AsyncApiEndpointExtensions
         string? cachedJson = null;
         var syncLock = new object();
 
-        endpoints
+        _ = endpoints
             .MapGet(
                 routePattern,
                 (AsyncApiDocumentGenerator generator) =>

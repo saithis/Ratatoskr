@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace Ratatoskr.AsyncApi.Model.Bindings;
 
-public class ChannelBindings
+public sealed class ChannelBindings
 {
     /// <summary>
     /// This object contains information about the channel representation in AMQP.
@@ -12,7 +12,7 @@ public class ChannelBindings
     public AmqpChannelBinding? Amqp { get; set; }
 }
 
-public class AmqpChannelBinding
+public sealed class AmqpChannelBinding
 {
     /// <summary>
     /// Defines what type of channel is it. Can be either <c>queue</c> or <c>routingKey</c> (default).
@@ -41,7 +41,7 @@ public class AmqpChannelBinding
     public string BindingVersion { get; set; } = "0.3.0";
 }
 
-public class AmqpExchangeDefinition
+public sealed class AmqpExchangeDefinition
 {
     /// <summary>
     /// The name of the exchange. It MUST NOT exceed 255 characters long.
@@ -79,7 +79,7 @@ public class AmqpExchangeDefinition
     public string? VHost { get; set; }
 }
 
-public class AmqpQueueDefinition
+public sealed class AmqpQueueDefinition
 {
     /// <summary>
     /// The name of the queue. It MUST NOT exceed 255 characters long.
@@ -125,11 +125,11 @@ public enum AmqpChannelType
 {
     /// <summary>Channel represents a queue.</summary>
     [JsonStringEnumMemberName("queue")]
-    Queue,
+    Queue = 0,
 
     /// <summary>Channel represents a routing key (exchange-based).</summary>
     [JsonStringEnumMemberName("routingKey")]
-    RoutingKey,
+    RoutingKey = 1,
 }
 
 /// <summary>
@@ -140,21 +140,21 @@ public enum AmqpExchangeType
 {
     /// <summary>Topic exchange with pattern-based routing.</summary>
     [JsonStringEnumMemberName("topic")]
-    Topic,
+    Topic = 0,
 
     /// <summary>Direct exchange with exact routing key matching.</summary>
     [JsonStringEnumMemberName("direct")]
-    Direct,
+    Direct = 1,
 
     /// <summary>Fanout exchange that broadcasts to all bound queues.</summary>
     [JsonStringEnumMemberName("fanout")]
-    Fanout,
+    Fanout = 2,
 
     /// <summary>The default (nameless) exchange.</summary>
     [JsonStringEnumMemberName("default")]
-    Default,
+    Default = 3,
 
     /// <summary>Headers exchange that routes based on message headers.</summary>
     [JsonStringEnumMemberName("headers")]
-    Headers,
+    Headers = 4,
 }

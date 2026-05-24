@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace Ratatoskr.AsyncApi.Model;
 
-public class AsyncApiInfo
+public sealed class AsyncApiInfo
 {
     [JsonPropertyName("title")]
     public string Title { get; set; } = "";
@@ -19,7 +19,7 @@ public class AsyncApiInfo
     public AsyncApiContact? Contact { get; set; }
 }
 
-public class AsyncApiContact
+public sealed class AsyncApiContact
 {
     [JsonPropertyName("name")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

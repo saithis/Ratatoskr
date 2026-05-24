@@ -4,7 +4,7 @@ namespace Ratatoskr;
 /// Marks a class as a Ratatoskr message with the specified type identifier.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
-public class RatatoskrMessageAttribute : Attribute
+public sealed class RatatoskrMessageAttribute : Attribute
 {
     /// <summary>
     /// The CloudEvent type identifier (e.g., "com.example.order.created").

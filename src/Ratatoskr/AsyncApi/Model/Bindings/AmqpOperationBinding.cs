@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace Ratatoskr.AsyncApi.Model.Bindings;
 
-public class OperationBindings
+public sealed class OperationBindings
 {
     /// <summary>
     /// This object contains information about the operation representation in AMQP.
@@ -23,7 +23,7 @@ public class OperationBindings
     "CA2227:CollectionPropertiesShouldBeReadOnly",
     Justification = "DTO for JSON serialization"
 )]
-public class AmqpOperationBinding
+public sealed class AmqpOperationBinding
 {
     /// <summary>
     /// TTL (Time-To-Live) for the message. It MUST be greater than or equal to zero.

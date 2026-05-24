@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace Ratatoskr.AsyncApi.Model;
 
-public class AsyncApiReference
+public sealed class AsyncApiReference
 {
     [JsonPropertyName("$ref")]
     public string Ref { get; set; }

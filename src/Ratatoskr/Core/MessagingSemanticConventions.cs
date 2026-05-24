@@ -8,31 +8,45 @@ namespace Ratatoskr.Core;
 /// </summary>
 internal static class MessagingSemanticConventions
 {
-    // Required attributes
+    /// <summary>
+    /// Required attributes
+    /// </summary>
     public const string System = "messaging.system";
     public const string OperationName = "messaging.operation.name";
     public const string OperationType = "messaging.operation.type";
 
-    // Destination attributes
+    /// <summary>
+    /// Destination attributes
+    /// </summary>
     public const string DestinationName = "messaging.destination.name";
     public const string DestinationSubscriptionName = "messaging.destination.subscription.name";
 
-    // Message attributes
+    /// <summary>
+    /// Message attributes
+    /// </summary>
     public const string MessageId = "messaging.message.id";
     public const string MessageBodySize = "messaging.message.body.size";
 
-    // Server attributes
+    /// <summary>
+    /// Server attributes
+    /// </summary>
     public const string ServerAddress = "server.address";
     public const string ServerPort = "server.port";
 
-    // Error attributes
+    /// <summary>
+    /// Error attributes
+    /// </summary>
     public const string ErrorType = "error.type";
 
-    // RabbitMQ-specific attributes
+    /// <summary>
+    /// RabbitMQ-specific attributes
+    /// </summary>
     public const string RabbitMqRoutingKey = "messaging.rabbitmq.destination.routing_key";
     public const string RabbitMqDeliveryTag = "messaging.rabbitmq.message.delivery_tag";
 
-    // Operation type values
+    /// <summary>
+    /// Operation type values
+    /// </summary>
     public const string OperationTypeCreate = "create";
     public const string OperationTypeSend = "send";
     public const string OperationTypeProcess = "process";

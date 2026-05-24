@@ -3,7 +3,7 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr.Config;
 
-public class ConsumeChannelBuilder(
+public sealed class ConsumeChannelBuilder(
     ChannelRegistration channel,
     IServiceCollection services,
     RatatoskrBuilder ratatoskrBuilder
@@ -25,12 +25,12 @@ public class ConsumeChannelBuilder(
         ArgumentNullException.ThrowIfNull(configure);
 
         AddMessage<T>(configure: null);
-        var messageRegistration = Channel.Messages.Last();
+        var messageRegistration = Channel.Messages[^1];
 
         var consumptionBuilder = new MessageConsumptionBuilder<T>(services);
         configure(consumptionBuilder);
 
-        ValidateAndSetHandlers<T>(messageRegistration, consumptionBuilder);
+        ValidateAndSetHandlers(messageRegistration, consumptionBuilder);
 
         return this;
     }
@@ -49,12 +49,12 @@ public class ConsumeChannelBuilder(
         ArgumentNullException.ThrowIfNull(configureMessage);
 
         AddMessage<T>(configureMessage);
-        var messageRegistration = Channel.Messages.Last();
+        var messageRegistration = Channel.Messages[^1];
 
         var consumptionBuilder = new MessageConsumptionBuilder<T>(services);
         configureHandlers(consumptionBuilder);
 
-        ValidateAndSetHandlers<T>(messageRegistration, consumptionBuilder);
+        ValidateAndSetHandlers(messageRegistration, consumptionBuilder);
 
         return this;
     }
@@ -69,7 +69,7 @@ public class ConsumeChannelBuilder(
         {
             throw new InvalidOperationException(
                 $"Consumes<{typeof(T).Name}>() requires at least one handler. "
-                    + $"Call .WithHandler<THandler>() to register a handler."
+                    + "Call .WithHandler<THandler>() to register a handler."
             );
         }
 
@@ -82,7 +82,7 @@ public class ConsumeChannelBuilder(
 /// <summary>
 /// Stores handler registrations on a <see cref="MessageRegistration"/> as an extension.
 /// </summary>
-internal class MessageHandlerRegistrations(List<ChannelHandlerRegistration> handlers)
+internal sealed class MessageHandlerRegistrations(List<ChannelHandlerRegistration> handlers)
 {
     public IReadOnlyList<ChannelHandlerRegistration> Handlers => handlers;
 }

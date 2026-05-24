@@ -5,7 +5,7 @@ namespace Ratatoskr.AsyncApi.Config;
 /// <summary>
 /// Top-level options for AsyncAPI document generation.
 /// </summary>
-public class AsyncApiOptions
+public sealed class AsyncApiOptions
 {
     /// <summary>The Info section of the AsyncAPI document.</summary>
     public AsyncApiInfo Info { get; set; } = new();
@@ -37,5 +37,10 @@ public class AsyncApiOptions
             Email = email,
         };
         return this;
+    }
+
+    public AsyncApiOptions WithContact(string name, Uri url = null, string? email = null)
+    {
+        throw new NotImplementedException();
     }
 }

@@ -6,7 +6,7 @@ namespace Ratatoskr.Core;
 /// Immutable registry of channel-scoped handler registrations, built at startup from channel configuration.
 /// Replaces DI-based handler discovery with explicit lookups by channel name and message type.
 /// </summary>
-public class ChannelHandlerRegistry
+public sealed class ChannelHandlerRegistry
 {
     private readonly Dictionary<
         (string ChannelName, Type MessageType),
@@ -86,15 +86,15 @@ public class ChannelHandlerRegistry
 
         foreach (var (key, list) in fireAndForget)
         {
-            registry._fireAndForget[key] = list.ToArray();
+            registry._fireAndForget[key] = [.. list];
         }
         foreach (var (key, list) in inbox)
         {
-            registry._inbox[key] = list.ToArray();
+            registry._inbox[key] = [.. list];
         }
         foreach (var (key, list) in inboxByChannel)
         {
-            registry._inboxByChannel[key] = list.ToArray();
+            registry._inboxByChannel[key] = [.. list];
         }
         foreach (var (key, value) in inboxByKey)
         {
@@ -117,8 +117,8 @@ public class ChannelHandlerRegistry
                 $"Duplicate inbox handler key '{key}' registered on channel '{channelName}' "
                     + $"for handler '{handler.HandlerType.Name}'. "
                     + $"Key is already used by handler '{existing.HandlerType.Name}'. "
-                    + $"Inbox handler keys must be globally unique because the inbox processor "
-                    + $"looks up handlers by key across all channels and DbContexts."
+                    + "Inbox handler keys must be globally unique because the inbox processor "
+                    + "looks up handlers by key across all channels and DbContexts."
             );
         }
 

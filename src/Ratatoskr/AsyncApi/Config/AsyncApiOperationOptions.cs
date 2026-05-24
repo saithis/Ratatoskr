@@ -13,7 +13,7 @@ namespace Ratatoskr.AsyncApi.Config;
     "CA1002:Do not expose generic lists",
     Justification = "DTO for API configuration"
 )]
-public class AsyncApiOperationOptions
+public sealed class AsyncApiOperationOptions
 {
     /// <summary>Custom operationId. Defaults to channel name (grouped) or {action}{TypeName} (per-message).</summary>
     public string? Id { get; private set; }

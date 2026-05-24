@@ -6,7 +6,7 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr;
 
-public partial class Ratatoskr(
+public sealed class Ratatoskr(
     IMessageSerializerResolver serializerResolver,
     IEnumerable<IMessageSender> senders,
     IMessagePropertiesEnricher enricher,
@@ -17,8 +17,9 @@ public partial class Ratatoskr(
 {
     private readonly FrozenDictionary<string, IMessageSender> _senderMap =
         senders.ToFrozenDictionary(x => x.TransportName);
-    private readonly IMessageActivityObserver[] _observers = observers.ToArray();
+    private readonly IMessageActivityObserver[] _observers = [.. observers];
 
+    /// <inheritdoc/>
     [SuppressMessage(
         "Design",
         "CA1031:Do not catch general exception types",
@@ -41,13 +42,13 @@ public partial class Ratatoskr(
 
         if (activity != null)
         {
-            activity.SetTag(MessagingSemanticConventions.OperationName, "publish");
-            activity.SetTag(
+            _ = activity.SetTag(MessagingSemanticConventions.OperationName, "publish");
+            _ = activity.SetTag(
                 MessagingSemanticConventions.OperationType,
                 MessagingSemanticConventions.OperationTypeCreate
             );
-            activity.SetTag(MessagingSemanticConventions.System, "ratatoskr");
-            activity.SetTag(MessagingSemanticConventions.MessageId, props.Id);
+            _ = activity.SetTag(MessagingSemanticConventions.System, "ratatoskr");
+            _ = activity.SetTag(MessagingSemanticConventions.MessageId, props.Id);
         }
 
         var serializer = serializerResolver.GetSerializer(typeof(TMessage));
@@ -113,11 +114,13 @@ public partial class Ratatoskr(
 
         if (exceptions is { Count: > 0 })
         {
-            activity?.SetTag(
-                MessagingSemanticConventions.ErrorType,
-                exceptions[0].GetType().FullName
+            _ = (
+                activity?.SetTag(
+                    MessagingSemanticConventions.ErrorType,
+                    exceptions[0].GetType().FullName
+                )
             );
-            activity?.SetStatus(ActivityStatusCode.Error, exceptions[0].Message);
+            _ = (activity?.SetStatus(ActivityStatusCode.Error, exceptions[0].Message));
             throw new AggregateException(
                 $"One or more transports failed to send message '{props.Id}'",
                 exceptions

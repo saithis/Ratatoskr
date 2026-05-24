@@ -15,7 +15,7 @@ namespace Ratatoskr.AsyncApi.Generation;
 /// Generates an AsyncAPI v3 document from the Ratatoskr channel registry and configuration.
 /// Transport-agnostic: transport-specific bindings are applied by registered <see cref="IAsyncApiTransportBindingProvider"/> implementations.
 /// </summary>
-public partial class AsyncApiDocumentGenerator(
+public sealed class AsyncApiDocumentGenerator(
     AsyncApiOptions options,
     ChannelRegistry channelRegistry,
     CloudEventsOptions cloudEventsOptions,
@@ -91,8 +91,7 @@ public partial class AsyncApiDocumentGenerator(
         // Build message definitions and link them to the channel
         foreach (var msg in channel.Messages)
         {
-            var asyncApiMessage = BuildMessage(msg, channel, schemas);
-            componentMessages[msg.MessageTypeName] = asyncApiMessage;
+            componentMessages[msg.MessageTypeName] = BuildMessage(msg, channel, schemas);
             asyncApiChannel.Messages[msg.MessageTypeName] = AsyncApiReference.ToComponentMessage(
                 msg.MessageTypeName
             );
@@ -220,11 +219,12 @@ public partial class AsyncApiDocumentGenerator(
 
         if (channel.Messages.Count > 0)
         {
-            operation.Messages = channel
-                .Messages.Select(m =>
+            operation.Messages =
+            [
+                .. channel.Messages.Select(m =>
                     AsyncApiReference.ToChannelMessage(channel.ChannelName, m.MessageTypeName)
-                )
-                .ToList();
+                ),
+            ];
         }
 
         AddOperation(operationId, operation, channel, document);
@@ -245,7 +245,7 @@ public partial class AsyncApiDocumentGenerator(
         {
             var msgOpts = msg.GetAsyncApiMessageOptions();
             var opOpts = msgOpts?.Operation;
-            var operationId = opOpts?.Id ?? $"{action}{msg.MessageType.Name}";
+            var operationId = opOpts?.Id ?? (action + msg.MessageType.Name);
 
             if (groups.TryGetValue(operationId, out var group))
             {
@@ -274,11 +274,12 @@ public partial class AsyncApiDocumentGenerator(
                 Summary = opOpts?.Summary,
                 Description = opOpts?.Description,
                 Tags = opOpts?.Tags?.Select(t => new AsyncApiTag { Name = t }).ToList(),
-                Messages = messages
-                    .Select(m =>
+                Messages =
+                [
+                    .. messages.Select(m =>
                         AsyncApiReference.ToChannelMessage(channel.ChannelName, m.MessageTypeName)
-                    )
-                    .ToList(),
+                    ),
+                ],
             };
 
             AddOperation(operationId, operation, channel, document);
@@ -296,7 +297,7 @@ public partial class AsyncApiDocumentGenerator(
         {
             throw new InvalidOperationException(
                 $"Duplicate AsyncAPI operationId '{operationId}'. "
-                    + $"Use WithOperation(o => o.WithId(\"...\")) to set a unique ID."
+                    + "Use WithOperation(o => o.WithId(\"...\")) to set a unique ID."
             );
         }
 

@@ -8,7 +8,7 @@ namespace Ratatoskr.AsyncApi.Model;
     "CA2227:CollectionPropertiesShouldBeReadOnly",
     Justification = "DTO for JSON serialization"
 )]
-public class AsyncApiDocument
+public sealed class AsyncApiDocument
 {
     [JsonPropertyName("asyncapi")]
     public string AsyncApi { get; set; } = "3.0.0";

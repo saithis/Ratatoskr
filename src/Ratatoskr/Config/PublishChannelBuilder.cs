@@ -2,7 +2,7 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr.Config;
 
-public class PublishChannelBuilder(ChannelRegistration channel) : ChannelBuilder(channel)
+public sealed class PublishChannelBuilder(ChannelRegistration channel) : ChannelBuilder(channel)
 {
     /// <summary>
     /// Registers a message type that is produced to this channel.
