@@ -11,7 +11,7 @@ internal class InboxTelemetry
     /// <summary>
     /// Starts a "deliver inbox" activity, restoring trace context from the message properties.
     /// </summary>
-    public Activity? StartDeliverActivity(MessageProperties props, string handlerKey)
+    public static Activity? StartDeliverActivity(MessageProperties props, string handlerKey)
     {
         ActivityContext.TryParse(props.TraceParent, props.TraceState, out var parentContext);
 
@@ -36,12 +36,12 @@ internal class InboxTelemetry
         return activity;
     }
 
-    public void RecordBatchSize(int count)
+    public static void RecordBatchSize(int count)
     {
         RatatoskrDiagnostics.InboxBatchSize.Record(count);
     }
 
-    public void RecordDelivered(bool success)
+    public static void RecordDelivered(bool success)
     {
         RatatoskrDiagnostics.InboxDeliverCount.Add(
             1,
@@ -49,12 +49,12 @@ internal class InboxTelemetry
         );
     }
 
-    public void RecordPoisoned()
+    public static void RecordPoisoned()
     {
         RatatoskrDiagnostics.InboxPoisonCount.Add(1);
     }
 
-    public void RecordBatchDuration(long startTimestamp)
+    public static void RecordBatchDuration(long startTimestamp)
     {
         RatatoskrDiagnostics.InboxProcessDuration.Record(
             Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds

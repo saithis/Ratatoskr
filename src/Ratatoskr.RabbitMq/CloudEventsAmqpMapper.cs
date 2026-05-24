@@ -86,7 +86,7 @@ public partial class CloudEventsAmqpMapper(
         }
     }
 
-    private byte[] MapBinaryMode(
+    private static byte[] MapBinaryMode(
         byte[] serializedData,
         MessageProperties props,
         BasicProperties outgoing
@@ -177,7 +177,7 @@ public partial class CloudEventsAmqpMapper(
         return serializedData;
     }
 
-    private byte[] MapStructuredMode(
+    private static byte[] MapStructuredMode(
         byte[] serializedData,
         MessageProperties props,
         BasicProperties outgoing
@@ -421,7 +421,7 @@ public partial class CloudEventsAmqpMapper(
             StringComparison.OrdinalIgnoreCase
         );
 
-    private (byte[] body, MessageProperties props) MapStructuredModeIncoming(
+    private static (byte[] body, MessageProperties props) MapStructuredModeIncoming(
         BasicDeliverEventArgs incoming
     )
     {

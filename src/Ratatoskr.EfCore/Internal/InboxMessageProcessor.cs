@@ -114,7 +114,7 @@ internal class InboxMessageProcessor<TDbContext>(
             }
         }
 
-        telemetry.RecordBatchSize(statuses.Length);
+        InboxTelemetry.RecordBatchSize(statuses.Length);
 
         var batchStartTimestamp = Stopwatch.GetTimestamp();
 
@@ -127,7 +127,7 @@ internal class InboxMessageProcessor<TDbContext>(
                     "InboxMessage record not found — likely deleted.",
                     timeProvider
                 );
-                telemetry.RecordPoisoned();
+                InboxTelemetry.RecordPoisoned();
                 await dbContext.SaveChangesAsync(cancellationToken);
                 continue;
             }
@@ -149,7 +149,7 @@ internal class InboxMessageProcessor<TDbContext>(
                     $"Properties deserialization failed: {ex.Message}",
                     timeProvider
                 );
-                telemetry.RecordPoisoned();
+                InboxTelemetry.RecordPoisoned();
                 await dbContext.SaveChangesAsync(cancellationToken);
                 continue;
             }
@@ -166,7 +166,7 @@ internal class InboxMessageProcessor<TDbContext>(
                     $"Handler key '{status.HandlerKey}' is not registered. The handler may have been removed or renamed.",
                     timeProvider
                 );
-                telemetry.RecordPoisoned();
+                InboxTelemetry.RecordPoisoned();
                 await dbContext.SaveChangesAsync(cancellationToken);
 
                 await observers.NotifyAsync(
@@ -189,7 +189,7 @@ internal class InboxMessageProcessor<TDbContext>(
             object? deliveredMessage = null;
             try
             {
-                deliverActivity = telemetry.StartDeliverActivity(props, status.HandlerKey);
+                deliverActivity = InboxTelemetry.StartDeliverActivity(props, status.HandlerKey);
 
                 var serializer = serializerResolver.GetSerializer(registration.MessageType);
                 deliveredMessage =
@@ -207,7 +207,7 @@ internal class InboxMessageProcessor<TDbContext>(
                 );
 
                 status.MarkAsCompleted(timeProvider);
-                telemetry.RecordDelivered(success: true);
+                InboxTelemetry.RecordDelivered(success: true);
 
                 InboxMessageProcessorLog.HandlerCompleted(
                     logger,
@@ -229,7 +229,7 @@ internal class InboxMessageProcessor<TDbContext>(
             {
                 handlerException = ex;
                 deliverActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                telemetry.RecordDelivered(success: false);
+                InboxTelemetry.RecordDelivered(success: false);
                 InboxMessageProcessorLog.HandlerFailed(
                     logger,
                     status.HandlerKey,
@@ -280,7 +280,7 @@ internal class InboxMessageProcessor<TDbContext>(
 
             if (status.IsPoisoned)
             {
-                telemetry.RecordPoisoned();
+                InboxTelemetry.RecordPoisoned();
                 await observers.NotifyAsync(
                     new MessageActivity
                     {
@@ -296,7 +296,7 @@ internal class InboxMessageProcessor<TDbContext>(
             }
         }
 
-        telemetry.RecordBatchDuration(batchStartTimestamp);
+        InboxTelemetry.RecordBatchDuration(batchStartTimestamp);
 
         return statuses.Length;
     }
