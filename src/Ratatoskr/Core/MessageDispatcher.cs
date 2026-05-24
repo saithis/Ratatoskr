@@ -191,6 +191,7 @@ public sealed partial class MessageDispatcher(
                 Message = message,
                 MessageType = messageType,
                 DispatchResult = result,
+                TransportName = transportName,
                 Exception = exceptions switch
                 {
                     null => null,
