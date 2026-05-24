@@ -185,14 +185,8 @@ dotnet_naming_style.forbidden_field_style.required_prefix = ____PUBLIC_FIELDS_AR
 # Enforce IDE0005 (Remove unnecessary usings) as an error
 dotnet_diagnostic.IDE0005.severity = error
 
-# Enforce IDE0290 (Use primary constructor)
-dotnet_diagnostic.IDE0290.severity = warning
-
 # Enforce IDE0060 (Remove unused parameters - ignores discards automatically!)
 dotnet_diagnostic.IDE0060.severity = error
-
-# Simplify interpolation 
-dotnet_diagnostic.IDE0071.severity = warning
 
 # Allow multiple blank lines
 dotnet_diagnostic.IDE2000.severity = silent
@@ -373,9 +367,6 @@ dotnet_diagnostic.CA1005.severity = warning
 # Enums should have zero value
 dotnet_diagnostic.CA1008.severity = error
 
-# Collections should implement generic interface
-dotnet_diagnostic.CA1010.severity = warning
-
 # Abstract types should not have public constructors
 dotnet_diagnostic.CA1012.severity = error
 
@@ -427,9 +418,6 @@ dotnet_diagnostic.CA1036.severity = suggestion
 # Avoid empty interfaces
 dotnet_diagnostic.CA1040.severity = suggestion
 
-# Provide ObsoleteAttribute message
-dotnet_diagnostic.CA1041.severity = warning
-
 # Use integral or string argument for indexers
 dotnet_diagnostic.CA1043.severity = suggestion
 
@@ -472,9 +460,6 @@ dotnet_diagnostic.CA1058.severity = warning
 # Move P/Invokes to NativeMethods class
 dotnet_diagnostic.CA1060.severity = warning
 
-# Do not hide base class methods
-dotnet_diagnostic.CA1061.severity = warning
-
 # Validate arguments of public methods
 dotnet_code_quality.CA1062.api_surface = public, protected
 dotnet_diagnostic.CA1062.severity = error
@@ -491,17 +476,8 @@ dotnet_diagnostic.CA1065.severity = warning
 # Implement IEquatable when overriding Equals
 dotnet_diagnostic.CA1066.severity = warning
 
-# Override Equals when implementing IEquatable
-dotnet_diagnostic.CA1067.severity = warning
-
-# CancellationToken parameters must come last
-dotnet_diagnostic.CA1068.severity = warning
-
 # Enums should not have duplicate values
 dotnet_diagnostic.CA1069.severity = error
-
-# Do not declare event fields as virtual
-dotnet_diagnostic.CA1070.severity = warning
 
 ####################################################################################################
 # Documentation Rules (CA1200)
@@ -534,17 +510,8 @@ dotnet_diagnostic.CA1307.severity = error
 # Normalize strings to uppercase
 dotnet_diagnostic.CA1308.severity = warning
 
-# Use ordinal StringComparison
-dotnet_diagnostic.CA1309.severity = warning
-
-# Specify StringComparison for correctness
-dotnet_diagnostic.CA1310.severity = warning
-
 # Specify a culture or use an invariant version
 dotnet_diagnostic.CA1311.severity = error
-
-# Specify marshaling for P/Invoke string arguments
-dotnet_diagnostic.CA2101.severity = warning
 
 ####################################################################################################
 # Interoperability Rules (CA1400-CA1422)
@@ -571,9 +538,6 @@ dotnet_diagnostic.CA1419.severity = suggestion
 # Property, type, or attribute requires runtime marshalling
 dotnet_diagnostic.CA1420.severity = suggestion
 
-# Method uses runtime marshalling when DisableRuntimeMarshallingAttribute is applied
-dotnet_diagnostic.CA1421.severity = warning
-
 # Validate platform compatibility - obsoleted APIs
 dotnet_diagnostic.CA1422.severity = warning
 
@@ -595,41 +559,14 @@ dotnet_diagnostic.CA1505.severity = error
 # Avoid excessive class coupling
 dotnet_diagnostic.CA1506.severity = suggestion # This also triggers for the main method
 
-# Use nameof in place of string
-dotnet_diagnostic.CA1507.severity = warning
-
 # Avoid dead conditional code
 dotnet_diagnostic.CA1508.severity = error
 
 # Invalid entry in code metrics configuration file
 dotnet_diagnostic.CA1509.severity = error
 
-# Use ArgumentNullException throw helper
-dotnet_diagnostic.CA1510.severity = warning
-
-# Use ArgumentException throw helper
-dotnet_diagnostic.CA1511.severity = warning
-
-# Use ArgumentOutOfRangeException throw helper
-dotnet_diagnostic.CA1512.severity = warning
-
-# Use ObjectDisposedException throw helper
-dotnet_diagnostic.CA1513.severity = warning
-
-# Avoid redundant length argument
-dotnet_diagnostic.CA1514.severity = warning
-
 # Consider making public types internal
 dotnet_diagnostic.CA1515.severity = suggestion
-
-####################################################################################################
-# Naming Rules (CA1700-CA1727 and IDE0130)
-# Naming rules support adherence to the naming conventions of the .NET design guidelines
-# Part of dotNetDave's Editor Config Suite
-####################################################################################################
-
-# Namespace does not match folder structure
-dotnet_diagnostic.IDE0130.severity = warning
 
 # Do not name enum values 'Reserved'
 dotnet_code_quality.CA1700.api_surface = public, protected
@@ -666,17 +603,11 @@ dotnet_diagnostic.CA1716.severity = error
 # Only FlagsAttribute enums should have plural names
 dotnet_diagnostic.CA1717.severity = error
 
-# Identifiers should not contain type names
-dotnet_diagnostic.CA1720.severity = warning
-
 # Property names should not match get methods
 dotnet_diagnostic.CA1721.severity = error
 
 # Type names should not match namespaces
 dotnet_diagnostic.CA1724.severity = warning
-
-# Parameter names should match base declaration
-dotnet_diagnostic.CA1725.severity = warning
 
 # Use PascalCase for named placeholders
 dotnet_diagnostic.CA1727.severity = error
@@ -762,10 +693,6 @@ dotnet_diagnostic.CA1828.severity = silent
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
 dotnet_diagnostic.CA1829.severity = error
 
-# Prefer strongly-typed Append and Insert method overloads on StringBuilder
-# Examples in Rock Your Code: Code Performance in Microsoft .NET
-dotnet_diagnostic.CA1830.severity = warning
-
 # Use AsSpan instead of Range-based indexers for string when appropriate
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
 dotnet_diagnostic.CA1831.severity = error
@@ -782,10 +709,6 @@ dotnet_diagnostic.CA1833.severity = error
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
 dotnet_diagnostic.CA1834.severity = suggestion
 
-# Prefer the memory-based overloads of ReadAsync/WriteAsync methods in stream-based classes
-# Examples in Rock Your Code: Code Performance in Microsoft .NET
-dotnet_diagnostic.CA1835.severity = warning
-
 # Prefer IsEmpty over Count when available
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
 dotnet_diagnostic.CA1836.severity = error
@@ -793,9 +716,6 @@ dotnet_diagnostic.CA1836.severity = error
 # Use Environment.ProcessId instead of Process.GetCurrentProcess().Id
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
 dotnet_diagnostic.CA1837.severity = suggestion
-
-# Avoid StringBuilder parameters for P/Invokes
-dotnet_diagnostic.CA1838.severity = warning
 
 # Use Environment.ProcessPath instead of Process.GetCurrentProcess().MainModule.FileName
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
@@ -816,9 +736,6 @@ dotnet_diagnostic.CA1842.severity = error
 # Do not use 'WaitAll' with a single task
 # Examples in Rock Your Code: Code Performance in Microsoft .NET *
 dotnet_diagnostic.CA1843.severity = error
-
-# Provide memory-based overrides of async methods when subclassing 'Stream' *
-dotnet_diagnostic.CA1844.severity = warning
 
 # Use span-based 'string.Concat'
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
@@ -873,24 +790,9 @@ dotnet_diagnostic.CA1857.severity = suggestion
 # Use StartsWith instead of IndexOf
 dotnet_diagnostic.CA1858.severity = error
 
-# Use concrete types when possible for improved performance
-# Examples in Rock Your Code: Code Performance in Microsoft .NET
-dotnet_diagnostic.CA1859.severity = warning
-
 # Avoid using 'Enumerable.Any()' extension method
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
 dotnet_diagnostic.CA1860.severity = error
-
-# Avoid constant arrays as arguments
-# Examples in Rock Your Code: Code Performance in Microsoft .NET
-dotnet_diagnostic.CA1861.severity = warning
-
-# Prefer the 'StringComparison' method overloads to perform case-insensitive string comparisons
-# Examples in Rock Your Code: Code Performance in Microsoft .NET
-dotnet_diagnostic.CA1862.severity = warning
-
-# Use 'CompositeFormat'
-dotnet_diagnostic.CA1863.severity = warning
 
 # Prefer the 'IDictionary.TryAdd(TKey, TValue)' method
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
@@ -906,15 +808,9 @@ dotnet_diagnostic.CA1867.severity = error
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
 dotnet_diagnostic.CA1868.severity = error
 
-# Cache and reuse 'JsonSerializerOptions' instances
-dotnet_diagnostic.CA1869.severity = warning
-
 # Use a cached 'SearchValues' instance
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
 dotnet_diagnostic.CA1870.severity = error
-
-# Do not pass a nullable struct to 'ArgumentNullException.ThrowIfNull'
-dotnet_diagnostic.CA1871.severity = warning
 
 # Prefer 'Convert.ToHexString' and 'Convert.ToHexStringLower' over call chains based on 'BitConverter.ToString'
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
@@ -926,10 +822,6 @@ dotnet_diagnostic.CA1873.severity = error
 
 # CA1874: Prefer static HashData method over ComputeHash *
 dotnet_diagnostic.CA1874.severity = error
-
-# CA1875: Use 'Regex.Count'
-# Examples in Rock Your Code: Code Performance in Microsoft .NET
-dotnet_diagnostic.CA1875.severity = warning
 
 # CA1877: Use 'Path.Combine' or 'Path.Join' overloads
 dotnet_diagnostic.CA1877.severity = warning
@@ -984,9 +876,6 @@ dotnet_diagnostic.CA2018.severity = warning
 
 # ThreadStatic fields should not use inline initialization
 dotnet_diagnostic.CA2019.severity = error
-
-# Prevent behavioral change caused by built-in operators of IntPtr/UIntPtr
-dotnet_diagnostic.CA2020.severity = warning
 
 # Do not call Enumerable.Cast<T> or Enumerable.OfType<T> with incompatible types
 dotnet_diagnostic.CA2021.severity = warning
@@ -1126,35 +1015,11 @@ dotnet_diagnostic.CA3011.severity = warning
 # Review code for regex injection vulnerabilities
 dotnet_diagnostic.CA3012.severity = warning
 
-# Do Not Add Schema By URL
-dotnet_diagnostic.CA3061.severity = warning
-
-# Insecure DTD processing in XML
-dotnet_diagnostic.CA3075.severity = warning
-
-# Insecure XSLT script processing
-dotnet_diagnostic.CA3076.severity = warning
-
-# Insecure Processing in API Design, XmlDocument and XmlTextReader
-dotnet_diagnostic.CA3077.severity = warning
-
-# Mark Verb Handlers With Validate Antiforgery Token
-dotnet_diagnostic.CA3147.severity = warning
-
-# Do Not Use Weak Cryptographic Algorithms
-dotnet_diagnostic.CA5350.severity = warning
-
 # Do Not Use Broken Cryptographic Algorithms
 dotnet_diagnostic.CA5351.severity = error
 
 # Do Not Use Unsafe Cipher Modes
 dotnet_diagnostic.CA5358.severity = warning
-
-# Do Not Disable Certificate Validation
-dotnet_diagnostic.CA5359.severity = warning
-
-# Do Not Call Dangerous Methods In Deserialization
-dotnet_diagnostic.CA5360.severity = warning
 
 # Do Not Disable SChannel Use of Strong Crypto
 dotnet_diagnostic.CA5361.severity = warning
@@ -1162,41 +1027,11 @@ dotnet_diagnostic.CA5361.severity = warning
 # Do Not Refer Self In Serializable Class
 dotnet_diagnostic.CA5362.severity = error
 
-# Do Not Disable Request Validation
-dotnet_diagnostic.CA5363.severity = warning
-
 # Do Not Use Deprecated Security Protocols
 dotnet_diagnostic.CA5364.severity = error
 
-# Do Not Disable HTTP Header Checking
-dotnet_diagnostic.CA5365.severity = warning
-
-# Use XmlReader For DataSet Read Xml
-dotnet_diagnostic.CA5366.severity = warning
-
 # Do Not Serialize Types With Pointer Fields
 dotnet_diagnostic.CA5367.severity = warning
-
-# Set ViewStateUserKey For Classes Derived From Page
-dotnet_diagnostic.CA5368.severity = warning
-
-# Use XmlReader For Deserialize
-dotnet_diagnostic.CA5369.severity = warning
-
-# Use XmlReader For Validating Reader
-dotnet_diagnostic.CA5370.severity = warning
-
-# Use XmlReader For Schema Read
-dotnet_diagnostic.CA5371.severity = warning
-
-# Use XmlReader For XPathDocument
-dotnet_diagnostic.CA5372.severity = warning
-
-# Do not use obsolete key derivation function
-dotnet_diagnostic.CA5373.severity = warning
-
-# Do Not Use XslTransform
-dotnet_diagnostic.CA5374.severity = warning
 
 # Do Not Use Account Shared Access Signature
 dotnet_diagnostic.CA5375.severity = warning
@@ -1210,9 +1045,6 @@ dotnet_diagnostic.CA5377.severity = warning
 # Do not disable ServicePointManagerSecurityProtocols
 dotnet_diagnostic.CA5378.severity = warning
 
-# Do Not Use Weak Key Derivation Function Algorithm
-dotnet_diagnostic.CA5379.severity = warning
-
 # Do Not Add Certificates To Root Store
 dotnet_diagnostic.CA5380.severity = warning
 
@@ -1224,12 +1056,6 @@ dotnet_diagnostic.CA5382.severity = warning
 
 # Ensure Use Secure Cookies In ASP.Net Core
 dotnet_diagnostic.CA5383.severity = warning
-
-# Do Not Use Digital Signature Algorithm (DSA)
-dotnet_diagnostic.CA5384.severity = warning
-
-# Use Rivest–Shamir–Adleman (RSA) Algorithm With Sufficient Key Size
-dotnet_diagnostic.CA5385.severity = warning
 
 # Avoid hardcoding SecurityProtocolType value
 dotnet_diagnostic.CA5386.severity = warning
@@ -1263,9 +1089,6 @@ dotnet_diagnostic.CA5395.severity = warning
 
 # Set HttpOnly to true for HttpCookie
 dotnet_diagnostic.CA5396.severity = warning
-
-# Do not use deprecated SslProtocols values
-dotnet_diagnostic.CA5397.severity = warning
 
 # Avoid hardcoded SslProtocols values
 dotnet_diagnostic.CA5398.severity = warning
@@ -1334,17 +1157,11 @@ dotnet_diagnostic.IDE0009.severity = suggestion
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
 dotnet_diagnostic.IDE0004.severity = error
 
-# Remove unnecessary import
-dotnet_diagnostic.IDE0005.severity = warning
-
 # Add missing cases to switch statement
 dotnet_diagnostic.IDE0010.severity = warning
 
 # Add braces
 dotnet_diagnostic.IDE0011.severity = error
-
-# Use throw expression
-dotnet_diagnostic.IDE0016.severity = warning
 
 # Use object initializers
 dotnet_diagnostic.IDE0017.severity = suggestion
@@ -1352,12 +1169,6 @@ dotnet_diagnostic.IDE0017.severity = suggestion
 # Inline variable declaration
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
 dotnet_diagnostic.IDE0018.severity = suggestion
-
-# Use pattern matching to avoid 'as' followed by a 'null' check
-dotnet_diagnostic.IDE0019.severity = warning
-
-# Use pattern matching to avoid 'is' check followed by a cast
-dotnet_diagnostic.IDE0020.severity = warning
 
 # Use expression body for constructors
 dotnet_diagnostic.IDE0021.severity = silent
@@ -1405,9 +1216,6 @@ dotnet_diagnostic.IDE0034.severity = suggestion
 # Remove unreachable code
 dotnet_diagnostic.IDE0035.severity = error
 
-# Order modifiers
-dotnet_diagnostic.IDE0036.severity = warning
-
 # Use inferred member name
 dotnet_diagnostic.IDE0037.severity = suggestion
 
@@ -1426,20 +1234,11 @@ dotnet_diagnostic.IDE0041.severity = suggestion
 # Deconstruct variable declaration
 dotnet_diagnostic.IDE0042.severity = suggestion
 
-# Format string contains invalid placeholder
-dotnet_diagnostic.IDE0043.severity = warning
-
-# Add readonly modifier
-dotnet_diagnostic.IDE0044.severity = warning
-
 # Use conditional expression for assignment
 dotnet_diagnostic.IDE0045.severity = suggestion
 
 # Use conditional expression for return
 dotnet_diagnostic.IDE0046.severity = suggestion
-
-# Parentheses preferences
-dotnet_diagnostic.IDE0047.severity = warning
 dotnet_diagnostic.IDE0048.severity = warning
 
 # Use language keywords instead of framework type names for type references
@@ -1447,9 +1246,6 @@ dotnet_diagnostic.IDE0049.severity = warning
 
 # Convert anonymous type to tuple
 dotnet_diagnostic.IDE0050.severity = suggestion
-
-# Remove unused private member
-dotnet_diagnostic.IDE0051.severity = warning
 
 # Remove unread private member
 dotnet_diagnostic.IDE0052.severity = error
@@ -1500,14 +1296,8 @@ dotnet_diagnostic.IDE0065.severity = error
 # Use switch expression
 dotnet_diagnostic.IDE0066.severity = warning
 
-# Use 'System.HashCode.Combine'
-dotnet_diagnostic.IDE0070.severity = warning
-
 # Add missing cases to switch expression
 dotnet_diagnostic.IDE0072.severity = suggestion
-
-# Require file header
-dotnet_diagnostic.IDE0073.severity = warning
 
 # Use compound assignment
 dotnet_diagnostic.IDE0074.severity = suggestion
@@ -1518,12 +1308,6 @@ dotnet_diagnostic.IDE0075.severity = suggestion
 # Remove invalid global 'SuppressMessageAttribute'
 dotnet_diagnostic.IDE0076.severity = silent
 
-# Avoid legacy format target in global 'SuppressMessageAttribute'
-dotnet_diagnostic.IDE0077.severity = warning
-
-# Use pattern matching
-dotnet_diagnostic.IDE0078.severity = warning
-
 # Remove unnecessary suppression
 dotnet_diagnostic.IDE0079.severity = error
 
@@ -1532,12 +1316,6 @@ dotnet_diagnostic.IDE0080.severity = suggestion
 
 # Remove ByVal
 dotnet_diagnostic.IDE0081.severity = error
-
-# Convert typeof to nameof
-dotnet_diagnostic.IDE0082.severity = warning
-
-# Use pattern matching (not operator)
-dotnet_diagnostic.IDE0083.severity = warning
 
 # Use pattern matching (IsNot operator)
 dotnet_diagnostic.IDE0084.severity = suggestion
@@ -1551,10 +1329,6 @@ dotnet_diagnostic.IDE0100.severity = silent
 
 # Use conditional delegate call
 dotnet_diagnostic.IDE0105.severity = warning
-
-# Remove unnecessary discard
-# Examples in Rock Your Code: Code Performance in Microsoft .NET
-dotnet_diagnostic.IDE0110.severity = warning
 
 # Simplify LINQ expression
 dotnet_diagnostic.IDE0120.severity = warning
@@ -1574,15 +1348,8 @@ dotnet_diagnostic.IDE0160.severity = suggestion
 # Use file-scoped namespace
 dotnet_diagnostic.IDE0161.severity = suggestion
 
-# Simplify property pattern
-dotnet_diagnostic.IDE0170.severity = warning
-
 # Use tuple to swap values
 dotnet_diagnostic.IDE0180.severity = suggestion
-
-# Unnecessary lambda expression
-# Examples in Rock Your Code: Code Performance in Microsoft .NET
-dotnet_diagnostic.IDE0200.severity = warning
 
 # Convert to top-level statements
 dotnet_diagnostic.IDE0210.severity = warning
@@ -1602,57 +1369,15 @@ dotnet_diagnostic.IDE0240.severity = error
 # Nullable directive is unnecessary
 dotnet_diagnostic.IDE0241.severity = error
 
-# Struct can be made 'readonly'
-dotnet_diagnostic.IDE0250.severity = warning
-
-# Member can be made 'readonly'
-dotnet_diagnostic.IDE0251.severity = warning
-
-# Use pattern matching
-dotnet_diagnostic.IDE0260.severity = warning
-
-# Null check can be simplified
-dotnet_diagnostic.IDE0270.severity = warning
-
 # Use 'nameof'
 dotnet_diagnostic.IDE0280.severity = error
 
 # Use primary constructor
 dotnet_diagnostic.IDE0290.severity = suggestion
 
-# Use collection expression for array
-dotnet_diagnostic.IDE0300.severity = warning
-
 # Use collection expression for empty
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
 dotnet_diagnostic.IDE0301.severity = suggestion
-
-# Use collection expression for stackalloc
-dotnet_diagnostic.IDE0302.severity = warning
-
-# Use collection expression for Create()
-dotnet_diagnostic.IDE0303.severity = warning
-
-# Use collection expression for builder
-dotnet_diagnostic.IDE0304.severity = warning
-
-# Use collection expression for fluent
-dotnet_diagnostic.IDE0305.severity = warning
-
-# Use collection expression for new
-dotnet_diagnostic.IDE0306.severity = warning
-
-# Make anonymous function static
-dotnet_diagnostic.IDE0320.severity = warning
-
-# Prefer 'System.Threading.Lock'
-dotnet_diagnostic.IDE0330.severity = warning
-
-# Use unbound generic type
-dotnet_diagnostic.IDE0340.severity = warning
-
-# Use implicitly typed lambda
-dotnet_diagnostic.IDE0350.severity = warning
 
 # Simplify property accessor
 dotnet_diagnostic.IDE0360.severity = suggestion
@@ -1689,9 +1414,6 @@ dotnet_diagnostic.IDE2006.severity = warning
 ####################################################################################################
 
 [*.{cs,csx,cake}]
-
-dotnet_diagnostic.IDE0007.severity = warning
-dotnet_diagnostic.IDE0008.severity = warning
 
 ####################################################################################################
 # Usage Rules (CA1801, CA1816, CA2200-CA2267)
@@ -1736,16 +1458,8 @@ dotnet_diagnostic.CA2216.severity = warning
 # Do not mark enums with FlagsAttribute
 dotnet_diagnostic.CA2217.severity = error
 
-# Override GetHashCode on overriding Equals
-# Examples in Rock Your Code: Code Performance in Microsoft .NET
-dotnet_diagnostic.CA2218.severity = warning
-
 # Do not raise exceptions in exception clauses
 dotnet_diagnostic.CA2219.severity = error
-
-# Override Equals on overloading operator equals
-# Examples in Rock Your Code: Code Performance in Microsoft .NET
-dotnet_diagnostic.CA2224.severity = warning
 
 # Operator overloads have named alternates
 dotnet_diagnostic.CA2225.severity = warning
@@ -1759,9 +1473,6 @@ dotnet_diagnostic.CA2227.severity = error
 # Implement serialization constructors
 dotnet_diagnostic.CA2229.severity = warning
 
-# Overload operator equals on overriding ValueType.Equals
-dotnet_diagnostic.CA2231.severity = warning
-
 # Pass System.Uri objects instead of strings
 dotnet_diagnostic.CA2234.severity = warning
 
@@ -1771,47 +1482,20 @@ dotnet_diagnostic.CA2235.severity = suggestion
 # Mark ISerializable types with SerializableAttribute
 dotnet_diagnostic.CA2237.severity = warning
 
-# Provide correct arguments to formatting methods
-dotnet_diagnostic.CA2241.severity = warning
-
-# Test for NaN correctly
-dotnet_diagnostic.CA2242.severity = warning
-
 # Attribute string literals should parse correctly
 dotnet_diagnostic.CA2243.severity = warning
-
-# Do not duplicate indexed element initializations
-dotnet_diagnostic.CA2244.severity = warning
 
 # Do not assign a property to itself
 dotnet_diagnostic.CA2245.severity = error
 
-# Do not assign a symbol and its member in the same statement
-dotnet_diagnostic.CA2246.severity = warning
-
 # Argument passed to TaskCompletionSource constructor should be TaskCreationOptions enum instead of TaskContinuationOptions enum
 dotnet_diagnostic.CA2247.severity = warning
-
-# Provide correct enum argument to Enum.HasFlag
-dotnet_diagnostic.CA2248.severity = warning
 
 # Consider using String.Contains instead of String.IndexOf
 dotnet_diagnostic.CA2249.severity = error
 
-# Use ThrowIfCancellationRequested
-dotnet_diagnostic.CA2250.severity = warning
-
-# Use String.Equals over String.Compare
-dotnet_diagnostic.CA2251.severity = warning
-
 # Opt in to preview features
 dotnet_diagnostic.CA2252.severity = suggestion
-
-# Named placeholders should not be numeric values
-dotnet_diagnostic.CA2253.severity = warning
-
-# Template should be a static expression
-dotnet_diagnostic.CA2254.severity = warning
 
 # The ModuleInitializer attribute should not be used in libraries
 dotnet_diagnostic.CA2255.severity = warning
@@ -1834,9 +1518,6 @@ dotnet_diagnostic.CA2260.severity = warning
 # Do not use ConfigureAwaitOptions.SuppressThrowing with Task<TResult>
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
 dotnet_diagnostic.CA2261.severity = warning
-
-# Set 'MaxResponseHeadersLength' properly
-dotnet_diagnostic.CA2262.severity = warning
 
 # Do not pass a non-nullable value to 'ArgumentNullException.ThrowIfNull'
 dotnet_diagnostic.CA2264.severity = warning
