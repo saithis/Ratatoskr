@@ -26,14 +26,18 @@ internal sealed class ProcessorHealthCheck<TProcessor>(
         {
             return Task.FromResult(
                 HealthCheckResult.Unhealthy(
-                    $"{typeof(TProcessor).Name} has not processed successfully for {timeSinceLastSuccess.TotalSeconds:F1}s (threshold: {unhealthyThreshold.TotalSeconds}s)."
+                    FormattableString.Invariant(
+                        $"{typeof(TProcessor).Name} has not processed successfully for {timeSinceLastSuccess.TotalSeconds:F1}s (threshold: {unhealthyThreshold.TotalSeconds}s)."
+                    )
                 )
             );
         }
 
         return Task.FromResult(
             HealthCheckResult.Healthy(
-                $"{typeof(TProcessor).Name} last processed successfully {timeSinceLastSuccess.TotalSeconds:F1}s ago."
+                FormattableString.Invariant(
+                    $"{typeof(TProcessor).Name} last processed successfully {timeSinceLastSuccess.TotalSeconds:F1}s ago."
+                )
             )
         );
     }
