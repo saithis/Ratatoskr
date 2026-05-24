@@ -12,7 +12,7 @@ internal class EfCoreTelemetry
     /// <summary>
     /// Starts a "send efcore" activity and sets trace context on the message properties.
     /// </summary>
-    public Activity? StartSendActivity(MessageProperties props, int contentLength)
+    public static Activity? StartSendActivity(MessageProperties props, int contentLength)
     {
         var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
             "send efcore",
@@ -41,7 +41,7 @@ internal class EfCoreTelemetry
     /// <summary>
     /// Records send metrics: operation duration and sent message count.
     /// </summary>
-    public void RecordSent(long startTimestamp, Exception? sendException)
+    public static void RecordSent(long startTimestamp, Exception? sendException)
     {
         var duration = Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds;
 

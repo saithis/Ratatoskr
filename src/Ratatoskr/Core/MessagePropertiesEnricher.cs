@@ -72,7 +72,7 @@ public sealed class MessagePropertiesEnricher(
         return properties;
     }
 
-    private string? GetMessageType(Type messageType, PublishInformation? publishInfo)
+    private static string? GetMessageType(Type messageType, PublishInformation? publishInfo)
     {
         if (publishInfo != null)
         {
@@ -83,7 +83,7 @@ public sealed class MessagePropertiesEnricher(
         return attr?.Type;
     }
 
-    private string? GetDataSchema(Type messageType, PublishInformation? publishInfo)
+    private static string? GetDataSchema(Type messageType, PublishInformation? publishInfo)
     {
         if (!string.IsNullOrEmpty(publishInfo?.Message.DataSchema))
         {

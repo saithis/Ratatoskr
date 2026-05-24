@@ -36,7 +36,7 @@ internal class EfCoreMessageSender(
             );
         }
 
-        using var activity = telemetry.StartSendActivity(props, content.Length);
+        using var activity = EfCoreTelemetry.StartSendActivity(props, content.Length);
         var startTimestamp = Stopwatch.GetTimestamp();
         Exception? sendException = null;
 
@@ -78,7 +78,7 @@ internal class EfCoreMessageSender(
         }
         finally
         {
-            telemetry.RecordSent(startTimestamp, sendException);
+            EfCoreTelemetry.RecordSent(startTimestamp, sendException);
 
             await observers.NotifyAsync(
                 new MessageActivity
