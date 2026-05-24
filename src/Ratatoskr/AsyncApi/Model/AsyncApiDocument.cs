@@ -21,10 +21,11 @@ public sealed class AsyncApiDocument
     public Dictionary<string, AsyncApiServer>? Servers { get; set; }
 
     [JsonPropertyName("channels")]
-    public Dictionary<string, AsyncApiChannel> Channels { get; set; } = new();
+    public Dictionary<string, AsyncApiChannel> Channels { get; set; } = new(StringComparer.Ordinal);
 
     [JsonPropertyName("operations")]
-    public Dictionary<string, AsyncApiOperation> Operations { get; set; } = new();
+    public Dictionary<string, AsyncApiOperation> Operations { get; set; } =
+        new(StringComparer.Ordinal);
 
     [JsonPropertyName("components")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

@@ -2,8 +2,12 @@ namespace Ratatoskr.Core;
 
 public sealed class ChannelRegistry
 {
-    private readonly Dictionary<string, ChannelRegistration> _publishChannels = new();
-    private readonly Dictionary<string, ChannelRegistration> _consumeChannels = new();
+    private readonly Dictionary<string, ChannelRegistration> _publishChannels = new(
+        StringComparer.Ordinal
+    );
+    private readonly Dictionary<string, ChannelRegistration> _consumeChannels = new(
+        StringComparer.Ordinal
+    );
     private bool _frozen;
 
     /// <summary>

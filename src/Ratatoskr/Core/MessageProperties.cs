@@ -57,21 +57,23 @@ public sealed class MessageProperties
     /// <summary>
     /// Custom headers to include with the message.
     /// </summary>
-    public Dictionary<string, string> Headers { get; init; } = new();
+    public Dictionary<string, string> Headers { get; init; } = new(StringComparer.Ordinal);
 
     /// <summary>
     /// The transports this message should be sent over.
     /// </summary>
-    public HashSet<string> Transports { get; init; } = new();
+    public HashSet<string> Transports { get; init; } = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Transport-specific metadata (e.g., RabbitMQ exchange/routing key).
     /// Not included in CloudEvents envelope.
     /// </summary>
-    public Dictionary<string, string> TransportMetadata { get; init; } = new();
+    public Dictionary<string, string> TransportMetadata { get; init; } =
+        new(StringComparer.Ordinal);
 
     /// <summary>
     /// CloudEvents extension attributes (included in envelope).
     /// </summary>
-    public Dictionary<string, object> CloudEventExtensions { get; init; } = new();
+    public Dictionary<string, object> CloudEventExtensions { get; init; } =
+        new(StringComparer.Ordinal);
 }

@@ -14,7 +14,7 @@ public sealed class MessagePropertiesEnricher(
 ) : IMessagePropertiesEnricher
 {
     private readonly Dictionary<string, ITransportMessageMetadataEnricher> _enrichersByTransport =
-        transportEnrichers.ToDictionary(e => e.TransportName);
+        transportEnrichers.ToDictionary(e => e.TransportName, StringComparer.Ordinal);
 
     /// <inheritdoc/>
     public MessageProperties Enrich<TMessage>(MessageProperties? properties)

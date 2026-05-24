@@ -29,8 +29,8 @@ public sealed partial class AsyncApiDocumentGenerator(
 
     public AsyncApiDocument Generate()
     {
-        var schemas = new Dictionary<string, JsonSchema>();
-        var messages = new Dictionary<string, AsyncApiMessage>();
+        var schemas = new Dictionary<string, JsonSchema>(StringComparer.Ordinal);
+        var messages = new Dictionary<string, AsyncApiMessage>(StringComparer.Ordinal);
 
         var document = new AsyncApiDocument
         {
@@ -80,7 +80,7 @@ public sealed partial class AsyncApiDocumentGenerator(
         var asyncApiChannel = new AsyncApiChannel
         {
             Address = channel.ChannelName,
-            Messages = new Dictionary<string, AsyncApiReference>(),
+            Messages = new Dictionary<string, AsyncApiReference>(StringComparer.Ordinal),
         };
 
         var channelOpts = channel.GetAsyncApiChannelOptions();
@@ -164,7 +164,7 @@ public sealed partial class AsyncApiDocumentGenerator(
         };
 
         // Add EventCatalog extension properties
-        asyncApiMessage.Extensions = new Dictionary<string, JsonElement>
+        asyncApiMessage.Extensions = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
         {
             ["x-eventcatalog-message-type"] = JsonSerializer.SerializeToElement(
                 messageType.ToString().ToLowerInvariant()
@@ -235,11 +235,10 @@ public sealed partial class AsyncApiDocumentGenerator(
         var action = GetAction(channel);
 
         // Phase 1: Group messages by operationId (messages sharing an ID are merged)
-        var groups =
-            new Dictionary<
-                string,
-                (AsyncApiOperationOptions? Opts, List<MessageRegistration> Messages)
-            >();
+        var groups = new Dictionary<
+            string,
+            (AsyncApiOperationOptions? Opts, List<MessageRegistration> Messages)
+        >(StringComparer.Ordinal);
 
         foreach (var msg in channel.Messages)
         {

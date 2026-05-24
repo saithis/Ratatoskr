@@ -16,8 +16,12 @@ public sealed class ChannelHandlerRegistry
         (string ChannelName, Type MessageType),
         ChannelHandlerRegistration[]
     > _inbox = new();
-    private readonly Dictionary<string, ChannelHandlerRegistration[]> _inboxByChannel = new();
-    private readonly Dictionary<string, ChannelHandlerRegistration> _inboxByKey = new();
+    private readonly Dictionary<string, ChannelHandlerRegistration[]> _inboxByChannel = new(
+        StringComparer.Ordinal
+    );
+    private readonly Dictionary<string, ChannelHandlerRegistration> _inboxByKey = new(
+        StringComparer.Ordinal
+    );
 
     private ChannelHandlerRegistry() { }
 
@@ -30,8 +34,10 @@ public sealed class ChannelHandlerRegistry
 
         var fireAndForget = new Dictionary<(string, Type), List<ChannelHandlerRegistration>>();
         var inbox = new Dictionary<(string, Type), List<ChannelHandlerRegistration>>();
-        var inboxByChannel = new Dictionary<string, List<ChannelHandlerRegistration>>();
-        var inboxByKey = new Dictionary<string, ChannelHandlerRegistration>();
+        var inboxByChannel = new Dictionary<string, List<ChannelHandlerRegistration>>(
+            StringComparer.Ordinal
+        );
+        var inboxByKey = new Dictionary<string, ChannelHandlerRegistration>(StringComparer.Ordinal);
 
         foreach (var channel in channelRegistry.GetConsumeChannels())
         {

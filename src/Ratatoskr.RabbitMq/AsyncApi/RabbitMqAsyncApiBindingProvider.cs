@@ -35,7 +35,7 @@ public class RabbitMqAsyncApiBindingProvider(
             );
         }
 
-        document.Servers ??= new Dictionary<string, AsyncApiServer>();
+        document.Servers ??= new Dictionary<string, AsyncApiServer>(StringComparer.Ordinal);
 
         document.Servers[ServerName] = new AsyncApiServer
         {
@@ -120,7 +120,7 @@ public class RabbitMqAsyncApiBindingProvider(
         // Document routing keys used by messages on this channel
         var routingKeys = channel
             .Messages.Select(m => m.GetRabbitMqOptions()?.RoutingKey ?? m.MessageTypeName)
-            .Distinct()
+            .Distinct(StringComparer.Ordinal)
             .ToList();
 
         if (routingKeys.Count > 0)
@@ -183,7 +183,7 @@ public class RabbitMqAsyncApiBindingProvider(
             Type = "object",
             Description =
                 "AMQP application-properties carrying CloudEvents attributes (binary content mode).",
-            Properties = new Dictionary<string, JsonSchema>
+            Properties = new Dictionary<string, JsonSchema>(StringComparer.Ordinal)
             {
                 [$"{prefix}specversion"] = new JsonSchema
                 {

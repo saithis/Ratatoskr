@@ -24,7 +24,7 @@ internal static class RabbitMqTransportMessageSnapshotFactory
     {
         var headers = BuildHeaders(props);
 
-        var metadata = new Dictionary<string, object?>
+        var metadata = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["exchange"] = exchange,
             ["routing-key"] = routingKey,
@@ -47,7 +47,7 @@ internal static class RabbitMqTransportMessageSnapshotFactory
     {
         var headers = BuildHeaders(ea.BasicProperties);
 
-        var metadata = new Dictionary<string, object?>
+        var metadata = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["exchange"] = ea.Exchange,
             ["routing-key"] = ea.RoutingKey,
@@ -65,7 +65,7 @@ internal static class RabbitMqTransportMessageSnapshotFactory
 
     private static Dictionary<string, object?> BuildHeaders(IReadOnlyBasicProperties props)
     {
-        var headers = new Dictionary<string, object?>();
+        var headers = new Dictionary<string, object?>(StringComparer.Ordinal);
 
         // Standard AMQP properties
         if (props.ContentType != null)
