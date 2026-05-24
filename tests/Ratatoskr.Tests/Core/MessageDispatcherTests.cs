@@ -845,7 +845,13 @@ public class MessageDispatcherTests
         if (handlerTypes.Length > 0)
         {
             var handlers = handlerTypes
-                .Select(h => new ChannelHandlerRegistration(typeof(TestEvent), h, false, null))
+                .Select(h => new ChannelHandlerRegistration
+                {
+                    MessageType = typeof(TestEvent),
+                    HandlerType = h,
+                    IsInbox = false,
+                    InboxKey = null,
+                })
                 .ToList();
             msgReg.SetExtension(new MessageHandlerRegistrations(handlers));
         }

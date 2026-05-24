@@ -9,9 +9,6 @@ public class ConsumeChannelBuilder(
     RatatoskrBuilder ratatoskrBuilder
 ) : ChannelBuilder(channel)
 {
-    /// <summary>The underlying channel registration.</summary>
-    internal ChannelRegistration Channel => channel;
-
     /// <summary>The service collection for registering DI services from extension methods.</summary>
     internal IServiceCollection Services => services;
 
@@ -25,8 +22,10 @@ public class ConsumeChannelBuilder(
     public ConsumeChannelBuilder Consumes<T>(Action<MessageConsumptionBuilder<T>> configure)
         where T : notnull
     {
+        ArgumentNullException.ThrowIfNull(configure);
+
         AddMessage<T>(configure: null);
-        var messageRegistration = channel.Messages.Last();
+        var messageRegistration = Channel.Messages.Last();
 
         var consumptionBuilder = new MessageConsumptionBuilder<T>(services);
         configure(consumptionBuilder);
@@ -46,8 +45,11 @@ public class ConsumeChannelBuilder(
     )
         where T : notnull
     {
+        ArgumentNullException.ThrowIfNull(configureHandlers);
+        ArgumentNullException.ThrowIfNull(configureMessage);
+
         AddMessage<T>(configureMessage);
-        var messageRegistration = channel.Messages.Last();
+        var messageRegistration = Channel.Messages.Last();
 
         var consumptionBuilder = new MessageConsumptionBuilder<T>(services);
         configureHandlers(consumptionBuilder);
@@ -64,10 +66,12 @@ public class ConsumeChannelBuilder(
         where T : notnull
     {
         if (consumptionBuilder.HandlerRegistrations.Count == 0)
+        {
             throw new InvalidOperationException(
                 $"Consumes<{typeof(T).Name}>() requires at least one handler. "
                     + $"Call .WithHandler<THandler>() to register a handler."
             );
+        }
 
         messageRegistration.SetExtension(
             new MessageHandlerRegistrations(consumptionBuilder.HandlerRegistrations)

@@ -16,6 +16,8 @@ public class ChannelRegistry
 
     public void Register(ChannelRegistration channel)
     {
+        ArgumentNullException.ThrowIfNull(channel);
+
         if (_frozen)
         {
             throw new InvalidOperationException("Registry is frozen and cannot be modified.");
@@ -99,7 +101,9 @@ public class ChannelRegistry
     public ChannelRegistration? FindPublishChannelForMessage(Type messageType)
     {
         if (_publishByType != null)
+        {
             return _publishByType.GetValueOrDefault(messageType)?.Channel;
+        }
 
         return _publishChannels.Values.FirstOrDefault(c =>
             c.Messages.Any(m => m.MessageType == messageType)
@@ -109,7 +113,9 @@ public class ChannelRegistry
     public ChannelRegistration? FindPublishChannelForTypeName(string messageTypeName)
     {
         if (_publishByTypeName != null)
+        {
             return _publishByTypeName.GetValueOrDefault(messageTypeName)?.Channel;
+        }
 
         return _publishChannels.Values.FirstOrDefault(c =>
             c.Messages.Any(m => m.MessageTypeName == messageTypeName)
@@ -148,12 +154,16 @@ public class ChannelRegistry
     public PublishInformation? GetPublishInformation(Type messageType)
     {
         if (_publishByType != null)
+        {
             return _publishByType.GetValueOrDefault(messageType);
+        }
 
         var channel = FindPublishChannelForMessage(messageType);
         var message = channel?.GetMessage(messageType);
         if (channel == null || message == null)
+        {
             return null;
+        }
         return new PublishInformation { Channel = channel, Message = message };
     }
 }

@@ -43,8 +43,11 @@ public class MessageConsumptionBuilder<TMessage>
         where THandler : class, IMessageHandler<TMessage>
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(stableKey);
+        ArgumentNullException.ThrowIfNull(legacyKeys);
         foreach (var legacyKey in legacyKeys)
+        {
             ArgumentException.ThrowIfNullOrWhiteSpace(legacyKey);
+        }
         AddHandler<THandler>(isInbox: true, inboxKey: stableKey, legacyKeys: legacyKeys);
         return this;
     }
@@ -70,13 +73,14 @@ public class MessageConsumptionBuilder<TMessage>
         _services.TryAddScoped<THandler>();
 
         HandlerRegistrations.Add(
-            new ChannelHandlerRegistration(
-                typeof(TMessage),
-                typeof(THandler),
-                isInbox,
-                inboxKey,
-                legacyKeys
-            )
+            new ChannelHandlerRegistration
+            {
+                MessageType = typeof(TMessage),
+                HandlerType = typeof(THandler),
+                IsInbox = isInbox,
+                InboxKey = inboxKey,
+                LegacyKeys = legacyKeys,
+            }
         );
     }
 }

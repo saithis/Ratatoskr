@@ -101,7 +101,7 @@ public class CloudEventEnvelope
                 value = element.Deserialize<T>();
                 return true;
             }
-            catch
+            catch (JsonException)
             {
                 // Ignore deserialization errors and return false
             }

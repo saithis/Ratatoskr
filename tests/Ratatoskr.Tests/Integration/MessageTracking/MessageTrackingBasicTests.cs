@@ -52,13 +52,13 @@ public class MessageTrackingBasicTests(
         });
 
         // Assert - Published stage
-        var published = await session.WaitForPublished<TestEvent>(TimeSpan.FromSeconds(5));
+        var published = await session.WaitForPublishedAsync<TestEvent>(TimeSpan.FromSeconds(5));
         published.GetMessage<TestEvent>().Id.Should().Be("track-pub-1");
         published.Properties.Type.Should().Be("test.event");
         published.RawBody.Should().NotBeNull();
 
         // Assert - Sent stage (on the wire)
-        var sent = await session.WaitForSent<TestEvent>(TimeSpan.FromSeconds(5));
+        var sent = await session.WaitForSentAsync<TestEvent>(TimeSpan.FromSeconds(5));
         sent.RawBody.Should().NotBeNull();
         Encoding.UTF8.GetString(sent.RawBody!).Should().Contain("track-pub-1");
     }
@@ -91,7 +91,7 @@ public class MessageTrackingBasicTests(
         });
 
         // Assert - Dispatched stage
-        var dispatched = await session.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(5));
+        var dispatched = await session.WaitForDispatchedAsync<TestEvent>(TimeSpan.FromSeconds(5));
         dispatched.GetMessage<TestEvent>().Id.Should().Be("track-cons-1");
         dispatched.Result.Should().Be(DispatchResult.Success);
 
@@ -125,7 +125,7 @@ public class MessageTrackingBasicTests(
         });
 
         // Wait for the full pipeline
-        var dispatched = await session.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(5));
+        var dispatched = await session.WaitForDispatchedAsync<TestEvent>(TimeSpan.FromSeconds(5));
         dispatched.GetMessage<TestEvent>().Id.Should().Be("e2e-1");
 
         // Assert all stages are captured
@@ -192,7 +192,7 @@ public class MessageTrackingBasicTests(
         });
 
         // Wait for the full outbox pipeline to complete
-        var dispatched = await session.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(10));
+        var dispatched = await session.WaitForDispatchedAsync<TestEvent>(TimeSpan.FromSeconds(10));
         dispatched.Result.Should().Be(DispatchResult.Success);
 
         // Assert - OutboxStaged (synchronous during SaveChanges, always available)
@@ -232,8 +232,8 @@ public class MessageTrackingBasicTests(
         });
 
         // Wait for both dispatches concurrently to verify trace isolation under parallelism
-        var wait1 = session1.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(5));
-        var wait2 = session2.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(5));
+        var wait1 = session1.WaitForDispatchedAsync<TestEvent>(TimeSpan.FromSeconds(5));
+        var wait2 = session2.WaitForDispatchedAsync<TestEvent>(TimeSpan.FromSeconds(5));
         await Task.WhenAll(wait1, wait2);
 
         var dispatched1 = await wait1;
@@ -291,7 +291,7 @@ public class MessageTrackingBasicTests(
         });
 
         // Assert - wait for a dispatch (which will be a failure)
-        var dispatched = await session.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(5));
+        var dispatched = await session.WaitForDispatchedAsync<TestEvent>(TimeSpan.FromSeconds(5));
         dispatched.Result.Should().Be(DispatchResult.RecoverableError);
         dispatched.Exception.Should().NotBeNull();
     }

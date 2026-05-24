@@ -1,11 +1,12 @@
 using System.Collections.Frozen;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using Ratatoskr.Core;
 
 namespace Ratatoskr;
 
-public class Ratatoskr(
+public partial class Ratatoskr(
     IMessageSerializerResolver serializerResolver,
     IEnumerable<IMessageSender> senders,
     IMessagePropertiesEnricher enricher,
@@ -18,6 +19,11 @@ public class Ratatoskr(
         senders.ToFrozenDictionary(x => x.TransportName);
     private readonly IMessageActivityObserver[] _observers = observers.ToArray();
 
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "We catch all exceptions from one transport to allow trying other transports and notifying observers, and rethrow them combined as an AggregateException at the end."
+    )]
     public async Task PublishDirectAsync<TMessage>(
         TMessage message,
         MessageProperties? props = null,
@@ -60,41 +66,42 @@ public class Ratatoskr(
         foreach (var transport in props.Transports)
         {
             if (!_senderMap.TryGetValue(transport, out var sender))
+            {
                 continue;
+            }
 
             matchedAny = true;
             Exception? sendException = null;
             try
             {
-                await sender.SendAsync(serializedMessage, props, cancellationToken);
+                await sender
+                    .SendAsync(serializedMessage, props, cancellationToken)
+                    .ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                logger.LogError(
-                    ex,
-                    "Transport '{TransportName}' failed to send message '{MessageId}'",
-                    sender.TransportName,
-                    props.Id
-                );
+                LogTransportSendFailed(logger, ex, sender.TransportName, props.Id);
                 sendException = ex;
                 exceptions ??= [];
                 exceptions.Add(ex);
             }
 
-            await _observers.NotifyAsync(
-                new MessageActivity
-                {
-                    Stage = MessageStage.Published,
-                    Properties = props,
-                    SerializedBody = serializedMessage,
-                    Message = message,
-                    MessageType = typeof(TMessage),
-                    TransportName = sender.TransportName,
-                    Exception = sendException,
-                    Timestamp = timeProvider.GetUtcNow(),
-                },
-                logger
-            );
+            await _observers
+                .NotifyAsync(
+                    new MessageActivity
+                    {
+                        Stage = MessageStage.Published,
+                        Properties = props,
+                        SerializedBody = serializedMessage,
+                        Message = message,
+                        MessageType = typeof(TMessage),
+                        TransportName = sender.TransportName,
+                        Exception = sendException,
+                        Timestamp = timeProvider.GetUtcNow(),
+                    },
+                    logger
+                )
+                .ConfigureAwait(false);
         }
 
         if (!matchedAny)
@@ -117,4 +124,16 @@ public class Ratatoskr(
             );
         }
     }
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Error,
+        Message = "Transport '{TransportName}' failed to send message '{MessageId}'"
+    )]
+    private static partial void LogTransportSendFailed(
+        ILogger logger,
+        Exception ex,
+        string transportName,
+        string messageId
+    );
 }

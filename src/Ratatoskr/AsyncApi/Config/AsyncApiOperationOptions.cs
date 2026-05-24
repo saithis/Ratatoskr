@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Ratatoskr.AsyncApi.Config;
 
 /// <summary>
@@ -6,6 +8,11 @@ namespace Ratatoskr.AsyncApi.Config;
 /// or at message level (customizes the per-message operation).
 /// Messages sharing the same <see cref="Id"/> are merged into a single operation.
 /// </summary>
+[SuppressMessage(
+    "Design",
+    "CA1002:Do not expose generic lists",
+    Justification = "DTO for API configuration"
+)]
 public class AsyncApiOperationOptions
 {
     /// <summary>Custom operationId. Defaults to channel name (grouped) or {action}{TypeName} (per-message).</summary>
@@ -42,6 +49,7 @@ public class AsyncApiOperationOptions
 
     public AsyncApiOperationOptions WithTags(params string[] tags)
     {
+        ArgumentNullException.ThrowIfNull(tags);
         Tags ??= [];
         Tags.AddRange(tags);
         return this;

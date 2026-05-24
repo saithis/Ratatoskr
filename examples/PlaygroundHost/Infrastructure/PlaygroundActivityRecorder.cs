@@ -8,8 +8,10 @@ public sealed class PlaygroundActivityRecorder : IMessageActivityObserver
     private const int MaxEntries = 2500;
     private readonly ConcurrentQueue<PlaygroundActivityEntry> _entries = new();
 
-    public ValueTask OnMessageActivity(MessageActivity activity)
+    public ValueTask OnMessageActivityAsync(MessageActivity activity)
     {
+        ArgumentNullException.ThrowIfNull(activity);
+
         var orderId = TryResolveOrderId(activity);
         var scenarioRunId = TryResolveScenarioRunId(activity);
         var entry = new PlaygroundActivityEntry(
@@ -53,12 +55,16 @@ public sealed class PlaygroundActivityRecorder : IMessageActivityObserver
         )
         {
             if (ext is string s && s.Length > 0)
+            {
                 return s;
+            }
             if (
                 ext is System.Text.Json.JsonElement je
                 && je.ValueKind == System.Text.Json.JsonValueKind.String
             )
+            {
                 return je.GetString();
+            }
         }
 
         return TryFromMessageScenarioRunId(activity.Message);
@@ -73,13 +79,17 @@ public sealed class PlaygroundActivityRecorder : IMessageActivityObserver
     {
         var fromMessage = TryFromMessageOrderId(activity.Message);
         if (!string.IsNullOrEmpty(fromMessage) && Guid.TryParse(fromMessage, out _))
+        {
             return Guid.Parse(fromMessage).ToString("D");
+        }
 
         if (
             activity.Properties.Id != null
             && PlaygroundMessageIds.TryParseOrderId(activity.Properties.Id, out var id)
         )
+        {
             return id.ToString("D");
+        }
 
         return null;
     }

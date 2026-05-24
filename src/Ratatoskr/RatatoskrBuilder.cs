@@ -49,19 +49,25 @@ public class RatatoskrBuilder
     internal void ExecuteDeferredActions()
     {
         foreach (var action in _deferredServiceActions)
+        {
             action(Services);
+        }
     }
 
     internal void Validate()
     {
         foreach (var validator in _validators)
+        {
             validator(ChannelRegistry);
+        }
     }
 
     internal void ValidateHandlers(ChannelHandlerRegistry handlerRegistry)
     {
         foreach (var validator in _handlerValidators)
+        {
             validator(ChannelRegistry, handlerRegistry);
+        }
     }
 
     #region New Channel Config
@@ -69,22 +75,38 @@ public class RatatoskrBuilder
     public RatatoskrBuilder AddEventPublishChannel(
         string channelName,
         Action<PublishChannelBuilder> configure
-    ) => AddPublishChannel(channelName, ChannelType.EventPublish, configure);
+    )
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        return AddPublishChannel(channelName, ChannelType.EventPublish, configure);
+    }
 
     public RatatoskrBuilder AddCommandPublishChannel(
         string channelName,
         Action<PublishChannelBuilder> configure
-    ) => AddPublishChannel(channelName, ChannelType.CommandPublish, configure);
+    )
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        return AddPublishChannel(channelName, ChannelType.CommandPublish, configure);
+    }
 
     public RatatoskrBuilder AddCommandConsumeChannel(
         string channelName,
         Action<ConsumeChannelBuilder> configure
-    ) => AddConsumeChannel(channelName, ChannelType.CommandConsume, configure);
+    )
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        return AddConsumeChannel(channelName, ChannelType.CommandConsume, configure);
+    }
 
     public RatatoskrBuilder AddEventConsumeChannel(
         string channelName,
         Action<ConsumeChannelBuilder> configure
-    ) => AddConsumeChannel(channelName, ChannelType.EventConsume, configure);
+    )
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        return AddConsumeChannel(channelName, ChannelType.EventConsume, configure);
+    }
 
     private RatatoskrBuilder AddPublishChannel(
         string name,
@@ -92,6 +114,7 @@ public class RatatoskrBuilder
         Action<PublishChannelBuilder> configure
     )
     {
+        ArgumentNullException.ThrowIfNull(configure);
         var channel = new ChannelRegistration(name, intent);
         var builder = new PublishChannelBuilder(channel);
         configure(builder);
@@ -105,6 +128,7 @@ public class RatatoskrBuilder
         Action<ConsumeChannelBuilder> configure
     )
     {
+        ArgumentNullException.ThrowIfNull(configure);
         var channel = new ChannelRegistration(name, intent);
         var builder = new ConsumeChannelBuilder(channel, Services, this);
         configure(builder);
@@ -119,6 +143,7 @@ public class RatatoskrBuilder
     /// </summary>
     public RatatoskrBuilder ConfigureCloudEvents(Action<CloudEventsOptions> configure)
     {
+        ArgumentNullException.ThrowIfNull(configure);
         configure(CloudEventsOptions);
         return this;
     }
@@ -128,6 +153,7 @@ public class RatatoskrBuilder
     /// </summary>
     public RatatoskrBuilder ConfigureAsyncApi(Action<AsyncApiOptions> configure)
     {
+        ArgumentNullException.ThrowIfNull(configure);
         configure(AsyncApiOptions);
         return this;
     }
@@ -137,6 +163,7 @@ public class RatatoskrBuilder
     /// </summary>
     public RatatoskrBuilder ConfigureJsonSerialization(Action<JsonSerializerOptions> configure)
     {
+        ArgumentNullException.ThrowIfNull(configure);
         configure(JsonSerializerOptions);
         return this;
     }

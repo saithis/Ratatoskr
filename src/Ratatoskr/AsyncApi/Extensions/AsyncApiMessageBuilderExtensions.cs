@@ -11,6 +11,7 @@ public static class AsyncApiMessageBuilderExtensions
         Action<AsyncApiMessageOptions> configure
     )
     {
+        ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(configure);
         var opts = new AsyncApiMessageOptions();
         configure(opts);

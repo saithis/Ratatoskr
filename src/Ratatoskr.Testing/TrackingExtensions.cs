@@ -17,6 +17,7 @@ public static class TrackingExtensions
         TimeSpan? defaultTimeout = null
     )
     {
+        ArgumentNullException.ThrowIfNull(services);
         var tracker = services.GetRequiredService<MessageTracker>();
         return new MessageTrackingSession(tracker, defaultTimeout);
     }
@@ -29,6 +30,7 @@ public static class TrackingExtensions
         TimeSpan? defaultTimeout = null
     )
     {
+        ArgumentNullException.ThrowIfNull(host);
         return host.Services.CreateTrackingSession(defaultTimeout);
     }
 
@@ -38,6 +40,7 @@ public static class TrackingExtensions
     /// </summary>
     public static ActivityTracker TrackActivity(this IServiceProvider services)
     {
+        ArgumentNullException.ThrowIfNull(services);
         var tracker = services.GetRequiredService<MessageTracker>();
         return new ActivityTracker(services, tracker);
     }
@@ -47,6 +50,7 @@ public static class TrackingExtensions
     /// </summary>
     public static ActivityTracker TrackActivity(this IHost host)
     {
+        ArgumentNullException.ThrowIfNull(host);
         return host.Services.TrackActivity();
     }
 }

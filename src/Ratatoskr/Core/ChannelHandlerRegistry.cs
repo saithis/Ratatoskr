@@ -26,6 +26,8 @@ public class ChannelHandlerRegistry
     /// </summary>
     public static ChannelHandlerRegistry Build(ChannelRegistry channelRegistry)
     {
+        ArgumentNullException.ThrowIfNull(channelRegistry);
+
         var fireAndForget = new Dictionary<(string, Type), List<ChannelHandlerRegistration>>();
         var inbox = new Dictionary<(string, Type), List<ChannelHandlerRegistration>>();
         var inboxByChannel = new Dictionary<string, List<ChannelHandlerRegistration>>();
@@ -37,7 +39,9 @@ public class ChannelHandlerRegistry
             {
                 var handlerRegs = message.GetExtension<MessageHandlerRegistrations>();
                 if (handlerRegs == null)
+                {
                     continue;
+                }
 
                 foreach (var handler in handlerRegs.Handlers)
                 {
@@ -56,12 +60,14 @@ public class ChannelHandlerRegistry
                             );
 
                             foreach (var legacyKey in handler.LegacyKeys)
+                            {
                                 ValidateAndAddKey(
                                     inboxByKey,
                                     legacyKey,
                                     handler,
                                     channel.ChannelName
                                 );
+                            }
                         }
                     }
                     else
@@ -79,13 +85,21 @@ public class ChannelHandlerRegistry
         var registry = new ChannelHandlerRegistry();
 
         foreach (var (key, list) in fireAndForget)
+        {
             registry._fireAndForget[key] = list.ToArray();
+        }
         foreach (var (key, list) in inbox)
+        {
             registry._inbox[key] = list.ToArray();
+        }
         foreach (var (key, list) in inboxByChannel)
+        {
             registry._inboxByChannel[key] = list.ToArray();
+        }
         foreach (var (key, value) in inboxByKey)
+        {
             registry._inboxByKey[key] = value;
+        }
 
         return registry;
     }
@@ -98,6 +112,7 @@ public class ChannelHandlerRegistry
     )
     {
         if (dict.TryGetValue(key, out var existing))
+        {
             throw new InvalidOperationException(
                 $"Duplicate inbox handler key '{key}' registered on channel '{channelName}' "
                     + $"for handler '{handler.HandlerType.Name}'. "
@@ -105,6 +120,7 @@ public class ChannelHandlerRegistry
                     + $"Inbox handler keys must be globally unique because the inbox processor "
                     + $"looks up handlers by key across all channels and DbContexts."
             );
+        }
 
         dict[key] = handler;
     }

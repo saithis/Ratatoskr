@@ -52,6 +52,7 @@ public class AsyncApiChannelOptions
     /// </summary>
     public AsyncApiChannelOptions WithOperation(Action<AsyncApiOperationOptions> configure)
     {
+        ArgumentNullException.ThrowIfNull(configure);
         Operation = new AsyncApiOperationOptions();
         configure(Operation);
         return this;

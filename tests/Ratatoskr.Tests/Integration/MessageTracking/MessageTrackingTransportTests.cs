@@ -50,7 +50,7 @@ public class MessageTrackingTransportTests(
         });
 
         // Assert - verify the raw bytes on the wire
-        var sent = await session.WaitForSent<TestEvent>(TimeSpan.FromSeconds(5));
+        var sent = await session.WaitForSentAsync<TestEvent>(TimeSpan.FromSeconds(5));
         var rawJson = Encoding.UTF8.GetString(sent.RawBody!);
         rawJson.Should().Contain("shape-1");
         rawJson.Should().Contain("transport shape");
@@ -95,7 +95,7 @@ public class MessageTrackingTransportTests(
             );
         });
 
-        var published = await session.WaitForPublished<TestEvent>(TimeSpan.FromSeconds(5));
+        var published = await session.WaitForPublishedAsync<TestEvent>(TimeSpan.FromSeconds(5));
         published.GetMessage<TestEvent>().Id.Should().Be("neg-1");
 
         // Now it should throw
@@ -138,7 +138,7 @@ public class MessageTrackingTransportTests(
         });
 
         // Assert - Sent stage should have TransportMessage with wire-level headers
-        var sent = await session.WaitForSent<TestEvent>(TimeSpan.FromSeconds(5));
+        var sent = await session.WaitForSentAsync<TestEvent>(TimeSpan.FromSeconds(5));
         sent.TransportMessage.Should().NotBeNull();
 
         var headers = sent.TransportMessage!.Headers;
@@ -191,7 +191,7 @@ public class MessageTrackingTransportTests(
         });
 
         // Assert - Received stage should have TransportMessage with raw wire data
-        var received = await session.WaitForReceived<TestEvent>(TimeSpan.FromSeconds(5));
+        var received = await session.WaitForReceivedAsync<TestEvent>(TimeSpan.FromSeconds(5));
         received.TransportMessage.Should().NotBeNull();
 
         var headers = received.TransportMessage!.Headers;
@@ -211,7 +211,7 @@ public class MessageTrackingTransportTests(
         Encoding.UTF8.GetString(received.TransportMessage.Body).Should().Contain("wire-recv-1");
 
         // Dispatched stage should NOT have TransportMessage
-        var dispatched = await session.WaitForDispatched<TestEvent>(TimeSpan.FromSeconds(5));
+        var dispatched = await session.WaitForDispatchedAsync<TestEvent>(TimeSpan.FromSeconds(5));
         dispatched.TransportMessage.Should().BeNull();
     }
 
@@ -253,7 +253,7 @@ public class MessageTrackingTransportTests(
         });
 
         // Assert — InboxQueued stage emitted by InboxAcceptor
-        var queued = await session.WaitForInboxQueued<TestEvent>(TimeSpan.FromSeconds(10));
+        var queued = await session.WaitForInboxQueuedAsync<TestEvent>(TimeSpan.FromSeconds(10));
         queued.Properties.Id.Should().NotBeNullOrEmpty();
         queued.TransportName.Should().Be("efcore");
     }
@@ -296,7 +296,9 @@ public class MessageTrackingTransportTests(
         });
 
         // Assert — InboxDispatched stage emitted after handler completes
-        var dispatched = await session.WaitForInboxDispatched<TestEvent>(TimeSpan.FromSeconds(15));
+        var dispatched = await session.WaitForInboxDispatchedAsync<TestEvent>(
+            TimeSpan.FromSeconds(15)
+        );
         dispatched.Properties.Id.Should().NotBeNullOrEmpty();
 
         // Both stages should be captured for the same message

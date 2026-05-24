@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -8,7 +9,12 @@ namespace Ratatoskr.Core;
 /// Dispatches incoming messages to registered fire-and-forget handlers for the given channel.
 /// Uses <see cref="ChannelHandlerRegistry"/> for handler lookup instead of DI discovery.
 /// </summary>
-public class MessageDispatcher(
+[SuppressMessage(
+    "Maintainability",
+    "CA1506:AvoidExcessiveClassCoupling",
+    Justification = "Orchestrator class coordinating many components"
+)]
+public partial class MessageDispatcher(
     ChannelRegistry channelRegistry,
     ChannelHandlerRegistry channelHandlerRegistry,
     IMessageSerializerResolver serializerResolver,
@@ -23,6 +29,11 @@ public class MessageDispatcher(
     /// <summary>
     /// Dispatches a message to all registered fire-and-forget handlers for the channel, each in its own DI scope.
     /// </summary>
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "Exceptions are caught during deserialization and handler execution to log them and return a recoverable or permanent dispatch result instead of crashing the consumer process."
+    )]
     public async Task<DispatchResult> DispatchAsync(
         byte[] body,
         MessageProperties properties,
@@ -31,6 +42,8 @@ public class MessageDispatcher(
         string transportName
     )
     {
+        ArgumentNullException.ThrowIfNull(properties);
+
         using var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
             "dispatch",
             ActivityKind.Consumer
@@ -49,7 +62,7 @@ public class MessageDispatcher(
 
         if (properties.Type == null)
         {
-            logger.LogError("Received message without a type");
+            LogReceivedMessageWithoutType(logger);
             activity?.SetStatus(ActivityStatusCode.Error, "Message has no type");
             return DispatchResult.PermanentError;
         }
@@ -77,10 +90,7 @@ public class MessageDispatcher(
 
         if (messageType == null)
         {
-            logger.LogWarning(
-                "No registration found for event type '{EventType}'",
-                properties.Type
-            );
+            LogNoRegistrationFound(logger, properties.Type);
             activity?.SetStatus(
                 ActivityStatusCode.Error,
                 $"No registration found for event type '{properties.Type}'"
@@ -97,18 +107,14 @@ public class MessageDispatcher(
         }
         catch (Exception ex)
         {
-            logger.LogError(
-                ex,
-                "Failed to deserialize message of type '{EventType}'",
-                properties.Type
-            );
+            LogDeserializationFailed(logger, ex, properties.Type);
             activity?.SetTag(MessagingSemanticConventions.ErrorType, ex.GetType().FullName);
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             return DispatchResult.PermanentError;
         }
         if (message == null)
         {
-            logger.LogError("Message of type '{EventType}' deserialized to null", properties.Type);
+            LogDeserializedToNull(logger, properties.Type);
             activity?.SetStatus(
                 ActivityStatusCode.Error,
                 $"Message of type '{properties.Type}' deserialized to null"
@@ -121,11 +127,7 @@ public class MessageDispatcher(
 
         if (handlers.Count == 0)
         {
-            logger.LogDebug(
-                "No fire-and-forget handlers for '{Type}' on channel '{Channel}'",
-                properties.Type,
-                channelName
-            );
+            LogNoHandlersFound(logger, properties.Type, channelName);
             return DispatchResult.NoHandlers;
         }
 
@@ -136,15 +138,12 @@ public class MessageDispatcher(
         {
             try
             {
-                await handlerInvoker.InvokeAsync(
-                    handler.HandlerType,
-                    message,
-                    properties,
-                    cancellationToken
-                );
+                await handlerInvoker
+                    .InvokeAsync(handler.HandlerType, message, properties, cancellationToken)
+                    .ConfigureAwait(false);
 
-                logger.LogDebug(
-                    "Handler '{Handler}' processed message '{Id}' of type '{Type}'",
+                LogHandlerProcessed(
+                    logger,
                     handler.HandlerType.Name,
                     properties.Id,
                     properties.Type
@@ -152,9 +151,9 @@ public class MessageDispatcher(
             }
             catch (Exception ex)
             {
-                logger.LogError(
+                LogHandlerFailed(
+                    logger,
                     ex,
-                    "Handler '{Handler}' failed for message '{Id}' of type '{Type}'",
                     handler.HandlerType.Name,
                     properties.Id,
                     properties.Type
@@ -182,28 +181,94 @@ public class MessageDispatcher(
             );
         }
 
-        await _observers.NotifyAsync(
-            new MessageActivity
-            {
-                Stage = MessageStage.Dispatched,
-                Properties = properties,
-                SerializedBody = body,
-                Message = message,
-                MessageType = messageType,
-                DispatchResult = result,
-                Exception = exceptions switch
+        await _observers
+            .NotifyAsync(
+                new MessageActivity
                 {
-                    null => null,
-                    [var single] => single,
-                    _ => new AggregateException(exceptions),
+                    Stage = MessageStage.Dispatched,
+                    Properties = properties,
+                    SerializedBody = body,
+                    Message = message,
+                    MessageType = messageType,
+                    DispatchResult = result,
+                    Exception = exceptions switch
+                    {
+                        null => null,
+                        [var single] => single,
+                        _ => new AggregateException(exceptions),
+                    },
+                    Timestamp = timeProvider.GetUtcNow(),
                 },
-                Timestamp = timeProvider.GetUtcNow(),
-            },
-            logger
-        );
+                logger
+            )
+            .ConfigureAwait(false);
 
         return result;
     }
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Error,
+        Message = "Received message without a type"
+    )]
+    private static partial void LogReceivedMessageWithoutType(ILogger logger);
+
+    [LoggerMessage(
+        EventId = 2,
+        Level = LogLevel.Warning,
+        Message = "No registration found for event type '{EventType}'"
+    )]
+    private static partial void LogNoRegistrationFound(ILogger logger, string eventType);
+
+    [LoggerMessage(
+        EventId = 3,
+        Level = LogLevel.Error,
+        Message = "Failed to deserialize message of type '{EventType}'"
+    )]
+    private static partial void LogDeserializationFailed(
+        ILogger logger,
+        Exception ex,
+        string eventType
+    );
+
+    [LoggerMessage(
+        EventId = 4,
+        Level = LogLevel.Error,
+        Message = "Message of type '{EventType}' deserialized to null"
+    )]
+    private static partial void LogDeserializedToNull(ILogger logger, string eventType);
+
+    [LoggerMessage(
+        EventId = 5,
+        Level = LogLevel.Debug,
+        Message = "No fire-and-forget handlers for '{Type}' on channel '{Channel}'"
+    )]
+    private static partial void LogNoHandlersFound(ILogger logger, string type, string channel);
+
+    [LoggerMessage(
+        EventId = 6,
+        Level = LogLevel.Debug,
+        Message = "Handler '{Handler}' processed message '{Id}' of type '{Type}'"
+    )]
+    private static partial void LogHandlerProcessed(
+        ILogger logger,
+        string handler,
+        string id,
+        string type
+    );
+
+    [LoggerMessage(
+        EventId = 7,
+        Level = LogLevel.Error,
+        Message = "Handler '{Handler}' failed for message '{Id}' of type '{Type}'"
+    )]
+    private static partial void LogHandlerFailed(
+        ILogger logger,
+        Exception ex,
+        string handler,
+        string id,
+        string type
+    );
 }
 
 /// <summary>Outcome of message dispatch.</summary>

@@ -19,7 +19,9 @@ public class RatatoskrMessageAttribute : Attribute
     public RatatoskrMessageAttribute(string type)
     {
         if (string.IsNullOrWhiteSpace(type))
+        {
             throw new ArgumentException("Type cannot be null or whitespace", nameof(type));
+        }
         Type = type;
     }
 }

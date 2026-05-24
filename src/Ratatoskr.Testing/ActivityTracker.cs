@@ -45,6 +45,8 @@ public class ActivityTracker
     /// </summary>
     public async Task<MessageTrackingSession> ExecuteAndWaitAsync(Func<Task> action)
     {
+        ArgumentNullException.ThrowIfNull(action);
+
         var conditions = new List<WaitCondition>(_waitConditions);
         _waitConditions.Clear();
 
@@ -52,7 +54,7 @@ public class ActivityTracker
 
         try
         {
-            await action();
+            await action().ConfigureAwait(false);
 
             if (conditions.Count > 0)
             {
@@ -67,14 +69,14 @@ public class ActivityTracker
                     )
                 );
 
-                await Task.WhenAll(waitTasks);
+                await Task.WhenAll(waitTasks).ConfigureAwait(false);
             }
 
             return session;
         }
         catch
         {
-            await session.DisposeAsync();
+            await session.DisposeAsync().ConfigureAwait(false);
             throw;
         }
     }
@@ -102,22 +104,25 @@ public class ActivityTracker
         try
         {
             var bus = _services.GetRequiredService<IRatatoskr>();
-            await bus.PublishDirectAsync(message, props, cancellationToken);
+            await bus.PublishDirectAsync(message, props, cancellationToken).ConfigureAwait(false);
 
-            await _tracker.WaitForAsync(
-                a =>
-                    a.Stage == MessageStage.Dispatched
-                    && MessageTracker.ExtractTraceId(a.Properties.TraceParent) == session.TraceId
-                    && MessageTypeMatcher.Matches<T>(a),
-                _timeout,
-                cancellationToken
-            );
+            await _tracker
+                .WaitForAsync(
+                    a =>
+                        a.Stage == MessageStage.Dispatched
+                        && MessageTracker.ExtractTraceId(a.Properties.TraceParent)
+                            == session.TraceId
+                        && MessageTypeMatcher.Matches<T>(a),
+                    _timeout,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
 
             return session;
         }
         catch
         {
-            await session.DisposeAsync();
+            await session.DisposeAsync().ConfigureAwait(false);
             throw;
         }
     }

@@ -16,9 +16,12 @@ public static class ServiceCollectionExtensions
     )
     {
         if (services.Any(d => d.ServiceType == typeof(RatatoskrMarker)))
+        {
             throw new InvalidOperationException(
                 "AddRatatoskr has already been called. It must only be called once per IServiceCollection."
             );
+        }
+
         services.AddSingleton<RatatoskrMarker>();
 
         var builder = new RatatoskrBuilder(services);

@@ -3251,3 +3251,6 @@ dotnet_diagnostic.SA1204.severity = none # Static/Instance ordering
 # Disable spacing/formatting rules to avoid conflict with CSharpier
 dotnet_diagnostic.SA1513.severity = none # Closing brace followed by blank line
 dotnet_diagnostic.SA1519.severity = none # Braces around multi-line child statements
+
+# Disable obsolete ASYNC0002 due to false positives on ValueTask returning methods
+dotnet_diagnostic.ASYNC0002.severity = none

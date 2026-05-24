@@ -136,5 +136,5 @@ public interface IMessageActivityObserver
     /// <summary>
     /// Called when a message activity occurs at any pipeline stage.
     /// </summary>
-    ValueTask OnMessageActivity(MessageActivity activity);
+    ValueTask OnMessageActivityAsync(MessageActivity activity);
 }

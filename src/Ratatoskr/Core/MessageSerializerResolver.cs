@@ -31,17 +31,23 @@ internal sealed class MessageSerializerResolver(
     )
     {
         if (serializerType.IsInstanceOfType(defaultSerializer))
+        {
             return defaultSerializer;
+        }
 
         var fromRegisteredSerializer = serializerCandidates.FirstOrDefault(
             serializerType.IsInstanceOfType
         );
         if (fromRegisteredSerializer != null)
+        {
             return fromRegisteredSerializer;
+        }
 
         var fromTypedResolution = serviceProvider.GetService(serializerType);
         if (fromTypedResolution is IMessageSerializer typedSerializer)
+        {
             return typedSerializer;
+        }
 
         throw new InvalidOperationException(
             $"Serializer '{serializerType.FullName}' is configured for one or more messages, but was not registered in DI. "
@@ -74,7 +80,9 @@ internal sealed class MessageSerializerResolver(
                 }
 
                 if (existingSerializerType == serializerType)
+                {
                     continue;
+                }
 
                 if (existingSerializerType == null || serializerType == null)
                 {
@@ -96,7 +104,9 @@ internal sealed class MessageSerializerResolver(
         foreach (var (messageType, configuredSerializerType) in serializerTypeMap)
         {
             if (configuredSerializerType == null)
+            {
                 continue;
+            }
 
             var serializer = ResolveConfiguredSerializer(
                 configuredSerializerType,

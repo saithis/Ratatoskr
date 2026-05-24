@@ -20,21 +20,28 @@ public class HandlerInvoker(IServiceScopeFactory scopeFactory)
         TimeSpan? timeout = null
     )
     {
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var handler = scope.ServiceProvider.GetRequiredService(handlerType);
-        var invoke = HandlerInvokerCache.Get(message.GetType());
+        ArgumentNullException.ThrowIfNull(handlerType);
+        ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(properties);
 
-        if (timeout.HasValue)
+        var scope = scopeFactory.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken
-            );
-            timeoutCts.CancelAfter(timeout.Value);
-            await invoke(handler, message, properties, timeoutCts.Token);
-        }
-        else
-        {
-            await invoke(handler, message, properties, cancellationToken);
+            var handler = scope.ServiceProvider.GetRequiredService(handlerType);
+            var invoke = HandlerInvokerCache.Get(message.GetType());
+
+            if (timeout.HasValue)
+            {
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken
+                );
+                timeoutCts.CancelAfter(timeout.Value);
+                await invoke(handler, message, properties, timeoutCts.Token).ConfigureAwait(false);
+            }
+            else
+            {
+                await invoke(handler, message, properties, cancellationToken).ConfigureAwait(false);
+            }
         }
     }
 }

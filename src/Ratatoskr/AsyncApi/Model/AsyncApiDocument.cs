@@ -1,7 +1,13 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 
 namespace Ratatoskr.AsyncApi.Model;
 
+[SuppressMessage(
+    "Usage",
+    "CA2227:CollectionPropertiesShouldBeReadOnly",
+    Justification = "DTO for JSON serialization"
+)]
 public class AsyncApiDocument
 {
     [JsonPropertyName("asyncapi")]

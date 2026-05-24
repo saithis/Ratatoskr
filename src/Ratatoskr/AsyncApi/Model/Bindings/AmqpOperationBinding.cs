@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 
 namespace Ratatoskr.AsyncApi.Model.Bindings;
@@ -12,6 +13,16 @@ public class OperationBindings
     public AmqpOperationBinding? Amqp { get; set; }
 }
 
+[SuppressMessage(
+    "Design",
+    "CA1002:Do not expose generic lists",
+    Justification = "DTO for JSON serialization"
+)]
+[SuppressMessage(
+    "Usage",
+    "CA2227:CollectionPropertiesShouldBeReadOnly",
+    Justification = "DTO for JSON serialization"
+)]
 public class AmqpOperationBinding
 {
     /// <summary>
@@ -89,6 +100,9 @@ public class AmqpOperationBinding
 /// </summary>
 public enum AmqpDeliveryMode
 {
+    /// <summary>No delivery mode specified (0).</summary>
+    None = 0,
+
     /// <summary>Transient delivery mode (1). Messages may be lost on broker restart.</summary>
     Transient = 1,
 
