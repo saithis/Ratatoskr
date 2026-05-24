@@ -6,7 +6,7 @@ namespace Ratatoskr.EfCore.Internal;
 /// <summary>
 /// Centralizes all OpenTelemetry instrumentation (tracing and metrics) for the outbox processor.
 /// </summary>
-internal class OutboxTelemetry
+internal static class OutboxTelemetry
 {
     /// <summary>
     /// Starts a "create outbox" activity, restoring trace context from the message properties.

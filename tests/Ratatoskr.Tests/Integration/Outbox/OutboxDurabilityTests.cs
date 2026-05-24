@@ -110,7 +110,6 @@ public class OutboxDurabilityTests(
                     c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<TestEvent>()
                 );
             });
-            services.AddSingleton<OutboxTelemetry>();
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
@@ -181,7 +180,6 @@ public class OutboxDurabilityTests(
                     c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<TestEvent>()
                 );
             });
-            services.AddSingleton<OutboxTelemetry>();
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
@@ -248,7 +246,6 @@ public class OutboxDurabilityTests(
                     c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<TestEvent>()
                 );
             });
-            services.AddSingleton<OutboxTelemetry>();
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
@@ -350,7 +347,6 @@ public class OutboxDurabilityTests(
                     c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<TestEvent>()
                 );
             });
-            services.AddSingleton<OutboxTelemetry>();
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
@@ -427,7 +423,6 @@ public class OutboxDurabilityTests(
                     c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<TestEvent>()
                 );
             });
-            services.AddSingleton<OutboxTelemetry>();
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
@@ -499,7 +494,6 @@ public class OutboxDurabilityTests(
                     c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<TestEvent>()
                 );
             });
-            services.AddSingleton<OutboxTelemetry>();
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();
@@ -563,7 +557,6 @@ public class OutboxDurabilityTests(
                     c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<TestEvent>()
                 );
             });
-            services.AddSingleton<OutboxTelemetry>();
             services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
             services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
             services.AddSingleton<OutboxProcessor<TestDbContext>>();

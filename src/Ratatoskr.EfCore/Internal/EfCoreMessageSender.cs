@@ -11,7 +11,6 @@ namespace Ratatoskr.EfCore.Internal;
 internal class EfCoreMessageSender(
     ChannelRegistry channelRegistry,
     IEnumerable<IEfCoreInboxAcceptor> acceptors,
-    EfCoreTelemetry telemetry,
     TimeProvider timeProvider,
     IEnumerable<IMessageActivityObserver> observers,
     ILogger<EfCoreMessageSender> logger
