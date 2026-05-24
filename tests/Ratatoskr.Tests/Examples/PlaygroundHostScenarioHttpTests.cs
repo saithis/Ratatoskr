@@ -253,6 +253,51 @@ public sealed class PlaygroundHostScenarioHttpTests(
         runRes.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
+    [Test]
+    public async Task BlockingHold_WithConfiguredRunTimeout_TerminatesAsTimedOut()
+    {
+        var testId = Guid.NewGuid().ToString("N")[..12];
+        var pubDb = $"ph_{testId}_pub";
+        var conDb = $"ph_{testId}_con";
+        var playDb = $"ph_{testId}_play";
+        var maint = MaintenanceConnectionString(postgres.ConnectionString);
+        await CreateDatabaseAsync(maint, pubDb);
+        await CreateDatabaseAsync(maint, conDb);
+        await CreateDatabaseAsync(maint, playDb);
+
+        var pubCs = new NpgsqlConnectionStringBuilder(postgres.ConnectionString)
+        {
+            Database = pubDb,
+        }.ToString();
+        var conCs = new NpgsqlConnectionStringBuilder(postgres.ConnectionString)
+        {
+            Database = conDb,
+        }.ToString();
+        var playCs = new NpgsqlConnectionStringBuilder(postgres.ConnectionString)
+        {
+            Database = playDb,
+        }.ToString();
+
+        await using var factory =
+            new WebApplicationFactory<PlaygroundHostAppMarker>().WithWebHostBuilder(builder =>
+            {
+                builder.UseSetting("ConnectionStrings:rabbitmq", rabbit.ConnectionString);
+                builder.UseSetting("ConnectionStrings:publisherdb", pubCs);
+                builder.UseSetting("ConnectionStrings:consumerdb", conCs);
+                builder.UseSetting("ConnectionStrings:playgrounddb", playCs);
+                builder.UseSetting("Playground:Enabled", "true");
+                builder.UseSetting("Playground:RunTimeoutSeconds", "8");
+                builder.UseSetting("ASPNETCORE_ENVIRONMENT", "Development");
+            });
+        _ = factory.Server;
+
+        var client = factory.CreateClient();
+        var runId = await StartScenarioAsync(client, "blocking-hold", confirmDanger: true);
+        var status = await WaitForTerminalAsync(client, runId, 20);
+        status.state.Should().Be("Failed");
+        status.detail.Should().Contain("Timed out", $"detail was: {status.detail}");
+    }
+
     private sealed record ScenarioCatalogDto(
         string slug,
         string title,

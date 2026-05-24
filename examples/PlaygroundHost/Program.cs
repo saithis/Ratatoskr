@@ -114,6 +114,10 @@ builder.Services.AddDbContext<ConsumerDbContext>(
 
 builder.Services.AddDbContext<PlaygroundDbContext>(options => options.UseNpgsql(playgroundCs));
 
+builder.Services.Configure<PlaygroundOptions>(
+    builder.Configuration.GetSection(PlaygroundOptions.SectionName)
+);
+
 PlaygroundScenarioManifest.RegisterScenarioServices(builder.Services);
 builder.Services.AddSingleton<ScenarioRunService>();
 

@@ -1,4 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
+using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Persistence;
 
 namespace PlaygroundHost.Infrastructure.ScenarioRunning;
@@ -7,9 +10,15 @@ public sealed class ScenarioRunService(
     IServiceScopeFactory scopeFactory,
     ILogger<ScenarioRunService> logger,
     IEnumerable<IScenario> scenarios,
-    TimeProvider time
+    TimeProvider time,
+    IOptions<PlaygroundOptions> playgroundOptions,
+    IHostApplicationLifetime hostLifetime
 )
 {
+    private readonly TimeSpan _runTimeout = TimeSpan.FromSeconds(
+        Math.Max(1, playgroundOptions.Value.RunTimeoutSeconds)
+    );
+
     private readonly Dictionary<string, IScenario> _bySlug = scenarios.ToDictionary(
         s => s.Slug,
         StringComparer.OrdinalIgnoreCase
@@ -78,19 +87,17 @@ public sealed class ScenarioRunService(
             await db.SaveChangesAsync(cancellationToken);
         });
 
-        _ = RunInBackgroundAsync(runId, scenario, cancellationToken);
+        _ = RunInBackgroundAsync(runId, scenario);
 
         return new ScenarioStartResult(runId, scenario.Title, Error: null);
     }
 
-    private async Task RunInBackgroundAsync(
-        Guid runId,
-        IScenario scenario,
-        CancellationToken cancellationToken
-    )
+    private async Task RunInBackgroundAsync(Guid runId, IScenario scenario)
     {
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(30));
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(
+            hostLifetime.ApplicationStopping
+        );
+        timeoutCts.CancelAfter(_runTimeout);
         using var executionCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token);
 
         using var pollShutdown = new CancellationTokenSource();
