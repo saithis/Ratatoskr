@@ -95,11 +95,9 @@ public class ProcessorHealthCheckTests
         result.Status.Should().Be(HealthStatus.Unhealthy);
     }
 
-    private class TestProcessor : PollingBackgroundService
+    private sealed class TestProcessor(TimeProvider timeProvider)
+        : PollingBackgroundService(null!, timeProvider, NullLogger.Instance)
     {
-        public TestProcessor(TimeProvider timeProvider)
-            : base(default!, timeProvider, NullLogger.Instance) { }
-
         protected override string ProcessorName => "Test";
         protected override TimeSpan PollingInterval => TimeSpan.FromSeconds(1);
         protected override TimeSpan RestartDelay => TimeSpan.FromSeconds(1);

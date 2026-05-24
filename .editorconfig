@@ -1223,7 +1223,7 @@ dotnet_diagnostic.CA2000.severity = error
 dotnet_diagnostic.CA2002.severity = error
 
 # Do not directly await a Task
-dotnet_diagnostic.CA2007.severity = error
+dotnet_diagnostic.CA2007.severity = none
 
 # Do not create tasks without passing a TaskScheduler
 dotnet_diagnostic.CA2008.severity = suggestion
@@ -2493,7 +2493,7 @@ dotnet_diagnostic.ASYNC0001.severity = error
 
 # Non asynchronous method names should not end with Async
 # Examples in Rock Your Code: Coding Standards for Microsoft .NET
-dotnet_diagnostic.ASYNC0002.severity = error
+dotnet_diagnostic.ASYNC0002.severity = suggestion # only suggestion due to false positives on ValueTask returning methods
 
 # Avoid void returning asynchronous method
 dotnet_diagnostic.ASYNC0003.severity = warning
@@ -2501,7 +2501,7 @@ dotnet_diagnostic.ASYNC0003.severity = warning
 # Use ConfigureAwait(false) on await expression
 # Examples in Rock Your Code: Coding Standards for Microsoft .NET
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
-dotnet_diagnostic.ASYNC0004.severity = error
+dotnet_diagnostic.ASYNC0004.severity = none
 
 # Do not use blocking call (make method async)
 dotnet_diagnostic.MA0045.severity = none
@@ -2509,7 +2509,7 @@ dotnet_diagnostic.MA0045.severity = none
 # Call 'ConfigureAwait(false)'
 # Examples in Rock Your Code: Coding Standards for Microsoft .NET
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
-dotnet_diagnostic.RCS1090.severity = error
+dotnet_diagnostic.RCS1090.severity = none
 
 # Return completed task instead of returning null
 dotnet_diagnostic.RCS1210.severity = error
@@ -2577,7 +2577,7 @@ dotnet_diagnostic.VSTHRD110.severity = error
 # Use .ConfigureAwait(bool)
 # Examples in Rock Your Code: Coding Standards for Microsoft .NET
 # Examples in Rock Your Code: Code Performance in Microsoft .NET
-dotnet_diagnostic.VSTHRD111.severity = error
+dotnet_diagnostic.VSTHRD111.severity = none
 
 # Implement System.IAsyncDisposable
 dotnet_diagnostic.VSTHRD112.severity = error
@@ -3251,6 +3251,3 @@ dotnet_diagnostic.SA1204.severity = none # Static/Instance ordering
 # Disable spacing/formatting rules to avoid conflict with CSharpier
 dotnet_diagnostic.SA1513.severity = none # Closing brace followed by blank line
 dotnet_diagnostic.SA1519.severity = none # Braces around multi-line child statements
-
-# Disable obsolete ASYNC0002 due to false positives on ValueTask returning methods
-dotnet_diagnostic.ASYNC0002.severity = none
