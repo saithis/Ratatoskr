@@ -19,8 +19,7 @@ public sealed class DirectConsumeRetryScenario : IPlaygroundScenario
     private static string QueueName { get; } =
         PlaygroundAmqpNames.QueueName(ScenarioSlug, "notifications");
 
-    public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues =>
-        [new("work", QueueName)];
+    public static IReadOnlyList<PlaygroundRabbitQueue> RabbitQueues => [new("work", QueueName)];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
     {

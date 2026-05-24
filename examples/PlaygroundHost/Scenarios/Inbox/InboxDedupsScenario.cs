@@ -20,7 +20,7 @@ public sealed class InboxDedupsScenario : IPlaygroundScenario
     private static string NonInboxQueue { get; } =
         PlaygroundAmqpNames.QueueName(ScenarioSlug, "no-inbox");
 
-    public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues =>
+    public static IReadOnlyList<PlaygroundRabbitQueue> RabbitQueues =>
         [new("inbox-dedup", InboxQueue), new("direct-double", NonInboxQueue)];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)

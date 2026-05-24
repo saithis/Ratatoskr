@@ -15,7 +15,7 @@ public sealed class DirectConsumeDlqScenario : IPlaygroundScenario
     private static string QueueName { get; } =
         PlaygroundAmqpNames.QueueName(ScenarioSlug, "notifications");
 
-    public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues =>
+    public static IReadOnlyList<PlaygroundRabbitQueue> RabbitQueues =>
         [new("notifications", QueueName)];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)

@@ -14,12 +14,12 @@ internal static class PlaygroundScenarioManifest
     private sealed record ScenarioEntry(
         IScenario Scenario,
         Action<RatatoskrBuilder> RegisterTopology,
-        IReadOnlyList<PlaygroundRabbitDepthQueue> DepthQueues
+        IReadOnlyList<PlaygroundRabbitQueue> DepthQueues
     );
 
     private static ScenarioEntry Entry<T>()
         where T : IPlaygroundScenario, new() =>
-        new(new T(), T.RegisterRatatoskrTopology, T.RabbitDepthQueues);
+        new(new T(), T.RegisterRatatoskrTopology, T.RabbitQueues);
 
     private static readonly ScenarioEntry[] _all =
     [
@@ -58,7 +58,7 @@ internal static class PlaygroundScenarioManifest
 
     internal static IEnumerable<(
         string Slug,
-        PlaygroundRabbitDepthQueue Queue
+        PlaygroundRabbitQueue Queue
     )> EnumerateRabbitDepthProbeTargets() =>
         from e in _all
         where e.DepthQueues.Count > 0

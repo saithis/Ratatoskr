@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using PlaygroundHost.Persistence;
 using Ratatoskr;
 
@@ -10,7 +11,7 @@ public sealed class ScenarioExecutionContext(
     ILogger logger
 )
 {
-    public Guid RunId { get; } = runId;
+    private Guid RunId { get; } = runId;
 
     public string ScenarioRunId => RunId.ToString("D");
 
@@ -19,13 +20,13 @@ public sealed class ScenarioExecutionContext(
     ///     <see cref="IScenario.ExecuteAsync" />).
     ///     Use <see cref="ScopeFactory" /> when you need a separate scope (for example a fresh <c>DbContext</c> per poll).
     /// </summary>
-    public IServiceProvider Services { get; } = services;
+    private IServiceProvider Services { get; } = services;
 
     public IServiceScopeFactory ScopeFactory { get; } = scopeFactory;
 
     public ILogger Logger { get; } = logger;
 
-    public List<string> StepsCompleted { get; } = [];
+    public ICollection<string> StepsCompleted { get; } = [];
 
     private TimeProvider? _timeProvider;
     public TimeProvider TimeProvider =>
@@ -54,8 +55,5 @@ public sealed class ScenarioExecutionContext(
     }
 
     public T GetRequired<T>()
-        where T : notnull
-    {
-        return Services.GetRequiredService<T>();
-    }
+        where T : notnull => Services.GetRequiredService<T>();
 }

@@ -12,7 +12,7 @@ public sealed class EfcoreInternalCommandScenario : IPlaygroundScenario
     private const string ScenarioSlug = "efcore-internal-command";
     private static string InternalCommandChannel { get; } = $"pg.{ScenarioSlug}.orders.internal";
 
-    public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues => [];
+    public static IReadOnlyList<PlaygroundRabbitQueue> RabbitQueues => [];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
     {

@@ -15,13 +15,13 @@ public sealed class ScenarioRunService(
         StringComparer.OrdinalIgnoreCase
     );
 
-    private async Task<T> WithPlaygroundDb<T>(Func<PlaygroundDbContext, Task<T>> work)
+    private async Task<T> WithPlaygroundDbAsync<T>(Func<PlaygroundDbContext, Task<T>> work)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         return await work(scope.ServiceProvider.GetRequiredService<PlaygroundDbContext>());
     }
 
-    private async Task WithPlaygroundDb(Func<PlaygroundDbContext, Task> work)
+    private async Task WithPlaygroundDbAsync(Func<PlaygroundDbContext, Task> work)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         await work(scope.ServiceProvider.GetRequiredService<PlaygroundDbContext>());
@@ -61,7 +61,7 @@ public sealed class ScenarioRunService(
         }
 
         var runId = Guid.NewGuid();
-        await WithPlaygroundDb(async db =>
+        await WithPlaygroundDbAsync(async db =>
         {
             await db.Database.EnsureCreatedAsync(cancellationToken);
             db.Runs.Add(
@@ -78,22 +78,21 @@ public sealed class ScenarioRunService(
             await db.SaveChangesAsync(cancellationToken);
         });
 
-        var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(30));
-        var executionCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token);
+        _ = RunInBackgroundAsync(runId, scenario, cancellationToken);
 
-        _ = RunInBackgroundAsync(runId, scenario, executionCts, timeoutCts);
-
-        return new ScenarioStartResult(runId, scenario.Title, null);
+        return new ScenarioStartResult(runId, scenario.Title, Error: null);
     }
 
     private async Task RunInBackgroundAsync(
         Guid runId,
         IScenario scenario,
-        CancellationTokenSource executionCts,
-        CancellationTokenSource timeoutCts
+        CancellationToken cancellationToken
     )
     {
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(30));
+        using var executionCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token);
+
         using var pollShutdown = new CancellationTokenSource();
         using var pollLoopCts = CancellationTokenSource.CreateLinkedTokenSource(
             timeoutCts.Token,
@@ -110,7 +109,7 @@ public sealed class ScenarioRunService(
             var verdict = await scenario.ExecuteAsync(ctx, executionCts.Token);
             // Persist terminal state without the execution token: cooperative cancel sets executionCts
             // cancelled while scenarios like cancel-smoke still return a normal Passed verdict.
-            await WithPlaygroundDb(async db =>
+            await WithPlaygroundDbAsync(async db =>
             {
                 var row = await db.Runs.FirstAsync(r => r.Id == runId, CancellationToken.None);
                 row.State = verdict.Passed ? "Passed" : "Failed";
@@ -143,9 +142,6 @@ public sealed class ScenarioRunService(
             {
                 // Poll loop may observe linked-token cancellation or a disposed scope factory during host teardown.
             }
-
-            executionCts.Dispose();
-            timeoutCts.Dispose();
         }
     }
 
@@ -188,7 +184,7 @@ public sealed class ScenarioRunService(
         Guid runId,
         CancellationToken cancellationToken
     ) =>
-        WithPlaygroundDb(async db =>
+        WithPlaygroundDbAsync(async db =>
         {
             var row = await db
                 .Runs.AsNoTracking()
@@ -199,7 +195,7 @@ public sealed class ScenarioRunService(
         });
 
     private Task MarkTerminalAsync(Guid runId, string state, string? detail) =>
-        WithPlaygroundDb(async db =>
+        WithPlaygroundDbAsync(async db =>
         {
             var row = await db.Runs.FirstOrDefaultAsync(r => r.Id == runId);
             if (row is null)
@@ -217,7 +213,7 @@ public sealed class ScenarioRunService(
         Guid runId,
         CancellationToken cancellationToken
     ) =>
-        WithPlaygroundDb(async db =>
+        WithPlaygroundDbAsync(async db =>
         {
             var row = await db
                 .Runs.AsNoTracking()
@@ -238,7 +234,7 @@ public sealed class ScenarioRunService(
         });
 
     public Task<bool> RequestCancelAsync(Guid runId, CancellationToken cancellationToken) =>
-        WithPlaygroundDb(async db =>
+        WithPlaygroundDbAsync(async db =>
         {
             var row = await db.Runs.FirstOrDefaultAsync(r => r.Id == runId, cancellationToken);
             if (row is null || row.State is "Passed" or "Failed" or "Cancelled")

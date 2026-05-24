@@ -23,7 +23,7 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
     private static string InventoryQueueName { get; } =
         PlaygroundAmqpNames.QueueName(ScenarioSlug, "inventory");
 
-    public static IReadOnlyList<PlaygroundRabbitDepthQueue> RabbitDepthQueues =>
+    public static IReadOnlyList<PlaygroundRabbitQueue> RabbitQueues =>
         [new("orders", OrdersQueueName), new("inventory", InventoryQueueName)];
 
     public static void RegisterRatatoskrTopology(RatatoskrBuilder bus)
