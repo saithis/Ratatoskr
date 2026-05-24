@@ -167,4 +167,4 @@ app.MapPost(
 app.MapAsyncApi();
 #endregion
 
-app.Run();
+await app.RunAsync();

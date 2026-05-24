@@ -5,3 +5,7 @@ dotnet_diagnostic.CA1848.severity = none
 
 # CA1873: Evaluation of this argument may be expensive and unnecessary if logging is disabled
 dotnet_diagnostic.CA1873.severity = none
+
+# Validate arguments of public methods
+# Examples in Rock Your Code: Coding Standards for Microsoft .NET
+dotnet_diagnostic.CA1062.severity = none
