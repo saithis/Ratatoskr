@@ -32,3 +32,6 @@ dotnet_diagnostic.CA1711.severity = none
 
 # Use an overload with a CancellationToken
 dotnet_diagnostic.MA0040.severity = suggestion
+
+# Pass System.Uri objects instead of strings
+dotnet_diagnostic.CA2234.severity = none

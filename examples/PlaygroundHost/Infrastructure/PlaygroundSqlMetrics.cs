@@ -1,4 +1,5 @@
 using System.Data;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 
@@ -68,6 +69,11 @@ public static class PlaygroundSqlMetrics
     private static string EscapeLike(string s) =>
         s.Replace("'", "''", StringComparison.OrdinalIgnoreCase);
 
+    [SuppressMessage(
+        "IDisposableAnalyzers",
+        "IDISP001:Dispose created",
+        Justification = "The connection is owned by the DbContext; disposing it would break subsequent EF operations on the same context."
+    )]
     private static async Task<int> ExecuteScalarIntAsync(
         DbContext db,
         string sql,
