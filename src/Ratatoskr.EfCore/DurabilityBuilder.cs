@@ -77,4 +77,5 @@ public class DurabilityBuilder<TDbContext>
 /// <summary>
 /// Sentinel type for idempotency detection of <c>AddEfCoreDurability&lt;TDbContext&gt;</c>.
 /// </summary>
+// ReSharper disable once UnusedTypeParameter
 internal sealed class DurabilityMarker<TDbContext>;
