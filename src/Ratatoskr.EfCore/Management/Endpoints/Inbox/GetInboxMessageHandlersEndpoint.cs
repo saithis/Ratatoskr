@@ -20,11 +20,9 @@ internal static class GetInboxMessageHandlersEndpoint
         string contextName,
         string messageId,
         EfCoreManagementDbContextLookup lookup,
-        ILoggerFactory loggerFactory,
         CancellationToken ct
     )
     {
-        var logger = loggerFactory.CreateLogger(typeof(GetInboxMessageHandlersEndpoint).FullName!);
         if (
             ManagementDbContextResolver.EnsureInbox(lookup, contextName, out var db) is
             { } resolveError
