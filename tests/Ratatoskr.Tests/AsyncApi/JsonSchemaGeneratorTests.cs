@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using Ratatoskr.AsyncApi.Model;
 using Ratatoskr.AsyncApi.Schema;
@@ -15,6 +16,11 @@ public class JsonSchemaGeneratorTests
     // ReSharper disable UnusedAutoPropertyAccessor.Local — used via reflection by JsonSchemaGenerator
 
     /// <summary>Covers primitive and string nullability scenarios.</summary>
+    [SuppressMessage(
+        "ReSharper",
+        "UnusedMember.Local",
+        Justification = "Used for serialization tests"
+    )]
     private class PrimitiveNullabilityModel
     {
         public string NonNullableString { get; set; } = "";
@@ -30,6 +36,11 @@ public class JsonSchemaGeneratorTests
     }
 
     /// <summary>Covers collection nullability scenarios.</summary>
+    [SuppressMessage(
+        "ReSharper",
+        "UnusedMember.Local",
+        Justification = "Used for serialization tests"
+    )]
     private class CollectionNullabilityModel
     {
         public List<string> NonNullableList { get; set; } = [];
@@ -41,12 +52,22 @@ public class JsonSchemaGeneratorTests
     }
 
     /// <summary>A nested complex type for reference testing.</summary>
+    [SuppressMessage(
+        "ReSharper",
+        "UnusedMember.Local",
+        Justification = "Used for serialization tests"
+    )]
     private class NestedModel
     {
         public string Value { get; set; } = "";
     }
 
     /// <summary>Covers complex object (reference type) nullability scenarios.</summary>
+    [SuppressMessage(
+        "ReSharper",
+        "UnusedMember.Local",
+        Justification = "Used for serialization tests"
+    )]
     private class ComplexNullabilityModel
     {
         public NestedModel NonNullableNested { get; set; } = new();
