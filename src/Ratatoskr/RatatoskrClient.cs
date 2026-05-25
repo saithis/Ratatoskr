@@ -133,6 +133,6 @@ internal sealed partial class RatatoskrClient(
         ILogger logger,
         Exception ex,
         string transportName,
-        string messageId
+        string? messageId
     );
 }

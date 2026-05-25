@@ -35,3 +35,25 @@ dotnet_diagnostic.MA0040.severity = suggestion
 
 # Pass System.Uri objects instead of strings
 dotnet_diagnostic.CA2234.severity = none
+
+# RCS1163: Unused parameters (very common in lambdas, DI factory mock registrations 'sp => ...')
+dotnet_diagnostic.RCS1163.severity = none
+
+# RCS1118: Mark local variable as const (not needed in test logic)
+dotnet_diagnostic.RCS1118.severity = none
+
+# MA0016: Use a collection abstraction instead of concrete type (tests can use concrete collections directly)
+dotnet_diagnostic.MA0016.severity = none
+
+# CS8602/CS8625: Nullability dereferences / passing null (standard in negative tests)
+dotnet_diagnostic.CS8602.severity = none
+dotnet_diagnostic.CS8625.severity = none
+
+# EF1002: EF Core SQL injection check (we test raw SQL behavior directly)
+dotnet_diagnostic.EF1002.severity = none
+
+# CA1056: URI properties should not be strings (standard mock variables)
+dotnet_diagnostic.CA1056.severity = none
+
+# MA0051: Method is too long (methods in test projects are naturally long sequences of setup/assertions)
+dotnet_diagnostic.MA0051.severity = none

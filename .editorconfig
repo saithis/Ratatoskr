@@ -1130,15 +1130,23 @@ dotnet_diagnostic.MA0041.severity = none
 # Disable filename must match type name rule (idiomatic to group small enums/helpers in the same file)
 dotnet_diagnostic.MA0048.severity = suggestion # Meziantou default: warning
 
+# Meziantou method length configuration
+MA0051.maximum_lines_per_method = 120
+
 # Disable make class sealed rule (duplicate of suppressed RCS1225 rule)
 dotnet_diagnostic.MA0053.severity = suggestion # Meziantou default: warning
 
-# Meziantou method length configuration
-dotnet_code_quality.MA0051.maximum_lines = 120
+# MA0108: Remove redundant default argument values (explicit nameof is highly self-documenting)
+dotnet_diagnostic.MA0108.severity = suggestion
+
+# MA0154: Use string.Equals instead of operator == (operator == is standard, clean, and idiomatic C#)
+dotnet_diagnostic.MA0154.severity = none
 
 # Suppress collection abstraction rule for serialization DTOs mapping 1:1 to AsyncAPI specification
 [src/Ratatoskr/AsyncApi/Model/**]
 dotnet_diagnostic.MA0016.severity = none
+
+[*.cs]
 
 ####################################################################################################
 # Other Platform Diagnostics
@@ -1164,3 +1172,10 @@ dotnet_diagnostic.RCS1226.severity = none # Add paragraph to documentation comme
 
 # Prevent duplicate seal class warnings (Keep CLASS0001)
 dotnet_diagnostic.RCS1225.severity = none # Roslynator make class sealed
+
+# RCS1124: Do not use '#' region (regions are useful for class organization)
+dotnet_diagnostic.RCS1124.severity = none
+
+# RCS1217: Use anonymous function instead of method group
+dotnet_diagnostic.RCS1217.severity = none
+

@@ -253,7 +253,7 @@ public sealed partial class MessageDispatcher(
     private static partial void LogHandlerProcessed(
         ILogger logger,
         string handler,
-        string id,
+        string? id,
         string type
     );
 
@@ -266,7 +266,7 @@ public sealed partial class MessageDispatcher(
         ILogger logger,
         Exception ex,
         string handler,
-        string id,
+        string? id,
         string type
     );
 }
