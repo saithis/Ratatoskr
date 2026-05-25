@@ -57,3 +57,6 @@ dotnet_diagnostic.CA1056.severity = none
 
 # MA0051: Method is too long (methods in test projects are naturally long sequences of setup/assertions)
 dotnet_diagnostic.MA0051.severity = none
+
+# Unused parameter (private accessibility)
+resharper_unused_parameter_local_highlighting = suggestion
