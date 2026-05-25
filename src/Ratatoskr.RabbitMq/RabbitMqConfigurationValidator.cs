@@ -40,7 +40,7 @@ internal static class RabbitMqConfigurationValidator
         {
             throw new InvalidOperationException(
                 $"Channel '{channel.ChannelName}' has no messages registered. "
-                    + $"Add at least one message using Produces<T>() or Consumes<T>()."
+                    + "Add at least one message using Produces<T>() or Consumes<T>()."
             );
         }
 
@@ -49,7 +49,7 @@ internal static class RabbitMqConfigurationValidator
         {
             throw new InvalidOperationException(
                 $"Consume channel '{channel.ChannelName}' does not have a QueueName configured. "
-                    + $"Call .WithQueueName(\"my-queue\") in the WithRabbitMq() configuration."
+                    + "Call .WithQueueName(\"my-queue\") in the WithRabbitMq() configuration."
             );
         }
 
@@ -60,8 +60,8 @@ internal static class RabbitMqConfigurationValidator
             {
                 throw new InvalidOperationException(
                     $"Channel '{channel.ChannelName}' is configured with QueueType.Quorum and QueueAutoDelete=true. "
-                        + $"Quorum queues do not support auto-delete. Use WithTransientQueue() with QueueType.Classic instead, "
-                        + $"or remove the auto-delete setting."
+                        + "Quorum queues do not support auto-delete. Use WithTransientQueue() with QueueType.Classic instead, "
+                        + "or remove the auto-delete setting."
                 );
             }
 
@@ -69,7 +69,7 @@ internal static class RabbitMqConfigurationValidator
             {
                 throw new InvalidOperationException(
                     $"Channel '{channel.ChannelName}' is configured with QueueType.Quorum and QueueExclusive=true. "
-                        + $"Quorum queues do not support exclusive mode."
+                        + "Quorum queues do not support exclusive mode."
                 );
             }
 
@@ -77,7 +77,7 @@ internal static class RabbitMqConfigurationValidator
             {
                 throw new InvalidOperationException(
                     $"Channel '{channel.ChannelName}' is configured with QueueType.Quorum and QueueDurable=false. "
-                        + $"Quorum queues must be durable."
+                        + "Quorum queues must be durable."
                 );
             }
         }
@@ -87,8 +87,8 @@ internal static class RabbitMqConfigurationValidator
         {
             throw new InvalidOperationException(
                 $"Channel '{channel.ChannelName}' is configured with AutoAck=true and managed retry enabled. "
-                    + $"Auto-acknowledged messages cannot be retried because the broker removes them immediately on delivery. "
-                    + $"Either disable auto-ack with .WithAutoAck(false), or disable managed retry with .WithRetry(r => r.WithManaged(false))."
+                    + "Auto-acknowledged messages cannot be retried because the broker removes them immediately on delivery. "
+                    + "Either disable auto-ack with .WithAutoAck(false), or disable managed retry with .WithRetry(r => r.WithManaged(false))."
             );
         }
     }
