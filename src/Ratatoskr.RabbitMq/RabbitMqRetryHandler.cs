@@ -12,7 +12,6 @@ namespace Ratatoskr.RabbitMq;
 /// </summary>
 internal partial class RabbitMqRetryHandler(
     RabbitMqTelemetry telemetry,
-    RabbitMqOptions options,
     TimeProvider timeProvider,
     ILogger<RabbitMqRetryHandler> logger
 )

@@ -149,11 +149,8 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
         }
     }
 
-    public sealed class OrderFulfilledHandler(
-        PublisherDbContext context,
-        TimeProvider timeProvider,
-        ILogger<OrderFulfilledHandler> _
-    ) : IMessageHandler<OrderFulfilled>
+    public sealed class OrderFulfilledHandler(PublisherDbContext context, TimeProvider timeProvider)
+        : IMessageHandler<OrderFulfilled>
     {
         public Task HandleAsync(
             OrderFulfilled message,
