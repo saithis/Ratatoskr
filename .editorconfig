@@ -1099,6 +1099,9 @@ dotnet_diagnostic.JSON002.severity = suggestion
 # Simplify boolean comparison
 dotnet_diagnostic.RCS1049.severity = silent
 
+# Remove redundant default switch section
+dotnet_diagnostic.RCS1070.severity = silent
+
 # Remove unnecessary 'Imports' or 'using' directive
 dotnet_diagnostic.RemoveUnnecessaryImportsFixable.severity = warning
 
@@ -1178,4 +1181,7 @@ dotnet_diagnostic.RCS1124.severity = none
 
 # RCS1217: Use anonymous function instead of method group
 dotnet_diagnostic.RCS1217.severity = none
+
+# Redundant argument with default value
+resharper_redundant_argument_default_value_highlighting = hint
 

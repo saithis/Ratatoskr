@@ -8,7 +8,6 @@ using RabbitMQ.Client;
 using Ratatoskr.RabbitMq;
 using Ratatoskr.TestHost;
 using Ratatoskr.Tests.Fixtures;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.Integration;
 

@@ -52,12 +52,12 @@ public static class PublicApiExtensions
 
             if (durabilityBuilder.InboxBuilder != null)
             {
-                RegisterInboxServices<TDbContext>(builder, durabilityBuilder.InboxBuilder);
+                RegisterInboxServices(builder, durabilityBuilder.InboxBuilder);
             }
 
             if (durabilityBuilder.OutboxBuilder != null)
             {
-                RegisterOutboxServices<TDbContext>(builder, durabilityBuilder.OutboxBuilder);
+                RegisterOutboxServices(builder, durabilityBuilder.OutboxBuilder);
             }
 
             builder.Services.AddSingleton(_ => new EfCoreMetricsSettings<TDbContext>(

@@ -1,7 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
-using PlaygroundHost.Infrastructure;
 using PlaygroundHost.Persistence;
 
 namespace PlaygroundHost.Infrastructure.ScenarioRunning;
