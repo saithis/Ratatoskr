@@ -41,7 +41,7 @@ public static class InboxPublicApiExtensions
                 throw new InvalidOperationException(
                     $"Channel '{channelName}' uses UseInbox<{typeof(TDbContext).Name}>() "
                         + $"but AddEfCoreDurability<{typeof(TDbContext).Name}>(d => d.UseInbox()) was not configured. "
-                        + $"Call AddEfCoreDurability before configuring consume channels."
+                        + "Call AddEfCoreDurability before configuring consume channels."
                 );
             }
         });
