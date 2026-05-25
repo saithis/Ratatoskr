@@ -328,7 +328,7 @@ internal partial class OutboxTriggerInterceptor<TDbContext>(
         Level = LogLevel.Warning,
         Message = "Message '{MessageId}' targets both same-DbContext and cross-DbContext inbox channels. Same-DbContext entries were created in this transaction; an outbox entry will also be created for cross-DbContext delivery. The inbox acceptor will deduplicate on delivery."
     )]
-    private static partial void LogTargetsBothSameAndCrossDb(ILogger logger, string messageId);
+    private static partial void LogTargetsBothSameAndCrossDb(ILogger logger, string? messageId);
 
     [LoggerMessage(
         EventId = 3,
@@ -337,7 +337,7 @@ internal partial class OutboxTriggerInterceptor<TDbContext>(
     )]
     private static partial void LogCreatedInboxEntries(
         ILogger logger,
-        string messageId,
+        string? messageId,
         string channel,
         int handlerCount
     );
