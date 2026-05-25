@@ -122,7 +122,7 @@ public partial class RabbitMqTopologyManager(
         CancellationToken token
     )
     {
-        string queueName =
+        var queueName =
             channelOpts.QueueName
             ?? throw new InvalidOperationException(
                 $"Queue name must be specified for consumer channel '{reg.ChannelName}'"
@@ -160,7 +160,7 @@ public partial class RabbitMqTopologyManager(
         {
             var msgOpts = msg.GetRabbitMqOptions();
 
-            string routingKey = msgOpts?.RoutingKey ?? msg.MessageTypeName;
+            var routingKey = msgOpts?.RoutingKey ?? msg.MessageTypeName;
 
             LogBindingQueue(logger, queueName, exchangeName, routingKey);
 

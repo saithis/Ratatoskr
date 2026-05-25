@@ -288,7 +288,7 @@ public class OutboxProcessingTests(
         });
 
         // Act - Try processing 3 times (max retries)
-        for (int i = 0; i < 3; i++)
+        for (var i = 0; i < 3; i++)
         {
             await InScopeAsync(async ctx =>
             {
@@ -355,7 +355,7 @@ public class OutboxProcessingTests(
         await InScopeAsync(async ctx =>
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            for (int i = 1; i <= 5; i++)
+            for (var i = 1; i <= 5; i++)
             {
                 dbContext.OutboxMessages.Add(new TestEvent { Data = $"message {i}" });
             }

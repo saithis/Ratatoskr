@@ -48,7 +48,7 @@ public sealed class OutboxSendFailureRegistry
             return false;
         }
 
-        string? runId = ext as string;
+        var runId = ext as string;
         if (
             runId == null
             && ext is System.Text.Json.JsonElement json

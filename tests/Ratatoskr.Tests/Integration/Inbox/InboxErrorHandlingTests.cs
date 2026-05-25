@@ -243,7 +243,7 @@ public class InboxErrorHandlingTests(
         await WaitForInboxEntriesAsync(1);
 
         // Process MaxRetries times with time advances between each attempt
-        for (int i = 0; i < 3; i++)
+        for (var i = 0; i < 3; i++)
         {
             await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
             fakeTime.Advance(TimeSpan.FromMinutes(10));
@@ -396,7 +396,7 @@ public class InboxErrorHandlingTests(
         await WaitForInboxEntriesAsync(1);
 
         // Process 10 times (2^10 = 1024s without cap, but cap is 30s)
-        for (int i = 0; i < 10; i++)
+        for (var i = 0; i < 10; i++)
         {
             await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
             fakeTime.Advance(TimeSpan.FromMinutes(5));
