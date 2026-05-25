@@ -6,6 +6,7 @@ namespace Ratatoskr.EfCore.Internal;
 /// Per-DbContext wrapper for <see cref="OutboxOptions"/>.
 /// Allows multiple DbContext types to each have their own outbox configuration.
 /// </summary>
+// ReSharper disable once UnusedTypeParameter
 internal class OutboxOptionsHolder<TDbContext>(OutboxOptions options)
     where TDbContext : DbContext
 {
