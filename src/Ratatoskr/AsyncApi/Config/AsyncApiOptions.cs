@@ -39,8 +39,14 @@ public sealed class AsyncApiOptions
         return this;
     }
 
-    public AsyncApiOptions WithContact(string name, Uri url = null, string? email = null)
+    public AsyncApiOptions WithContact(string name, Uri? url = null, string? email = null)
     {
-        throw new NotImplementedException();
+        Info.Contact = new AsyncApiContact
+        {
+            Name = name,
+            Url = url?.ToString(),
+            Email = email,
+        };
+        return this;
     }
 }
