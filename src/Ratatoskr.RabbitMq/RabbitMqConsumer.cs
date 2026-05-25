@@ -497,8 +497,6 @@ internal sealed partial class RabbitMqConsumer(
                         cancellationToken
                     );
                     break;
-                default:
-                    break;
             }
         }
         finally

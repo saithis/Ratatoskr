@@ -32,7 +32,7 @@ public class ActivityTracker
     /// <summary>
     /// Adds a wait condition: wait for a message of type T at the specified stage.
     /// </summary>
-    public ActivityTracker WaitForMessage<T>(MessageStage stage = MessageStage.Dispatched)
+    public ActivityTracker WaitForMessage<T>(MessageStage stage)
         where T : notnull
     {
         _waitConditions.Add(new WaitCondition(typeof(T), stage));

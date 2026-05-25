@@ -75,7 +75,6 @@ internal static class CursorHelper
         {
             2 => normalized + "==",
             3 => normalized + "=",
-            0 => normalized,
             _ => normalized,
         };
 

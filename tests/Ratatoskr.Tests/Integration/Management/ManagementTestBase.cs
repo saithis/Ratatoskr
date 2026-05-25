@@ -56,6 +56,7 @@ public abstract class ManagementTestBase(
         });
 
         await InitializeDatabase();
+        // ReSharper disable once ConditionalAccessQualifierIsNonNullableAccordingToAPIContract
         HttpClient?.Dispose();
         HttpClient = CreateHttpClient();
     }
@@ -75,6 +76,7 @@ public abstract class ManagementTestBase(
 
         if (disposing)
         {
+            // ReSharper disable once ConditionalAccessQualifierIsNonNullableAccordingToAPIContract
             HttpClient?.Dispose();
         }
 
@@ -86,6 +88,7 @@ public abstract class ManagementTestBase(
         if (!_disposed)
         {
             _disposed = true;
+            // ReSharper disable once ConditionalAccessQualifierIsNonNullableAccordingToAPIContract
             HttpClient?.Dispose();
         }
 
