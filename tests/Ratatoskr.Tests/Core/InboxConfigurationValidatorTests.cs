@@ -171,7 +171,7 @@ public class InboxConfigurationValidatorTests
         var act = () =>
             services.AddRatatoskr(bus =>
             {
-                bus.AddEfCoreDurability<TestDbContext>(d => { });
+                bus.AddEfCoreDurability<TestDbContext>(_ => { });
             });
 
         act.Should()

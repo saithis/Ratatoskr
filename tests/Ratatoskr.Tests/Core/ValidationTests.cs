@@ -16,7 +16,7 @@ public class ValidationTests
 
         // Act & Assert
         var act = () =>
-            builder.AddEventConsumeChannel("test-channel", c => c.Consumes<TestEvent>(m => { }));
+            builder.AddEventConsumeChannel("test-channel", c => c.Consumes<TestEvent>(_ => { }));
 
         act.Should()
             .Throw<InvalidOperationException>()
