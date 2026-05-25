@@ -8,6 +8,7 @@ using RabbitMQ.Client;
 using Ratatoskr.RabbitMq;
 using Ratatoskr.TestHost;
 using Ratatoskr.Tests.Fixtures;
+using TUnit.Core;
 
 namespace Ratatoskr.Tests.Integration;
 
@@ -135,6 +136,16 @@ public abstract class RatatoskrIntegrationTest(
         }
 
         return _factory.CreateClient();
+    }
+
+    [After(Test)]
+    public async Task CleanupFactoryAsync()
+    {
+        if (_factory != null)
+        {
+            await _factory.DisposeAsync();
+            _factory = null;
+        }
     }
 
     public async ValueTask DisposeAsync()
