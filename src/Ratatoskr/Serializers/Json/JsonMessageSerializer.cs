@@ -10,10 +10,7 @@ public sealed class JsonMessageSerializer : IMessageSerializer
     public JsonMessageSerializer()
         : this(options: null) { }
 
-    public JsonMessageSerializer(JsonSerializerOptions? options)
-    {
-        _options = options;
-    }
+    public JsonMessageSerializer(JsonSerializerOptions? options) => _options = options;
 
     /// <inheritdoc/>
     public string ContentType => "application/json";

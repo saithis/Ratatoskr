@@ -8,10 +8,7 @@ namespace Ratatoskr.Testing;
 /// </summary>
 public class TrackedMessage
 {
-    internal TrackedMessage(MessageActivity activity)
-    {
-        Activity = activity;
-    }
+    internal TrackedMessage(MessageActivity activity) => Activity = activity;
 
     internal MessageActivity Activity { get; }
 

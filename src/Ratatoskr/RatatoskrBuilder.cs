@@ -19,10 +19,7 @@ public sealed class RatatoskrBuilder
         new();
     private readonly List<Action<IServiceCollection>> _deferredServiceActions = new();
 
-    internal RatatoskrBuilder(IServiceCollection services)
-    {
-        Services = services;
-    }
+    internal RatatoskrBuilder(IServiceCollection services) => Services = services;
 
     /// <summary>
     /// Registers a validation callback that runs after all channels are configured.

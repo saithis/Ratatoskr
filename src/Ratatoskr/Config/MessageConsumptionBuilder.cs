@@ -14,10 +14,7 @@ public sealed class MessageConsumptionBuilder<TMessage>
     private readonly IServiceCollection _services;
     internal List<ChannelHandlerRegistration> HandlerRegistrations { get; } = new();
 
-    internal MessageConsumptionBuilder(IServiceCollection services)
-    {
-        _services = services;
-    }
+    internal MessageConsumptionBuilder(IServiceCollection services) => _services = services;
 
     /// <summary>
     /// Registers an inbox handler with a stable key.

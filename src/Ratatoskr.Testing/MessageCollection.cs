@@ -9,10 +9,7 @@ public class MessageCollection : IEnumerable<TrackedMessage>
 {
     private readonly Func<IEnumerable<TrackedMessage>> _source;
 
-    internal MessageCollection(Func<IEnumerable<TrackedMessage>> source)
-    {
-        _source = source;
-    }
+    internal MessageCollection(Func<IEnumerable<TrackedMessage>> source) => _source = source;
 
     /// <summary>
     /// Gets the number of tracked messages in this collection.
