@@ -392,7 +392,7 @@ public class OutboxDurabilityTests(
         blockingSender.UnblockSend();
 
         // Assert — should throw OperationCanceledException, not swallow it
-        Func<Task> act = async () => await processTask;
+        var act = async () => await processTask;
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         // Message should NOT have been marked as failed (no PublishFailed call)

@@ -55,7 +55,7 @@ public class InboxHandlerStatusEntityTests
         var maxDelay = TimeSpan.FromSeconds(10);
 
         // Simulate many failures to hit the cap
-        for (int i = 0; i < 10; i++)
+        for (var i = 0; i < 10; i++)
         {
             status.MarkAsFailed($"Error {i}", fakeTime, maxRetries: 20, maxDelay);
             fakeTime.Advance(TimeSpan.FromSeconds(1));
@@ -79,7 +79,7 @@ public class InboxHandlerStatusEntityTests
         var status = InboxHandlerStatusEntity.Create("msg-1", "handler-a", fakeTime);
 
         // Act - Fail maxRetries times
-        for (int i = 0; i < 3; i++)
+        for (var i = 0; i < 3; i++)
         {
             status.MarkAsFailed($"Error {i}", fakeTime, maxRetries: 3, TimeSpan.FromMinutes(5));
             fakeTime.Advance(TimeSpan.FromSeconds(1));
@@ -98,7 +98,7 @@ public class InboxHandlerStatusEntityTests
         // With equal jitter, delay ∈ [base*0.5, base) for each attempt.
         var fakeTime = new FakeTimeProvider();
 
-        for (int run = 0; run < 50; run++)
+        for (var run = 0; run < 50; run++)
         {
             var status = InboxHandlerStatusEntity.Create($"msg-{run}", "handler-a", fakeTime);
             var now = fakeTime.GetUtcNow();

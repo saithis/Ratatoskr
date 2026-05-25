@@ -265,7 +265,7 @@ public class InboxCancellationAndTimeoutTests(
 
         await WaitForInboxEntriesAsync(1);
 
-        for (int i = 0; i < 2; i++)
+        for (var i = 0; i < 2; i++)
         {
             await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
             fakeTime.Advance(TimeSpan.FromMinutes(10));

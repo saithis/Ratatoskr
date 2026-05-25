@@ -158,7 +158,7 @@ public class OutboxMessageEntityTests
         var maxDelay = TimeSpan.FromSeconds(10);
 
         // Simulate many failures to hit the cap
-        for (int i = 0; i < 10; i++)
+        for (var i = 0; i < 10; i++)
         {
             entity.PublishFailed($"Error {i}", fakeTime, maxRetries: 20, maxDelay);
             fakeTime.Advance(TimeSpan.FromSeconds(1));
@@ -188,7 +188,7 @@ public class OutboxMessageEntityTests
         var maxRetries = 3;
 
         // Act - Fail maxRetries times
-        for (int i = 0; i < maxRetries; i++)
+        for (var i = 0; i < maxRetries; i++)
         {
             entity.PublishFailed($"Error {i}", fakeTime, maxRetries, TimeSpan.FromMinutes(5));
             fakeTime.Advance(TimeSpan.FromSeconds(1));

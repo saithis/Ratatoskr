@@ -47,7 +47,7 @@ public class InboxBatchAndEndToEndTests(
         await InitializeDatabase();
 
         // Publish 5 messages while processing is disabled
-        for (int i = 0; i < 5; i++)
+        for (var i = 0; i < 5; i++)
         {
             await InScopeAsync(async ctx =>
             {
@@ -124,7 +124,7 @@ public class InboxBatchAndEndToEndTests(
         await InitializeDatabase();
 
         // Publish 5 messages
-        for (int i = 0; i < 5; i++)
+        for (var i = 0; i < 5; i++)
         {
             await InScopeAsync(async ctx =>
             {
