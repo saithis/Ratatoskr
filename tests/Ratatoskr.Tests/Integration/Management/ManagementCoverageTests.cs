@@ -290,9 +290,9 @@ public class ManagementCompositionTests
         // the same endpoint builder and maps nothing.
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddAuthorization(o =>
-            o.AddPolicy("RatatoskrAdmin", p => p.RequireAssertion(_ => true))
-        );
+        services
+            .AddAuthorizationBuilder()
+            .AddPolicy("RatatoskrAdmin", p => p.RequireAssertion(_ => true));
 
         using var sp = services.BuildServiceProvider();
         var routes = new MinimalEndpointRouteBuilder(sp);
