@@ -455,7 +455,7 @@ file class NoOpUserRolesChangedHandler : IMessageHandler<UserRolesChangedEvent>
 {
     public Task HandleAsync(
         UserRolesChangedEvent message,
-        MessageProperties context,
+        MessageProperties properties,
         CancellationToken cancellationToken
     ) => Task.CompletedTask;
 }
@@ -464,7 +464,7 @@ file class NoOpOrderCreatedHandler : IMessageHandler<OrderCreatedEvent>
 {
     public Task HandleAsync(
         OrderCreatedEvent message,
-        MessageProperties context,
+        MessageProperties properties,
         CancellationToken cancellationToken
     ) => Task.CompletedTask;
 }
@@ -473,7 +473,7 @@ file class NoOpApiKeyRevokedHandler : IMessageHandler<ApiKeyRevokedEvent>
 {
     public Task HandleAsync(
         ApiKeyRevokedEvent message,
-        MessageProperties context,
+        MessageProperties properties,
         CancellationToken cancellationToken
     ) => Task.CompletedTask;
 }

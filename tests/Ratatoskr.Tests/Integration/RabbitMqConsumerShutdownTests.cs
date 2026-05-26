@@ -121,7 +121,7 @@ file sealed class ConcurrentAckStressEventHandler : IMessageHandler<TestEvent>
 
     public async Task HandleAsync(
         TestEvent message,
-        MessageProperties context,
+        MessageProperties properties,
         CancellationToken cancellationToken
     )
     {
@@ -152,7 +152,7 @@ file sealed class BackpressureTestEventHandler : IMessageHandler<TestEvent>
 
     public async Task HandleAsync(
         TestEvent message,
-        MessageProperties context,
+        MessageProperties properties,
         CancellationToken cancellationToken
     )
     {
