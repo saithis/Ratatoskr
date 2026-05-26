@@ -27,7 +27,7 @@ public sealed class AsyncApiContact
 
     [JsonPropertyName("url")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? Url { get; set; }
+    public System.Uri? Url { get; set; }
 
     [JsonPropertyName("email")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

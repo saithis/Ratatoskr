@@ -33,7 +33,7 @@ public sealed class AsyncApiOptions
         Info.Contact = new AsyncApiContact
         {
             Name = name,
-            Url = url,
+            Url = url is null ? null : new Uri(url),
             Email = email,
         };
         return this;
@@ -44,7 +44,7 @@ public sealed class AsyncApiOptions
         Info.Contact = new AsyncApiContact
         {
             Name = name,
-            Url = url?.ToString(),
+            Url = url,
             Email = email,
         };
         return this;
