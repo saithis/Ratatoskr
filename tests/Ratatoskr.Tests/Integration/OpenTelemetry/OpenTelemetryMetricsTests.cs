@@ -503,7 +503,7 @@ public class OpenTelemetryMetricsTests(
 
         public Task HandleAsync(
             TestEvent message,
-            MessageProperties context,
+            MessageProperties properties,
             CancellationToken cancellationToken
         )
         {
@@ -523,7 +523,7 @@ public class OpenTelemetryMetricsTests(
     {
         public Task HandleAsync(
             TestEvent message,
-            MessageProperties context,
+            MessageProperties properties,
             CancellationToken cancellationToken
         )
         {

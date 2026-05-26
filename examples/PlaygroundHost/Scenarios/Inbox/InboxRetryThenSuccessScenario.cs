@@ -154,7 +154,7 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
     {
         public Task HandleAsync(
             OrderFulfilled message,
-            MessageProperties _,
+            MessageProperties properties,
             CancellationToken cancellationToken
         ) =>
             IScenarioExtensions.UpdateOrderStatusAsync(

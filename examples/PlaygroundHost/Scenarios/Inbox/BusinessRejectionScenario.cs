@@ -138,7 +138,7 @@ public sealed class BusinessRejectionScenario : IPlaygroundScenario
     {
         public Task HandleAsync(
             OrderFailed message,
-            MessageProperties _,
+            MessageProperties properties,
             CancellationToken cancellationToken
         ) =>
             IScenarioExtensions.UpdateOrderStatusAsync(

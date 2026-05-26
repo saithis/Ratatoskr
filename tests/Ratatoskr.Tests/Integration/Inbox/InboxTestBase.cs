@@ -54,20 +54,29 @@ public abstract class InboxTestBase(
 
     protected class InboxHandlerA : IMessageHandler<TestEvent>
     {
-        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct) =>
-            Task.CompletedTask;
+        public Task HandleAsync(
+            TestEvent message,
+            MessageProperties properties,
+            CancellationToken cancellationToken
+        ) => Task.CompletedTask;
     }
 
     protected class InboxHandlerB : IMessageHandler<TestEvent>
     {
-        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct) =>
-            Task.CompletedTask;
+        public Task HandleAsync(
+            TestEvent message,
+            MessageProperties properties,
+            CancellationToken cancellationToken
+        ) => Task.CompletedTask;
     }
 
     protected class AlwaysFailingHandler : IMessageHandler<TestEvent>
     {
-        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct) =>
-            throw new InvalidOperationException("Handler failed intentionally");
+        public Task HandleAsync(
+            TestEvent message,
+            MessageProperties properties,
+            CancellationToken cancellationToken
+        ) => throw new InvalidOperationException("Handler failed intentionally");
     }
 
     protected class InvocationCounter
@@ -81,7 +90,11 @@ public abstract class InboxTestBase(
 
     protected class CountingHandler(InvocationCounter counter) : IMessageHandler<TestEvent>
     {
-        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
+        public Task HandleAsync(
+            TestEvent message,
+            MessageProperties properties,
+            CancellationToken cancellationToken
+        )
         {
             counter.Increment();
             return Task.CompletedTask;
@@ -92,7 +105,11 @@ public abstract class InboxTestBase(
     {
         private const int FailuresBeforeSuccess = 2;
 
-        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct)
+        public Task HandleAsync(
+            TestEvent message,
+            MessageProperties properties,
+            CancellationToken cancellationToken
+        )
         {
             var attempt = counter.Increment();
             if (attempt <= FailuresBeforeSuccess)

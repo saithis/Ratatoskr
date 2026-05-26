@@ -720,26 +720,38 @@ public class MultiDbContextTests(
 
     private class HandlerForDbContext1 : IMessageHandler<TestEvent>
     {
-        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct) =>
-            Task.CompletedTask;
+        public Task HandleAsync(
+            TestEvent message,
+            MessageProperties properties,
+            CancellationToken cancellationToken
+        ) => Task.CompletedTask;
     }
 
     private class HandlerForDbContext1B : IMessageHandler<TestEvent>
     {
-        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct) =>
-            Task.CompletedTask;
+        public Task HandleAsync(
+            TestEvent message,
+            MessageProperties properties,
+            CancellationToken cancellationToken
+        ) => Task.CompletedTask;
     }
 
     private class HandlerForDbContext2 : IMessageHandler<TestEvent>
     {
-        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct) =>
-            Task.CompletedTask;
+        public Task HandleAsync(
+            TestEvent message,
+            MessageProperties properties,
+            CancellationToken cancellationToken
+        ) => Task.CompletedTask;
     }
 
     private class HandlerForDbContext2B : IMessageHandler<TestEvent>
     {
-        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct) =>
-            Task.CompletedTask;
+        public Task HandleAsync(
+            TestEvent message,
+            MessageProperties properties,
+            CancellationToken cancellationToken
+        ) => Task.CompletedTask;
     }
 
     #endregion

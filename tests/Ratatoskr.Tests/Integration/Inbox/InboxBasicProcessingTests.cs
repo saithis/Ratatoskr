@@ -336,9 +336,9 @@ public class InboxBasicProcessingTests(
                 .SingleAsync(m => m.Id == cloudEventsId);
             inboxMsg.Id.Should().Be(cloudEventsId, "entity ID is the CloudEvents ID");
 
-            var props = inboxMsg.GetProperties();
-            props.Id.Should().Be(cloudEventsId, "properties ID should match entity ID");
-            props.Type.Should().Be("test.event");
+            var properties = inboxMsg.GetProperties();
+            properties.Id.Should().Be(cloudEventsId, "properties ID should match entity ID");
+            properties.Type.Should().Be("test.event");
 
             var serializer = ctx.ServiceProvider.GetRequiredService<IMessageSerializer>();
             var deserialized =
@@ -406,8 +406,8 @@ public class InboxBasicProcessingTests(
     {
         public Task HandleAsync(
             OrderCreatedEvent message,
-            MessageProperties props,
-            CancellationToken ct
+            MessageProperties properties,
+            CancellationToken cancellationToken
         ) => Task.CompletedTask;
     }
 }

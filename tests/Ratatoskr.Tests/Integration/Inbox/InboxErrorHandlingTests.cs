@@ -679,7 +679,7 @@ public class InboxErrorHandlingTests(
                     "inbox-events",
                     c =>
                         c.Consumes<TestEvent>(m =>
-                                m.WithHandler<InboxHandlerA>("bad-props-handler")
+                                m.WithHandler<InboxHandlerA>("bad-properties-handler")
                             )
                             .UseInbox<TestDbContext>()
                 );
@@ -695,12 +695,12 @@ public class InboxErrorHandlingTests(
 
         await InitializeDatabase();
 
-        const string messageId = "bad-props-1";
+        const string messageId = "bad-properties-1";
         await InScopeAsync(async ctx =>
         {
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
             await bus.PublishDirectAsync(
-                new TestEvent { Id = "business-bad-props-1" },
+                new TestEvent { Id = "business-bad-properties-1" },
                 new MessageProperties { Id = messageId }
             );
         });
@@ -748,7 +748,10 @@ public class InboxErrorHandlingTests(
 
     private class LongErrorHandler : IMessageHandler<TestEvent>
     {
-        public Task HandleAsync(TestEvent message, MessageProperties props, CancellationToken ct) =>
-            throw new InvalidOperationException(new string('X', 5000));
+        public Task HandleAsync(
+            TestEvent message,
+            MessageProperties properties,
+            CancellationToken cancellationToken
+        ) => throw new InvalidOperationException(new string('X', 5000));
     }
 }

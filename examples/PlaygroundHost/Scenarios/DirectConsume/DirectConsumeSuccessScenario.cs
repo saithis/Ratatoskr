@@ -87,7 +87,7 @@ public sealed class DirectConsumeSuccessScenario : IPlaygroundScenario
     {
         public Task HandleAsync(
             DirectWork message,
-            MessageProperties _,
+            MessageProperties properties,
             CancellationToken cancellationToken
         ) =>
             IScenarioExtensions.UpdateOrderStatusAsync(

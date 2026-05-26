@@ -56,7 +56,7 @@ public class TestEventHandler : IMessageHandler<TestEvent>
 
     public Task HandleAsync(
         TestEvent message,
-        MessageProperties context,
+        MessageProperties properties,
         CancellationToken cancellationToken
     )
     {
@@ -71,7 +71,7 @@ public class SecondTestEventHandler : IMessageHandler<TestEvent>
 
     public Task HandleAsync(
         TestEvent message,
-        MessageProperties context,
+        MessageProperties properties,
         CancellationToken cancellationToken
     )
     {
@@ -86,7 +86,7 @@ public class ThrowingTestEventHandler : IMessageHandler<TestEvent>
 
     public Task HandleAsync(
         TestEvent message,
-        MessageProperties context,
+        MessageProperties properties,
         CancellationToken cancellationToken
     )
     {
@@ -102,7 +102,7 @@ public class NoOpTestEventHandler : IMessageHandler<TestEvent>
 {
     public Task HandleAsync(
         TestEvent message,
-        MessageProperties context,
+        MessageProperties properties,
         CancellationToken cancellationToken
     ) => Task.CompletedTask;
 }
@@ -136,7 +136,7 @@ public class ScopedServiceTestHandler(
 {
     public Task HandleAsync(
         TestEvent message,
-        MessageProperties context,
+        MessageProperties properties,
         CancellationToken cancellationToken
     )
     {
@@ -152,7 +152,7 @@ public class CancellationAwareTestHandler : IMessageHandler<TestEvent>
 {
     public Task HandleAsync(
         TestEvent message,
-        MessageProperties context,
+        MessageProperties properties,
         CancellationToken cancellationToken
     )
     {
@@ -162,7 +162,7 @@ public class CancellationAwareTestHandler : IMessageHandler<TestEvent>
 }
 
 /// <summary>
-/// Handler that captures the MessageProperties context for assertion.
+/// Handler that captures the MessageProperties properties for assertion.
 /// </summary>
 public class ContextCapturingHandler : IMessageHandler<TestEvent>
 {
@@ -170,11 +170,11 @@ public class ContextCapturingHandler : IMessageHandler<TestEvent>
 
     public Task HandleAsync(
         TestEvent message,
-        MessageProperties context,
+        MessageProperties properties,
         CancellationToken cancellationToken
     )
     {
-        CapturedContext = context;
+        CapturedContext = properties;
         return Task.CompletedTask;
     }
 }

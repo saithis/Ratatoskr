@@ -134,7 +134,7 @@ public sealed class OutboxSuccessScenario : IPlaygroundScenario
     {
         public Task HandleAsync(
             OrderFulfilled message,
-            MessageProperties _,
+            MessageProperties properties,
             CancellationToken cancellationToken
         ) =>
             IScenarioExtensions.UpdateOrderStatusAsync(

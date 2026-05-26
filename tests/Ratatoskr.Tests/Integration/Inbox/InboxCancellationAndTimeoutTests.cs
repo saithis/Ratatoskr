@@ -292,13 +292,13 @@ public class InboxCancellationAndTimeoutTests(
     {
         public async Task HandleAsync(
             TestEvent message,
-            MessageProperties props,
-            CancellationToken ct
+            MessageProperties properties,
+            CancellationToken cancellationToken
         )
         {
             coordination.HandlerStarted.Release();
-            await coordination.HandlerGate.WaitAsync(ct);
-            ct.ThrowIfCancellationRequested();
+            await coordination.HandlerGate.WaitAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
         }
     }
 
@@ -306,11 +306,11 @@ public class InboxCancellationAndTimeoutTests(
     {
         public async Task HandleAsync(
             TestEvent message,
-            MessageProperties props,
-            CancellationToken ct
+            MessageProperties properties,
+            CancellationToken cancellationToken
         )
         {
-            await Task.Delay(Timeout.Infinite, ct);
+            await Task.Delay(Timeout.Infinite, cancellationToken);
         }
     }
 }

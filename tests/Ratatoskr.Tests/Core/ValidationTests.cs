@@ -232,7 +232,7 @@ file class NoOpOrderCreatedHandler : IMessageHandler<OrderCreatedEvent>
 {
     public Task HandleAsync(
         OrderCreatedEvent message,
-        MessageProperties context,
+        MessageProperties properties,
         CancellationToken cancellationToken
     ) => Task.CompletedTask;
 }
