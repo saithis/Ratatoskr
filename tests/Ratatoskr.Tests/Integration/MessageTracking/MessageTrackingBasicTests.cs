@@ -319,7 +319,7 @@ public class MessageTrackingBasicTests(
             .WaitForMessage<TestEvent>(MessageStage.Dispatched)
             .ExecuteAndWaitAsync(async () =>
             {
-                using var scope = Services.CreateScope();
+                await using var scope = Services.CreateAsyncScope();
                 var bus = scope.ServiceProvider.GetRequiredService<IRatatoskr>();
                 await bus.PublishDirectAsync(
                     new TestEvent { Id = "action-1", Data = "action based" }

@@ -122,7 +122,7 @@ public class OutboxBasicTests(RabbitMqContainerFixture rabbitMq, PostgresContain
         await WaitForConditionAsync(
             () =>
                 handler.HandledMessages.Count > 0
-                && handler.HandledMessages.Any(m => m.Id == "e2e-1"),
+                && handler.HandledMessages.Exists(m => m.Id == "e2e-1"),
             TimeSpan.FromSeconds(10)
         );
 

@@ -81,7 +81,7 @@ public class OutboxDurabilityTests(
                 {
                     var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
                     var entities = await dbContext.Set<OutboxMessageEntity>().ToListAsync();
-                    return entities.Count == 2 && entities.All(e => e.ProcessedAt != null);
+                    return entities.Count == 2 && entities.TrueForAll(e => e.ProcessedAt != null);
                 }),
             TimeSpan.FromSeconds(10)
         );

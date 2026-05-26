@@ -54,7 +54,7 @@ public class OpenTelemetryMetricsTests(
 
         // 4. Wait for processing
         await WaitForConditionAsync(
-            () => handler.HandledMessages.Any(m => m.Id == eventId),
+            () => handler.HandledMessages.Exists(m => m.Id == eventId),
             TimeSpan.FromSeconds(10)
         );
 
@@ -473,7 +473,7 @@ public class OpenTelemetryMetricsTests(
         // 4. Process inbox deterministically instead of relying on background polling
         await InScopeAsync(async ctx =>
         {
-            using var scope = ctx.ServiceProvider.CreateScope();
+            await using var scope = ctx.ServiceProvider.CreateAsyncScope();
             var processor = scope.ServiceProvider.GetRequiredService<
                 InboxMessageProcessor<TestDbContext>
             >();

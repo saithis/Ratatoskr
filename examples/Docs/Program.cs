@@ -133,7 +133,7 @@ builder
 var app = builder.Build();
 
 #region EnsureDatabase
-using (var scope = app.Services.CreateScope())
+await using (var scope = app.Services.CreateAsyncScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<OrderDbContext>();
     await db.Database.EnsureCreatedAsync();

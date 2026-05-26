@@ -130,7 +130,7 @@ public class OutboxProcessingTests(
                 {
                     var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
                     var entities = await dbContext.Set<OutboxMessageEntity>().ToListAsync();
-                    return entities.Count == 3 && entities.All(e => e.ProcessedAt != null);
+                    return entities.Count == 3 && entities.TrueForAll(e => e.ProcessedAt != null);
                 }),
             TimeSpan.FromSeconds(10)
         );
@@ -380,7 +380,7 @@ public class OutboxProcessingTests(
                 {
                     var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
                     var entities = await dbContext.Set<OutboxMessageEntity>().ToListAsync();
-                    return entities.All(e => e.ProcessedAt != null);
+                    return entities.TrueForAll(e => e.ProcessedAt != null);
                 }),
             TimeSpan.FromSeconds(10)
         );

@@ -38,7 +38,7 @@ public abstract class InboxTestBase(
         var total = 0;
         while (true)
         {
-            using var scope = serviceProvider.CreateScope();
+            await using var scope = serviceProvider.CreateAsyncScope();
             var processor = scope.ServiceProvider.GetRequiredService<
                 InboxMessageProcessor<TestDbContext>
             >();

@@ -227,7 +227,7 @@ app.MapRatatoskrManagementApi("DevOnlyNoAuth");
 await PlaygroundEnsureCreatedGate.Semaphore.WaitAsync();
 try
 {
-    using (var scope = app.Services.CreateScope())
+    await using (var scope = app.Services.CreateAsyncScope())
     {
         await scope
             .ServiceProvider.GetRequiredService<PublisherDbContext>()
