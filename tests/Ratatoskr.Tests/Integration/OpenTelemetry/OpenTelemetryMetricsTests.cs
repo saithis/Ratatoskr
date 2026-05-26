@@ -244,7 +244,7 @@ public class OpenTelemetryMetricsTests(
             .Take(2)
             .Should()
             .AllSatisfy(a => a.Status.Should().Be(ActivityStatusCode.Error));
-        consumerActivities.Last().Status.Should().Be(ActivityStatusCode.Unset);
+        consumerActivities[^1].Status.Should().Be(ActivityStatusCode.Unset);
     }
 
     [Test]
