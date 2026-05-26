@@ -316,7 +316,8 @@ public class ManagementCompositionTests
         public DateTimeOffset? LastOutboxProcessingAt => null;
         public DateTimeOffset? LastInboxProcessingAt => null;
 
-        public DbContext GetDbContext(IServiceProvider _) => throw new NotSupportedException();
+        public DbContext GetDbContext(IServiceProvider serviceProvider) =>
+            throw new NotSupportedException();
     }
 
     private sealed class MinimalEndpointRouteBuilder(IServiceProvider sp)
