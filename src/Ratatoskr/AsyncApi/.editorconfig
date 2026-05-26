@@ -1,0 +1,7 @@
+[*.cs]
+
+# Suppress collection abstraction rule for serialization DTOs mapping 1:1 to AsyncAPI specification
+dotnet_diagnostic.MA0016.severity = none
+
+# Auto-property accessor is never used (non-private accessibility)﻿
+resharper_unused_auto_property_accessor_global_highlighting = none

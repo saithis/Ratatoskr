@@ -1148,12 +1148,6 @@ dotnet_diagnostic.MA0108.severity = suggestion
 # MA0154: Use string.Equals instead of operator == (operator == is standard, clean, and idiomatic C#)
 dotnet_diagnostic.MA0154.severity = none
 
-# Suppress collection abstraction rule for serialization DTOs mapping 1:1 to AsyncAPI specification
-[src/Ratatoskr/AsyncApi/Model/**]
-dotnet_diagnostic.MA0016.severity = none
-
-[*.cs]
-
 ####################################################################################################
 # Other Platform Diagnostics
 ####################################################################################################
