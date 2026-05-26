@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -43,6 +44,7 @@ internal static class ContextHealthEndpoint
         );
     }
 
+    [SuppressMessage("ReSharper", "NotAccessedPositionalProperty.Global", Justification = "DTO")]
     internal record ContextHealthResponse(
         string DbContextName,
         long PoisonedOutboxCount,

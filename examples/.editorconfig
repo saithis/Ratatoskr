@@ -11,3 +11,6 @@ dotnet_diagnostic.CA1062.severity = none
 
 # CS1591: Missing XML comment for publicly visible type or member
 dotnet_diagnostic.CS1591.severity = none
+
+# Non-accessed positional property (non-private accessibility)
+resharper_not_accessed_positional_property_global_highlighting = none

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -23,7 +24,9 @@ internal static class GetContextsEndpoint
         return TypedResults.Ok(new ContextListResponse(contexts));
     }
 
+    [SuppressMessage("ReSharper", "NotAccessedPositionalProperty.Global", Justification = "DTO")]
     internal record ContextListItem(string Name, bool HasOutbox, bool HasInbox);
 
+    [SuppressMessage("ReSharper", "NotAccessedPositionalProperty.Global", Justification = "DTO")]
     internal record ContextListResponse(List<ContextListItem> Contexts);
 }

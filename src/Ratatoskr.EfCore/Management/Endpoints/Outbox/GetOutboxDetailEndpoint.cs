@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -64,6 +65,7 @@ internal static class GetOutboxDetailEndpoint
         );
     }
 
+    [SuppressMessage("ReSharper", "NotAccessedPositionalProperty.Global", Justification = "DTO")]
     internal record OutboxPoisonedDetail(
         Guid Id,
         string MessageType,

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -127,6 +128,7 @@ internal static partial class ListPoisonedInboxEndpoint
         return TypedResults.Ok(new InboxPoisonedListResponse(dtos, totalCount, nextCursor));
     }
 
+    [SuppressMessage("ReSharper", "NotAccessedPositionalProperty.Global", Justification = "DTO")]
     internal record InboxPoisonedListItem(
         Guid HandlerStatusId,
         string MessageId,
@@ -139,6 +141,7 @@ internal static partial class ListPoisonedInboxEndpoint
         string DbContext
     );
 
+    [SuppressMessage("ReSharper", "NotAccessedPositionalProperty.Global", Justification = "DTO")]
     internal record InboxPoisonedListResponse(
         List<InboxPoisonedListItem> Items,
         long TotalCount,

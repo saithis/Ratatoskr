@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Http.Json;
 using AwesomeAssertions;
@@ -381,6 +382,7 @@ public sealed class PlaygroundHostScenarioHttpTests : IAsyncDisposable
         status.Detail.Should().Contain("Timed out", $"detail was: {status.Detail}");
     }
 
+    [SuppressMessage("ReSharper", "NotAccessedPositionalProperty.Local", Justification = "DTO")]
     private sealed record ScenarioCatalogDto(
         string Slug,
         string Title,
