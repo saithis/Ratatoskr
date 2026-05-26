@@ -318,7 +318,10 @@ public class CloudEventsAmqpMapperOutgoingTests
         // The cloudEvents-prefixed user headers should not appear as-is
         // (they would conflict with the protocol-level cloudEvents_ headers)
         var userCustomHeaders = outgoing
-            .Headers.Keys.Where(k => k is "cloudEvents_custom" or "cloudEvents:custom")
+            .Headers.Keys.Where(k =>
+                string.Equals(k, "cloudEvents_custom", StringComparison.Ordinal)
+                || string.Equals(k, "cloudEvents:custom", StringComparison.Ordinal)
+            )
             .ToList();
         userCustomHeaders.Should().BeEmpty();
     }

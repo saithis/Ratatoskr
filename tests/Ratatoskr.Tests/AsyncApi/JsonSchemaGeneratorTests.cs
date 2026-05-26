@@ -100,7 +100,8 @@ public class JsonSchemaGeneratorTests
 
     /// <summary>Returns true if the schema is a oneOf with [innerSchema, {type: "null"}] (nullable complex/collection).</summary>
     private static bool IsOneOfWithNull(JsonSchema schema) =>
-        schema.OneOf is { Count: 2 } && schema.OneOf[1].Type is "null";
+        schema.OneOf is { Count: 2 }
+        && string.Equals(schema.OneOf[1].Type as string, "null", StringComparison.Ordinal);
 
     // ──────────────────────────────
     //  Primitive nullability

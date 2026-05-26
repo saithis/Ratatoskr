@@ -241,7 +241,12 @@ public sealed class ScenarioRunService(
         WithPlaygroundDbAsync(async db =>
         {
             var row = await db.Runs.FirstOrDefaultAsync(r => r.Id == runId, cancellationToken);
-            if (row is null || row.State is "Passed" or "Failed" or "Cancelled")
+            if (
+                row is null
+                || string.Equals(row.State, "Passed", StringComparison.Ordinal)
+                || string.Equals(row.State, "Failed", StringComparison.Ordinal)
+                || string.Equals(row.State, "Cancelled", StringComparison.Ordinal)
+            )
             {
                 return false;
             }
