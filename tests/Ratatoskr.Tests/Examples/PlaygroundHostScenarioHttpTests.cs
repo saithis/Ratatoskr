@@ -175,7 +175,14 @@ public sealed class PlaygroundHostScenarioHttpTests : IAsyncDisposable
             status = await client.GetFromJsonAsync<ScenarioRunStatusDto>(
                 $"/api/playground/runs/{runId}"
             );
-            if (status is { State: "Passed" or "Failed" or "Cancelled" })
+            if (
+                status is not null
+                && (
+                    string.Equals(status.State, "Passed", StringComparison.Ordinal)
+                    || string.Equals(status.State, "Failed", StringComparison.Ordinal)
+                    || string.Equals(status.State, "Cancelled", StringComparison.Ordinal)
+                )
+            )
             {
                 break;
             }

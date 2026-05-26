@@ -124,20 +124,22 @@ public sealed class InboxDedupsScenario : IPlaygroundScenario
     )
     {
         var inbox = entries.Count(e =>
-            e
-                is {
-                    MessageType: MessageType,
-                    Stage: nameof(MessageStage.InboxDispatched),
-                    IsSuccess: true
-                }
+            string.Equals(e.MessageType, MessageType, StringComparison.Ordinal)
+            && string.Equals(
+                e.Stage,
+                nameof(MessageStage.InboxDispatched),
+                StringComparison.Ordinal
+            )
+            && e.IsSuccess == true
         );
         var direct = entries.Count(e =>
-            e
-                is {
-                    MessageType: MessageType,
-                    Stage: nameof(MessageStage.Dispatched),
-                    DispatchResult: nameof(DispatchResult.Success)
-                }
+            string.Equals(e.MessageType, MessageType, StringComparison.Ordinal)
+            && string.Equals(e.Stage, nameof(MessageStage.Dispatched), StringComparison.Ordinal)
+            && string.Equals(
+                e.DispatchResult,
+                nameof(DispatchResult.Success),
+                StringComparison.Ordinal
+            )
         );
         return (inbox, direct);
     }
