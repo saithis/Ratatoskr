@@ -26,7 +26,7 @@ public static class ScenarioAssertions
                 return true;
             }
 
-            await Task.Delay(pollInterval, cancellationToken);
+            await Task.Delay(pollInterval, time, cancellationToken);
         }
 
         return false;
@@ -155,7 +155,7 @@ public static class ScenarioAssertions
                 return new ScenarioVerdict(passed: true);
             }
 
-            await Task.Delay(ScenarioTiming.OrderPollInterval, cancellationToken);
+            await Task.Delay(ScenarioTiming.OrderPollInterval, time, cancellationToken);
         }
 
         await using var scope2 = scopeFactory.CreateAsyncScope();

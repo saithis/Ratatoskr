@@ -90,7 +90,7 @@ public sealed class InboxDedupsScenario : IPlaygroundScenario
         await context.Ratatoskr.PublishDirectAsync(evt, props, cancellationToken);
         context.StepsCompleted.Add("duplicate_direct_publish");
 
-        await Task.Delay(ScenarioTiming.ReplaySettleDelay, cancellationToken);
+        await Task.Delay(ScenarioTiming.ReplaySettleDelay, context.TimeProvider, cancellationToken);
 
         await ScenarioAssertions.WaitUntilAsync(
             context.TimeProvider,

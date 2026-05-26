@@ -28,7 +28,7 @@ public sealed class BlockingHoldScenario : IPlaygroundScenario
         CancellationToken cancellationToken
     )
     {
-        await Task.Delay(TimeSpan.FromSeconds(25), cancellationToken);
+        await Task.Delay(TimeSpan.FromSeconds(25), context.TimeProvider, cancellationToken);
         return new ScenarioVerdict(passed: true);
     }
 }
