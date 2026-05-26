@@ -13,7 +13,7 @@ public class Order
 
 public enum OrderStatus
 {
-    Placed,
-    Fulfilled,
-    Failed,
+    Placed = 0,
+    Fulfilled = 1,
+    Failed = 2,
 }
