@@ -49,7 +49,9 @@ public class TestEntity
     public DateTimeOffset CreatedAt { get; set; }
 }
 
-// Test handler implementations for message consuming tests
+/// <summary>
+/// Test handler implementations for message consuming tests
+/// </summary>
 public class TestEventHandler : IMessageHandler<TestEvent>
 {
     public List<TestEvent> HandledMessages { get; } = new();

@@ -4,7 +4,9 @@ using Ratatoskr.AsyncApi.Attributes;
 
 namespace Ratatoskr.Tests.AsyncApi;
 
-// A publish message with attribute-driven metadata
+/// <summary>
+/// A publish message with attribute-driven metadata
+/// </summary>
 [RatatoskrMessage("api-key.revoked")]
 [AsyncApiMessage(
     Version = "1.0.0",
@@ -31,7 +33,9 @@ public record ApiKeyRevokedEvent
     public List<string?> Scopes { get; init; } = [];
 }
 
-// A consume message with option-driven metadata (no attribute)
+/// <summary>
+/// A consume message with option-driven metadata (no attribute)
+/// </summary>
 [RatatoskrMessage("user-roles-changed")]
 public record UserRolesChangedEvent
 {
