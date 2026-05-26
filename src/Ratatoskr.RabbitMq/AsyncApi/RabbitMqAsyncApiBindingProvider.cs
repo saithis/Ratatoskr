@@ -51,7 +51,7 @@ public class RabbitMqAsyncApiBindingProvider(
             if (document.Channels.TryGetValue(channel.ChannelName, out var asyncApiChannel))
             {
                 asyncApiChannel.Servers ??= new List<AsyncApiReference>();
-                if (asyncApiChannel.Servers.All(s => s.Ref != serverRef.Ref))
+                if (asyncApiChannel.Servers.TrueForAll(s => s.Ref != serverRef.Ref))
                 {
                     asyncApiChannel.Servers.Add(serverRef);
                 }

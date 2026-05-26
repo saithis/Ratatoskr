@@ -175,7 +175,7 @@ public class InboxBasicProcessingTests(
                 {
                     var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
                     var statuses = await db.Set<InboxHandlerStatusEntity>().ToListAsync();
-                    return statuses.Count == 2 && statuses.All(s => s.CompletedAt != null);
+                    return statuses.Count == 2 && statuses.TrueForAll(s => s.CompletedAt != null);
                 }),
             TimeSpan.FromSeconds(15)
         );
@@ -255,7 +255,7 @@ public class InboxBasicProcessingTests(
                 {
                     var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
                     var statuses = await db.Set<InboxHandlerStatusEntity>().ToListAsync();
-                    return statuses.Count == 2 && statuses.All(s => s.CompletedAt != null);
+                    return statuses.Count == 2 && statuses.TrueForAll(s => s.CompletedAt != null);
                 }),
             TimeSpan.FromSeconds(15)
         );

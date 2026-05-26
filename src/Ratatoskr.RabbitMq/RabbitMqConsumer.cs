@@ -41,7 +41,7 @@ internal sealed partial class RabbitMqConsumer(
         {
             lock (_channelsLock)
             {
-                return _consumers.Count > 0 && _consumers.All(c => c.Channel.IsOpen);
+                return _consumers.Count > 0 && _consumers.TrueForAll(c => c.Channel.IsOpen);
             }
         }
     }

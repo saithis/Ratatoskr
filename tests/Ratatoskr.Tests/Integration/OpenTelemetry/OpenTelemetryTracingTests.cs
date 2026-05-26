@@ -44,7 +44,7 @@ public class OpenTelemetryTracingTests(
 
         // 4. Wait for processing
         await WaitForConditionAsync(
-            () => handler.HandledMessages.Any(m => m.Id == eventId),
+            () => handler.HandledMessages.Exists(m => m.Id == eventId),
             TimeSpan.FromSeconds(10)
         );
 
@@ -141,7 +141,7 @@ public class OpenTelemetryTracingTests(
 
         // 4. Wait for processing
         await WaitForConditionAsync(
-            () => handler.HandledMessages.Any(m => m.Id == eventId),
+            () => handler.HandledMessages.Exists(m => m.Id == eventId),
             TimeSpan.FromSeconds(10)
         );
 
