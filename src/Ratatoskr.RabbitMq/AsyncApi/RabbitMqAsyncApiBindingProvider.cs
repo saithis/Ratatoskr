@@ -176,7 +176,7 @@ public class RabbitMqAsyncApiBindingProvider(
     /// </summary>
     private static JsonSchema BuildBinaryModeHeadersSchema()
     {
-        var prefix = CloudEventsAmqpConstants.HeaderPrefix; // "cloudEvents_"
+        const string prefix = CloudEventsAmqpConstants.HeaderPrefix; // "cloudEvents_"
 
         return new JsonSchema
         {
