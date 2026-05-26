@@ -14,6 +14,7 @@ public static class IScenarioExtensions
         string messageId
     )
     {
+        ArgumentNullException.ThrowIfNull(scenario);
         var mp = new MessageProperties { Id = messageId };
         PlaygroundCorrelation.AttachToMessageProperties(mp, context.ScenarioRunId);
         return mp;
@@ -26,6 +27,7 @@ public static class IScenarioExtensions
         string publishOrigin
     )
     {
+        ArgumentNullException.ThrowIfNull(scenario);
         var now = time.GetUtcNow().UtcDateTime;
         var order = new Order
         {
@@ -48,6 +50,7 @@ public static class IScenarioExtensions
     )
         where TMessage : notnull
     {
+        ArgumentNullException.ThrowIfNull(scenario);
         var props = new MessageProperties { Id = cloudEventsMessageId };
         PlaygroundCorrelation.AttachToMessageProperties(props, scenarioRunId);
         db.OutboxMessages.Add(message, props);
@@ -63,6 +66,7 @@ public static class IScenarioExtensions
     )
         where TCommand : notnull
     {
+        ArgumentNullException.ThrowIfNull(scenario);
         var order = scenario.AddPlacedOrderToContext(db, time, "outbox");
         scenario.StageCorrelatedOutboxMessage(
             db,
@@ -83,6 +87,7 @@ public static class IScenarioExtensions
         CancellationToken cancellationToken
     )
     {
+        ArgumentNullException.ThrowIfNull(scenario);
         var order = await db.Orders.FirstOrDefaultAsync(
             o => o.Id == Guid.Parse(orderId),
             cancellationToken
