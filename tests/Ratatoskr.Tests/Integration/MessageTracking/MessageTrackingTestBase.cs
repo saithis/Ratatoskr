@@ -12,7 +12,7 @@ public abstract class MessageTrackingTestBase(
 {
     protected string QueueName => $"track-queue-{TestId}";
     protected string ExchangeName => $"track-exchange-{TestId}";
-    protected string DefaultRoutingKey => "test.event";
+    protected static string DefaultRoutingKey => "test.event";
 
     protected void ConfigureConsumeBus(
         RatatoskrBuilder bus,

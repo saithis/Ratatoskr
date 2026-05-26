@@ -314,7 +314,7 @@ public abstract class RatatoskrIntegrationTest(
             await db.Database.EnsureCreatedAsync();
         });
 
-    protected Task WaitForConditionAsync(
+    protected static Task WaitForConditionAsync(
         Func<bool> condition,
         TimeSpan timeout,
         string? message = null

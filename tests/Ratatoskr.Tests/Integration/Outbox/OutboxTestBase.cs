@@ -14,7 +14,7 @@ public abstract class OutboxTestBase(
 {
     protected string ExchangeName => $"outbox-test-{TestId}";
     protected string QueueName => $"outbox-queue-{TestId}";
-    protected string DefaultRoutingKey => "test.event";
+    protected static string DefaultRoutingKey => "test.event";
 
     protected async Task<BasicGetResult?> WaitForMessageAsync(
         string queueName,
@@ -33,7 +33,9 @@ public abstract class OutboxTestBase(
         return result;
     }
 
-    protected async Task<int> ProcessOutboxAsync<TDbContext>(IServiceProvider serviceProvider)
+    protected static async Task<int> ProcessOutboxAsync<TDbContext>(
+        IServiceProvider serviceProvider
+    )
         where TDbContext : DbContext, IOutboxDbContext
     {
         var totalProcessed = 0;
