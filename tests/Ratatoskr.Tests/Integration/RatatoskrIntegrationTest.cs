@@ -35,6 +35,8 @@ public abstract class RatatoskrIntegrationTest(
     protected string TestId { get; } = Guid.NewGuid().ToString("N");
     protected string RabbitMqConnectionString => rabbitMq.ConnectionString;
 
+    protected PostgresContainerFixture PostgresFixture => postgres;
+
     /// <summary>
     /// Override the connection string to point to the unique database for this test
     /// </summary>
