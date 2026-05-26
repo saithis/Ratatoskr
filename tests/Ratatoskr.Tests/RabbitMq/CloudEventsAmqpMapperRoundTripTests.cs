@@ -38,7 +38,15 @@ public class CloudEventsAmqpMapperRoundTripTests
         var mappedBody = _mapper.MapOutgoing(originalBody, originalProps, outgoing);
 
         // Act — incoming (simulate receiving the message)
-        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", outgoing, mappedBody);
+        var incoming = new BasicDeliverEventArgs(
+            "tag",
+            1,
+            redelivered: false,
+            "ex",
+            "rk",
+            outgoing,
+            mappedBody
+        );
         var result = _mapper.MapIncoming(incoming);
 
         // Assert — round-trip preserves key properties.
@@ -76,7 +84,15 @@ public class CloudEventsAmqpMapperRoundTripTests
         var mappedBody = structuredMapper.MapOutgoing(originalBody, originalProps, outgoing);
 
         // Act — incoming
-        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", outgoing, mappedBody);
+        var incoming = new BasicDeliverEventArgs(
+            "tag",
+            1,
+            redelivered: false,
+            "ex",
+            "rk",
+            outgoing,
+            mappedBody
+        );
         var result = structuredMapper.MapIncoming(incoming);
 
         // Assert — TraceParent/TraceState are NOT asserted here: in production,
@@ -103,7 +119,15 @@ public class CloudEventsAmqpMapperRoundTripTests
 
         // Act — outgoing then incoming
         var mappedBody = _mapper.MapOutgoing(originalBody, originalProps, outgoing);
-        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", outgoing, mappedBody);
+        var incoming = new BasicDeliverEventArgs(
+            "tag",
+            1,
+            redelivered: false,
+            "ex",
+            "rk",
+            outgoing,
+            mappedBody
+        );
         var result = _mapper.MapIncoming(incoming);
 
         // Assert
@@ -131,7 +155,15 @@ public class CloudEventsAmqpMapperRoundTripTests
 
         // Act
         var mappedBody = structuredMapper.MapOutgoing(originalBody, originalProps, outgoing);
-        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", outgoing, mappedBody);
+        var incoming = new BasicDeliverEventArgs(
+            "tag",
+            1,
+            redelivered: false,
+            "ex",
+            "rk",
+            outgoing,
+            mappedBody
+        );
         var result = structuredMapper.MapIncoming(incoming);
 
         // Assert
@@ -158,7 +190,15 @@ public class CloudEventsAmqpMapperRoundTripTests
         var originalBody = Encoding.UTF8.GetBytes("{\"ok\":true}");
 
         var mappedBody = _mapper.MapOutgoing(originalBody, originalProps, outgoing);
-        var incoming = new BasicDeliverEventArgs("tag", 1, false, "ex", "rk", outgoing, mappedBody);
+        var incoming = new BasicDeliverEventArgs(
+            "tag",
+            1,
+            redelivered: false,
+            "ex",
+            "rk",
+            outgoing,
+            mappedBody
+        );
         var result = _mapper.MapIncoming(incoming);
 
         result.props.CloudEventExtensions.Should().ContainKey(extKey);

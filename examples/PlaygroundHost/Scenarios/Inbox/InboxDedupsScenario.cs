@@ -110,11 +110,11 @@ public sealed class InboxDedupsScenario : IPlaygroundScenario
         );
         return inbox == 1 && direct == 2
             ? new ScenarioVerdict(
-                true,
+                passed: true,
                 details: new { inboxInboxDispatched = inbox, directDispatched = direct }
             )
             : new ScenarioVerdict(
-                false,
+                passed: false,
                 $"Expected 1 inbox and 2 direct dispatches (inbox={inbox}, direct={direct})."
             );
     }

@@ -275,7 +275,7 @@ public class ManagementCompositionTests
             new StubDescriptor("TestDbContext", "App.Beta.TestDbContext"),
         ];
 
-        var act = () => new EfCoreManagementDbContextLookup(providers, null);
+        var act = () => new EfCoreManagementDbContextLookup(providers, serviceProvider: null);
 
         act.Should()
             .Throw<InvalidOperationException>()

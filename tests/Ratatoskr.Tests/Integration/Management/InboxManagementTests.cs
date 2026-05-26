@@ -40,7 +40,7 @@ public class InboxManagementTests(
 
         using var response = await HttpClient.PostAsync(
             $"{BaseUrl}/poisoned/{handlerStatusId}/requeue",
-            null
+            content: null
         );
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -73,7 +73,7 @@ public class InboxManagementTests(
 
         using var response = await HttpClient.PostAsync(
             $"{BaseUrl}/messages/{messageId}/requeue",
-            null
+            content: null
         );
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 

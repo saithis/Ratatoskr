@@ -20,7 +20,7 @@ public class RequeuedCountTests(
         var id = await SeedPoisonedOutboxAsync();
 
         // First requeue
-        await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", null);
+        await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", content: null);
 
         // Re-poison the entity so we can requeue again
         await InScopeAsync(async ctx =>
@@ -33,7 +33,7 @@ public class RequeuedCountTests(
         });
 
         // Second requeue
-        await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", null);
+        await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", content: null);
 
         await InScopeAsync(async ctx =>
         {
@@ -49,7 +49,7 @@ public class RequeuedCountTests(
         await StartManagementTestAsync();
         var id = await SeedPoisonedOutboxAsync();
 
-        await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", null);
+        await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", content: null);
 
         await InScopeAsync(async ctx =>
         {

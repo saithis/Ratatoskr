@@ -51,7 +51,7 @@ public sealed class OversizedPayloadRollsBackScenario : IPlaygroundScenario
         {
             await context.PublisherDb.SaveChangesAsync(cancellationToken);
             return new ScenarioVerdict(
-                false,
+                passed: false,
                 "Expected SaveChanges to fail for oversized payload."
             );
         }
@@ -64,10 +64,10 @@ public sealed class OversizedPayloadRollsBackScenario : IPlaygroundScenario
                 .AnyAsync(o => o.Id == order.Id, cancellationToken);
             return orderRowExists
                 ? new ScenarioVerdict(
-                    false,
+                    passed: false,
                     "Order row exists after failed save; expected rollback."
                 )
-                : new ScenarioVerdict(true);
+                : new ScenarioVerdict(passed: true);
         }
     }
 

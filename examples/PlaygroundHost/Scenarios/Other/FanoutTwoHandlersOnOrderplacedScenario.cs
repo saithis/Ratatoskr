@@ -110,13 +110,13 @@ public sealed class FanoutTwoHandlersOnOrderplacedScenario : IPlaygroundScenario
         {
             var entries = recorder.GetEntriesForScenarioRun(runId);
             var okCount = CountSuccessfulOrderPlacedDispatches(entries);
-            return new ScenarioVerdict(true, details: new { matchingRows = okCount });
+            return new ScenarioVerdict(passed: true, details: new { matchingRows = okCount });
         }
 
         var final = recorder.GetEntriesForScenarioRun(runId);
         var n = CountSuccessfulOrderPlacedDispatches(final);
         return new ScenarioVerdict(
-            false,
+            passed: false,
             $"Expected at least 2 successful OrderPlaced handler rows for this run; saw {n}."
         );
     }
