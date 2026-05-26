@@ -29,7 +29,7 @@ public class MessagePropertiesEnricherTests
         var enricher = CreateEnricher();
 
         // Act
-        var result = enricher.Enrich<TestEvent>(null);
+        var result = enricher.Enrich<TestEvent>(properties: null);
 
         // Assert
         result.Type.Should().Be("test.event");
@@ -59,7 +59,7 @@ public class MessagePropertiesEnricherTests
         var enricher = CreateEnricher();
 
         // Act
-        var result = enricher.Enrich<TestEvent>(null);
+        var result = enricher.Enrich<TestEvent>(properties: null);
 
         // Assert
         result.Source.Should().Be("/test-service");
@@ -86,7 +86,7 @@ public class MessagePropertiesEnricherTests
         var enricher = CreateEnricher();
 
         // Act
-        var result = enricher.Enrich<TestEvent>(null);
+        var result = enricher.Enrich<TestEvent>(properties: null);
 
         // Assert
         result.Id.Should().NotBeNullOrEmpty();
@@ -116,7 +116,7 @@ public class MessagePropertiesEnricherTests
         var enricher = CreateEnricher();
 
         // Act
-        var result = enricher.Enrich<TestEvent>(null);
+        var result = enricher.Enrich<TestEvent>(properties: null);
 
         // Assert
         result.Time.Should().Be(now);
@@ -129,7 +129,7 @@ public class MessagePropertiesEnricherTests
         var enricher = CreateEnricher();
 
         // Act
-        var result = enricher.Enrich<TestEvent>(null);
+        var result = enricher.Enrich<TestEvent>(properties: null);
 
         // Assert
         result.Should().NotBeNull();
@@ -145,7 +145,7 @@ public class MessagePropertiesEnricherTests
         var enricher = CreateEnricher();
 
         // Act
-        var result = enricher.Enrich<TestEvent>(null);
+        var result = enricher.Enrich<TestEvent>(properties: null);
 
         // Assert
         result.Type.Should().Be("test.event");
@@ -162,7 +162,7 @@ public class MessagePropertiesEnricherTests
         var enricher = CreateEnricher();
 
         // Act
-        enricher.Enrich<TestEvent>(null);
+        enricher.Enrich<TestEvent>(properties: null);
 
         // Assert
         _transportEnricher.WasCalled.Should().BeTrue();
@@ -179,7 +179,7 @@ public class MessagePropertiesEnricherTests
         var enricher = CreateEnricher();
 
         // Act
-        enricher.Enrich<TestEvent>(null);
+        enricher.Enrich<TestEvent>(properties: null);
 
         // Assert — enricher has TransportName "test", channel only has "other-transport"
         _transportEnricher.WasCalled.Should().BeFalse();
@@ -195,7 +195,7 @@ public class MessagePropertiesEnricherTests
         var enricher = CreateEnricher();
 
         // Act
-        enricher.Enrich<TestEvent>(null);
+        enricher.Enrich<TestEvent>(properties: null);
 
         // Assert
         _transportEnricher.WasCalled.Should().BeFalse();
@@ -211,7 +211,7 @@ public class MessagePropertiesEnricherTests
         var enricher = CreateEnricher();
 
         // Act
-        var result = enricher.Enrich(typeof(TestEvent), null);
+        var result = enricher.Enrich(typeof(TestEvent), properties: null);
 
         // Assert
         result.Type.Should().Be("test.event");
@@ -233,7 +233,7 @@ public class MessagePropertiesEnricherTests
         var enricher = CreateEnricher();
 
         // Act
-        var result = enricher.Enrich<TestEvent>(null);
+        var result = enricher.Enrich<TestEvent>(properties: null);
 
         // Assert
         result.DataSchema.Should().Be("https://schemas.example.com/v1.json");
@@ -270,7 +270,7 @@ public class MessagePropertiesEnricherTests
         var enricher = CreateEnricher();
 
         // Act
-        var result = enricher.Enrich<EventWithDataSchema>(null);
+        var result = enricher.Enrich<EventWithDataSchema>(properties: null);
 
         // Assert
         result.DataSchema.Should().Be("https://schemas.example.com/event-with-schema/v1.json");
@@ -283,7 +283,7 @@ public class MessagePropertiesEnricherTests
         var enricher = CreateEnricher();
 
         // Act
-        var result = enricher.Enrich<TestEvent>(null);
+        var result = enricher.Enrich<TestEvent>(properties: null);
 
         // Assert
         result.DataSchema.Should().BeNull();

@@ -29,9 +29,9 @@ public sealed class CancelSmokeScenario : IPlaygroundScenario
         }
         catch (OperationCanceledException)
         {
-            return new ScenarioVerdict(true, "Cancelled as expected.");
+            return new ScenarioVerdict(passed: true, "Cancelled as expected.");
         }
 
-        return new ScenarioVerdict(false, "Expected cancellation or timeout.");
+        return new ScenarioVerdict(passed: false, "Expected cancellation or timeout.");
     }
 }

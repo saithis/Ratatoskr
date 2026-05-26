@@ -204,7 +204,7 @@ public class MessageTrackingTransportTests(
         metadata.Should().ContainKey("exchange");
         metadata.Should().ContainKey("routing-key");
         metadata.Should().ContainKey("redelivered");
-        metadata["redelivered"].Should().Be(false);
+        metadata["redelivered"].Should().Be(expected: false);
 
         // Body should be the raw wire bytes
         received.TransportMessage.Body.Should().NotBeEmpty();

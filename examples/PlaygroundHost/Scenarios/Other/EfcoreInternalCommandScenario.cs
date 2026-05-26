@@ -87,9 +87,9 @@ public sealed class EfcoreInternalCommandScenario : IPlaygroundScenario
             )
         );
         return hit
-            ? new ScenarioVerdict(true)
+            ? new ScenarioVerdict(passed: true)
             : new ScenarioVerdict(
-                false,
+                passed: false,
                 "No ReserveStockInternal / EF Core transport activity captured for this run yet."
             );
     }

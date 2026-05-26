@@ -258,7 +258,7 @@ public abstract class RatatoskrIntegrationTest(
             DeliveryMode = DeliveryModes.Persistent,
         };
 
-        await channel.BasicPublishAsync(exchange, routingKey, false, props, body);
+        await channel.BasicPublishAsync(exchange, routingKey, mandatory: false, props, body);
     }
 
     protected async Task<uint> GetMessageCountAsync(string queueName)

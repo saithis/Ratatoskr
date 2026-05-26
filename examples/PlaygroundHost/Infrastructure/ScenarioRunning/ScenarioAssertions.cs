@@ -66,14 +66,14 @@ public static class ScenarioAssertions
         if (ok)
         {
             return new ScenarioVerdict(
-                true,
+                passed: true,
                 details: new { before = baselineExclusive, after = capturedAfter!.Value }
             );
         }
 
         var final = await readCountAsync(cancellationToken);
         return new ScenarioVerdict(
-            false,
+            passed: false,
             $"{metricDescriptionForFailure} did not increase within timeout (before={baselineExclusive}, after={final})."
         );
     }
@@ -116,7 +116,7 @@ public static class ScenarioAssertions
         if (ok)
         {
             return new ScenarioVerdict(
-                true,
+                passed: true,
                 details: new { before = baselineExclusive, after = capturedAfter!.Value }
             );
         }
@@ -127,7 +127,7 @@ public static class ScenarioAssertions
             cancellationToken
         );
         return new ScenarioVerdict(
-            false,
+            passed: false,
             $"DLQ depth did not increase within timeout (before={baselineExclusive}, after={final})."
         );
     }
@@ -152,7 +152,7 @@ public static class ScenarioAssertions
                 .FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken);
             if (order is { Status: var s } && s == expected)
             {
-                return new ScenarioVerdict(true);
+                return new ScenarioVerdict(passed: true);
             }
 
             await Task.Delay(ScenarioTiming.OrderPollInterval, cancellationToken);
@@ -164,7 +164,7 @@ public static class ScenarioAssertions
             .Orders.AsNoTracking()
             .FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken);
         return new ScenarioVerdict(
-            false,
+            passed: false,
             $"Order {orderId} did not reach {expected} within {timeout}. Current: {final?.Status.ToString() ?? "missing"}."
         );
     }

@@ -93,7 +93,7 @@ public class TopologyTests(RabbitMqContainerFixture rabbitMq, PostgresContainerF
         await using var channel = await connection.CreateChannelAsync();
 
         await WaitForConditionAsync(
-            async () => await channel.BasicGetAsync(dlqName, true) != null,
+            async () => await channel.BasicGetAsync(dlqName, autoAck: true) != null,
             TimeSpan.FromSeconds(5),
             "Message should be routed to DLQ via DLQ Exchange"
         );

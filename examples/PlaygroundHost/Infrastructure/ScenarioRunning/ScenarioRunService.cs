@@ -55,14 +55,14 @@ public sealed class ScenarioRunService(
     {
         if (!_bySlug.TryGetValue(slug, out var scenario))
         {
-            return new ScenarioStartResult(null, null, $"Unknown scenario '{slug}'.");
+            return new ScenarioStartResult(RunId: null, Title: null, $"Unknown scenario '{slug}'.");
         }
 
         if (scenario.RequiresDangerConfirmation && !confirmDanger)
         {
             return new ScenarioStartResult(
-                null,
-                null,
+                RunId: null,
+                Title: null,
                 "This scenario requires confirmDanger=true (acknowledge the risk in the dashboard)."
             );
         }

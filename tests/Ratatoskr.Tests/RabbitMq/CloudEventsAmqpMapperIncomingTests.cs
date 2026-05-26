@@ -40,7 +40,7 @@ public class CloudEventsAmqpMapperIncomingTests
         var incoming = new BasicDeliverEventArgs(
             "tag",
             1,
-            false,
+            redelivered: false,
             "ex",
             "rk",
             basicProperties,
@@ -81,7 +81,7 @@ public class CloudEventsAmqpMapperIncomingTests
         var incoming = new BasicDeliverEventArgs(
             "tag",
             1,
-            false,
+            redelivered: false,
             "ex",
             "rk",
             basicProperties,
@@ -117,7 +117,7 @@ public class CloudEventsAmqpMapperIncomingTests
         var incoming = new BasicDeliverEventArgs(
             "tag",
             1,
-            false,
+            redelivered: false,
             "ex",
             "rk",
             basicProperties,
@@ -158,7 +158,7 @@ public class CloudEventsAmqpMapperIncomingTests
         var incoming = new BasicDeliverEventArgs(
             "tag",
             1,
-            false,
+            redelivered: false,
             "ex",
             "rk",
             basicProperties,
@@ -196,7 +196,7 @@ public class CloudEventsAmqpMapperIncomingTests
         var incoming = new BasicDeliverEventArgs(
             "tag",
             1,
-            false,
+            redelivered: false,
             "ex",
             "rk",
             basicProperties,
@@ -234,7 +234,7 @@ public class CloudEventsAmqpMapperIncomingTests
         var incoming = new BasicDeliverEventArgs(
             "tag",
             1,
-            false,
+            redelivered: false,
             "ex",
             "rk",
             basicProperties,
@@ -271,7 +271,7 @@ public class CloudEventsAmqpMapperIncomingTests
         var incoming = new BasicDeliverEventArgs(
             "tag",
             1,
-            false,
+            redelivered: false,
             "ex",
             "rk",
             basicProperties,
@@ -309,7 +309,7 @@ public class CloudEventsAmqpMapperIncomingTests
         var incoming = new BasicDeliverEventArgs(
             "tag",
             1,
-            false,
+            redelivered: false,
             "ex",
             "rk",
             basicProperties,
@@ -348,7 +348,7 @@ public class CloudEventsAmqpMapperIncomingTests
         var incoming = new BasicDeliverEventArgs(
             "tag",
             1,
-            false,
+            redelivered: false,
             "ex",
             "rk",
             basicProperties,
@@ -377,7 +377,7 @@ public class CloudEventsAmqpMapperIncomingTests
         var incoming = new BasicDeliverEventArgs(
             "tag",
             1,
-            false,
+            redelivered: false,
             "ex",
             "rk",
             basicProperties,
@@ -409,7 +409,7 @@ public class CloudEventsAmqpMapperIncomingTests
         var incoming = new BasicDeliverEventArgs(
             "tag",
             1,
-            false,
+            redelivered: false,
             "ex",
             "rk",
             basicProperties,
@@ -472,7 +472,7 @@ public class CloudEventsAmqpMapperIncomingTests
         var incoming = new BasicDeliverEventArgs(
             "tag",
             1,
-            false,
+            redelivered: false,
             "ex",
             "rk",
             basicProperties,

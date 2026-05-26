@@ -150,7 +150,7 @@ public sealed class PlaygroundHostScenarioHttpTests : IAsyncDisposable
         await _factoryLock.WaitAsync();
         try
         {
-            var factory = Interlocked.Exchange(ref _sharedFactory, null);
+            var factory = Interlocked.Exchange(ref _sharedFactory, value: null);
             if (factory is not null)
             {
                 await factory.DisposeAsync();
@@ -196,7 +196,7 @@ public sealed class PlaygroundHostScenarioHttpTests : IAsyncDisposable
         var q = confirmDanger ? "?confirmDanger=true" : "";
         using var runRes = await client.PostAsync(
             $"/api/playground/scenarios/{Uri.EscapeDataString(slug)}/run{q}",
-            null
+            content: null
         );
         var errBody = await runRes.Content.ReadAsStringAsync();
         var okStart = runRes.StatusCode is HttpStatusCode.Accepted or HttpStatusCode.OK;
@@ -227,8 +227,14 @@ public sealed class PlaygroundHostScenarioHttpTests : IAsyncDisposable
     public Task ConcurrentRuns_TwoOutboxSuccessRuns_BothPass() =>
         RunHttpTestAsync(async client =>
         {
-            var startA = client.PostAsync("/api/playground/scenarios/outbox-success/run", null);
-            var startB = client.PostAsync("/api/playground/scenarios/outbox-success/run", null);
+            var startA = client.PostAsync(
+                "/api/playground/scenarios/outbox-success/run",
+                content: null
+            );
+            var startB = client.PostAsync(
+                "/api/playground/scenarios/outbox-success/run",
+                content: null
+            );
             using var runA = await startA;
             using var runB = await startB;
 
@@ -254,7 +260,7 @@ public sealed class PlaygroundHostScenarioHttpTests : IAsyncDisposable
             var runId = await StartScenarioAsync(client, slug);
             using var cancelRes = await client.PostAsync(
                 $"/api/playground/runs/{runId}/cancel",
-                null
+                content: null
             );
             cancelRes.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -272,7 +278,7 @@ public sealed class PlaygroundHostScenarioHttpTests : IAsyncDisposable
             var runId = await StartScenarioAsync(client, slug, confirmDanger: true);
             using var cancelRes = await client.PostAsync(
                 $"/api/playground/runs/{runId}/cancel",
-                null
+                content: null
             );
             cancelRes.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -311,7 +317,7 @@ public sealed class PlaygroundHostScenarioHttpTests : IAsyncDisposable
 
             using var runRes = await client.PostAsync(
                 $"/api/playground/scenarios/{slug}/run",
-                null
+                content: null
             );
             runRes.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         });

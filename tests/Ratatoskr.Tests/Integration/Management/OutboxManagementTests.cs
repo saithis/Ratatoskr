@@ -100,7 +100,10 @@ public class OutboxManagementTests(
         await StartManagementTestAsync();
         var id = await SeedPoisonedOutboxAsync();
 
-        using var response = await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", null);
+        using var response = await HttpClient.PostAsync(
+            $"{BaseUrl}/poisoned/{id}/requeue",
+            content: null
+        );
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         await InScopeAsync(async ctx =>
@@ -118,7 +121,7 @@ public class OutboxManagementTests(
         await StartManagementTestAsync();
         var id = await SeedPoisonedOutboxAsync();
 
-        await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", null);
+        await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", content: null);
 
         await InScopeAsync(async ctx =>
         {
@@ -134,7 +137,7 @@ public class OutboxManagementTests(
         await StartManagementTestAsync();
         var id = await SeedPoisonedOutboxAsync();
 
-        await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", null);
+        await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", content: null);
 
         await InScopeAsync(async ctx =>
         {
@@ -163,7 +166,10 @@ public class OutboxManagementTests(
             id = entity.Id;
         });
 
-        using var response = await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", null);
+        using var response = await HttpClient.PostAsync(
+            $"{BaseUrl}/poisoned/{id}/requeue",
+            content: null
+        );
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 

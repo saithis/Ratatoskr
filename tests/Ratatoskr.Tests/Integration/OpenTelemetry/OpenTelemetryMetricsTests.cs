@@ -477,7 +477,10 @@ public class OpenTelemetryMetricsTests(
             var processor = scope.ServiceProvider.GetRequiredService<
                 InboxMessageProcessor<TestDbContext>
             >();
-            await processor.ProcessBatchAsync(false, CancellationToken.None);
+            await processor.ProcessBatchAsync(
+                includeStuckMessageDetection: false,
+                CancellationToken.None
+            );
         });
 
         // 5. Assert — inbox-specific metrics are recorded (not the outbox ones)

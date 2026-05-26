@@ -67,7 +67,7 @@ public class InboxCancellationAndTimeoutTests(
             var processor = ctx.ServiceProvider.GetRequiredService<
                 InboxMessageProcessor<TestDbContext>
             >();
-            await processor.ProcessBatchAsync(false, cts.Token);
+            await processor.ProcessBatchAsync(includeStuckMessageDetection: false, cts.Token);
         });
 
         // Wait for handler to start, then cancel
@@ -138,7 +138,7 @@ public class InboxCancellationAndTimeoutTests(
             var processor = ctx.ServiceProvider.GetRequiredService<
                 InboxMessageProcessor<TestDbContext>
             >();
-            await processor.ProcessBatchAsync(false, cts.Token);
+            await processor.ProcessBatchAsync(includeStuckMessageDetection: false, cts.Token);
         });
 
         await coordination.HandlerStarted.WaitAsync(TimeSpan.FromSeconds(5));

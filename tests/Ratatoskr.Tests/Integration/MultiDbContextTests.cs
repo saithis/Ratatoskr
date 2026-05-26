@@ -678,7 +678,10 @@ public class MultiDbContextTests(
             var processor = scope.ServiceProvider.GetRequiredService<
                 InboxMessageProcessor<TDbContext>
             >();
-            var count = await processor.ProcessBatchAsync(true, CancellationToken.None);
+            var count = await processor.ProcessBatchAsync(
+                includeStuckMessageDetection: true,
+                CancellationToken.None
+            );
             total += count;
             if (count == 0)
             {
@@ -698,7 +701,10 @@ public class MultiDbContextTests(
             var processor = scope.ServiceProvider.GetRequiredService<
                 OutboxMessageProcessor<TDbContext>
             >();
-            var count = await processor.ProcessBatchAsync(true, CancellationToken.None);
+            var count = await processor.ProcessBatchAsync(
+                includeStuckMessageDetection: true,
+                CancellationToken.None
+            );
             total += count;
             if (count == 0)
             {
