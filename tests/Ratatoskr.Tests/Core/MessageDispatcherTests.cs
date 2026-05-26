@@ -322,7 +322,10 @@ public class MessageDispatcherTests
             Source = "/test-source",
             Subject = "test-subject",
             Time = DateTimeOffset.UtcNow,
-            Headers = new Dictionary<string, string> { ["custom"] = "header" },
+            Headers = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["custom"] = "header",
+            },
         };
 
         // Act

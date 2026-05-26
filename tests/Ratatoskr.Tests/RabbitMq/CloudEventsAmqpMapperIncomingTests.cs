@@ -21,7 +21,7 @@ public class CloudEventsAmqpMapperIncomingTests
     public void MapBinaryModeIncoming_ShouldMapTraceContext()
     {
         // Arrange
-        var headers = new Dictionary<string, object?>
+        var headers = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             { "traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" },
             { "tracestate", "rojo=00f067aa0ba902b7" },
@@ -62,7 +62,7 @@ public class CloudEventsAmqpMapperIncomingTests
     {
         // Backward compatibility: older Ratatoskr versions set cloudEvents_traceparent
         // but not the bare traceparent header.
-        var headers = new Dictionary<string, object?>
+        var headers = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             { "cloudEvents_traceparent", "00-legacy-trace-id-01" },
             { "cloudEvents_tracestate", "legacy=true" },
@@ -98,7 +98,7 @@ public class CloudEventsAmqpMapperIncomingTests
     public void MapBinaryModeIncoming_ShouldPreferCloudEventsTraceparent_WhenBothHeadersExist()
     {
         // Ratatoskr's CloudEvents trace context takes priority when present.
-        var headers = new Dictionary<string, object?>
+        var headers = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             { "traceparent", "00-rmq-client-trace-01" },
             { "cloudEvents_traceparent", "00-ratatoskr-send-trace-01" },
@@ -132,7 +132,7 @@ public class CloudEventsAmqpMapperIncomingTests
     [Test]
     public void MapBinaryModeIncoming_ShouldDecodeReadOnlyMemoryTraceHeaderValues()
     {
-        var headers = new Dictionary<string, object?>
+        var headers = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             {
                 "traceparent",
@@ -176,7 +176,7 @@ public class CloudEventsAmqpMapperIncomingTests
     [Test]
     public void MapBinaryModeIncoming_ShouldFallbackToBareTraceparent_WhenCloudEventsTraceparentIsInvalid()
     {
-        var headers = new Dictionary<string, object?>
+        var headers = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             { "cloudEvents_traceparent", "invalid-traceparent" },
             { "traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" },
@@ -219,7 +219,7 @@ public class CloudEventsAmqpMapperIncomingTests
             "{\"id\":\"123\",\"source\":\"/unit-test\",\"type\":\"test.event\",\"specversion\":\"1.0\",\"data\":{\"foo\":\"bar\"}}";
         var body = Encoding.UTF8.GetBytes(cloudEventJson);
 
-        var headers = new Dictionary<string, object?>
+        var headers = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             { "traceparent", "00-structured-trace-id-01" },
             { "tracestate", "structured=true" },
@@ -256,7 +256,7 @@ public class CloudEventsAmqpMapperIncomingTests
             "{\"id\":\"123\",\"source\":\"/unit-test\",\"type\":\"test.event\",\"specversion\":\"1.0\",\"traceparent\":\"00-envelope-trace-id-01\",\"tracestate\":\"envelope=true\",\"data\":{\"foo\":\"bar\"}}";
         var body = Encoding.UTF8.GetBytes(cloudEventJson);
 
-        var headers = new Dictionary<string, object?>
+        var headers = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             { "traceparent", "00-rmq-client-trace-id-01" },
             { "tracestate", "rmq=true" },
@@ -287,7 +287,7 @@ public class CloudEventsAmqpMapperIncomingTests
     public void MapIncoming_BinaryMode_ExtractsAllProperties()
     {
         // Arrange
-        var headers = new Dictionary<string, object?>
+        var headers = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             { "cloudEvents_specversion", "1.0" },
             { "cloudEvents_id", "evt-789" },
@@ -457,7 +457,7 @@ public class CloudEventsAmqpMapperIncomingTests
     public void MapIncoming_EmptyBody_HandlesGracefully()
     {
         // Arrange
-        var headers = new Dictionary<string, object?>
+        var headers = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             { "cloudEvents_id", "evt-empty" },
             { "cloudEvents_source", "/test" },

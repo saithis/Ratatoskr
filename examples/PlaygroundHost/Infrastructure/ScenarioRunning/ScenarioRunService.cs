@@ -44,7 +44,7 @@ public sealed class ScenarioRunService(
                 s.RequiresDangerConfirmation,
                 s.DangerConfirmationText
             ))
-            .OrderBy(s => s.Slug)
+            .OrderBy(s => s.Slug, StringComparer.Ordinal)
             .ToList();
 
     public async Task<ScenarioStartResult> StartRunAsync(

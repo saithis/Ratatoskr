@@ -15,7 +15,7 @@ public class CloudEventEnvelopeTests
             Id = "123",
             Source = "/test",
             Type = "test.type",
-            Extensions = new Dictionary<string, object>
+            Extensions = new Dictionary<string, object>(StringComparer.Ordinal)
             {
                 { "traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" },
             },
@@ -38,7 +38,10 @@ public class CloudEventEnvelopeTests
             Id = "123",
             Source = "/test",
             Type = "test.type",
-            Extensions = new Dictionary<string, object> { { "traceparent", "some-value" } },
+            Extensions = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                { "traceparent", "some-value" },
+            },
         };
 
         // Act
@@ -81,7 +84,10 @@ public class CloudEventEnvelopeTests
             Id = "123",
             Source = "/test",
             Type = "test.type",
-            Extensions = new Dictionary<string, object> { { "traceparent", json } },
+            Extensions = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                { "traceparent", json },
+            },
         };
 
         // Act
@@ -105,7 +111,10 @@ public class CloudEventEnvelopeTests
             Id = "123",
             Source = "/test",
             Type = "test.type",
-            Extensions = new Dictionary<string, object> { { "traceparent", json } },
+            Extensions = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                { "traceparent", json },
+            },
         };
 
         // Act

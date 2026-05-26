@@ -55,10 +55,10 @@ public class OpenTelemetryTracingTests(
             a.OperationName == "create outbox"
         );
         var sendActivity = relevantActivities.FirstOrDefault(a =>
-            a.OperationName.StartsWith("send ")
+            a.OperationName.StartsWith("send ", StringComparison.Ordinal)
         );
         var processActivity = relevantActivities.FirstOrDefault(a =>
-            a.OperationName.StartsWith("process ")
+            a.OperationName.StartsWith("process ", StringComparison.Ordinal)
         );
 
         outboxActivity.Should().NotBeNull("OutboxProcess activity should exist");
@@ -150,10 +150,10 @@ public class OpenTelemetryTracingTests(
 
         var publishActivity = relevantActivities.FirstOrDefault(a => a.OperationName == "publish");
         var sendActivity = relevantActivities.FirstOrDefault(a =>
-            a.OperationName.StartsWith("send ")
+            a.OperationName.StartsWith("send ", StringComparison.Ordinal)
         );
         var processActivity = relevantActivities.FirstOrDefault(a =>
-            a.OperationName.StartsWith("process ")
+            a.OperationName.StartsWith("process ", StringComparison.Ordinal)
         );
         var outboxActivity = relevantActivities.FirstOrDefault(a =>
             a.OperationName == "create outbox"

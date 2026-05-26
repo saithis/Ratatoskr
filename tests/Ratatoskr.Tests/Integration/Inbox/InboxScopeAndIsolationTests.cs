@@ -168,7 +168,8 @@ public class InboxScopeAndIsolationTests(
         private readonly TaskCompletionSource _allDone = new();
         private int _handlerCount;
         public bool CheckingHandlerSawChanges { get; set; }
-        public ConcurrentDictionary<string, int> DbContextIds { get; } = new();
+        public ConcurrentDictionary<string, int> DbContextIds { get; } =
+            new(StringComparer.Ordinal);
 
         public void RecordHandler(string name, int dbContextId)
         {

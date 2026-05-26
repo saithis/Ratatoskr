@@ -47,7 +47,8 @@ public class JsonSchemaGeneratorTests
         public List<string>? NullableList { get; set; }
         public string[] NonNullableArray { get; set; } = [];
         public string[]? NullableArray { get; set; }
-        public Dictionary<string, int> NonNullableDictionary { get; set; } = new();
+        public Dictionary<string, int> NonNullableDictionary { get; set; } =
+            new(StringComparer.Ordinal);
         public Dictionary<string, int>? NullableDictionary { get; set; }
     }
 
@@ -82,7 +83,7 @@ public class JsonSchemaGeneratorTests
 
     private JsonSchema GenerateSchema<T>()
     {
-        var components = new Dictionary<string, JsonSchema>();
+        var components = new Dictionary<string, JsonSchema>(StringComparer.Ordinal);
         _generator.GenerateAndRegister(typeof(T), components);
         return components[typeof(T).Name];
     }
@@ -274,7 +275,7 @@ public class JsonSchemaGeneratorTests
     [Test]
     public void NonNullableComplexType_ProducesRefWithoutNull()
     {
-        var components = new Dictionary<string, JsonSchema>();
+        var components = new Dictionary<string, JsonSchema>(StringComparer.Ordinal);
         _generator.GenerateAndRegister(typeof(ComplexNullabilityModel), components);
         var schema = components[nameof(ComplexNullabilityModel)];
         var prop = schema.Properties!["nonNullableNested"];
@@ -286,7 +287,7 @@ public class JsonSchemaGeneratorTests
     [Test]
     public void NullableComplexType_ProducesOneOfRefAndNull()
     {
-        var components = new Dictionary<string, JsonSchema>();
+        var components = new Dictionary<string, JsonSchema>(StringComparer.Ordinal);
         _generator.GenerateAndRegister(typeof(ComplexNullabilityModel), components);
         var schema = components[nameof(ComplexNullabilityModel)];
         var prop = schema.Properties!["nullableNested"];
