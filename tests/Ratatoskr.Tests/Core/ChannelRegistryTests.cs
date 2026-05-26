@@ -26,7 +26,7 @@ public class ChannelRegistryTests
         channel.Should().NotBeNull();
         channel.Intent.Should().Be(ChannelType.EventPublish);
         channel.Messages.Should().HaveCount(1);
-        channel.Messages[0].MessageType.Should().Be(typeof(TestEvent));
+        channel.Messages[0].MessageType.Should().Be<TestEvent>();
     }
 
     [Test]
@@ -70,7 +70,7 @@ public class ChannelRegistryTests
         // Assert
         results.Should().HaveCount(1);
         results[0].Channel.ChannelName.Should().Be("orders.commands");
-        results[0].Message.MessageType.Should().Be(typeof(TestEvent));
+        results[0].Message.MessageType.Should().Be<TestEvent>();
     }
 
     [Test]
@@ -139,7 +139,7 @@ public class ChannelRegistryTests
         result.Should().NotBeNull();
         result.Channel.ChannelName.Should().Be("test.exchange");
         result.Message.MessageTypeName.Should().Be("test.event");
-        result.Message.MessageType.Should().Be(typeof(TestEvent));
+        result.Message.MessageType.Should().Be<TestEvent>();
     }
 
     [Test]

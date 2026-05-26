@@ -341,8 +341,7 @@ public class InboxBasicProcessingTests(
             properties.Type.Should().Be("test.event");
 
             var serializer = ctx.ServiceProvider.GetRequiredService<IMessageSerializer>();
-            var deserialized =
-                serializer.Deserialize(inboxMsg.Content, typeof(TestEvent)) as TestEvent;
+            var deserialized = serializer.Deserialize<TestEvent>(inboxMsg.Content);
             deserialized.Should().NotBeNull();
             deserialized.Id.Should().Be(businessId, "business ID preserved in serialized content");
             deserialized.Data.Should().Be(data);
