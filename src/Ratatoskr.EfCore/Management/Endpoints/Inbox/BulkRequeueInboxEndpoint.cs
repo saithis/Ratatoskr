@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -137,8 +138,10 @@ internal static class BulkRequeueInboxEndpoint
 
     internal record BulkRequeueInboxRequest(List<Guid>? Ids);
 
+    [SuppressMessage("ReSharper", "NotAccessedPositionalProperty.Global", Justification = "DTO")]
     internal record BulkRequeueInboxFailure(Guid Id, string Reason);
 
+    [SuppressMessage("ReSharper", "NotAccessedPositionalProperty.Global", Justification = "DTO")]
     internal record BulkRequeueInboxResponse(
         List<Guid> Succeeded,
         List<BulkRequeueInboxFailure> Failed

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -62,6 +63,7 @@ internal static class GetInboxMessageHandlersEndpoint
         );
     }
 
+    [SuppressMessage("ReSharper", "NotAccessedPositionalProperty.Global", Justification = "DTO")]
     internal record InboxHandlerStatusSummary(
         Guid HandlerStatusId,
         string HandlerKey,
@@ -73,6 +75,7 @@ internal static class GetInboxMessageHandlersEndpoint
         string DbContext
     );
 
+    [SuppressMessage("ReSharper", "NotAccessedPositionalProperty.Global", Justification = "DTO")]
     internal record InboxMessageHandlers(
         string MessageId,
         string MessageType,
