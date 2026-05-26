@@ -201,7 +201,7 @@ public sealed class ScenarioRunService(
     private Task MarkTerminalAsync(Guid runId, string state, string? detail) =>
         WithPlaygroundDbAsync(async db =>
         {
-            var row = await db.Runs.FirstOrDefaultAsync(r => r.Id == runId);
+            var row = await db.Runs.FirstOrDefaultAsync(r => r.Id == runId, CancellationToken.None);
             if (row is null)
             {
                 return;
@@ -210,7 +210,7 @@ public sealed class ScenarioRunService(
             row.State = state;
             row.CompletedAt = time.GetUtcNow();
             row.Detail = detail;
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(CancellationToken.None);
         });
 
     public Task<ScenarioRunStatusDto?> GetStatusAsync(
