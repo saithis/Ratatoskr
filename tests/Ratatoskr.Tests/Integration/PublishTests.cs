@@ -13,7 +13,7 @@ public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
     : RatatoskrIntegrationTest(rabbitMq, postgres)
 {
     private string ExchangeName => $"pub-test-{TestId}";
-    private string DefaultRoutingKey => "test.event";
+    private static string DefaultRoutingKey => "test.event";
 
     [Test]
     public async Task Publish_DirectToExchange_MessageDelivered()
