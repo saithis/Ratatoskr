@@ -24,7 +24,7 @@ public class MultiDbContextTests(
     {
         get
         {
-            var builder = new Npgsql.NpgsqlConnectionStringBuilder(PostgresConnectionString)
+            var builder = new Npgsql.NpgsqlConnectionStringBuilder(PostgresFixture.ConnectionString)
             {
                 Database = $"test_{TestId}_second",
                 MaxPoolSize = 2,
@@ -42,7 +42,7 @@ public class MultiDbContextTests(
 
     private async Task CreateSecondDatabaseAsync()
     {
-        await using var connection = new Npgsql.NpgsqlConnection(PostgresConnectionString);
+        await using var connection = new Npgsql.NpgsqlConnection(PostgresFixture.ConnectionString);
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = $"CREATE DATABASE \"test_{TestId}_second\"";
