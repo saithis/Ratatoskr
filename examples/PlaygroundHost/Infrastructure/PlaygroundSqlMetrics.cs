@@ -24,11 +24,7 @@ public static class PlaygroundSqlMetrics
     ) =>
         ExecuteScalarIntAsync(
             db,
-            """
-            SELECT COUNT(*) FROM "InboxHandlerStatusEntity" s
-            INNER JOIN "InboxMessageEntity" m ON s."MessageId" = m."Id"
-            WHERE s."IsPoisoned" = true
-            """,
+            "SELECT COUNT(*) FROM \"InboxHandlerStatusEntity\" s INNER JOIN \"InboxMessageEntity\" m ON s.\"MessageId\" = m.\"Id\" WHERE s.\"IsPoisoned\" = true",
             cancellationToken
         );
 
@@ -40,11 +36,7 @@ public static class PlaygroundSqlMetrics
     ) =>
         ExecuteScalarIntAsync(
             db,
-            $"""
-            SELECT COUNT(*) FROM "OutboxMessageEntity"
-            WHERE "IsPoisoned" = true
-              AND "SerializedProperties" LIKE '%{EscapeLike(scenarioRunId)}%'
-            """,
+            $"SELECT COUNT(*) FROM \"OutboxMessageEntity\" WHERE \"IsPoisoned\" = true AND \"SerializedProperties\" LIKE '%{EscapeLike(scenarioRunId)}%'",
             cancellationToken
         );
 
@@ -55,14 +47,7 @@ public static class PlaygroundSqlMetrics
     ) =>
         ExecuteScalarIntAsync(
             db,
-            $"""
-            SELECT COUNT(*) FROM "InboxHandlerStatusEntity" s
-            INNER JOIN "InboxMessageEntity" m ON s."MessageId" = m."Id"
-            WHERE s."IsPoisoned" = true
-              AND (m."SerializedProperties" LIKE '%{EscapeLike(
-                scenarioRunId
-            )}%' OR encode(m."Content", 'escape') LIKE '%{EscapeLike(scenarioRunId)}%')
-            """,
+            $"SELECT COUNT(*) FROM \"InboxHandlerStatusEntity\" s INNER JOIN \"InboxMessageEntity\" m ON s.\"MessageId\" = m.\"Id\" WHERE s.\"IsPoisoned\" = true AND (m.\"SerializedProperties\" LIKE '%{EscapeLike(scenarioRunId)}%' OR encode(m.\"Content\", 'escape') LIKE '%{EscapeLike(scenarioRunId)}%')",
             cancellationToken
         );
 
