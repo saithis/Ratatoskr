@@ -10,6 +10,7 @@ public sealed class TransportMessageSnapshot
     /// <summary>
     /// The transport name the message is sent over.
     /// </summary>
+    // ReSharper disable once UnusedAutoPropertyAccessor.Global
     public required string TransportName { get; init; }
 
     /// <summary>
