@@ -38,7 +38,7 @@ public class ChannelHandlerRegistryTests
         // Assert
         var handlers = registry.GetFireAndForgetHandlers("test-channel", typeof(TestEvent));
         handlers.Should().HaveCount(1);
-        handlers[0].HandlerType.Should().Be(typeof(TestEventHandler));
+        handlers[0].HandlerType.Should().Be<TestEventHandler>();
         handlers[0].IsInbox.Should().BeFalse();
         handlers[0].InboxKey.Should().BeNull();
     }
@@ -60,7 +60,7 @@ public class ChannelHandlerRegistryTests
         // Assert
         var handlers = registry.GetInboxHandlers("test-channel");
         handlers.Should().HaveCount(1);
-        handlers[0].HandlerType.Should().Be(typeof(TestEventHandler));
+        handlers[0].HandlerType.Should().Be<TestEventHandler>();
         handlers[0].IsInbox.Should().BeTrue();
         handlers[0].InboxKey.Should().Be("handler-key");
     }
@@ -82,7 +82,7 @@ public class ChannelHandlerRegistryTests
         // Assert
         var handler = registry.GetInboxRegistrationByKey("handler-key");
         handler.Should().NotBeNull();
-        handler.HandlerType.Should().Be(typeof(TestEventHandler));
+        handler.HandlerType.Should().Be<TestEventHandler>();
         handler.InboxKey.Should().Be("handler-key");
     }
 
@@ -207,12 +207,12 @@ public class ChannelHandlerRegistryTests
         // Assert - fire-and-forget handler
         var fafHandlers = registry.GetFireAndForgetHandlers("test-channel", typeof(TestEvent));
         fafHandlers.Should().HaveCount(1);
-        fafHandlers[0].HandlerType.Should().Be(typeof(TestEventHandler));
+        fafHandlers[0].HandlerType.Should().Be<TestEventHandler>();
 
         // Assert - inbox handler
         var inboxHandlers = registry.GetInboxHandlers("test-channel");
         inboxHandlers.Should().HaveCount(1);
-        inboxHandlers[0].HandlerType.Should().Be(typeof(SecondTestEventHandler));
+        inboxHandlers[0].HandlerType.Should().Be<SecondTestEventHandler>();
         inboxHandlers[0].InboxKey.Should().Be("inbox-key");
     }
 
@@ -279,11 +279,11 @@ public class ChannelHandlerRegistryTests
         // Assert — per-type lookup returns only the matching handler
         var testHandlers = registry.GetInboxHandlers("test-channel", typeof(TestEvent));
         testHandlers.Should().HaveCount(1);
-        testHandlers[0].HandlerType.Should().Be(typeof(TestEventHandler));
+        testHandlers[0].HandlerType.Should().Be<TestEventHandler>();
 
         var orderHandlers = registry.GetInboxHandlers("test-channel", typeof(OrderCreatedEvent));
         orderHandlers.Should().HaveCount(1);
-        orderHandlers[0].HandlerType.Should().Be(typeof(NoOpOrderHandler));
+        orderHandlers[0].HandlerType.Should().Be<NoOpOrderHandler>();
     }
 
     [Test]

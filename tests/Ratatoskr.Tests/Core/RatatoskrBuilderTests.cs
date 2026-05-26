@@ -175,7 +175,7 @@ public class RatatoskrBuilderTests
         // Assert
         var channel = builder.ChannelRegistry.GetPublishChannel("pub-channel");
         var msg = channel!.GetMessage(typeof(TestEvent));
-        msg!.SerializerType.Should().Be(typeof(TestEventPipeMessageSerializer));
+        msg!.SerializerType.Should().Be<TestEventPipeMessageSerializer>();
     }
 
     [Test]
