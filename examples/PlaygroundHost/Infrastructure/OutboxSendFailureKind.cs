@@ -2,7 +2,7 @@ namespace PlaygroundHost.Infrastructure;
 
 public enum OutboxSendFailureKind
 {
-    Succeed,
-    AlwaysFail,
-    SucceedAfterNFailures,
+    Succeed = 0,
+    AlwaysFail = 1,
+    SucceedAfterNFailures = 2,
 }

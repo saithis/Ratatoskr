@@ -57,6 +57,6 @@ public record RoleAssignment
 
 public enum AssignmentLevel
 {
-    Global,
-    Tenant,
+    Global = 0,
+    Tenant = 1,
 }
