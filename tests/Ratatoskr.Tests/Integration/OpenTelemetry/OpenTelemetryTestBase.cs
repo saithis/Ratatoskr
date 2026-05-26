@@ -73,7 +73,7 @@ public abstract class OpenTelemetryTestBase(
         );
     }
 
-    protected (
+    protected static (
         string InstrumentName,
         double Value,
         KeyValuePair<string, object?>[] Tags
@@ -93,7 +93,7 @@ public abstract class OpenTelemetryTestBase(
             )
             .ToArray();
 
-    protected MeterListener CreateMeterListener(
+    protected static MeterListener CreateMeterListener(
         ConcurrentBag<(
             string InstrumentName,
             double Value,
@@ -125,7 +125,7 @@ public abstract class OpenTelemetryTestBase(
         return meterListener;
     }
 
-    protected ActivityListener CreateActivityListener(ConcurrentBag<Activity> activities)
+    protected static ActivityListener CreateActivityListener(ConcurrentBag<Activity> activities)
     {
         return new ActivityListener
         {
@@ -135,7 +135,10 @@ public abstract class OpenTelemetryTestBase(
         };
     }
 
-    protected List<Activity> GetRelevantActivities(IEnumerable<Activity> activities, string eventId)
+    protected static List<Activity> GetRelevantActivities(
+        IEnumerable<Activity> activities,
+        string eventId
+    )
     {
         // Filter directly by message ID to isolate activities for this test's message.
         // Trace-based grouping is unreliable when tests run in parallel because a shared
@@ -152,7 +155,7 @@ public abstract class OpenTelemetryTestBase(
         ];
     }
 
-    protected void AssertActivityTags(
+    protected static void AssertActivityTags(
         Activity activity,
         string exchangeName,
         string? queueName,
@@ -201,7 +204,7 @@ public abstract class OpenTelemetryTestBase(
         activity.TagObjects.Should().Contain(t => t.Key == "server.port");
     }
 
-    protected void AssertMetricTags(
+    protected static void AssertMetricTags(
         (string InstrumentName, double Value, KeyValuePair<string, object?>[] Tags) metric,
         string exchangeName,
         string? queueName,
