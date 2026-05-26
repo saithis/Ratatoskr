@@ -29,9 +29,9 @@ public class ManagementAuthorizationTests(
             services
                 .AddAuthentication("Reject")
                 .AddScheme<AuthenticationSchemeOptions, AlwaysRejectHandler>("Reject", _ => { });
-            services.AddAuthorization(o =>
-                o.AddPolicy("RatatoskrAdmin", p => p.RequireAuthenticatedUser())
-            );
+            services
+                .AddAuthorizationBuilder()
+                .AddPolicy("RatatoskrAdmin", p => p.RequireAuthenticatedUser());
 
             services.AddRatatoskr(bus =>
             {
@@ -58,9 +58,9 @@ public class ManagementAuthorizationTests(
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddAuthorization(o =>
-            o.AddPolicy("ExistingPolicy", p => p.RequireAssertion(_ => true))
-        );
+        services
+            .AddAuthorizationBuilder()
+            .AddPolicy("ExistingPolicy", p => p.RequireAssertion(_ => true));
         services.AddRatatoskr(bus => bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox()));
         services.AddDbContext<TestDbContext>(opts => opts.UseInMemoryDatabase("throwtest"));
 

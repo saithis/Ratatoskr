@@ -31,9 +31,9 @@ builder.Services.AddSingleton<IMessageActivityObserver>(sp =>
     sp.GetRequiredService<PlaygroundActivityRecorder>()
 );
 
-builder.Services.AddAuthorization(o =>
-    o.AddPolicy("DevOnlyNoAuth", p => p.RequireAssertion(_ => true))
-);
+builder
+    .Services.AddAuthorizationBuilder()
+    .AddPolicy("DevOnlyNoAuth", p => p.RequireAssertion(_ => true));
 
 builder.Services.AddCors(o =>
     o.AddPolicy("LocalDashboard", p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader())

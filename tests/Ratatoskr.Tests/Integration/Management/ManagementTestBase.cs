@@ -39,9 +39,9 @@ public abstract class ManagementTestBase(
                     _ => { }
                 );
 
-            services.AddAuthorization(o =>
-                o.AddPolicy("RatatoskrAdmin", p => p.RequireAssertion(_ => true))
-            );
+            services
+                .AddAuthorizationBuilder()
+                .AddPolicy("RatatoskrAdmin", p => p.RequireAssertion(_ => true));
 
             services.AddRatatoskr(bus =>
             {
