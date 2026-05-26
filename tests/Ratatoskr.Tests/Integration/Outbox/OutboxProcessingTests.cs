@@ -357,7 +357,13 @@ public class OutboxProcessingTests(
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             for (var i = 1; i <= 5; i++)
             {
-                dbContext.OutboxMessages.Add(new TestEvent { Data = $"message {i}" });
+                dbContext.OutboxMessages.Add(
+                    new TestEvent
+                    {
+                        Data =
+                            $"message {i.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                    }
+                );
             }
             await dbContext.SaveChangesAsync();
         });

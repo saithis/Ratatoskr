@@ -25,7 +25,7 @@ public abstract class InboxTestBase(
                     return count >= expectedCount;
                 }),
             timeout ?? TimeSpan.FromSeconds(10),
-            $"Expected {expectedCount} inbox handler status entries to appear within timeout"
+            $"Expected {expectedCount.ToString(System.Globalization.CultureInfo.InvariantCulture)} inbox handler status entries to appear within timeout"
         );
     }
 
@@ -114,7 +114,9 @@ public abstract class InboxTestBase(
             var attempt = counter.Increment();
             if (attempt <= FailuresBeforeSuccess)
             {
-                throw new InvalidOperationException($"Transient failure (attempt {attempt})");
+                throw new InvalidOperationException(
+                    $"Transient failure (attempt {attempt.ToString(System.Globalization.CultureInfo.InvariantCulture)})"
+                );
             }
 
             return Task.CompletedTask;

@@ -23,7 +23,9 @@ public class FailingMessageSender(string transportName, int failuresBeforeSucces
 
         if (_callCount <= failuresBeforeSuccess)
         {
-            throw new InvalidOperationException($"Simulated failure (attempt {_callCount})");
+            throw new InvalidOperationException(
+                $"Simulated failure (attempt {_callCount.ToString(System.Globalization.CultureInfo.InvariantCulture)})"
+            );
         }
 
         return Task.CompletedTask;

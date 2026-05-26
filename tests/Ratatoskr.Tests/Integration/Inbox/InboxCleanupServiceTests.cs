@@ -274,10 +274,12 @@ public class InboxCleanupServiceTests(
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             for (var i = 0; i < 5; i++)
             {
-                var message = CreateInboxMessage($"msg-{i}");
+                var message = CreateInboxMessage(
+                    $"msg-{i.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
+                );
                 db.Set<InboxMessageEntity>().Add(message);
                 var status = InboxHandlerStatusEntity.Create(
-                    $"msg-{i}",
+                    $"msg-{i.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
                     "handler-a",
                     _timeProvider
                 );

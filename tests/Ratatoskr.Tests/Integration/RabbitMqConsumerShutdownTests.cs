@@ -271,7 +271,11 @@ public class RabbitMqConsumerShutdownTests(
             await PublishToRabbitMqAsync(
                 exchange: "",
                 routingKey: ConcurrencyQueueName,
-                new TestEvent { Id = $"c-{i}", Data = "x" }
+                new TestEvent
+                {
+                    Id = $"c-{i.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                    Data = "x",
+                }
             );
         }
 
@@ -328,7 +332,11 @@ public class RabbitMqConsumerShutdownTests(
             await PublishToRabbitMqAsync(
                 exchange: "",
                 routingKey: BackpressureQueueName,
-                new TestEvent { Id = $"bp-{i}", Data = "x" }
+                new TestEvent
+                {
+                    Id = $"bp-{i.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                    Data = "x",
+                }
             );
         }
 
@@ -388,7 +396,11 @@ public class RabbitMqConsumerShutdownTests(
             await PublishToRabbitMqAsync(
                 exchange: "",
                 routingKey: AckStressQueueName,
-                new TestEvent { Id = $"ack-{i}", Data = "x" }
+                new TestEvent
+                {
+                    Id = $"ack-{i.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                    Data = "x",
+                }
             );
         }
 

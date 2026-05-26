@@ -823,7 +823,9 @@ public class OutboxDurabilityTests(
             _callCount++;
             if (_callCount > successesBeforeFailure)
             {
-                throw new InvalidOperationException($"Simulated failure (attempt {_callCount})");
+                throw new InvalidOperationException(
+                    $"Simulated failure (attempt {_callCount.ToString(System.Globalization.CultureInfo.InvariantCulture)})"
+                );
             }
 
             return Task.CompletedTask;

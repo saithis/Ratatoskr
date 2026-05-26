@@ -511,7 +511,9 @@ public class OpenTelemetryMetricsTests(
 
             if (currentAttempt <= failuresBeforeSuccess)
             {
-                throw new InvalidOperationException($"Simulated failure {currentAttempt}");
+                throw new InvalidOperationException(
+                    $"Simulated failure {currentAttempt.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
+                );
             }
 
             HandledMessages.Add(message);

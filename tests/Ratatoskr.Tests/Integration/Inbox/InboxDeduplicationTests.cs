@@ -220,8 +220,16 @@ public class InboxDeduplicationTests(
             {
                 var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
                 await bus.PublishDirectAsync(
-                    new TestEvent { Id = $"business-concurrent-proc-{index}" },
-                    new MessageProperties { Id = $"concurrent-proc-{index}" }
+                    new TestEvent
+                    {
+                        Id =
+                            $"business-concurrent-proc-{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                    },
+                    new MessageProperties
+                    {
+                        Id =
+                            $"concurrent-proc-{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                    }
                 );
             });
         }

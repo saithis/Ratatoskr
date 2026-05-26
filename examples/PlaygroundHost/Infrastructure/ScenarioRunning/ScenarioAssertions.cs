@@ -74,7 +74,7 @@ public static class ScenarioAssertions
         var final = await readCountAsync(cancellationToken);
         return new ScenarioVerdict(
             passed: false,
-            $"{metricDescriptionForFailure} did not increase within timeout (before={baselineExclusive}, after={final})."
+            $"{metricDescriptionForFailure} did not increase within timeout (before={baselineExclusive.ToString(System.Globalization.CultureInfo.InvariantCulture)}, after={final.ToString(System.Globalization.CultureInfo.InvariantCulture)})."
         );
     }
 

@@ -209,7 +209,9 @@ public sealed class PlaygroundHostScenarioHttpTests : IAsyncDisposable
         var okStart = runRes.StatusCode is HttpStatusCode.Accepted or HttpStatusCode.OK;
         okStart
             .Should()
-            .BeTrue($"POST run failed for slug={slug}: {(int)runRes.StatusCode} {errBody}");
+            .BeTrue(
+                $"POST run failed for slug={slug}: {((int)runRes.StatusCode).ToString(System.Globalization.CultureInfo.InvariantCulture)} {errBody}"
+            );
         var runBody = await runRes.Content.ReadFromJsonAsync<RunAcceptedDto>();
         runBody!.RunId.Should().NotBeEmpty();
         return runBody.RunId;
