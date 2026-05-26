@@ -1,6 +1,6 @@
 namespace Ratatoskr.RabbitMq;
 
-public class RabbitMqConstants
+public static class RabbitMqConstants
 {
     internal const string TransportName = "rabbitmq";
 }
