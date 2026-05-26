@@ -25,7 +25,7 @@ public sealed class CancelSmokeScenario : IPlaygroundScenario
     {
         try
         {
-            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            await Task.Delay(Timeout.InfiniteTimeSpan, context.TimeProvider, cancellationToken);
         }
         catch (OperationCanceledException)
         {

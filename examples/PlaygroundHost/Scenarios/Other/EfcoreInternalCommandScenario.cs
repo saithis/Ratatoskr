@@ -73,7 +73,11 @@ public sealed class EfcoreInternalCommandScenario : IPlaygroundScenario
         await StageOrderAsync(context.PublisherDb, context.TimeProvider, runId, cancellationToken);
         context.StepsCompleted.Add("staged_two_internal_same_save");
 
-        await Task.Delay(ScenarioTiming.EfCoreActivitySettleDelay, cancellationToken);
+        await Task.Delay(
+            ScenarioTiming.EfCoreActivitySettleDelay,
+            context.TimeProvider,
+            cancellationToken
+        );
         var entries = recorder.GetEntriesForScenarioRun(runId);
         var hit = entries.Any(e =>
             (e.MessageType ?? "").Contains(
