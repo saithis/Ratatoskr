@@ -856,10 +856,9 @@ public class OutboxDurabilityTests(
     /// </summary>
     private sealed class BlockingMessageSender(string transportName) : IMessageSender, IDisposable
     {
-        private readonly SemaphoreSlim _sendStarted = new(0, 1);
         private readonly SemaphoreSlim _gate = new(0, 1);
         public string TransportName => transportName;
-        public SemaphoreSlim SendStarted => _sendStarted;
+        public SemaphoreSlim SendStarted { get; } = new(0, 1);
 
         public void UnblockSend() => _gate.Release();
 
@@ -869,14 +868,14 @@ public class OutboxDurabilityTests(
             CancellationToken cancellationToken
         )
         {
-            _sendStarted.Release();
+            SendStarted.Release();
             await _gate.WaitAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
         }
 
         public void Dispose()
         {
-            _sendStarted.Dispose();
+            SendStarted.Dispose();
             _gate.Dispose();
         }
     }
