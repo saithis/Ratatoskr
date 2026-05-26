@@ -232,7 +232,10 @@ public class PublishTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
             Type = "test.event",
             ContentType = "application/json",
             DeliveryMode = RabbitMQ.Client.DeliveryModes.Persistent,
-            Headers = new Dictionary<string, object?> { ["cloudEvents_subject"] = subject },
+            Headers = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["cloudEvents_subject"] = subject,
+            },
         };
 
         await channel.BasicPublishAsync(

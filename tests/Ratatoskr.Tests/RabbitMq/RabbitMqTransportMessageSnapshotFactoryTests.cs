@@ -13,7 +13,7 @@ public class RabbitMqTransportMessageSnapshotFactoryTests
         // Arrange
         var basicProps = new BasicProperties
         {
-            Headers = new Dictionary<string, object?>
+            Headers = new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 ["my-header"] = Encoding.UTF8.GetBytes("hello world"),
             },
@@ -38,7 +38,10 @@ public class RabbitMqTransportMessageSnapshotFactoryTests
         var binaryData = new byte[] { 0xFF, 0xFE, 0x00, 0x01, 0x80 };
         var basicProps = new BasicProperties
         {
-            Headers = new Dictionary<string, object?> { ["binary-header"] = binaryData },
+            Headers = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["binary-header"] = binaryData,
+            },
         };
 
         // Act
@@ -64,7 +67,10 @@ public class RabbitMqTransportMessageSnapshotFactoryTests
         // Arrange
         var basicProps = new BasicProperties
         {
-            Headers = new Dictionary<string, object?> { ["empty-header"] = Array.Empty<byte>() },
+            Headers = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["empty-header"] = Array.Empty<byte>(),
+            },
         };
 
         // Act
@@ -104,7 +110,7 @@ public class RabbitMqTransportMessageSnapshotFactoryTests
         // Arrange - native RabbitMQ-typed header values (long, bool, string)
         var basicProps = new BasicProperties
         {
-            Headers = new Dictionary<string, object?>
+            Headers = new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 ["long-header"] = 42L,
                 ["bool-header"] = true,

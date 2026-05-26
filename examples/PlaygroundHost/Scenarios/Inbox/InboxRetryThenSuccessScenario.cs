@@ -115,7 +115,9 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
     public sealed class ProcessOrderHandler(ConsumerDbContext context)
         : IMessageHandler<ProcessOrderCommand>
     {
-        private static readonly ConcurrentDictionary<string, int> DeliveryAttempts = new();
+        private static readonly ConcurrentDictionary<string, int> DeliveryAttempts = new(
+            StringComparer.Ordinal
+        );
 
         public async Task HandleAsync(
             ProcessOrderCommand message,

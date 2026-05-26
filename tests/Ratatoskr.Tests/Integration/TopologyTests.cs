@@ -46,7 +46,10 @@ public class TopologyTests(RabbitMqContainerFixture rabbitMq, PostgresContainerF
                 durable: true,
                 exclusive: false,
                 autoDelete: false,
-                arguments: new Dictionary<string, object?> { ["x-queue-type"] = "classic" }
+                arguments: new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["x-queue-type"] = "classic",
+                }
             );
 
         await act.Should()

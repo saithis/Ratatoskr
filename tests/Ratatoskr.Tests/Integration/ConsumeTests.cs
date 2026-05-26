@@ -486,7 +486,7 @@ public class ConsumeTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
         return new BasicProperties
         {
             ContentType = contentType,
-            Headers = new Dictionary<string, object?>
+            Headers = new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 ["cloudEvents_specversion"] = "1.0",
                 ["cloudEvents_type"] = type,
