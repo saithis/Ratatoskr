@@ -29,7 +29,7 @@ public abstract class InboxTestBase(
         );
     }
 
-    protected async Task<int> ProcessInboxAsync(
+    protected static async Task<int> ProcessInboxAsync(
         IServiceProvider serviceProvider,
         bool includeStuckDetection = true,
         CancellationToken cancellationToken = default

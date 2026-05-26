@@ -668,7 +668,7 @@ public class MultiDbContextTests(
         );
     }
 
-    private async Task<int> ProcessInboxAsync<TDbContext>(IServiceProvider serviceProvider)
+    private static async Task<int> ProcessInboxAsync<TDbContext>(IServiceProvider serviceProvider)
         where TDbContext : DbContext, IInboxDbContext
     {
         var total = 0;
@@ -691,7 +691,7 @@ public class MultiDbContextTests(
         return total;
     }
 
-    private async Task<int> ProcessOutboxAsync<TDbContext>(IServiceProvider serviceProvider)
+    private static async Task<int> ProcessOutboxAsync<TDbContext>(IServiceProvider serviceProvider)
         where TDbContext : DbContext, IOutboxDbContext
     {
         var total = 0;
