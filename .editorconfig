@@ -1114,6 +1114,9 @@ dotnet_diagnostic.RCS1189.severity = none
 # Use expression-bodied lambda
 dotnet_diagnostic.RCS1021.severity = suggestion
 
+# Implement exception constructors
+dotnet_diagnostic.RCS1194.severity = none
+
 ####################################################################################################
 # Meziantou Analyzer Rules (MA)
 ####################################################################################################
