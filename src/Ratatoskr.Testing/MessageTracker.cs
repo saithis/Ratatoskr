@@ -76,7 +76,7 @@ public class MessageTracker : IMessageActivityObserver
                 {
                     tcs.TrySetException(
                         new TimeoutException(
-                            $"Timed out after {timeout.TotalSeconds}s waiting for message activity."
+                            $"Timed out after {timeout.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)}s waiting for message activity."
                         )
                     );
                 }

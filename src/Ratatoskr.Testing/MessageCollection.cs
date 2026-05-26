@@ -85,7 +85,7 @@ public class MessageCollection : IEnumerable<TrackedMessage>
         if (count > 0)
         {
             throw new InvalidOperationException(
-                $"Expected no messages of type '{typeof(T).Name}', but found {count}."
+                $"Expected no messages of type '{typeof(T).Name}', but found {count.ToString(System.Globalization.CultureInfo.InvariantCulture)}."
             );
         }
     }

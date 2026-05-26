@@ -590,8 +590,18 @@ public class MultiDbContextTests(
             {
                 var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
                 await bus.PublishDirectAsync(
-                    new TestEvent { Id = $"concurrent-{index}", Data = $"data-{index}" },
-                    new MessageProperties { Id = $"concurrent-msg-{index}" }
+                    new TestEvent
+                    {
+                        Id =
+                            $"concurrent-{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                        Data =
+                            $"data-{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                    },
+                    new MessageProperties
+                    {
+                        Id =
+                            $"concurrent-msg-{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                    }
                 );
             });
         }
@@ -664,7 +674,7 @@ public class MultiDbContextTests(
                     return count >= expectedCount;
                 }),
             timeout ?? TimeSpan.FromSeconds(10),
-            $"Expected {expectedCount} inbox handler status entries in {typeof(TDbContext).Name} within timeout"
+            $"Expected {expectedCount.ToString(System.Globalization.CultureInfo.InvariantCulture)} inbox handler status entries in {typeof(TDbContext).Name} within timeout"
         );
     }
 

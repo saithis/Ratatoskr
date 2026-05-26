@@ -53,8 +53,16 @@ public class InboxBatchAndEndToEndTests(
             {
                 var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
                 await bus.PublishDirectAsync(
-                    new TestEvent { Id = $"business-accum-{i}" },
-                    new MessageProperties { Id = $"accum-{i}" }
+                    new TestEvent
+                    {
+                        Id =
+                            $"business-accum-{i.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                    },
+                    new MessageProperties
+                    {
+                        Id =
+                            $"accum-{i.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                    }
                 );
             });
         }
@@ -130,8 +138,16 @@ public class InboxBatchAndEndToEndTests(
             {
                 var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
                 await bus.PublishDirectAsync(
-                    new TestEvent { Id = $"business-batch-{i}" },
-                    new MessageProperties { Id = $"batch-{i}" }
+                    new TestEvent
+                    {
+                        Id =
+                            $"business-batch-{i.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                    },
+                    new MessageProperties
+                    {
+                        Id =
+                            $"batch-{i.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                    }
                 );
             });
         }

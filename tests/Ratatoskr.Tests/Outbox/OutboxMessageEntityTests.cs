@@ -160,7 +160,12 @@ public class OutboxMessageEntityTests
         // Simulate many failures to hit the cap
         for (var i = 0; i < 10; i++)
         {
-            entity.PublishFailed($"Error {i}", fakeTime, maxRetries: 20, maxDelay);
+            entity.PublishFailed(
+                $"Error {i.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                fakeTime,
+                maxRetries: 20,
+                maxDelay
+            );
             fakeTime.Advance(TimeSpan.FromSeconds(1));
         }
 
@@ -190,7 +195,12 @@ public class OutboxMessageEntityTests
         // Act - Fail maxRetries times
         for (var i = 0; i < maxRetries; i++)
         {
-            entity.PublishFailed($"Error {i}", fakeTime, maxRetries, TimeSpan.FromMinutes(5));
+            entity.PublishFailed(
+                $"Error {i.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                fakeTime,
+                maxRetries,
+                TimeSpan.FromMinutes(5)
+            );
             fakeTime.Advance(TimeSpan.FromSeconds(1));
         }
 

@@ -117,7 +117,7 @@ public sealed class FanoutTwoHandlersOnOrderplacedScenario : IPlaygroundScenario
         var n = CountSuccessfulOrderPlacedDispatches(final);
         return new ScenarioVerdict(
             passed: false,
-            $"Expected at least 2 successful OrderPlaced handler rows for this run; saw {n}."
+            $"Expected at least 2 successful OrderPlaced handler rows for this run; saw {n.ToString(System.Globalization.CultureInfo.InvariantCulture)}."
         );
     }
 

@@ -57,7 +57,12 @@ public class InboxHandlerStatusEntityTests
         // Simulate many failures to hit the cap
         for (var i = 0; i < 10; i++)
         {
-            status.MarkAsFailed($"Error {i}", fakeTime, maxRetries: 20, maxDelay);
+            status.MarkAsFailed(
+                $"Error {i.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                fakeTime,
+                maxRetries: 20,
+                maxDelay
+            );
             fakeTime.Advance(TimeSpan.FromSeconds(1));
         }
 
@@ -81,7 +86,12 @@ public class InboxHandlerStatusEntityTests
         // Act - Fail maxRetries times
         for (var i = 0; i < 3; i++)
         {
-            status.MarkAsFailed($"Error {i}", fakeTime, maxRetries: 3, TimeSpan.FromMinutes(5));
+            status.MarkAsFailed(
+                $"Error {i.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                fakeTime,
+                maxRetries: 3,
+                TimeSpan.FromMinutes(5)
+            );
             fakeTime.Advance(TimeSpan.FromSeconds(1));
         }
 
@@ -100,7 +110,11 @@ public class InboxHandlerStatusEntityTests
 
         for (var run = 0; run < 50; run++)
         {
-            var status = InboxHandlerStatusEntity.Create($"msg-{run}", "handler-a", fakeTime);
+            var status = InboxHandlerStatusEntity.Create(
+                $"msg-{run.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                "handler-a",
+                fakeTime
+            );
             var now = fakeTime.GetUtcNow();
 
             status.MarkAsFailed("Error", fakeTime, maxRetries: 10, TimeSpan.FromMinutes(5));
@@ -108,10 +122,16 @@ public class InboxHandlerStatusEntityTests
             // ErrorCount=1: base = 2^1 = 2, delay ∈ [1, 2)
             status
                 .NextAttemptAt!.Value.Should()
-                .BeOnOrAfter(now.AddSeconds(1), $"run {run}: jitter minimum is base*0.5 = 1s");
+                .BeOnOrAfter(
+                    now.AddSeconds(1),
+                    $"run {run.ToString(System.Globalization.CultureInfo.InvariantCulture)}: jitter minimum is base*0.5 = 1s"
+                );
             status
                 .NextAttemptAt!.Value.Should()
-                .BeOnOrBefore(now.AddSeconds(2), $"run {run}: jitter maximum is base = 2s");
+                .BeOnOrBefore(
+                    now.AddSeconds(2),
+                    $"run {run.ToString(System.Globalization.CultureInfo.InvariantCulture)}: jitter maximum is base = 2s"
+                );
         }
     }
 }

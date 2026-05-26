@@ -115,7 +115,7 @@ public sealed class InboxDedupsScenario : IPlaygroundScenario
             )
             : new ScenarioVerdict(
                 passed: false,
-                $"Expected 1 inbox and 2 direct dispatches (inbox={inbox}, direct={direct})."
+                $"Expected 1 inbox and 2 direct dispatches (inbox={inbox.ToString(System.Globalization.CultureInfo.InvariantCulture)}, direct={direct.ToString(System.Globalization.CultureInfo.InvariantCulture)})."
             );
     }
 
