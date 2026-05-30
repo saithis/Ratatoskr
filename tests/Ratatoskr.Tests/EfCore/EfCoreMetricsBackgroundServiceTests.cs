@@ -108,13 +108,13 @@ public class EfCoreMetricsBackgroundServiceTests
                 "handler1",
                 timeProvider
             );
-            inPoisoned1.MarkAsPoisoned("error", timeProvider);
+            inPoisoned1.MarkAsPoisoned("error");
             var inPoisoned2 = InboxHandlerStatusEntity.Create(
                 Guid.NewGuid().ToString(),
                 "handler2",
                 timeProvider
             );
-            inPoisoned2.MarkAsPoisoned("error", timeProvider);
+            inPoisoned2.MarkAsPoisoned("error");
             // 1 completed (should not be counted)
             var inCompleted = InboxHandlerStatusEntity.Create(
                 Guid.NewGuid().ToString(),

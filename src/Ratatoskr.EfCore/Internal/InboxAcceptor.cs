@@ -99,55 +99,16 @@ internal partial class InboxAcceptor<TDbContext>(
                 );
         }
 
-        try
+        var earlyOutcome = await TrySaveInboxEntriesAsync(
+            dbContext,
+            properties.Id,
+            properties.Type,
+            inboxHandlers,
+            cancellationToken
+        );
+        if (earlyOutcome.HasValue)
         {
-            await dbContext.SaveChangesAsync(cancellationToken);
-            LogAcceptedNewInboxMessage(logger, properties.Id, properties.Type);
-        }
-        catch (DbUpdateException ex) when (DbExceptionHelper.IsUniqueConstraintViolation(ex))
-        {
-            // Message already exists — fall back to adding only missing handler statuses
-            dbContext.ChangeTracker.Clear();
-
-            var existingKeys = await dbContext
-                .Set<InboxHandlerStatusEntity>()
-                .Where(s => s.MessageId == properties.Id)
-                .Select(s => s.HandlerKey)
-                .ToHashSetAsync(cancellationToken);
-
-            var newHandlers = inboxHandlers
-                .Where(h => !existingKeys.Contains(h.InboxKey!))
-                .ToList();
-            if (newHandlers.Count == 0)
-            {
-                LogInboxDuplicateIgnored(logger, properties.Id);
-                return InboxAcceptOutcome.Duplicate;
-            }
-
-            foreach (var handler in newHandlers)
-            {
-                dbContext
-                    .Set<InboxHandlerStatusEntity>()
-                    .Add(
-                        InboxHandlerStatusEntity.Create(
-                            properties.Id,
-                            handler.InboxKey!,
-                            timeProvider
-                        )
-                    );
-            }
-
-            try
-            {
-                await dbContext.SaveChangesAsync(cancellationToken);
-                LogInboxAlreadyExistedAddedHandlers(logger, properties.Id, newHandlers.Count);
-            }
-            catch (DbUpdateException ex2) when (DbExceptionHelper.IsUniqueConstraintViolation(ex2))
-            {
-                dbContext.ChangeTracker.Clear();
-                LogInboxHandlersAlreadyInserted(logger, properties.Id);
-                return InboxAcceptOutcome.Duplicate;
-            }
+            return earlyOutcome.Value;
         }
 
         LogPersistedInboxEntries(logger, properties.Id, inboxHandlers.Count);
@@ -166,6 +127,75 @@ internal partial class InboxAcceptor<TDbContext>(
 
         await inboxProcessor.TriggerAsync(cancellationToken);
 
+        return InboxAcceptOutcome.Accepted;
+    }
+
+    private async Task<InboxAcceptOutcome?> TrySaveInboxEntriesAsync(
+        TDbContext dbContext,
+        string messageId,
+        string messageType,
+        IReadOnlyList<ChannelHandlerRegistration> inboxHandlers,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            LogAcceptedNewInboxMessage(logger, messageId, messageType);
+            return null;
+        }
+        catch (DbUpdateException ex) when (DbExceptionHelper.IsUniqueConstraintViolation(ex))
+        {
+            return await HandleDuplicateAsync(
+                dbContext,
+                messageId,
+                inboxHandlers,
+                cancellationToken
+            );
+        }
+    }
+
+    private async Task<InboxAcceptOutcome> HandleDuplicateAsync(
+        TDbContext dbContext,
+        string messageId,
+        IReadOnlyList<ChannelHandlerRegistration> inboxHandlers,
+        CancellationToken cancellationToken
+    )
+    {
+        // Message already exists -- fall back to adding only missing handler statuses
+        dbContext.ChangeTracker.Clear();
+
+        var existingKeys = await dbContext
+            .Set<InboxHandlerStatusEntity>()
+            .Where(s => s.MessageId == messageId)
+            .Select(s => s.HandlerKey)
+            .ToHashSetAsync(cancellationToken);
+
+        var newHandlers = inboxHandlers.Where(h => !existingKeys.Contains(h.InboxKey!)).ToList();
+        if (newHandlers.Count == 0)
+        {
+            LogInboxDuplicateIgnored(logger, messageId);
+            return InboxAcceptOutcome.Duplicate;
+        }
+
+        foreach (var handler in newHandlers)
+        {
+            dbContext
+                .Set<InboxHandlerStatusEntity>()
+                .Add(InboxHandlerStatusEntity.Create(messageId, handler.InboxKey!, timeProvider));
+        }
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            LogInboxAlreadyExistedAddedHandlers(logger, messageId, newHandlers.Count);
+        }
+        catch (DbUpdateException ex2) when (DbExceptionHelper.IsUniqueConstraintViolation(ex2))
+        {
+            dbContext.ChangeTracker.Clear();
+            LogInboxHandlersAlreadyInserted(logger, messageId);
+            return InboxAcceptOutcome.Duplicate;
+        }
         return InboxAcceptOutcome.Accepted;
     }
 

@@ -62,34 +62,13 @@ public sealed partial class MessageDispatcher(
         }
 
         // 1. Resolve Message Type
-        Type? messageType = null;
-
-        var channel = channelRegistry.GetConsumeChannel(channelName);
-        var msgReg = channel?.GetMessage(properties.Type);
-        if (msgReg != null)
-        {
-            messageType = msgReg.MessageType;
-        }
-
-        if (messageType == null)
-        {
-            var match = channelRegistry
-                .FindConsumeChannelsForType(properties.Type)
-                .FirstOrDefault();
-            if (match.Message != null)
-            {
-                messageType = match.Message.MessageType;
-            }
-        }
-
+        var messageType = ResolveMessageType(properties.Type, channelName);
         if (messageType == null)
         {
             LogNoRegistrationFound(logger, properties.Type);
-            _ = (
-                activity?.SetStatus(
-                    ActivityStatusCode.Error,
-                    $"No registration found for event type '{properties.Type}'"
-                )
+            _ = activity?.SetStatus(
+                ActivityStatusCode.Error,
+                $"No registration found for event type '{properties.Type}'"
             );
             return DispatchResult.NoHandlers;
         }
@@ -104,25 +83,22 @@ public sealed partial class MessageDispatcher(
         catch (Exception ex)
         {
             LogDeserializationFailed(logger, ex, properties.Type);
-            _ = (activity?.SetTag(MessagingSemanticConventions.ErrorType, ex.GetType().FullName));
-            _ = (activity?.SetStatus(ActivityStatusCode.Error, ex.Message));
+            _ = activity?.SetTag(MessagingSemanticConventions.ErrorType, ex.GetType().FullName);
+            _ = activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             return DispatchResult.PermanentError;
         }
         if (message == null)
         {
             LogDeserializedToNull(logger, properties.Type);
-            _ = (
-                activity?.SetStatus(
-                    ActivityStatusCode.Error,
-                    $"Message of type '{properties.Type}' deserialized to null"
-                )
+            _ = activity?.SetStatus(
+                ActivityStatusCode.Error,
+                $"Message of type '{properties.Type}' deserialized to null"
             );
             return DispatchResult.PermanentError;
         }
 
         // 3. Get fire-and-forget handlers from the channel handler registry
         var handlers = channelHandlerRegistry.GetFireAndForgetHandlers(channelName, messageType);
-
         if (handlers.Count == 0)
         {
             LogNoHandlersFound(logger, properties.Type, channelName);
@@ -130,39 +106,12 @@ public sealed partial class MessageDispatcher(
         }
 
         // 4. Invoke each handler in its own DI scope for full isolation.
-        List<Exception>? exceptions = null;
-
-        foreach (var handler in handlers)
-        {
-            try
-            {
-                await handlerInvoker.InvokeAsync(
-                    handler.HandlerType,
-                    message,
-                    properties,
-                    cancellationToken
-                );
-
-                LogHandlerProcessed(
-                    logger,
-                    handler.HandlerType.Name,
-                    properties.Id,
-                    properties.Type
-                );
-            }
-            catch (Exception ex)
-            {
-                LogHandlerFailed(
-                    logger,
-                    ex,
-                    handler.HandlerType.Name,
-                    properties.Id,
-                    properties.Type
-                );
-                exceptions ??= [];
-                exceptions.Add(ex);
-            }
-        }
+        var exceptions = await InvokeHandlersAsync(
+            handlers,
+            message,
+            properties,
+            cancellationToken
+        );
 
         var result = exceptions != null ? DispatchResult.RecoverableError : DispatchResult.Success;
 
@@ -204,6 +153,65 @@ public sealed partial class MessageDispatcher(
         );
 
         return result;
+    }
+
+    private Type? ResolveMessageType(string typeName, string channelName)
+    {
+        var channel = channelRegistry.GetConsumeChannel(channelName);
+        var msgReg = channel?.GetMessage(typeName);
+        if (msgReg != null)
+        {
+            return msgReg.MessageType;
+        }
+
+        var match = channelRegistry.FindConsumeChannelsForType(typeName).FirstOrDefault();
+        return match.Message?.MessageType;
+    }
+
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "Handler exceptions are caught to allow remaining handlers to run and to return a recoverable error result."
+    )]
+    private async Task<List<Exception>?> InvokeHandlersAsync(
+        IReadOnlyList<ChannelHandlerRegistration> handlers,
+        object message,
+        MessageProperties properties,
+        CancellationToken cancellationToken
+    )
+    {
+        List<Exception>? exceptions = null;
+        foreach (var handler in handlers)
+        {
+            try
+            {
+                await handlerInvoker.InvokeAsync(
+                    handler.HandlerType,
+                    message,
+                    properties,
+                    cancellationToken
+                );
+                LogHandlerProcessed(
+                    logger,
+                    handler.HandlerType.Name,
+                    properties.Id,
+                    properties.Type!
+                );
+            }
+            catch (Exception ex)
+            {
+                LogHandlerFailed(
+                    logger,
+                    ex,
+                    handler.HandlerType.Name,
+                    properties.Id,
+                    properties.Type!
+                );
+                exceptions ??= [];
+                exceptions.Add(ex);
+            }
+        }
+        return exceptions;
     }
 
     [LoggerMessage(
