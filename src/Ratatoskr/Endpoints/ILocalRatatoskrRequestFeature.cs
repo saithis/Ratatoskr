@@ -7,4 +7,6 @@ namespace Ratatoskr.Endpoints;
 /// </summary>
 internal interface ILocalRatatoskrRequestFeature;
 
+#pragma warning disable MA0182 // marker type for in-process request detection, not yet wired to a caller
 internal sealed class LocalRatatoskrRequestFeature : ILocalRatatoskrRequestFeature;
+#pragma warning restore MA0182

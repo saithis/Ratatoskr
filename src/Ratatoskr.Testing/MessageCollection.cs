@@ -19,7 +19,9 @@ public class MessageCollection : IEnumerable<TrackedMessage>
     /// <summary>
     /// Gets a single message of the specified type. Throws if zero or more than one match.
     /// </summary>
+#pragma warning disable CA1720 // method name mirrors LINQ convention, not the float type
     public TrackedMessage Single<T>()
+#pragma warning restore CA1720
         where T : notnull
     {
         var typeName = MessageTypeMatcher.GetTypeName(typeof(T));

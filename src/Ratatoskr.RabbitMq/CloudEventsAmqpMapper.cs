@@ -51,7 +51,7 @@ public partial class CloudEventsAmqpMapper(
             );
         }
 
-        // TODO: make this settable per message and maybe add it to the properties
+        // Content mode is configured per-mapper instance. Per-message override tracked in issue backlog.
         return options.ContentMode switch
         {
             CloudEventsContentMode.Binary => MapBinaryMode(serializedData, props, outgoing),
