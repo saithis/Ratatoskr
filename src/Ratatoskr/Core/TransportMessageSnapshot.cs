@@ -18,7 +18,9 @@ public sealed class TransportMessageSnapshot
     /// In structured CloudEvents mode, this is the full JSON envelope.
     /// In binary mode, this is the serialized message payload.
     /// </summary>
+#pragma warning disable CA1819 // byte[] is intentional: callers use it directly with Encoding.GetString and similar APIs
     public required byte[] Body { get; init; }
+#pragma warning restore CA1819
 
     /// <summary>
     /// Transport-level headers/properties flattened into a dictionary.
