@@ -235,6 +235,8 @@ internal class OutboxMessageProcessor<TDbContext>(
             {
                 return null;
             }
+
+            await dbContext.SaveChangesAsync(CancellationToken.None);
         }
 
         return await RecordAndNotifyAsync(message, props, sendException);
