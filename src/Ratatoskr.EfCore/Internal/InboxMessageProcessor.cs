@@ -81,6 +81,33 @@ internal class InboxMessageProcessor<TDbContext>(
             .Where(m => messageIds.Contains(m.Id))
             .ToDictionaryAsync(m => m.Id, cancellationToken);
 
+        var claimed = await MarkStatusesAsProcessingAsync(statuses, cancellationToken);
+        if (claimed == null)
+        {
+            return 0;
+        }
+        statuses = claimed;
+
+        InboxTelemetry.RecordBatchSize(statuses.Length);
+        var batchStartTimestamp = Stopwatch.GetTimestamp();
+
+        foreach (var status in statuses)
+        {
+            if (!await ProcessStatusAsync(status, messages, cancellationToken))
+            {
+                break;
+            }
+        }
+
+        InboxTelemetry.RecordBatchDuration(batchStartTimestamp);
+        return statuses.Length;
+    }
+
+    private async Task<InboxHandlerStatusEntity[]?> MarkStatusesAsProcessingAsync(
+        InboxHandlerStatusEntity[] statuses,
+        CancellationToken cancellationToken
+    )
+    {
         foreach (var status in statuses)
         {
             status.MarkAsProcessing(timeProvider);
@@ -91,7 +118,7 @@ internal class InboxMessageProcessor<TDbContext>(
             try
             {
                 await dbContext.SaveChangesAsync(cancellationToken);
-                break;
+                return statuses;
             }
             catch (DbUpdateConcurrencyException ex)
             {
@@ -107,189 +134,172 @@ internal class InboxMessageProcessor<TDbContext>(
                 statuses = [.. statuses.Where(s => !conflictIds.Contains(s.Id))];
                 if (statuses.Length == 0)
                 {
-                    return 0;
+                    return null;
                 }
             }
         }
+    }
 
-        InboxTelemetry.RecordBatchSize(statuses.Length);
-
-        var batchStartTimestamp = Stopwatch.GetTimestamp();
-
-        foreach (var status in statuses)
+    /// <summary>Returns false to signal the caller should stop the batch loop (cancellation).</summary>
+    private async Task<bool> ProcessStatusAsync(
+        InboxHandlerStatusEntity status,
+        Dictionary<string, InboxMessageEntity> messages,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!messages.TryGetValue(status.MessageId, out var inboxMessage))
         {
-            if (!messages.TryGetValue(status.MessageId, out var inboxMessage))
-            {
-                InboxMessageProcessorLog.MessageNotFound(logger, status.MessageId, status.Id);
-                status.MarkAsPoisoned("InboxMessage record not found -- likely deleted.");
-                InboxTelemetry.RecordPoisoned();
-                await dbContext.SaveChangesAsync(cancellationToken);
-                continue;
-            }
+            InboxMessageProcessorLog.MessageNotFound(logger, status.MessageId, status.Id);
+            status.MarkAsPoisoned("InboxMessage record not found -- likely deleted.");
+            InboxTelemetry.RecordPoisoned();
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return true;
+        }
 
-            MessageProperties props;
-            try
-            {
-                props = inboxMessage.GetProperties();
-            }
-            catch (Exception ex)
-            {
-                InboxMessageProcessorLog.DeserializationFailed(
-                    logger,
-                    status.MessageId,
-                    status.Id,
-                    ex
-                );
-                status.MarkAsPoisoned($"Properties deserialization failed: {ex.Message}");
-                InboxTelemetry.RecordPoisoned();
-                await dbContext.SaveChangesAsync(cancellationToken);
-                continue;
-            }
+        MessageProperties props;
+        try
+        {
+            props = inboxMessage.GetProperties();
+        }
+        catch (Exception ex)
+        {
+            InboxMessageProcessorLog.DeserializationFailed(logger, status.MessageId, status.Id, ex);
+            status.MarkAsPoisoned($"Properties deserialization failed: {ex.Message}");
+            InboxTelemetry.RecordPoisoned();
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return true;
+        }
 
-            var registration = channelHandlerRegistry.GetInboxRegistrationByKey(status.HandlerKey);
-            if (registration == null)
-            {
-                InboxMessageProcessorLog.HandlerKeyNotRegistered(
-                    logger,
-                    status.HandlerKey,
-                    status.Id
-                );
-                status.MarkAsPoisoned(
-                    $"Handler key '{status.HandlerKey}' is not registered. The handler may have been removed or renamed."
-                );
-                InboxTelemetry.RecordPoisoned();
-                await dbContext.SaveChangesAsync(cancellationToken);
-
-                await observers.NotifyAsync(
-                    new MessageActivity
-                    {
-                        Stage = MessageStage.InboxPoisoned,
-                        Properties = props,
-                        SerializedBody = inboxMessage.Content,
-                        TransportName = inboxMessage.TransportName,
-                        Timestamp = timeProvider.GetUtcNow(),
-                    },
-                    logger
-                );
-
-                continue;
-            }
-
-            Activity? deliverActivity = null;
-            Exception? handlerException = null;
-            object? deliveredMessage = null;
-            try
-            {
-                deliverActivity = InboxTelemetry.StartDeliverActivity(props, status.HandlerKey);
-
-                var serializer = serializerResolver.GetSerializer(registration.MessageType);
-                deliveredMessage =
-                    serializer.Deserialize(inboxMessage.Content, registration.MessageType)
-                    ?? throw new InvalidOperationException(
-                        $"Deserialized message of type '{registration.MessageType.Name}' was null."
-                    );
-
-                await handlerInvoker.InvokeAsync(
-                    registration.HandlerType,
-                    deliveredMessage,
-                    props,
-                    cancellationToken,
-                    _options.HandlerTimeout
-                );
-
-                status.MarkAsCompleted(timeProvider);
-                InboxTelemetry.RecordDelivered(success: true);
-
-                InboxMessageProcessorLog.HandlerCompleted(
-                    logger,
-                    status.HandlerKey,
-                    status.MessageId
-                );
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                InboxMessageProcessorLog.HandlerInterrupted(
-                    logger,
-                    status.HandlerKey,
-                    status.MessageId
-                );
-                deliverActivity?.Dispose();
-                break;
-            }
-            catch (Exception ex)
-            {
-                handlerException = ex;
-                deliverActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                InboxTelemetry.RecordDelivered(success: false);
-                InboxMessageProcessorLog.HandlerFailed(
-                    logger,
-                    status.HandlerKey,
-                    status.MessageId,
-                    status.ErrorCount + 1,
-                    ex
-                );
-                status.MarkAsFailed(
-                    ex.Message,
-                    timeProvider,
-                    _options.MaxRetries,
-                    _options.MaxRetryDelay
-                );
-
-                if (status.IsPoisoned)
-                {
-                    InboxMessageProcessorLog.HandlerPoisoned(
-                        logger,
-                        status.HandlerKey,
-                        status.MessageId,
-                        status.ErrorCount,
-                        ex.Message
-                    );
-                }
-            }
-            finally
-            {
-                deliverActivity?.Dispose();
-            }
-
-            await dbContext.SaveChangesAsync(CancellationToken.None);
-
+        var registration = channelHandlerRegistry.GetInboxRegistrationByKey(status.HandlerKey);
+        if (registration == null)
+        {
+            InboxMessageProcessorLog.HandlerKeyNotRegistered(logger, status.HandlerKey, status.Id);
+            status.MarkAsPoisoned(
+                $"Handler key '{status.HandlerKey}' is not registered. The handler may have been removed or renamed."
+            );
+            InboxTelemetry.RecordPoisoned();
+            await dbContext.SaveChangesAsync(cancellationToken);
             await observers.NotifyAsync(
                 new MessageActivity
                 {
-                    Stage = MessageStage.InboxDispatched,
+                    Stage = MessageStage.InboxPoisoned,
                     Properties = props,
                     SerializedBody = inboxMessage.Content,
-                    Message = deliveredMessage,
-                    MessageType = registration.MessageType,
                     TransportName = inboxMessage.TransportName,
-                    IsSuccess = handlerException == null,
+                    Timestamp = timeProvider.GetUtcNow(),
+                },
+                logger
+            );
+            return true;
+        }
+
+        Activity? deliverActivity = null;
+        Exception? handlerException = null;
+        object? deliveredMessage = null;
+        try
+        {
+            deliverActivity = InboxTelemetry.StartDeliverActivity(props, status.HandlerKey);
+
+            var serializer = serializerResolver.GetSerializer(registration.MessageType);
+            deliveredMessage =
+                serializer.Deserialize(inboxMessage.Content, registration.MessageType)
+                ?? throw new InvalidOperationException(
+                    $"Deserialized message of type '{registration.MessageType.Name}' was null."
+                );
+
+            await handlerInvoker.InvokeAsync(
+                registration.HandlerType,
+                deliveredMessage,
+                props,
+                cancellationToken,
+                _options.HandlerTimeout
+            );
+
+            status.MarkAsCompleted(timeProvider);
+            InboxTelemetry.RecordDelivered(success: true);
+            InboxMessageProcessorLog.HandlerCompleted(logger, status.HandlerKey, status.MessageId);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            InboxMessageProcessorLog.HandlerInterrupted(
+                logger,
+                status.HandlerKey,
+                status.MessageId
+            );
+            deliverActivity?.Dispose();
+            return false;
+        }
+        catch (Exception ex)
+        {
+            handlerException = ex;
+            deliverActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            InboxTelemetry.RecordDelivered(success: false);
+            InboxMessageProcessorLog.HandlerFailed(
+                logger,
+                status.HandlerKey,
+                status.MessageId,
+                status.ErrorCount + 1,
+                ex
+            );
+            status.MarkAsFailed(
+                ex.Message,
+                timeProvider,
+                _options.MaxRetries,
+                _options.MaxRetryDelay
+            );
+
+            if (status.IsPoisoned)
+            {
+                InboxMessageProcessorLog.HandlerPoisoned(
+                    logger,
+                    status.HandlerKey,
+                    status.MessageId,
+                    status.ErrorCount,
+                    ex.Message
+                );
+            }
+        }
+        finally
+        {
+            deliverActivity?.Dispose();
+        }
+
+        await dbContext.SaveChangesAsync(CancellationToken.None);
+
+        await observers.NotifyAsync(
+            new MessageActivity
+            {
+                Stage = MessageStage.InboxDispatched,
+                Properties = props,
+                SerializedBody = inboxMessage.Content,
+                Message = deliveredMessage,
+                MessageType = registration.MessageType,
+                TransportName = inboxMessage.TransportName,
+                IsSuccess = handlerException == null,
+                Exception = handlerException,
+                Timestamp = timeProvider.GetUtcNow(),
+            },
+            logger
+        );
+
+        if (status.IsPoisoned)
+        {
+            InboxTelemetry.RecordPoisoned();
+            await observers.NotifyAsync(
+                new MessageActivity
+                {
+                    Stage = MessageStage.InboxPoisoned,
+                    Properties = props,
+                    SerializedBody = inboxMessage.Content,
+                    TransportName = inboxMessage.TransportName,
                     Exception = handlerException,
                     Timestamp = timeProvider.GetUtcNow(),
                 },
                 logger
             );
-
-            if (status.IsPoisoned)
-            {
-                InboxTelemetry.RecordPoisoned();
-                await observers.NotifyAsync(
-                    new MessageActivity
-                    {
-                        Stage = MessageStage.InboxPoisoned,
-                        Properties = props,
-                        SerializedBody = inboxMessage.Content,
-                        TransportName = inboxMessage.TransportName,
-                        Exception = handlerException,
-                        Timestamp = timeProvider.GetUtcNow(),
-                    },
-                    logger
-                );
-            }
         }
 
-        InboxTelemetry.RecordBatchDuration(batchStartTimestamp);
-
-        return statuses.Length;
+        return true;
     }
 }
 

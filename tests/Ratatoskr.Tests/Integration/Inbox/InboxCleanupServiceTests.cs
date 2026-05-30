@@ -129,7 +129,7 @@ public class InboxCleanupServiceTests(
                 "handler-a",
                 _timeProvider
             );
-            status.MarkAsPoisoned("test failure", _timeProvider);
+            status.MarkAsPoisoned("test failure");
             db.Set<InboxHandlerStatusEntity>().Add(status);
             await db.SaveChangesAsync();
         });

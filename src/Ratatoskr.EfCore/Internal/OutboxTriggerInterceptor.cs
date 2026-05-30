@@ -72,105 +72,110 @@ internal partial class OutboxTriggerInterceptor<TDbContext>(
 
         foreach (var item in stagedItems)
         {
-            var enrichedProperties = enricher.Enrich(item.Message.GetType(), item.Properties);
-            var serializer = serializerResolver.GetSerializer(item.Message.GetType());
-            var serializedMessage = serializer.Serialize(item.Message);
-            enrichedProperties.ContentType = serializer.ContentType;
-
-            if (
-                _options.MaxMessageSize.HasValue
-                && serializedMessage.Length > _options.MaxMessageSize.Value
-            )
-            {
-                throw new InvalidOperationException(
-                    string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"Serialized message of type '{item.Message.GetType().Name}' is {serializedMessage.Length} bytes, which exceeds the configured maximum of {_options.MaxMessageSize.Value} bytes."
-                    )
-                );
-            }
-
-            if (enrichedProperties.Transports.Count == 0)
-            {
-                LogNoTransportsFound(logger, item.Message.GetType());
-                throw new InvalidOperationException(
-                    $"No transports found for message '{item.Message.GetType()}'."
-                );
-            }
-
-            // For EF Core transport with same-DbContext inbox: write inbox entries directly
-            // in this transaction and skip the outbox entry (no need to round-trip through OutboxProcessor).
-            // An outbox entry is still needed if there are cross-DbContext channels.
-            var skipEfCoreOutbox = false;
-            if (
-                enrichedProperties.Transports.Contains(EfCoreTransportConstants.TransportName)
-                && context is IInboxDbContext
-                && enrichedProperties.Type != null
-            )
-            {
-                var (sameDbCreated, hasCrossDbChannels) = CreateSameTransactionInboxEntries(
-                    context,
-                    flags,
-                    enrichedProperties,
-                    serializedMessage
-                );
-                skipEfCoreOutbox = sameDbCreated && !hasCrossDbChannels;
-
-                if (sameDbCreated && hasCrossDbChannels)
-                {
-                    LogTargetsBothSameAndCrossDb(logger, enrichedProperties.Id);
-                }
-
-                if (sameDbCreated)
-                {
-                    await _observers.NotifyAsync(
-                        new MessageActivity
-                        {
-                            Stage = MessageStage.InboxQueued,
-                            Properties = enrichedProperties,
-                            SerializedBody = serializedMessage,
-                            TransportName = EfCoreTransportConstants.TransportName,
-                            Timestamp = timeProvider.GetUtcNow(),
-                        },
-                        logger
-                    );
-                }
-            }
-
-            foreach (var transport in enrichedProperties.Transports)
-            {
-                // Skip outbox entry for EF Core transport when ALL inbox channels are
-                // same-DbContext (entries already created in this transaction).
-                if (transport == EfCoreTransportConstants.TransportName && skipEfCoreOutbox)
-                {
-                    continue;
-                }
-
-                var outboxMessage = OutboxMessageEntity.Create(
-                    serializedMessage,
-                    enrichedProperties,
-                    timeProvider,
-                    transport
-                );
-                context.Set<OutboxMessageEntity>().Add(outboxMessage);
-                flags.OutboxEntitiesStaged = true;
-            }
-
-            await _observers.NotifyAsync(
-                new MessageActivity
-                {
-                    Stage = MessageStage.OutboxStaged,
-                    Properties = enrichedProperties,
-                    SerializedBody = serializedMessage,
-                    Message = item.Message,
-                    MessageType = item.Message.GetType(),
-                    Timestamp = timeProvider.GetUtcNow(),
-                },
-                logger
-            );
+            await StageItemAsync(context, flags, item, cancellationToken);
         }
 
         return result;
+    }
+
+    private async Task StageItemAsync(
+        DbContext context,
+        StagedFlags flags,
+        OutboxStagingCollection.Item item,
+        CancellationToken cancellationToken
+    )
+    {
+        var enrichedProperties = enricher.Enrich(item.Message.GetType(), item.Properties);
+        var serializer = serializerResolver.GetSerializer(item.Message.GetType());
+        var serializedMessage = serializer.Serialize(item.Message);
+        enrichedProperties.ContentType = serializer.ContentType;
+
+        if (
+            _options.MaxMessageSize.HasValue
+            && serializedMessage.Length > _options.MaxMessageSize.Value
+        )
+        {
+            throw new InvalidOperationException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Serialized message of type '{item.Message.GetType().Name}' is {serializedMessage.Length} bytes, which exceeds the configured maximum of {_options.MaxMessageSize.Value} bytes."
+                )
+            );
+        }
+
+        if (enrichedProperties.Transports.Count == 0)
+        {
+            LogNoTransportsFound(logger, item.Message.GetType());
+            throw new InvalidOperationException(
+                $"No transports found for message '{item.Message.GetType()}'."
+            );
+        }
+
+        var skipEfCoreOutbox = false;
+        if (
+            enrichedProperties.Transports.Contains(EfCoreTransportConstants.TransportName)
+            && context is IInboxDbContext
+            && enrichedProperties.Type != null
+        )
+        {
+            var (sameDbCreated, hasCrossDbChannels) = CreateSameTransactionInboxEntries(
+                context,
+                flags,
+                enrichedProperties,
+                serializedMessage
+            );
+            skipEfCoreOutbox = sameDbCreated && !hasCrossDbChannels;
+
+            if (sameDbCreated && hasCrossDbChannels)
+            {
+                LogTargetsBothSameAndCrossDb(logger, enrichedProperties.Id);
+            }
+
+            if (sameDbCreated)
+            {
+                await _observers.NotifyAsync(
+                    new MessageActivity
+                    {
+                        Stage = MessageStage.InboxQueued,
+                        Properties = enrichedProperties,
+                        SerializedBody = serializedMessage,
+                        TransportName = EfCoreTransportConstants.TransportName,
+                        Timestamp = timeProvider.GetUtcNow(),
+                    },
+                    logger
+                );
+            }
+        }
+
+        foreach (var transport in enrichedProperties.Transports)
+        {
+            if (transport == EfCoreTransportConstants.TransportName && skipEfCoreOutbox)
+            {
+                continue;
+            }
+
+            var outboxMessage = OutboxMessageEntity.Create(
+                serializedMessage,
+                enrichedProperties,
+                timeProvider,
+                transport
+            );
+            context.Set<OutboxMessageEntity>().Add(outboxMessage);
+            flags.OutboxEntitiesStaged = true;
+        }
+
+        await _observers.NotifyAsync(
+            new MessageActivity
+            {
+                Stage = MessageStage.OutboxStaged,
+                Properties = enrichedProperties,
+                SerializedBody = serializedMessage,
+                Message = item.Message,
+                MessageType = item.Message.GetType(),
+                Timestamp = timeProvider.GetUtcNow(),
+            },
+            logger
+        );
     }
 
     /// <summary>

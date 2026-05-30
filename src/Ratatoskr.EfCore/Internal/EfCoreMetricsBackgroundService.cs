@@ -115,7 +115,7 @@ internal partial class EfCoreMetricsBackgroundService<TDbContext>(
         );
         state.ContextMetrics.AddOrUpdate(
             _contextName,
-            snapshot,
+            static (_, newSnapshot) => newSnapshot,
             static (_, _, newSnapshot) => newSnapshot,
             snapshot
         );

@@ -319,37 +319,18 @@ internal sealed partial class RabbitMqConsumer(
         {
             // Enforce inbound message size limit
             if (
-                options.MaxInboundMessageSize.HasValue
-                && ea.Body.Length > options.MaxInboundMessageSize.Value
+                await HandleIfOversizedAsync(
+                    channel,
+                    ea,
+                    channelOptions,
+                    queueName,
+                    channelName,
+                    messageId,
+                    ackLock,
+                    cancellationToken
+                )
             )
             {
-                LogOversizedMessageRejected(
-                    logger,
-                    ea.Body.Length,
-                    options.MaxInboundMessageSize.Value,
-                    messageId
-                );
-                if (channelOptions.AutoAck)
-                {
-                    LogOversizedMessageAutoAckError(logger, channelName);
-                    return;
-                }
-                await ackLock.WaitAsync(cancellationToken);
-                try
-                {
-                    await retryHandler.HandleFailureAsync(
-                        channel,
-                        ea,
-                        channelOptions,
-                        queueName,
-                        DispatchResult.PermanentError,
-                        cancellationToken
-                    );
-                }
-                finally
-                {
-                    ackLock.Release();
-                }
                 return;
             }
 
@@ -422,37 +403,18 @@ internal sealed partial class RabbitMqConsumer(
         }
         catch (Exception ex)
         {
-            LogErrorProcessingMessage(logger, ex, messageId);
-
-            errorType = ex.GetType().FullName;
-
-            activity?.SetTag(MessagingSemanticConventions.ErrorType, errorType);
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-
-            if (tags.Count == 0)
-            {
-                tags = telemetry.CreateConsumeFallbackTags(ea, queueName);
-            }
-
-            if (!channelOptions.AutoAck)
-            {
-                await ackLock.WaitAsync(cancellationToken);
-                try
-                {
-                    await retryHandler.HandleFailureAsync(
-                        channel,
-                        ea,
-                        channelOptions,
-                        queueName,
-                        DispatchResult.RecoverableError,
-                        cancellationToken
-                    );
-                }
-                finally
-                {
-                    ackLock.Release();
-                }
-            }
+            (errorType, tags) = await HandleMessageExceptionAsync(
+                channel,
+                ea,
+                channelOptions,
+                queueName,
+                ex,
+                messageId,
+                tags,
+                activity,
+                ackLock,
+                cancellationToken
+            );
         }
         finally
         {
@@ -463,6 +425,102 @@ internal sealed partial class RabbitMqConsumer(
                 telemetry.RecordProcessed(tags, processStartTimestamp, messageTime, errorType);
             }
         }
+    }
+
+    private async Task<bool> HandleIfOversizedAsync(
+        IChannel channel,
+        BasicDeliverEventArgs ea,
+        RabbitMqChannelOptions channelOptions,
+        string queueName,
+        string channelName,
+        string messageId,
+        SemaphoreSlim ackLock,
+        CancellationToken cancellationToken
+    )
+    {
+        if (
+            !options.MaxInboundMessageSize.HasValue
+            || ea.Body.Length <= options.MaxInboundMessageSize.Value
+        )
+        {
+            return false;
+        }
+
+        LogOversizedMessageRejected(
+            logger,
+            ea.Body.Length,
+            options.MaxInboundMessageSize.Value,
+            messageId
+        );
+        if (channelOptions.AutoAck)
+        {
+            LogOversizedMessageAutoAckError(logger, channelName);
+            return true;
+        }
+
+        await ackLock.WaitAsync(cancellationToken);
+        try
+        {
+            await retryHandler.HandleFailureAsync(
+                channel,
+                ea,
+                channelOptions,
+                queueName,
+                DispatchResult.PermanentError,
+                cancellationToken
+            );
+        }
+        finally
+        {
+            ackLock.Release();
+        }
+        return true;
+    }
+
+    private async Task<(string? errorType, TagList tags)> HandleMessageExceptionAsync(
+        IChannel channel,
+        BasicDeliverEventArgs ea,
+        RabbitMqChannelOptions channelOptions,
+        string queueName,
+        Exception ex,
+        string messageId,
+        TagList tags,
+        Activity? activity,
+        SemaphoreSlim ackLock,
+        CancellationToken cancellationToken
+    )
+    {
+        LogErrorProcessingMessage(logger, ex, messageId);
+        var errorType = ex.GetType().FullName;
+        activity?.SetTag(MessagingSemanticConventions.ErrorType, errorType);
+        activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+
+        if (tags.Count == 0)
+        {
+            tags = telemetry.CreateConsumeFallbackTags(ea, queueName);
+        }
+
+        if (!channelOptions.AutoAck)
+        {
+            await ackLock.WaitAsync(cancellationToken);
+            try
+            {
+                await retryHandler.HandleFailureAsync(
+                    channel,
+                    ea,
+                    channelOptions,
+                    queueName,
+                    DispatchResult.RecoverableError,
+                    cancellationToken
+                );
+            }
+            finally
+            {
+                ackLock.Release();
+            }
+        }
+
+        return (errorType, tags);
     }
 
     private async Task HandleDispatchResultAsync(
