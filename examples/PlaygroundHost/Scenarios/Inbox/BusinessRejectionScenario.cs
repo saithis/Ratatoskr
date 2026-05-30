@@ -142,7 +142,6 @@ public sealed class BusinessRejectionScenario : IPlaygroundScenario
             CancellationToken cancellationToken
         ) =>
             IScenarioExtensions.UpdateOrderStatusAsync(
-                null!,
                 context,
                 timeProvider,
                 message.OrderId,

@@ -79,7 +79,6 @@ public static class IScenarioExtensions
     }
 
     public static async Task UpdateOrderStatusAsync(
-        this IScenario scenario,
         PublisherDbContext db,
         TimeProvider time,
         string orderId,
@@ -87,7 +86,6 @@ public static class IScenarioExtensions
         CancellationToken cancellationToken
     )
     {
-        ArgumentNullException.ThrowIfNull(scenario);
         var order = await db.Orders.FirstOrDefaultAsync(
             o => o.Id == Guid.Parse(orderId),
             cancellationToken

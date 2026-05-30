@@ -160,7 +160,6 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
             CancellationToken cancellationToken
         ) =>
             IScenarioExtensions.UpdateOrderStatusAsync(
-                null!,
                 context,
                 timeProvider,
                 message.OrderId,

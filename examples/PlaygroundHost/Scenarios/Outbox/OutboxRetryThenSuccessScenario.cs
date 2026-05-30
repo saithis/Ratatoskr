@@ -147,7 +147,6 @@ public sealed class OutboxRetryThenSuccessScenario : IPlaygroundScenario
             CancellationToken cancellationToken
         ) =>
             IScenarioExtensions.UpdateOrderStatusAsync(
-                null!,
                 context,
                 timeProvider,
                 message.OrderId,

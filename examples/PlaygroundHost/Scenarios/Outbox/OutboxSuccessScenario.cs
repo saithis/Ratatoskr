@@ -138,7 +138,6 @@ public sealed class OutboxSuccessScenario : IPlaygroundScenario
             CancellationToken cancellationToken
         ) =>
             IScenarioExtensions.UpdateOrderStatusAsync(
-                null!,
                 context,
                 timeProvider,
                 message.OrderId,
