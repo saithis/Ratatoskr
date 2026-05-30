@@ -6,6 +6,9 @@ using Ratatoskr.RabbitMq.Extensions;
 
 namespace Ratatoskr.RabbitMq;
 
+/// <summary>
+/// Provisions RabbitMQ exchanges, queues, and bindings based on the Ratatoskr channel registry at application startup.
+/// </summary>
 public partial class RabbitMqTopologyManager(
     ChannelRegistry registry,
     RabbitMqConnectionManager connectionManager,
@@ -16,11 +19,17 @@ public partial class RabbitMqTopologyManager(
         TaskCreationOptions.RunContinuationsAsynchronously
     );
 
+    /// <summary>
+    /// Returns a task that completes when topology provisioning has finished, or faults if provisioning failed.
+    /// </summary>
     public Task WaitForProvisioningAsync(CancellationToken cancellationToken = default)
     {
         return _provisioningTcs.Task.WaitAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// Declares all exchanges, queues, and bindings for registered RabbitMQ channels over a fresh AMQP channel.
+    /// </summary>
     public async Task ProvisionTopologyAsync(CancellationToken cancellationToken)
     {
         try

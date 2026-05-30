@@ -3,13 +3,18 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr.Serializers.Json;
 
+/// <summary>
+/// Serializes and deserializes messages using System.Text.Json.
+/// </summary>
 public sealed class JsonMessageSerializer : IMessageSerializer
 {
     private readonly JsonSerializerOptions? _options;
 
+    /// <summary>Initializes the serializer with default <see cref="JsonSerializerOptions"/>.</summary>
     public JsonMessageSerializer()
         : this(options: null) { }
 
+    /// <summary>Initializes the serializer with the specified <see cref="JsonSerializerOptions"/>.</summary>
     public JsonMessageSerializer(JsonSerializerOptions? options) => _options = options;
 
     /// <inheritdoc/>

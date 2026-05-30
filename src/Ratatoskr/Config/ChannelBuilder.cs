@@ -3,6 +3,9 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr.Config;
 
+/// <summary>
+/// Base class for fluent channel configuration builders.
+/// </summary>
 public abstract class ChannelBuilder(ChannelRegistration channel)
 {
     /// <summary>The underlying channel registration.</summary>

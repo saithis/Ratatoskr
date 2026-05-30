@@ -7,6 +7,9 @@ using Ratatoskr.AsyncApi.Generation;
 
 namespace Ratatoskr.AsyncApi.Extensions;
 
+/// <summary>
+/// Extension methods for mapping the AsyncAPI document endpoint in ASP.NET Core applications.
+/// </summary>
 public static class AsyncApiEndpointExtensions
 {
     private static readonly JsonSerializerOptions _serializerOptions = new()

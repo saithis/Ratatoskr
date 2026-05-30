@@ -92,6 +92,9 @@ public class MessageCollection : IEnumerable<TrackedMessage>
         }
     }
 
+    /// <summary>
+    /// Returns an enumerator that iterates over all tracked messages in this collection.
+    /// </summary>
     public IEnumerator<TrackedMessage> GetEnumerator() => _source().GetEnumerator();
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();

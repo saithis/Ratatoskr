@@ -3,6 +3,9 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr.Testing;
 
+/// <summary>
+/// Extension methods for registering Ratatoskr testing services in the dependency injection container.
+/// </summary>
 public static class ServiceCollectionExtensions
 {
     /// <summary>

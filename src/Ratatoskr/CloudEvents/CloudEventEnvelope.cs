@@ -80,6 +80,7 @@ public sealed class CloudEventEnvelope
     [JsonExtensionData]
     public IDictionary<string, object>? Extensions { get; init; }
 
+    /// <summary>Attempts to retrieve and deserialize a CloudEvents extension attribute by key.</summary>
     public bool TryGetExtension<T>(string keyName, out T? value)
     {
         value = default;

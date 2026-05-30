@@ -1,5 +1,8 @@
 namespace Ratatoskr.Core;
 
+/// <summary>
+/// Serializes and deserializes message payloads for a specific content type.
+/// </summary>
 public interface IMessageSerializer
 {
     /// <summary>

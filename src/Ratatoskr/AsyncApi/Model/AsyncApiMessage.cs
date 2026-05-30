@@ -5,6 +5,9 @@ using Ratatoskr.AsyncApi.Model.Bindings;
 
 namespace Ratatoskr.AsyncApi.Model;
 
+/// <summary>
+/// Represents an AsyncAPI v3 message definition describing the shape of a message on a channel.
+/// </summary>
 [SuppressMessage(
     "Design",
     "CA1002:Do not expose generic lists",
@@ -17,22 +20,27 @@ namespace Ratatoskr.AsyncApi.Model;
 )]
 public sealed class AsyncApiMessage
 {
+    /// <summary>Machine-readable name of the message (typically the CLR type name).</summary>
     [JsonPropertyName("name")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Name { get; set; }
 
+    /// <summary>Human-readable title of the message.</summary>
     [JsonPropertyName("title")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Title { get; set; }
 
+    /// <summary>Short summary of the message's purpose.</summary>
     [JsonPropertyName("summary")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Summary { get; set; }
 
+    /// <summary>Detailed description of the message.</summary>
     [JsonPropertyName("description")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Description { get; set; }
 
+    /// <summary>The content type of the message payload (e.g. "application/json").</summary>
     [JsonPropertyName("contentType")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ContentType { get; set; }
@@ -51,6 +59,7 @@ public sealed class AsyncApiMessage
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public JsonSchema? Headers { get; set; }
 
+    /// <summary>Transport-specific binding information for the message.</summary>
     [JsonPropertyName("bindings")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public MessageBindings? Bindings { get; set; }

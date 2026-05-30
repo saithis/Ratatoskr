@@ -4,8 +4,12 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr.AsyncApi.Extensions;
 
+/// <summary>
+/// Extension methods for configuring AsyncAPI documentation on message builders.
+/// </summary>
 public static class AsyncApiMessageBuilderExtensions
 {
+    /// <summary>Attaches AsyncAPI message-level documentation options to a message builder.</summary>
     public static MessageBuilder WithAsyncApi(
         this MessageBuilder builder,
         Action<AsyncApiMessageOptions> configure

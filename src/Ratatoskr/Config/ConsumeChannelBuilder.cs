@@ -3,6 +3,9 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr.Config;
 
+/// <summary>
+/// Fluent builder for configuring a consume channel and its message handlers.
+/// </summary>
 public sealed class ConsumeChannelBuilder(
     ChannelRegistration channel,
     IServiceCollection services,

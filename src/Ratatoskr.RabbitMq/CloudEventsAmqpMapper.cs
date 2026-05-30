@@ -20,6 +20,9 @@ public partial class CloudEventsAmqpMapper(
     ILogger<CloudEventsAmqpMapper> logger
 ) : IRabbitMqEnvelopeMapper
 {
+    /// <summary>
+    /// Maps outgoing message data and properties onto AMQP basic properties using the configured CloudEvents content mode.
+    /// </summary>
     public byte[] MapOutgoing(
         byte[] serializedData,
         MessageProperties props,
@@ -64,6 +67,9 @@ public partial class CloudEventsAmqpMapper(
         };
     }
 
+    /// <summary>
+    /// Maps an incoming AMQP delivery to raw message bytes and <see cref="MessageProperties"/>, auto-detecting binary or structured CloudEvents content mode.
+    /// </summary>
     public (byte[] body, MessageProperties props) MapIncoming(BasicDeliverEventArgs incoming)
     {
         ArgumentNullException.ThrowIfNull(incoming);

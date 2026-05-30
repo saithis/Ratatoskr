@@ -3,6 +3,9 @@ using Microsoft.Extensions.Hosting;
 
 namespace Ratatoskr.Testing;
 
+/// <summary>
+/// Extension methods for creating message tracking sessions in integration tests.
+/// </summary>
 public static class TrackingExtensions
 {
     /// <summary>
