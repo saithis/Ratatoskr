@@ -237,6 +237,15 @@ internal class OutboxMessageProcessor<TDbContext>(
             }
         }
 
+        return await RecordAndNotifyAsync(message, props, sendException);
+    }
+
+    private async Task<bool> RecordAndNotifyAsync(
+        OutboxMessageEntity message,
+        MessageProperties? props,
+        Exception? sendException
+    )
+    {
         var success = sendException == null && props != null;
         OutboxTelemetry.RecordProcessed(success: success);
 

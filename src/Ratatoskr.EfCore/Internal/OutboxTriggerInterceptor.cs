@@ -72,7 +72,7 @@ internal partial class OutboxTriggerInterceptor<TDbContext>(
 
         foreach (var item in stagedItems)
         {
-            await StageItemAsync(context, flags, item, cancellationToken);
+            await StageItemAsync(context, flags, item);
         }
 
         return result;
@@ -81,8 +81,7 @@ internal partial class OutboxTriggerInterceptor<TDbContext>(
     private async Task StageItemAsync(
         DbContext context,
         StagedFlags flags,
-        OutboxStagingCollection.Item item,
-        CancellationToken cancellationToken
+        OutboxStagingCollection.Item item
     )
     {
         var enrichedProperties = enricher.Enrich(item.Message.GetType(), item.Properties);

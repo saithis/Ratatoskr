@@ -193,76 +193,15 @@ internal class InboxMessageProcessor<TDbContext>(
             return true;
         }
 
-        Activity? deliverActivity = null;
-        Exception? handlerException = null;
-        object? deliveredMessage = null;
-        try
-        {
-            deliverActivity = InboxTelemetry.StartDeliverActivity(props, status.HandlerKey);
-
-            var serializer = serializerResolver.GetSerializer(registration.MessageType);
-            deliveredMessage =
-                serializer.Deserialize(inboxMessage.Content, registration.MessageType)
-                ?? throw new InvalidOperationException(
-                    $"Deserialized message of type '{registration.MessageType.Name}' was null."
-                );
-
-            await handlerInvoker.InvokeAsync(
-                registration.HandlerType,
-                deliveredMessage,
-                props,
-                cancellationToken,
-                _options.HandlerTimeout
-            );
-
-            status.MarkAsCompleted(timeProvider);
-            InboxTelemetry.RecordDelivered(success: true);
-            InboxMessageProcessorLog.HandlerCompleted(logger, status.HandlerKey, status.MessageId);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            InboxMessageProcessorLog.HandlerInterrupted(
-                logger,
-                status.HandlerKey,
-                status.MessageId
-            );
-            deliverActivity?.Dispose();
+        var (shouldContinue, handlerException, deliveredMessage) = await InvokeHandlerAsync(
+            status,
+            inboxMessage,
+            registration,
+            props,
+            cancellationToken
+        );
+        if (!shouldContinue)
             return false;
-        }
-        catch (Exception ex)
-        {
-            handlerException = ex;
-            deliverActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            InboxTelemetry.RecordDelivered(success: false);
-            InboxMessageProcessorLog.HandlerFailed(
-                logger,
-                status.HandlerKey,
-                status.MessageId,
-                status.ErrorCount + 1,
-                ex
-            );
-            status.MarkAsFailed(
-                ex.Message,
-                timeProvider,
-                _options.MaxRetries,
-                _options.MaxRetryDelay
-            );
-
-            if (status.IsPoisoned)
-            {
-                InboxMessageProcessorLog.HandlerPoisoned(
-                    logger,
-                    status.HandlerKey,
-                    status.MessageId,
-                    status.ErrorCount,
-                    ex.Message
-                );
-            }
-        }
-        finally
-        {
-            deliverActivity?.Dispose();
-        }
 
         await dbContext.SaveChangesAsync(CancellationToken.None);
 
@@ -300,6 +239,92 @@ internal class InboxMessageProcessor<TDbContext>(
         }
 
         return true;
+    }
+
+    private async Task<(
+        bool ShouldContinue,
+        Exception? HandlerException,
+        object? DeliveredMessage
+    )> InvokeHandlerAsync(
+        InboxHandlerStatusEntity status,
+        InboxMessageEntity inboxMessage,
+        ChannelHandlerRegistration registration,
+        MessageProperties props,
+        CancellationToken cancellationToken
+    )
+    {
+        Activity? deliverActivity = null;
+        Exception? handlerException = null;
+        object? deliveredMessage = null;
+        try
+        {
+            deliverActivity = InboxTelemetry.StartDeliverActivity(props, status.HandlerKey);
+
+            var serializer = serializerResolver.GetSerializer(registration.MessageType);
+            deliveredMessage =
+                serializer.Deserialize(inboxMessage.Content, registration.MessageType)
+                ?? throw new InvalidOperationException(
+                    $"Deserialized message of type '{registration.MessageType.Name}' was null."
+                );
+
+            await handlerInvoker.InvokeAsync(
+                registration.HandlerType,
+                deliveredMessage,
+                props,
+                cancellationToken,
+                _options.HandlerTimeout
+            );
+
+            status.MarkAsCompleted(timeProvider);
+            InboxTelemetry.RecordDelivered(success: true);
+            InboxMessageProcessorLog.HandlerCompleted(logger, status.HandlerKey, status.MessageId);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            InboxMessageProcessorLog.HandlerInterrupted(
+                logger,
+                status.HandlerKey,
+                status.MessageId
+            );
+            deliverActivity?.Dispose();
+            return (false, null, null);
+        }
+        catch (Exception ex)
+        {
+            handlerException = ex;
+            deliverActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            InboxTelemetry.RecordDelivered(success: false);
+            InboxMessageProcessorLog.HandlerFailed(
+                logger,
+                status.HandlerKey,
+                status.MessageId,
+                status.ErrorCount + 1,
+                ex
+            );
+            status.MarkAsFailed(
+                ex.Message,
+                timeProvider,
+                _options.MaxRetries,
+                _options.MaxRetryDelay
+            );
+
+            if (status.IsPoisoned)
+            {
+                InboxMessageProcessorLog.HandlerPoisoned(
+                    logger,
+                    status.HandlerKey,
+                    status.MessageId,
+                    status.ErrorCount,
+                    ex.Message
+                );
+            }
+        }
+        finally
+        {
+            deliverActivity?.Dispose();
+        }
+
+        return (true, handlerException, deliveredMessage);
     }
 }
 

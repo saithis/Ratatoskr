@@ -186,7 +186,7 @@ public partial class RabbitMqTopologyManager(
     private async Task ProvisionRetryTopologyAsync(
         IChannel channel,
         string queueName,
-        IDictionary<string, object?> mainQueueArgs,
+        Dictionary<string, object?> mainQueueArgs,
         RabbitMqChannelOptions channelOpts,
         CancellationToken token
     )
