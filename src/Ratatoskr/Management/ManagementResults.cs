@@ -3,7 +3,9 @@ using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace Ratatoskr.Management;
 
+#pragma warning disable MA0182 // used by Ratatoskr.EfCore via InternalsVisibleTo
 internal static class ManagementResults
+#pragma warning restore MA0182
 {
     internal const string ProblemTypeBase = "https://saithis.github.io/Ratatoskr/problems/";
 
