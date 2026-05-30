@@ -107,17 +107,15 @@ internal static partial class ListPoisonedOutboxEndpoint
             items.RemoveAt(items.Count - 1);
         }
 
-        var dtos = items
-            .Select(x => new OutboxPoisonedListItem(
-                x.Id,
-                ManagementHelpers.ExtractType(x.SerializedProperties, logger),
-                x.CreatedAt,
-                x.ErrorCount,
-                x.RequeuedCount,
-                string.IsNullOrEmpty(x.Error) ? null : x.Error,
-                contextName
-            ))
-            .ToList();
+        var dtos = items.ConvertAll(x => new OutboxPoisonedListItem(
+            x.Id,
+            ManagementHelpers.ExtractType(x.SerializedProperties, logger),
+            x.CreatedAt,
+            x.ErrorCount,
+            x.RequeuedCount,
+            string.IsNullOrEmpty(x.Error) ? null : x.Error,
+            contextName
+        ));
 
         var nextCursor = hasNext ? CursorHelper.Encode(items[^1].CreatedAt, items[^1].Id) : null;
 

@@ -23,11 +23,11 @@ public sealed class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncD
 
         if (enablePublisherConfirms)
         {
-            var options = new CreateChannelOptions(
+            var channelOptions = new CreateChannelOptions(
                 publisherConfirmationsEnabled: true,
                 publisherConfirmationTrackingEnabled: true
             );
-            return await connection.CreateChannelAsync(options, cancellationToken);
+            return await connection.CreateChannelAsync(channelOptions, cancellationToken);
         }
 
         return await connection.CreateChannelAsync(cancellationToken: cancellationToken);

@@ -109,18 +109,17 @@ internal static partial class ListPoisonedInboxEndpoint
             rows.RemoveAt(rows.Count - 1);
         }
 
-        var dtos = rows.Select(x => new InboxPoisonedListItem(
-                x.Id,
-                x.MessageId,
-                ManagementHelpers.ExtractType(x.SerializedProperties, logger),
-                x.HandlerKey,
-                x.ReceivedAt,
-                x.ErrorCount,
-                x.RequeuedCount,
-                string.IsNullOrEmpty(x.LastError) ? null : x.LastError,
-                contextName
-            ))
-            .ToList();
+        var dtos = rows.ConvertAll(x => new InboxPoisonedListItem(
+            x.Id,
+            x.MessageId,
+            ManagementHelpers.ExtractType(x.SerializedProperties, logger),
+            x.HandlerKey,
+            x.ReceivedAt,
+            x.ErrorCount,
+            x.RequeuedCount,
+            string.IsNullOrEmpty(x.LastError) ? null : x.LastError,
+            contextName
+        ));
 
         var nextCursor = hasNext ? CursorHelper.Encode(rows[^1].ReceivedAt, rows[^1].Id) : null;
 
