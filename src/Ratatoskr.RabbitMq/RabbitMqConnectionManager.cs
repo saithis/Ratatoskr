@@ -145,7 +145,7 @@ public sealed class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncD
         {
             if (_sendChannel.IsOpen)
             {
-                await _sendChannel.CloseAsync();
+                await _sendChannel.CloseAsync(CancellationToken.None);
             }
 
             _sendChannel.Dispose();
@@ -153,7 +153,7 @@ public sealed class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncD
         }
         if (_connection != null)
         {
-            await _connection.CloseAsync();
+            await _connection.CloseAsync(CancellationToken.None);
             _connection.Dispose();
             _connection = null;
         }

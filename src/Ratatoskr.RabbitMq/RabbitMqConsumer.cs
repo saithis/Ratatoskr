@@ -266,7 +266,7 @@ internal sealed partial class RabbitMqConsumer(
             {
                 if (channel.IsOpen)
                 {
-                    await channel.CloseAsync();
+                    await channel.CloseAsync(CancellationToken.None);
                 }
 
                 channel.Dispose();

@@ -98,7 +98,7 @@ public class MessageTracker : IMessageActivityObserver
         {
             foreach (var waiter in _waiters)
             {
-                waiter.Completion.TrySetCanceled();
+                waiter.Completion.TrySetCanceled(waiter.Cts.Token);
                 waiter.Cts.Dispose();
             }
 

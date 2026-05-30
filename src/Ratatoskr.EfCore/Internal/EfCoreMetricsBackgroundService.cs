@@ -44,7 +44,7 @@ internal partial class EfCoreMetricsBackgroundService<TDbContext>(
 
     internal async Task UpdateMetricsAsync(CancellationToken stoppingToken)
     {
-        using var scope = serviceProvider.CreateScope();
+        await using var scope = serviceProvider.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<TDbContext>();
 
         dbContext.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
@@ -113,7 +113,12 @@ internal partial class EfCoreMetricsBackgroundService<TDbContext>(
             pendingInbox,
             poisonedInbox
         );
-        state.ContextMetrics.AddOrUpdate(_contextName, snapshot, (_, _) => snapshot);
+        state.ContextMetrics.AddOrUpdate(
+            _contextName,
+            snapshot,
+            static (_, _, newSnapshot) => newSnapshot,
+            snapshot
+        );
     }
 
     private async Task<long> CountAsync(
