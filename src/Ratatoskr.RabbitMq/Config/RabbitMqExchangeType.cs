@@ -9,16 +9,16 @@ namespace Ratatoskr.RabbitMq.Config;
 public enum RabbitMqExchangeType
 {
     /// <summary>Topic exchange with pattern-based routing (e.g. "order.*").</summary>
-    Topic,
+    Topic = 0,
 
     /// <summary>Direct exchange with exact routing key matching.</summary>
-    Direct,
+    Direct = 1,
 
     /// <summary>Fanout exchange that broadcasts to all bound queues.</summary>
-    Fanout,
+    Fanout = 2,
 
     /// <summary>Headers exchange that routes based on message headers.</summary>
-    Headers,
+    Headers = 3,
 }
 
 internal static class RabbitMqExchangeTypeExtensions

@@ -80,10 +80,8 @@ public partial class CloudEventsAmqpMapper(
         {
             return MapStructuredModeIncoming(incoming);
         }
-        else
-        {
-            return MapBinaryModeIncoming(incoming);
-        }
+
+        return MapBinaryModeIncoming(incoming);
     }
 
     private static byte[] MapBinaryMode(

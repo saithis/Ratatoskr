@@ -129,7 +129,6 @@ internal sealed partial class RabbitMqConsumer(
                     return;
                 }
                 _ = DispatchAfterGateAsync();
-                return;
 
                 async Task DispatchAfterGateAsync()
                 {

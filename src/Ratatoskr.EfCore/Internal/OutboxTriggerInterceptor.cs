@@ -23,9 +23,11 @@ internal partial class OutboxTriggerInterceptor<TDbContext>(
     private readonly OutboxOptions _options = optionsHolder.Options;
     private readonly IMessageActivityObserver[] _observers = [.. observers];
 
-    // Per-DbContext state for flags set in SavingChangesAsync and read in SavedChangesAsync.
-    // ConditionalWeakTable ensures no memory leak — entries are collected when the DbContext is GC'd.
-    // This is safe for a singleton interceptor shared across concurrent SaveChanges calls.
+    /// <summary>
+    /// Per-DbContext state for flags set in SavingChangesAsync and read in SavedChangesAsync.
+    /// ConditionalWeakTable ensures no memory leak -- entries are collected when the DbContext is GC'd.
+    /// This is safe for a singleton interceptor shared across concurrent SaveChanges calls.
+    /// </summary>
     private static readonly ConditionalWeakTable<DbContext, StagedFlags> PerContextFlags = new();
 
     private sealed class StagedFlags
