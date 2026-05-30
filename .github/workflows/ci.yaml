@@ -38,7 +38,7 @@ jobs:
 
     - name: Build
       # builds with the Release configuration for better optimization
-      run: dotnet build --no-restore --configuration Release
+      run: dotnet build --no-restore --configuration Release -warnaserror
 
     - name: Install dotnet-coverage
       run: dotnet tool install --global dotnet-coverage
