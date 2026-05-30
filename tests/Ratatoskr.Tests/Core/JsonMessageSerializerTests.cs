@@ -83,7 +83,7 @@ public class JsonMessageSerializerTests
         var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testEvent));
 
         // Act
-        var result = deserializer.Deserialize(body, typeof(TestEvent));
+        var result = deserializer.Deserialize<TestEvent>(body);
 
         // Assert
         result.Should().NotBeNull();

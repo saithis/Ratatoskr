@@ -128,7 +128,7 @@ public partial class RabbitMqTopologyManager(
                 $"Queue name must be specified for consumer channel '{reg.ChannelName}'"
             );
 
-        IDictionary<string, object?> queueArgs = new Dictionary<string, object?>(
+        Dictionary<string, object?> queueArgs = new(
             channelOpts.QueueArguments,
             StringComparer.Ordinal
         );

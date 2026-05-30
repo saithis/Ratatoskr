@@ -45,18 +45,16 @@ internal static class GetInboxMessageHandlersEndpoint
             .ToListAsync(ct);
 
         var msgType = msg.GetProperties().Type ?? "(unknown)";
-        var summaries = handlers
-            .Select(h => new InboxHandlerStatusSummary(
-                h.Id,
-                h.HandlerKey,
-                h.ErrorCount,
-                h.RequeuedCount,
-                string.IsNullOrEmpty(h.LastError) ? null : h.LastError,
-                h.IsPoisoned,
-                h.CompletedAt.HasValue,
-                contextName
-            ))
-            .ToList();
+        var summaries = handlers.ConvertAll(h => new InboxHandlerStatusSummary(
+            h.Id,
+            h.HandlerKey,
+            h.ErrorCount,
+            h.RequeuedCount,
+            string.IsNullOrEmpty(h.LastError) ? null : h.LastError,
+            h.IsPoisoned,
+            h.CompletedAt.HasValue,
+            contextName
+        ));
 
         return TypedResults.Ok(
             new InboxMessageHandlers(messageId, msgType, msg.ReceivedAt, summaries)
