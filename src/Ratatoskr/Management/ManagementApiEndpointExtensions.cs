@@ -6,6 +6,9 @@ using Microsoft.Extensions.Options;
 
 namespace Ratatoskr.Management;
 
+/// <summary>
+/// Extension methods for mapping Ratatoskr management API endpoints in ASP.NET Core applications.
+/// </summary>
 public static class ManagementApiEndpointExtensions
 {
     /// <summary>

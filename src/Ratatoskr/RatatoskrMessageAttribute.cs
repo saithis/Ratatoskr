@@ -16,6 +16,7 @@ public sealed class RatatoskrMessageAttribute : Attribute
     /// </summary>
     public string? DataSchema { get; set; }
 
+    /// <summary>Initializes the attribute with the required CloudEvents type identifier.</summary>
     public RatatoskrMessageAttribute(string type)
     {
         if (string.IsNullOrWhiteSpace(type))

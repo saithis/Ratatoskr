@@ -2,6 +2,9 @@ using Ratatoskr.Config;
 
 namespace Ratatoskr.EfCore;
 
+/// <summary>
+/// Extension methods for configuring EF Core as a publish channel transport.
+/// </summary>
 public static class EfCoreChannelExtensions
 {
     extension(PublishChannelBuilder builder)

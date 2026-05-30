@@ -7,8 +7,12 @@ using Ratatoskr.Serializers.Json;
 
 namespace Ratatoskr;
 
+/// <summary>
+/// Extension methods for registering Ratatoskr services in the DI container.
+/// </summary>
 public static class ServiceCollectionExtensions
 {
+    /// <summary>Registers all Ratatoskr core services and applies the provided channel/transport configuration.</summary>
     public static IServiceCollection AddRatatoskr(
         this IServiceCollection services,
         Action<RatatoskrBuilder>? configure = null

@@ -5,6 +5,9 @@ using Ratatoskr.RabbitMq.Config;
 
 namespace Ratatoskr.RabbitMq.Extensions;
 
+/// <summary>
+/// Extension methods for configuring RabbitMQ transport on channel registrations and builders.
+/// </summary>
 [SuppressMessage(
     "Naming",
     "CA1708:Identifiers should differ by more than case",
@@ -14,9 +17,15 @@ public static class RabbitMqChannelExtensions
 {
     extension(ChannelRegistration registration)
     {
+        /// <summary>
+        /// Returns <see langword="true"/> if this channel has RabbitMQ transport options attached.
+        /// </summary>
         public bool IsRabbitMqChannel() =>
             registration.GetExtension<RabbitMqChannelOptions>() != null;
 
+        /// <summary>
+        /// Returns the <see cref="RabbitMqChannelOptions"/> attached to this channel registration, or <see langword="null"/> if not configured.
+        /// </summary>
         public RabbitMqChannelOptions? GetRabbitMqChannelOptions() =>
             registration.GetExtension<RabbitMqChannelOptions>();
     }

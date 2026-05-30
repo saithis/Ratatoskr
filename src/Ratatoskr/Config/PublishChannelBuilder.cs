@@ -2,6 +2,9 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr.Config;
 
+/// <summary>
+/// Fluent builder for configuring a publish channel and its outgoing message types.
+/// </summary>
 public sealed class PublishChannelBuilder(ChannelRegistration channel) : ChannelBuilder(channel)
 {
     /// <summary>

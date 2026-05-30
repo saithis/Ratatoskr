@@ -20,6 +20,9 @@ public class RabbitMqAsyncApiBindingProvider(
 {
     private const string ServerName = "rabbitmq";
 
+    /// <summary>
+    /// Adds the RabbitMQ server entry to the AsyncAPI document and links it to all RabbitMQ channels.
+    /// </summary>
     public void ConfigureServers(
         AsyncApiDocument document,
         IEnumerable<ChannelRegistration> channels
@@ -59,6 +62,9 @@ public class RabbitMqAsyncApiBindingProvider(
         }
     }
 
+    /// <summary>
+    /// Adds AMQP exchange (and optionally queue) bindings to the AsyncAPI channel entry for a RabbitMQ channel.
+    /// </summary>
     public void ConfigureChannel(ChannelRegistration channel, AsyncApiDocument document)
     {
         ArgumentNullException.ThrowIfNull(channel);
@@ -100,6 +106,9 @@ public class RabbitMqAsyncApiBindingProvider(
         }
     }
 
+    /// <summary>
+    /// Adds AMQP operation bindings (delivery mode, routing keys, ack mode) to the AsyncAPI operation for a RabbitMQ channel.
+    /// </summary>
     public void ConfigureOperation(ChannelRegistration channel, AsyncApiOperation operation)
     {
         ArgumentNullException.ThrowIfNull(channel);
@@ -138,6 +147,9 @@ public class RabbitMqAsyncApiBindingProvider(
         operation.Bindings = new OperationBindings { Amqp = binding };
     }
 
+    /// <summary>
+    /// Adds AMQP message bindings and, for binary-mode CloudEvents, the application-properties headers schema.
+    /// </summary>
     public void ConfigureMessage(
         MessageRegistration message,
         ChannelRegistration channel,

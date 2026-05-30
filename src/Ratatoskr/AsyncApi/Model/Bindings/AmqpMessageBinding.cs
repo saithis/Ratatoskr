@@ -2,6 +2,9 @@ using System.Text.Json.Serialization;
 
 namespace Ratatoskr.AsyncApi.Model.Bindings;
 
+/// <summary>
+/// Container for transport-specific message binding definitions.
+/// </summary>
 public sealed class MessageBindings
 {
     /// <summary>
@@ -12,6 +15,9 @@ public sealed class MessageBindings
     public AmqpMessageBinding? Amqp { get; set; }
 }
 
+/// <summary>
+/// AMQP-specific message binding properties.
+/// </summary>
 public sealed class AmqpMessageBinding
 {
     /// <summary>

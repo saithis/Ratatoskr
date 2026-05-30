@@ -2,6 +2,9 @@ using RabbitMQ.Client;
 
 namespace Ratatoskr.RabbitMq;
 
+/// <summary>
+/// Manages the lifecycle of the AMQP connection and shared send channel used by RabbitMQ transport.
+/// </summary>
 public sealed class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncDisposable
 {
     private readonly SemaphoreSlim _connectionLock = new(1, 1);
@@ -14,6 +17,9 @@ public sealed class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncD
     /// </summary>
     public bool IsConnected => _connection is { IsOpen: true };
 
+    /// <summary>
+    /// Creates and returns a new dedicated AMQP channel, optionally with publisher confirms enabled.
+    /// </summary>
     public async Task<IChannel> CreateChannelAsync(
         bool enablePublisherConfirms,
         CancellationToken cancellationToken = default
@@ -139,6 +145,9 @@ public sealed class RabbitMqConnectionManager(RabbitMqOptions options) : IAsyncD
         };
     }
 
+    /// <summary>
+    /// Closes and disposes the shared send channel and the underlying AMQP connection.
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
         if (_sendChannel != null)

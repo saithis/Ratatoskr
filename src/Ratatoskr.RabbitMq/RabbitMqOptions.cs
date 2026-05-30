@@ -1,5 +1,8 @@
 namespace Ratatoskr.RabbitMq;
 
+/// <summary>
+/// Configuration options for the RabbitMQ transport, including connection string, publisher confirms, and shutdown behaviour.
+/// </summary>
 public class RabbitMqOptions
 {
     /// <summary>

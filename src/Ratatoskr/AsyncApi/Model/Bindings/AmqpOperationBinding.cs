@@ -3,6 +3,9 @@ using System.Text.Json.Serialization;
 
 namespace Ratatoskr.AsyncApi.Model.Bindings;
 
+/// <summary>
+/// Container for transport-specific operation binding definitions.
+/// </summary>
 public sealed class OperationBindings
 {
     /// <summary>
@@ -13,6 +16,9 @@ public sealed class OperationBindings
     public AmqpOperationBinding? Amqp { get; set; }
 }
 
+/// <summary>
+/// AMQP-specific operation binding properties controlling message delivery behavior.
+/// </summary>
 [SuppressMessage(
     "Design",
     "CA1002:Do not expose generic lists",

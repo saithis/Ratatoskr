@@ -31,10 +31,12 @@ public sealed class JsonSchema
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public object? Type { get; set; }
 
+    /// <summary>JSON Schema format hint (e.g. "date-time", "uuid").</summary>
     [JsonPropertyName("format")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Format { get; set; }
 
+    /// <summary>Human-readable description of the schema or property.</summary>
     [JsonPropertyName("description")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Description { get; set; }
@@ -44,22 +46,27 @@ public sealed class JsonSchema
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<JsonSchema>? OneOf { get; set; }
 
+    /// <summary>List of property names that are required in the object.</summary>
     [JsonPropertyName("required")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? Required { get; set; }
 
+    /// <summary>Named property schemas for an object type.</summary>
     [JsonPropertyName("properties")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Dictionary<string, JsonSchema>? Properties { get; set; }
 
+    /// <summary>Schema for additional (unspecified) properties of an object.</summary>
     [JsonPropertyName("additionalProperties")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public JsonSchema? AdditionalProperties { get; set; }
 
+    /// <summary>Schema for items in an array type.</summary>
     [JsonPropertyName("items")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public JsonSchema? Items { get; set; }
 
+    /// <summary>The set of allowed values for this property.</summary>
     [JsonPropertyName("enum")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<object>? Enum { get; set; }
@@ -74,22 +81,27 @@ public sealed class JsonSchema
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? XEnumVarnames { get; set; }
 
+    /// <summary>Maximum allowed string length.</summary>
     [JsonPropertyName("maxLength")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? MaxLength { get; set; }
 
+    /// <summary>Minimum allowed string length.</summary>
     [JsonPropertyName("minLength")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? MinLength { get; set; }
 
+    /// <summary>Minimum allowed numeric value (inclusive).</summary>
     [JsonPropertyName("minimum")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public double? Minimum { get; set; }
 
+    /// <summary>Maximum allowed numeric value (inclusive).</summary>
     [JsonPropertyName("maximum")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public double? Maximum { get; set; }
 
+    /// <summary>Regular expression pattern that the string value must match.</summary>
     [JsonPropertyName("pattern")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Pattern { get; set; }

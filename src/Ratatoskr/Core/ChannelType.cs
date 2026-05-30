@@ -1,5 +1,8 @@
 namespace Ratatoskr.Core;
 
+/// <summary>
+/// Describes the intent of a channel — whether it publishes or consumes, and whether it carries events or commands.
+/// </summary>
 public enum ChannelType
 {
     /// <summary>

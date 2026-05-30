@@ -2,6 +2,9 @@ using System.Text.Json.Serialization;
 
 namespace Ratatoskr.AsyncApi.Model.Bindings;
 
+/// <summary>
+/// Container for transport-specific channel binding definitions.
+/// </summary>
 public sealed class ChannelBindings
 {
     /// <summary>
@@ -12,6 +15,9 @@ public sealed class ChannelBindings
     public AmqpChannelBinding? Amqp { get; set; }
 }
 
+/// <summary>
+/// AMQP-specific channel binding properties describing the exchange or queue configuration.
+/// </summary>
 public sealed class AmqpChannelBinding
 {
     /// <summary>
@@ -41,6 +47,9 @@ public sealed class AmqpChannelBinding
     public string BindingVersion { get; set; } = "0.3.0";
 }
 
+/// <summary>
+/// Defines the AMQP exchange properties for a routing-key-based channel.
+/// </summary>
 public sealed class AmqpExchangeDefinition
 {
     /// <summary>
@@ -79,6 +88,9 @@ public sealed class AmqpExchangeDefinition
     public string? VHost { get; set; }
 }
 
+/// <summary>
+/// Defines the AMQP queue properties for a queue-based channel.
+/// </summary>
 public sealed class AmqpQueueDefinition
 {
     /// <summary>

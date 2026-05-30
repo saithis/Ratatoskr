@@ -1,5 +1,8 @@
 namespace Ratatoskr.Core;
 
+/// <summary>
+/// Carries all metadata associated with a message during publish and consume operations.
+/// </summary>
 public sealed class MessageProperties
 {
     /// <summary>

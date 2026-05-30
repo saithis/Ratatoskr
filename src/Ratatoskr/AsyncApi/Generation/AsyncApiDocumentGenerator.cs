@@ -27,6 +27,7 @@ public sealed partial class AsyncApiDocumentGenerator(
     [GeneratedRegex(@"(?<=[a-z])([A-Z])|(?<=[A-Z])([A-Z][a-z])")]
     private static partial Regex SentenceCasePattern { get; }
 
+    /// <summary>Generates the AsyncAPI v3 document from the registered channels and configuration.</summary>
     public AsyncApiDocument Generate()
     {
         var schemas = new Dictionary<string, JsonSchema>(StringComparer.Ordinal);

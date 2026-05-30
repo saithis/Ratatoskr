@@ -15,6 +15,7 @@ public sealed class MessageRouter(
 {
     private readonly IMessageRouteInterceptor[] _interceptors = [.. interceptors];
 
+    /// <summary>Routes an incoming message through all interceptors and then dispatches it to registered handlers.</summary>
     public async Task<DispatchResult> RouteAsync(
         byte[] body,
         MessageProperties properties,

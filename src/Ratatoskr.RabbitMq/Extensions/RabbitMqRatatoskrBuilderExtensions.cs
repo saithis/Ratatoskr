@@ -8,8 +8,14 @@ using Ratatoskr.RabbitMq.Management;
 
 namespace Ratatoskr.RabbitMq.Extensions;
 
+/// <summary>
+/// Extension methods for registering RabbitMQ transport with the Ratatoskr builder.
+/// </summary>
 public static class RabbitMqRatatoskrBuilderExtensions
 {
+    /// <summary>
+    /// Registers all RabbitMQ services (connection, topology, producer, consumer, AsyncAPI bindings) with the Ratatoskr pipeline.
+    /// </summary>
     public static RatatoskrBuilder UseRabbitMq(
         this RatatoskrBuilder builder,
         Action<RabbitMqOptions> configure

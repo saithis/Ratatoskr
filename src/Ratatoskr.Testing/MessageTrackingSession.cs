@@ -215,6 +215,9 @@ public sealed class MessageTrackingSession : IAsyncDisposable
         return collection;
     }
 
+    /// <summary>
+    /// Stops the tracking activity and restores the previous ambient activity.
+    /// </summary>
     public ValueTask DisposeAsync()
     {
         if (_disposed)

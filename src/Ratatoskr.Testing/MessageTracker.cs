@@ -14,6 +14,9 @@ public class MessageTracker : IMessageActivityObserver
     private readonly List<Waiter> _waiters = new();
     private readonly Lock _lock = new();
 
+    /// <summary>
+    /// Records a message activity and notifies any registered waiters.
+    /// </summary>
     public ValueTask OnMessageActivityAsync(MessageActivity activity)
     {
         ArgumentNullException.ThrowIfNull(activity);

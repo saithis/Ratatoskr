@@ -7,8 +7,12 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr;
 
+/// <summary>
+/// Fluent builder for configuring the Ratatoskr messaging infrastructure, channels, and serialization.
+/// </summary>
 public sealed class RatatoskrBuilder
 {
+    /// <summary>The service collection used to register Ratatoskr DI services.</summary>
     public IServiceCollection Services { get; }
     internal CloudEventsOptions CloudEventsOptions { get; } = new();
     internal AsyncApiOptions AsyncApiOptions { get; } = new();
@@ -66,6 +70,7 @@ public sealed class RatatoskrBuilder
         }
     }
 
+    /// <summary>Registers a channel on which this service publishes domain events.</summary>
     public RatatoskrBuilder AddEventPublishChannel(
         string channelName,
         Action<PublishChannelBuilder> configure
@@ -75,6 +80,7 @@ public sealed class RatatoskrBuilder
         return AddPublishChannel(channelName, ChannelType.EventPublish, configure);
     }
 
+    /// <summary>Registers a channel on which this service sends commands to another service.</summary>
     public RatatoskrBuilder AddCommandPublishChannel(
         string channelName,
         Action<PublishChannelBuilder> configure
@@ -84,6 +90,7 @@ public sealed class RatatoskrBuilder
         return AddPublishChannel(channelName, ChannelType.CommandPublish, configure);
     }
 
+    /// <summary>Registers a channel from which this service consumes commands.</summary>
     public RatatoskrBuilder AddCommandConsumeChannel(
         string channelName,
         Action<ConsumeChannelBuilder> configure
@@ -93,6 +100,7 @@ public sealed class RatatoskrBuilder
         return AddConsumeChannel(channelName, ChannelType.CommandConsume, configure);
     }
 
+    /// <summary>Registers a channel from which this service consumes events published by another service.</summary>
     public RatatoskrBuilder AddEventConsumeChannel(
         string channelName,
         Action<ConsumeChannelBuilder> configure
