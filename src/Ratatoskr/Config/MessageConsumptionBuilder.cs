@@ -43,7 +43,7 @@ public sealed class MessageConsumptionBuilder<TMessage>
         ArgumentNullException.ThrowIfNull(legacyKeys);
         foreach (var legacyKey in legacyKeys)
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(legacyKey);
+            ArgumentException.ThrowIfNullOrWhiteSpace(legacyKey, nameof(legacyKeys));
         }
         AddHandler<THandler>(isInbox: true, inboxKey: stableKey, legacyKeys: legacyKeys);
         return this;
