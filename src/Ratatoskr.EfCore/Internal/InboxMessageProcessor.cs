@@ -121,10 +121,7 @@ internal class InboxMessageProcessor<TDbContext>(
             if (!messages.TryGetValue(status.MessageId, out var inboxMessage))
             {
                 InboxMessageProcessorLog.MessageNotFound(logger, status.MessageId, status.Id);
-                status.MarkAsPoisoned(
-                    "InboxMessage record not found — likely deleted.",
-                    timeProvider
-                );
+                status.MarkAsPoisoned("InboxMessage record not found -- likely deleted.");
                 InboxTelemetry.RecordPoisoned();
                 await dbContext.SaveChangesAsync(cancellationToken);
                 continue;
@@ -143,10 +140,7 @@ internal class InboxMessageProcessor<TDbContext>(
                     status.Id,
                     ex
                 );
-                status.MarkAsPoisoned(
-                    $"Properties deserialization failed: {ex.Message}",
-                    timeProvider
-                );
+                status.MarkAsPoisoned($"Properties deserialization failed: {ex.Message}");
                 InboxTelemetry.RecordPoisoned();
                 await dbContext.SaveChangesAsync(cancellationToken);
                 continue;
@@ -161,8 +155,7 @@ internal class InboxMessageProcessor<TDbContext>(
                     status.Id
                 );
                 status.MarkAsPoisoned(
-                    $"Handler key '{status.HandlerKey}' is not registered. The handler may have been removed or renamed.",
-                    timeProvider
+                    $"Handler key '{status.HandlerKey}' is not registered. The handler may have been removed or renamed."
                 );
                 InboxTelemetry.RecordPoisoned();
                 await dbContext.SaveChangesAsync(cancellationToken);

@@ -116,7 +116,7 @@ internal sealed partial class RabbitMqConsumer(
             };
 
             var consumer = new AsyncEventingBasicConsumer(channel);
-            consumer.ReceivedAsync += async (notNeededParam, ea) =>
+            consumer.ReceivedAsync += async (_, ea) =>
             {
                 Interlocked.Increment(ref _inFlightHandlers);
                 try
