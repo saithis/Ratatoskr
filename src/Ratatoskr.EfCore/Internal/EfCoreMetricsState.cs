@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Runtime.InteropServices;
 using Microsoft.EntityFrameworkCore;
 
 namespace Ratatoskr.EfCore.Internal;
@@ -6,6 +7,7 @@ namespace Ratatoskr.EfCore.Internal;
 /// <summary>
 /// Immutable snapshot of backlog counts for one DbContext (one scrape reads a consistent tuple).
 /// </summary>
+[StructLayout(LayoutKind.Auto)]
 internal readonly record struct DbContextMetrics(
     long PendingOutboxCount,
     long PoisonedOutboxCount,
