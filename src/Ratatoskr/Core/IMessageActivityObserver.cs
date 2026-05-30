@@ -78,7 +78,9 @@ public sealed class MessageActivity
     /// The serialized message body (raw bytes). May be null for some stages.
     /// At the Sent stage, this is the exact bytes sent to the transport (including CloudEvents envelope in structured mode).
     /// </summary>
+#pragma warning disable CA1819 // byte[] is intentional: callers use it directly with Encoding.GetString and similar APIs
     public byte[]? SerializedBody { get; init; }
+#pragma warning restore CA1819
 
     /// <summary>
     /// The deserialized message object. Available at Published, OutboxStaged, and Dispatched stages.

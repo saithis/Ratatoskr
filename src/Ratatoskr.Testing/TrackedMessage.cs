@@ -20,7 +20,9 @@ public class TrackedMessage
     /// <summary>
     /// The raw serialized body bytes. At the Sent stage, this is the exact bytes on the wire.
     /// </summary>
+#pragma warning disable CA1819 // byte[] is intentional: callers use it directly with Encoding.GetString and similar APIs
     public byte[]? RawBody => Activity.SerializedBody;
+#pragma warning restore CA1819
 
     /// <summary>
     /// The dispatch result. Only set at the Dispatched stage.
