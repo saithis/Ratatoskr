@@ -31,9 +31,9 @@ public sealed partial class MessageDispatcher(
     public async Task<DispatchResult> DispatchAsync(
         byte[] body,
         MessageProperties properties,
-        CancellationToken cancellationToken,
         string channelName,
-        string transportName
+        string transportName,
+        CancellationToken cancellationToken = default
     )
     {
         ArgumentNullException.ThrowIfNull(properties);

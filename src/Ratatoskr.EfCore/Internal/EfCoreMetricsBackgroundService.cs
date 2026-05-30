@@ -61,24 +61,24 @@ internal partial class EfCoreMetricsBackgroundService<TDbContext>(
         {
             pendingOutbox = await CountAsync(
                 dbContext,
-                stoppingToken,
                 async (db, ct) =>
                 {
                     var n = await db.Set<OutboxMessageEntity>()
                         .CountAsync(x => x.ProcessedAt == null && !x.IsPoisoned, ct);
                     return n;
-                }
+                },
+                stoppingToken
             );
 
             poisonedOutbox = await CountAsync(
                 dbContext,
-                stoppingToken,
                 async (db, ct) =>
                 {
                     var n = await db.Set<OutboxMessageEntity>()
                         .CountAsync(x => x.ProcessedAt == null && x.IsPoisoned, ct);
                     return n;
-                }
+                },
+                stoppingToken
             );
         }
 
@@ -86,24 +86,24 @@ internal partial class EfCoreMetricsBackgroundService<TDbContext>(
         {
             pendingInbox = await CountAsync(
                 dbContext,
-                stoppingToken,
                 async (db, ct) =>
                 {
                     var n = await db.Set<InboxHandlerStatusEntity>()
                         .CountAsync(x => x.CompletedAt == null && !x.IsPoisoned, ct);
                     return n;
-                }
+                },
+                stoppingToken
             );
 
             poisonedInbox = await CountAsync(
                 dbContext,
-                stoppingToken,
                 async (db, ct) =>
                 {
                     var n = await db.Set<InboxHandlerStatusEntity>()
                         .CountAsync(x => x.CompletedAt == null && x.IsPoisoned, ct);
                     return n;
-                }
+                },
+                stoppingToken
             );
         }
 
@@ -123,8 +123,8 @@ internal partial class EfCoreMetricsBackgroundService<TDbContext>(
 
     private async Task<long> CountAsync(
         TDbContext dbContext,
-        CancellationToken stoppingToken,
-        Func<TDbContext, CancellationToken, Task<long>> count
+        Func<TDbContext, CancellationToken, Task<long>> count,
+        CancellationToken stoppingToken = default
     )
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);

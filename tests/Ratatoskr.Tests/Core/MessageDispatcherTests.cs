@@ -43,9 +43,9 @@ public class MessageDispatcherTests
         var result = await dispatcher.DispatchAsync(
             body,
             context,
-            CancellationToken.None,
             "test",
-            "test"
+            "test",
+            CancellationToken.None
         );
 
         // Assert
@@ -91,9 +91,9 @@ public class MessageDispatcherTests
         var result = await dispatcher.DispatchAsync(
             body,
             context,
-            CancellationToken.None,
             "test",
-            "test"
+            "test",
+            CancellationToken.None
         );
 
         // Assert
@@ -127,9 +127,9 @@ public class MessageDispatcherTests
         var result = await dispatcher.DispatchAsync(
             body,
             context,
-            CancellationToken.None,
             "test",
-            "test"
+            "test",
+            CancellationToken.None
         );
 
         // Assert
@@ -165,9 +165,9 @@ public class MessageDispatcherTests
         var result = await dispatcher.DispatchAsync(
             invalidBody,
             context,
-            CancellationToken.None,
             "test",
-            "test"
+            "test",
+            CancellationToken.None
         );
 
         // Assert
@@ -205,9 +205,9 @@ public class MessageDispatcherTests
         var result = await dispatcher.DispatchAsync(
             body,
             context,
-            CancellationToken.None,
             "test",
-            "test"
+            "test",
+            CancellationToken.None
         );
 
         // Assert
@@ -250,9 +250,9 @@ public class MessageDispatcherTests
         var result = await dispatcher.DispatchAsync(
             body,
             context,
-            CancellationToken.None,
             "test",
-            "test"
+            "test",
+            CancellationToken.None
         );
 
         // Assert
@@ -288,8 +288,8 @@ public class MessageDispatcherTests
         };
 
         // Act - Dispatch twice
-        await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
-        await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
+        await dispatcher.DispatchAsync(body, context, "test", "test", CancellationToken.None);
+        await dispatcher.DispatchAsync(body, context, "test", "test", CancellationToken.None);
 
         // Assert - Each dispatch creates a new scope, so scoped service is new each time
         collector.ServiceIds.Should().HaveCount(2);
@@ -329,7 +329,7 @@ public class MessageDispatcherTests
         };
 
         // Act
-        await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
+        await dispatcher.DispatchAsync(body, context, "test", "test", CancellationToken.None);
 
         // Assert
         handler.CapturedContext.Should().NotBeNull();
@@ -370,7 +370,7 @@ public class MessageDispatcherTests
         await cts.CancelAsync();
 
         // Act
-        var result = await dispatcher.DispatchAsync(body, context, cts.Token, "test", "test");
+        var result = await dispatcher.DispatchAsync(body, context, "test", "test", cts.Token);
 
         // Assert - OperationCanceledException from handler is treated as RecoverableError
         result.Should().Be(DispatchResult.RecoverableError);
@@ -404,9 +404,9 @@ public class MessageDispatcherTests
         var result = await dispatcher.DispatchAsync(
             null!,
             context,
-            CancellationToken.None,
             "test",
-            "test"
+            "test",
+            CancellationToken.None
         );
 
         // Assert - null body causes deserialization failure -> PermanentError
@@ -488,9 +488,9 @@ public class MessageDispatcherTests
         var result = await dispatcher.DispatchAsync(
             body,
             context,
-            CancellationToken.None,
             "unknown-channel",
-            "test"
+            "test",
+            CancellationToken.None
         );
 
         // Assert — type was resolved (no PermanentError), but no handlers on "unknown-channel"
@@ -527,9 +527,9 @@ public class MessageDispatcherTests
         var result = await dispatcher.DispatchAsync(
             body,
             context,
-            CancellationToken.None,
             "test",
-            "test"
+            "test",
+            CancellationToken.None
         );
 
         // Assert
@@ -584,7 +584,7 @@ public class MessageDispatcherTests
         ActivitySource.AddActivityListener(listener);
 
         // Act
-        await dispatcher.DispatchAsync(body, context, CancellationToken.None, "test", "test");
+        await dispatcher.DispatchAsync(body, context, "test", "test", CancellationToken.None);
 
         // Assert
         capturedActivity.Should().NotBeNull();
@@ -660,9 +660,9 @@ public class MessageDispatcherTests
         var result = await dispatcher.DispatchAsync(
             body,
             context,
-            CancellationToken.None,
             "test",
-            "test"
+            "test",
+            CancellationToken.None
         );
 
         // Assert
@@ -713,9 +713,9 @@ public class MessageDispatcherTests
         var result = await dispatcher.DispatchAsync(
             body,
             context,
-            CancellationToken.None,
             "test",
-            "test"
+            "test",
+            CancellationToken.None
         );
 
         // Assert
@@ -766,9 +766,9 @@ public class MessageDispatcherTests
         var result = await dispatcher.DispatchAsync(
             body,
             context,
-            CancellationToken.None,
             "test",
-            "test"
+            "test",
+            CancellationToken.None
         );
 
         // Assert
@@ -827,9 +827,9 @@ public class MessageDispatcherTests
         var result = await dispatcher.DispatchAsync(
             invalidBody,
             context,
-            CancellationToken.None,
             "test",
-            "test"
+            "test",
+            CancellationToken.None
         );
 
         // Assert
