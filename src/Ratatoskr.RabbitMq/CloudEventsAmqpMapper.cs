@@ -57,7 +57,7 @@ public partial class CloudEventsAmqpMapper(
             CloudEventsContentMode.Binary => MapBinaryMode(serializedData, props, outgoing),
             CloudEventsContentMode.Structured => MapStructuredMode(serializedData, props, outgoing),
             _ => throw new InvalidEnumArgumentException(
-                $"{nameof(options)}.{nameof(options.ContentMode)}",
+                nameof(options.ContentMode),
                 (int)options.ContentMode,
                 typeof(CloudEventsContentMode)
             ),
@@ -160,8 +160,14 @@ public partial class CloudEventsAmqpMapper(
         foreach (var header in props.Headers)
         {
             if (
-                !header.Key.StartsWith(CloudEventsAmqpConstants.HeaderPrefix)
-                && !header.Key.StartsWith(CloudEventsAmqpConstants.AlternativeHeaderPrefix)
+                !header.Key.StartsWith(
+                    CloudEventsAmqpConstants.HeaderPrefix,
+                    StringComparison.Ordinal
+                )
+                && !header.Key.StartsWith(
+                    CloudEventsAmqpConstants.AlternativeHeaderPrefix,
+                    StringComparison.Ordinal
+                )
             )
             {
                 outgoing.Headers[header.Key] = header.Value;
@@ -286,7 +292,10 @@ public partial class CloudEventsAmqpMapper(
         // Parse time from CloudEvents header if available
         DateTimeOffset? time = null;
         var timeStr = GetCloudEventHeader(incomingHeaders, CloudEventsAmqpConstants.TimeHeader);
-        if (timeStr != null && DateTimeOffset.TryParse(timeStr, out var parsedTime))
+        if (
+            timeStr != null
+            && DateTimeOffset.TryParse(timeStr, CultureInfo.InvariantCulture, out var parsedTime)
+        )
         {
             time = parsedTime;
         }
