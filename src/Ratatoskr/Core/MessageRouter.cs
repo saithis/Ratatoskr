@@ -19,8 +19,8 @@ public sealed class MessageRouter(
         byte[] body,
         MessageProperties properties,
         string transportName,
-        CancellationToken cancellationToken,
-        string channelName
+        string channelName,
+        CancellationToken cancellationToken = default
     )
     {
         var handlersAccepted = false;
@@ -39,9 +39,9 @@ public sealed class MessageRouter(
         var result = await dispatcher.DispatchAsync(
             body,
             properties,
-            cancellationToken,
             channelName,
-            transportName
+            transportName,
+            cancellationToken
         );
 
         if (result == DispatchResult.NoHandlers && handlersAccepted)

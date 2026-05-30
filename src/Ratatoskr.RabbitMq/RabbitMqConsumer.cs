@@ -390,8 +390,8 @@ internal sealed partial class RabbitMqConsumer(
                 body,
                 props,
                 RabbitMqConstants.TransportName,
-                cancellationToken,
-                channelName
+                channelName,
+                cancellationToken
             );
 
             errorType = result switch
