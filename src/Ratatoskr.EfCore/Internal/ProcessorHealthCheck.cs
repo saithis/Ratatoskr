@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace Ratatoskr.EfCore.Internal;
@@ -26,7 +27,8 @@ internal sealed class ProcessorHealthCheck<TProcessor>(
         {
             return Task.FromResult(
                 HealthCheckResult.Unhealthy(
-                    FormattableString.Invariant(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
                         $"{typeof(TProcessor).Name} has not processed successfully for {timeSinceLastSuccess.TotalSeconds:F1}s (threshold: {unhealthyThreshold.TotalSeconds}s)."
                     )
                 )
@@ -35,7 +37,8 @@ internal sealed class ProcessorHealthCheck<TProcessor>(
 
         return Task.FromResult(
             HealthCheckResult.Healthy(
-                FormattableString.Invariant(
+                string.Create(
+                    CultureInfo.InvariantCulture,
                     $"{typeof(TProcessor).Name} last processed successfully {timeSinceLastSuccess.TotalSeconds:F1}s ago."
                 )
             )

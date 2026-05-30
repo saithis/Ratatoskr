@@ -21,8 +21,10 @@ internal static class BackoffCalculator
     )
     {
         var baseDelay = Math.Max(0, Math.Min(Math.Pow(2, errorCount), maxRetryDelay.TotalSeconds));
+#pragma warning disable CA5394 // jitter for backoff does not need cryptographic randomness
         var delaySeconds =
             (baseDelay * 0.5) + (baseDelay * 0.5 * (random ?? Random.Shared).NextDouble());
+#pragma warning restore CA5394
         return TimeSpan.FromSeconds(delaySeconds);
     }
 }

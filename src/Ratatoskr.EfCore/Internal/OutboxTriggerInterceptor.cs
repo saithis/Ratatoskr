@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -82,7 +83,8 @@ internal partial class OutboxTriggerInterceptor<TDbContext>(
             )
             {
                 throw new InvalidOperationException(
-                    FormattableString.Invariant(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
                         $"Serialized message of type '{item.Message.GetType().Name}' is {serializedMessage.Length} bytes, which exceeds the configured maximum of {_options.MaxMessageSize.Value} bytes."
                     )
                 );

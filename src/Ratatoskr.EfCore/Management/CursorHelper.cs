@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Runtime.InteropServices;
 
 namespace Ratatoskr.EfCore.Management;
 
@@ -14,6 +15,7 @@ internal static class CursorHelper
 {
     private const int CursorByteLength = 26;
 
+    [StructLayout(LayoutKind.Auto)]
     internal readonly record struct Cursor(DateTimeOffset Time, Guid Id);
 
     internal static string Encode(DateTimeOffset time, Guid id)
