@@ -59,10 +59,8 @@ public partial class CloudEventsAmqpMapper(
         {
             CloudEventsContentMode.Binary => MapBinaryMode(serializedData, props, outgoing),
             CloudEventsContentMode.Structured => MapStructuredMode(serializedData, props, outgoing),
-            _ => throw new InvalidEnumArgumentException(
-                nameof(options.ContentMode),
-                (int)options.ContentMode,
-                typeof(CloudEventsContentMode)
+            _ => throw new NotSupportedException(
+                $"Unsupported {nameof(CloudEventsContentMode)}: {options.ContentMode}"
             ),
         };
     }
