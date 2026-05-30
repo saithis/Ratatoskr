@@ -781,6 +781,101 @@ public class OutboxDurabilityTests(
             .Contain("non-generic-add");
     }
 
+    [Test]
+    public async Task Outbox_SaveConflictOnOtherEntity_StillPersistsCurrentMessage()
+    {
+        // Verifies the concurrency fix: when SaveChangesAsync throws DbUpdateConcurrencyException
+        // with empty entries (conflict not on the current message), the processor retries
+        // SaveChangesAsync so the current message's state is actually persisted.
+        // Without the fix, the save is silently skipped and the message is reprocessed on next run.
+        //
+        // Save call order:
+        //   #1 = staging
+        //   #2 = MarkMessagesAsProcessingAsync claim save
+        //   #3 = ProcessMessageAsync save  ← throw with empty entries
+        //   #4 = retry save               ← should pass and persist the state
+        var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var interceptor = new ThrowOnNthSaveInterceptor(throwOnCallN: 3);
+
+        await StartTestAsync(services =>
+        {
+            services.AddSingleton<TimeProvider>(fakeTime);
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddEventPublishChannel(
+                    ExchangeName,
+                    c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<TestEvent>()
+                );
+            });
+            services.AddSingleton<OutboxTriggerInterceptor<TestDbContext>>();
+            services.AddTransient<OutboxMessageProcessor<TestDbContext>>();
+            services.AddSingleton<OutboxProcessor<TestDbContext>>();
+            services.AddSingleton(new OutboxOptionsHolder<TestDbContext>(new OutboxOptions()));
+            services.AddSingleton(interceptor);
+            services.AddDbContext<TestDbContext>(
+                (sp, options) =>
+                {
+                    options.UseNpgsql(PostgresConnectionString);
+                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.AddInterceptors(sp.GetRequiredService<ThrowOnNthSaveInterceptor>());
+                }
+            );
+        });
+
+        await InitializeDatabase();
+
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            dbContext.OutboxMessages.Add(new TestEvent { Data = "conflict-other-entity-msg" });
+            await dbContext.SaveChangesAsync(); // save call #1
+        });
+
+        await InScopeAsync(async ctx =>
+        {
+            await ProcessOutboxAsync<TestDbContext>(ctx.ServiceProvider);
+        });
+
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var entity = await dbContext.Set<OutboxMessageEntity>().FirstAsync();
+            entity
+                .ProcessedAt.Should()
+                .NotBeNull(
+                    "processor must retry SaveChanges when the conflict was on a different entity"
+                );
+            entity.ErrorCount.Should().Be(0);
+        });
+    }
+
+    /// <summary>
+    /// Interceptor that throws DbUpdateConcurrencyException with no entries (simulating a
+    /// conflict on a different entity) on the Nth SaveChanges call, then passes through.
+    /// </summary>
+    private class ThrowOnNthSaveInterceptor(int throwOnCallN) : SaveChangesInterceptor
+    {
+        private int _callCount;
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default
+        )
+        {
+            _callCount++;
+            if (_callCount == throwOnCallN)
+            {
+                throw new DbUpdateConcurrencyException(
+                    "Simulated conflict on other entity",
+                    (Exception?)null
+                );
+            }
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
+    }
+
     /// <summary>
     /// Interceptor that throws on the first SaveChanges attempt, then passes through.
     /// Throws from SavingChangesAsync to simulate a failure before the DB commit.
