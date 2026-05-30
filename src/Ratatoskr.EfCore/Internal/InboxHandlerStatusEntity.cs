@@ -125,7 +125,7 @@ internal class InboxHandlerStatusEntity
     /// Immediately marks this handler status as poisoned without going through the retry cycle.
     /// Used for deterministically unrecoverable errors (e.g. message deleted, handler key removed).
     /// </summary>
-    public void MarkAsPoisoned(string error, TimeProvider timeProvider)
+    public void MarkAsPoisoned(string error)
     {
         LastError = error.Length > 2000 ? error[..2000] : error;
         ProcessingStartedAt = null;

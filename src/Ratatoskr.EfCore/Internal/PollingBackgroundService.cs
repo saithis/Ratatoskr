@@ -40,7 +40,9 @@ internal abstract partial class PollingBackgroundService(
     /// Signals the processor to check for pending work immediately.
     /// Non-blocking: if a trigger is already pending it is dropped.
     /// </summary>
+#pragma warning disable RCS1163 // CT kept for API consistency; TryWrite is synchronous and non-cancellable
     public ValueTask TriggerAsync(CancellationToken cancellationToken = default)
+#pragma warning restore RCS1163
     {
         _triggerChannel.Writer.TryWrite(1);
         return ValueTask.CompletedTask;
