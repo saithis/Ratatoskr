@@ -17,4 +17,4 @@ if (authOptions?.GetPolicy("RatatoskrAdmin") is not null)
     app.MapRatatoskrManagementApi("RatatoskrAdmin");
 }
 
-app.Run();
+await app.RunAsync();

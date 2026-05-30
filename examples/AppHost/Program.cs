@@ -33,4 +33,4 @@ builder
     .WithEnvironment("RATATOSKR_EXAMPLES_PLAYGROUND", "1")
     .WithHttpHealthCheck("/health/ready");
 
-builder.Build().Run();
+await builder.Build().RunAsync();
