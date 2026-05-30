@@ -230,11 +230,11 @@ internal partial class InboxAcceptor<TDbContext>(
 internal enum InboxAcceptOutcome
 {
     /// <summary>No inbox-managed handlers exist for this message type on this channel.</summary>
-    NoHandlers,
+    NoHandlers = 0,
 
     /// <summary>Inbox entries were successfully persisted for the first time.</summary>
-    Accepted,
+    Accepted = 1,
 
     /// <summary>A concurrent instance already persisted the inbox entries (unique constraint race).</summary>
-    Duplicate,
+    Duplicate = 2,
 }

@@ -28,7 +28,7 @@ public static class CloudEventsAmqpConstants
     /// </summary>
     public const string AlternativeHeaderPrefix = "cloudEvents:";
 
-    // CloudEvents attribute header names (with underscore separator)
+    /// <summary>CloudEvents attribute header names (attribute name portion, used with <see cref="HeaderPrefix"/>).</summary>
     public const string SpecVersionHeader = "specversion";
     public const string IdHeader = "id";
     public const string SourceHeader = "source";
