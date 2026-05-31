@@ -74,6 +74,8 @@ When the publish channel and consume channel use different `DbContext` types, th
 
 All consume channels using the EF Core transport **must** have `UseInbox<TDbContext>()` configured, and all handlers must have stable keys. A channel without `UseInbox` will cause an `InvalidOperationException` at send time.
 
+A message type produced to the EF Core transport **must** also have at least one consume channel registered for it. Because the EF Core transport delivers in-process by writing to the inbox of each matching consume channel, a producer with no matching consumer has nowhere to deliver. Rather than silently discarding the message (which would mark the outbox row processed and lose it without a trace), `EfCoreMessageSender` throws an `InvalidOperationException`. For direct publishing the exception surfaces to the caller; for the outbox the row is retried and then poisoned, keeping it visible for investigation.
+
 This means the fire-and-forget handler pattern is not available with the EF Core transport. To mix durable and fire-and-forget delivery, use RabbitMQ for the fire-and-forget channel or use a separate message type.
 
 ## Comparison with RabbitMQ

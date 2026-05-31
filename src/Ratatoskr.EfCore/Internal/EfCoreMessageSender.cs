@@ -8,7 +8,7 @@ namespace Ratatoskr.EfCore.Internal;
 /// Sends messages by writing directly to the target inbox tables via <see cref="IEfCoreInboxAcceptor"/>.
 /// Used by the outbox processor for cross-DbContext delivery and by DirectPublishAsync.
 /// </summary>
-internal partial class EfCoreMessageSender(
+internal class EfCoreMessageSender(
     ChannelRegistry channelRegistry,
     IEnumerable<IEfCoreInboxAcceptor> acceptors,
     TimeProvider timeProvider,
@@ -46,12 +46,18 @@ internal partial class EfCoreMessageSender(
             if (consumeChannels.Count == 0)
             {
                 // The EF Core transport delivers in-process by writing to the inbox of each
-                // matching consume channel. With no consume channel for this type there is
-                // nowhere to deliver: the send is a no-op and the outbox row (if any) is marked
-                // processed. That is intended for fan-out-to-nobody, but it also silently hides a
-                // common misconfiguration (a producer routed to EF Core with no matching consumer),
-                // so surface it as a warning rather than dropping the message without a trace.
-                EfCoreMessageSenderLog.NoConsumeChannelForType(logger, props.Type);
+                // matching consume channel. With no consume channel for this type the message
+                // would reach no inbox; completing silently here would let the outbox mark the
+                // row processed and the message would be lost without a trace. Fail instead so the
+                // misconfiguration surfaces (direct publish throws to the caller; the outbox retries
+                // and then poisons the row, keeping it visible).
+                throw new InvalidOperationException(
+                    $"Cannot deliver message of type '{props.Type}' via the EF Core transport: "
+                        + "no consume channel is registered for this message type. The EF Core "
+                        + "transport delivers in-process through the inbox, so the application must "
+                        + "register a consume channel with UseInbox<TDbContext>() for this type "
+                        + "(or remove the EF Core transport from its producer)."
+                );
             }
 
             foreach (var (channel, _) in consumeChannels)
@@ -122,14 +128,4 @@ internal partial class EfCoreMessageSender(
         }
         return map;
     }
-}
-
-internal static partial class EfCoreMessageSenderLog
-{
-    [LoggerMessage(
-        EventId = 1,
-        Level = LogLevel.Warning,
-        Message = "Message of type '{Type}' was routed to the EF Core transport but no consume channel is registered for it. The message will not be delivered to any inbox. Register a consume channel with UseInbox<TDbContext>() for this type, or remove the EF Core transport from its producer."
-    )]
-    public static partial void NoConsumeChannelForType(ILogger logger, string type);
 }
