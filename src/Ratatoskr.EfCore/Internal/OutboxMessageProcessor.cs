@@ -129,7 +129,17 @@ internal class OutboxMessageProcessor<TDbContext>(
 
                 OutboxMessageProcessorLog.SkippedConflicts(logger, conflictIds.Count);
 
-                messages = [.. messages.Where(m => !conflictIds.Contains(m.Id))];
+                var remaining = messages.Where(m => !conflictIds.Contains(m.Id)).ToArray();
+                if (remaining.Length == messages.Length)
+                {
+                    // The conflict did not identify any message in the current claim set (for
+                    // example a DbUpdateConcurrencyException with an empty Entries collection).
+                    // Retrying the same unchanged set would spin forever, so rethrow and let the
+                    // batch be retried fresh on the next polling cycle.
+                    throw;
+                }
+
+                messages = remaining;
                 if (messages.Length == 0)
                 {
                     return null;

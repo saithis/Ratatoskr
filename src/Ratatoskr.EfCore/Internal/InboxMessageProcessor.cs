@@ -131,7 +131,17 @@ internal class InboxMessageProcessor<TDbContext>(
 
                 InboxMessageProcessorLog.SkippedConflicts(logger, conflictIds.Count);
 
-                statuses = [.. statuses.Where(s => !conflictIds.Contains(s.Id))];
+                var remaining = statuses.Where(s => !conflictIds.Contains(s.Id)).ToArray();
+                if (remaining.Length == statuses.Length)
+                {
+                    // The conflict did not identify any status in the current claim set (for
+                    // example a DbUpdateConcurrencyException with an empty Entries collection).
+                    // Retrying the same unchanged set would spin forever, so rethrow and let the
+                    // batch be retried fresh on the next polling cycle.
+                    throw;
+                }
+
+                statuses = remaining;
                 if (statuses.Length == 0)
                 {
                     return null;
@@ -203,7 +213,33 @@ internal class InboxMessageProcessor<TDbContext>(
         if (!shouldContinue)
             return false;
 
-        await dbContext.SaveChangesAsync(CancellationToken.None);
+        try
+        {
+            await dbContext.SaveChangesAsync(CancellationToken.None);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            var conflictIds = new HashSet<Guid>();
+            foreach (var entry in ex.Entries)
+            {
+                conflictIds.Add(((InboxHandlerStatusEntity)entry.Entity).Id);
+                await entry.ReloadAsync(CancellationToken.None);
+            }
+
+            InboxMessageProcessorLog.SkippedConflicts(logger, conflictIds.Count);
+
+            if (conflictIds.Contains(status.Id))
+            {
+                // This status was modified concurrently (for example a management requeue or
+                // delete). Skip it and keep processing the rest of the claimed batch instead of
+                // abandoning the still-unprocessed statuses, which would leave them stuck until
+                // the stuck-message threshold elapses. The handler ran at least once; the inbox
+                // contract is at-least-once delivery, so a re-run via stuck detection is safe.
+                return true;
+            }
+
+            await dbContext.SaveChangesAsync(CancellationToken.None);
+        }
 
         await observers.NotifyAsync(
             new MessageActivity

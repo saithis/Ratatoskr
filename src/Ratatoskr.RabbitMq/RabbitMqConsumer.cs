@@ -93,8 +93,13 @@ internal sealed partial class RabbitMqConsumer(
                 continue;
             }
 
+            // Publisher confirms are enabled even though this is primarily a consume channel:
+            // the managed dead-letter path republishes failed messages on this channel and then
+            // acks the original. Without confirms a publish that the broker never persisted would
+            // still be followed by the ack, losing the message. With confirms, BasicPublishAsync
+            // throws on an unconfirmed publish so the ack is skipped and the message is redelivered.
             var channel = await connectionManager.CreateChannelAsync(
-                enablePublisherConfirms: false,
+                enablePublisherConfirms: true,
                 stoppingToken
             );
             await channel.BasicQosAsync(
