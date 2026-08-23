@@ -1,4 +1,4 @@
-﻿<Solution>
+<Solution>
   <Folder Name="/examples/">
     <Project Path="examples/AppHost/AppHost.csproj" />
     <Project Path="examples/Docs/Docs.csproj" />
@@ -16,5 +16,6 @@
   <Project Path="src\Ratatoskr.EfCore\Ratatoskr.EfCore.csproj" />
   <Project Path="src\Ratatoskr.RabbitMq\Ratatoskr.RabbitMq.csproj" />
   <Project Path="src\Ratatoskr.Testing\Ratatoskr.Testing.csproj" />
+  <Project Path="src\Ratatoskr.UI\Ratatoskr.UI.csproj" />
   <Project Path="src\Ratatoskr\Ratatoskr.csproj" />
 </Solution>

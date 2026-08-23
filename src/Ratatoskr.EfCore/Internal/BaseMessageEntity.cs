@@ -9,7 +9,7 @@ internal class BaseMessageEntity
     /// <summary>JSON-serialized <see cref="MessageProperties"/>.</summary>
     public required string SerializedProperties { get; init; }
 
-    public required byte[] Content { get; init; }
+    public required byte[] Content { get; set; }
 
     /// <summary>
     /// outbox: The transport this outbox entry targets.<br />

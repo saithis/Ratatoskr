@@ -13,9 +13,11 @@ using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.Management;
 using Ratatoskr.RabbitMq.Extensions;
+using Ratatoskr.UI;
 using ServiceDefaults;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddRatatoskrUI();
 
 builder.AddServiceDefaults();
 
@@ -223,6 +225,7 @@ app.MapGet(
     .RequireCors("LocalDashboard");
 
 app.MapRatatoskrManagementApi("DevOnlyNoAuth");
+app.MapRatatoskrUI("/ratatoskr");
 
 await PlaygroundEnsureCreatedGate.Semaphore.WaitAsync();
 try

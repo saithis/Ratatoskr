@@ -71,6 +71,14 @@ public static class ServiceCollectionExtensions
         );
         _ = services.AddSingleton<AsyncApiDocumentGenerator>();
 
+        // Register core management endpoint configurator
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<
+                Management.IRatatoskrEndpointConfigurator,
+                Management.CoreEndpointConfigurator
+            >()
+        );
+
         return services;
     }
 
