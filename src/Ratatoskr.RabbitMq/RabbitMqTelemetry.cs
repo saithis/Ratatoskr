@@ -152,7 +152,9 @@ internal class RabbitMqTelemetry(RabbitMqOptions options, TimeProvider timeProvi
         ulong deliveryTag
     )
     {
+#pragma warning disable MA0060
         ActivityContext.TryParse(props.TraceParent, props.TraceState, out var parentContext);
+#pragma warning restore MA0060
 
         var destinationName =
             tags.FirstOrDefault(t => t.Key == MessagingSemanticConventions.DestinationName).Value

@@ -14,7 +14,7 @@ public static class RatatoskrDiagnostics
     /// <summary>The name of the OpenTelemetry Meter used for Ratatoskr metrics.</summary>
     public const string MeterName = "Ratatoskr";
 
-    private static readonly double[] DurationBuckets =
+    private static readonly double[] _durationBuckets =
     [
         0.005,
         0.01,
@@ -49,7 +49,7 @@ public static class RatatoskrDiagnostics
         "messaging.client.operation.duration",
         "s",
         "Duration of messaging operation initiated by a producer or consumer client.",
-        advice: new InstrumentAdvice<double> { HistogramBucketBoundaries = DurationBuckets }
+        advice: new InstrumentAdvice<double> { HistogramBucketBoundaries = _durationBuckets }
     );
 
     /// <summary>Number of messages the producer attempted to send to the broker.</summary>
@@ -71,7 +71,7 @@ public static class RatatoskrDiagnostics
         "messaging.process.duration",
         "s",
         "Duration of processing operation.",
-        advice: new InstrumentAdvice<double> { HistogramBucketBoundaries = DurationBuckets }
+        advice: new InstrumentAdvice<double> { HistogramBucketBoundaries = _durationBuckets }
     );
 
     /// <summary>
@@ -173,7 +173,7 @@ public static class RatatoskrDiagnostics
     /// <summary>
     /// Cleanup Metrics
     /// </summary>
-    private static readonly double[] CleanupDurationBuckets =
+    private static readonly double[] _cleanupDurationBuckets =
     [
         0.1,
         0.5,
@@ -197,7 +197,7 @@ public static class RatatoskrDiagnostics
         "ratatoskr.outbox.cleanup.duration",
         "s",
         "Duration of outbox cleanup operation.",
-        advice: new InstrumentAdvice<double> { HistogramBucketBoundaries = CleanupDurationBuckets }
+        advice: new InstrumentAdvice<double> { HistogramBucketBoundaries = _cleanupDurationBuckets }
     );
 
     /// <summary>Number of completed inbox handler statuses deleted by the cleanup job.</summary>
@@ -219,7 +219,7 @@ public static class RatatoskrDiagnostics
         "ratatoskr.inbox.cleanup.duration",
         "s",
         "Duration of inbox cleanup operation.",
-        advice: new InstrumentAdvice<double> { HistogramBucketBoundaries = CleanupDurationBuckets }
+        advice: new InstrumentAdvice<double> { HistogramBucketBoundaries = _cleanupDurationBuckets }
     );
 
     /// <summary>

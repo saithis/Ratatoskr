@@ -47,7 +47,7 @@ public class OutboxManagementTests(
             var props = new MessageProperties { Type = "normal.event" };
             var content = JsonSerializer.SerializeToUtf8Bytes(new { });
             var entity = OutboxMessageEntity.Create(content, props, time, "efcore");
-            db.Set<OutboxMessageEntity>().Add(entity);
+            await db.Set<OutboxMessageEntity>().AddAsync(entity);
             await db.SaveChangesAsync();
         });
 
@@ -161,7 +161,7 @@ public class OutboxManagementTests(
             var props = new MessageProperties { Type = "normal.event" };
             var content = JsonSerializer.SerializeToUtf8Bytes(new { });
             var entity = OutboxMessageEntity.Create(content, props, time, "efcore");
-            db.Set<OutboxMessageEntity>().Add(entity);
+            await db.Set<OutboxMessageEntity>().AddAsync(entity);
             await db.SaveChangesAsync();
             id = entity.Id;
         });

@@ -79,7 +79,7 @@ internal class InboxMessageProcessor<TDbContext>(
         var messages = await dbContext
             .Set<InboxMessageEntity>()
             .Where(m => messageIds.Contains(m.Id))
-            .ToDictionaryAsync(m => m.Id, cancellationToken);
+            .ToDictionaryAsync(m => m.Id, StringComparer.Ordinal, cancellationToken);
 
         var claimed = await MarkStatusesAsProcessingAsync(statuses, cancellationToken);
         if (claimed == null)

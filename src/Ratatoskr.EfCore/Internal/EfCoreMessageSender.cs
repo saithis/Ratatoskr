@@ -8,7 +8,7 @@ namespace Ratatoskr.EfCore.Internal;
 /// Sends messages by writing directly to the target inbox tables via <see cref="IEfCoreInboxAcceptor"/>.
 /// Used by the outbox processor for cross-DbContext delivery and by DirectPublishAsync.
 /// </summary>
-internal partial class EfCoreMessageSender(
+internal class EfCoreMessageSender(
     ChannelRegistry channelRegistry,
     IEnumerable<IEfCoreInboxAcceptor> acceptors,
     TimeProvider timeProvider,

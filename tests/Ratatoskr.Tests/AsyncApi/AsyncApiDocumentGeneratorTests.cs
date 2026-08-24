@@ -18,7 +18,7 @@ namespace Ratatoskr.Tests.AsyncApi;
 
 public class AsyncApiDocumentGeneratorTests
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    private static readonly JsonSerializerOptions _jsonOptions = new()
     {
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
@@ -105,7 +105,7 @@ public class AsyncApiDocumentGeneratorTests
         );
 
         var document = generator.Generate();
-        var json = JsonSerializer.Serialize(document, JsonOptions);
+        var json = JsonSerializer.Serialize(document, _jsonOptions);
 
         await Verify(json, extension: "json").UseDirectory("Snapshots");
     }
@@ -127,7 +127,7 @@ public class AsyncApiDocumentGeneratorTests
         );
 
         var document = generator.Generate();
-        var json = JsonSerializer.Serialize(document, JsonOptions);
+        var json = JsonSerializer.Serialize(document, _jsonOptions);
 
         await Verify(json, extension: "json").UseDirectory("Snapshots");
     }
@@ -205,7 +205,7 @@ public class AsyncApiDocumentGeneratorTests
         );
 
         var document = generator.Generate();
-        var json = JsonSerializer.Serialize(document, JsonOptions);
+        var json = JsonSerializer.Serialize(document, _jsonOptions);
 
         document.Servers.Should().BeNull();
         await Verify(json, extension: "json").UseDirectory("Snapshots");

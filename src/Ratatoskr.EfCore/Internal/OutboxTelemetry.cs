@@ -14,7 +14,9 @@ internal static class OutboxTelemetry
     public static Activity? StartCreateActivity(MessageProperties props)
     {
         // https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/
+#pragma warning disable MA0060
         ActivityContext.TryParse(props.TraceParent, props.TraceState, out var parentContext);
+#pragma warning restore MA0060
 
         var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
             "create outbox",

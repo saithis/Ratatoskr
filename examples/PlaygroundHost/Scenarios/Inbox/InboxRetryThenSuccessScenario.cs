@@ -115,7 +115,7 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
     public sealed class ProcessOrderHandler(ConsumerDbContext context)
         : IMessageHandler<ProcessOrderCommand>
     {
-        private static readonly ConcurrentDictionary<string, int> DeliveryAttempts = new(
+        private static readonly ConcurrentDictionary<string, int> _deliveryAttempts = new(
             StringComparer.Ordinal
         );
 
@@ -127,7 +127,7 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
         {
             _ = properties;
             var key = $"{message.ScenarioRunId}:{message.OrderId}";
-            var n = DeliveryAttempts.AddOrUpdate(key, 1, (_, old) => old + 1);
+            var n = _deliveryAttempts.AddOrUpdate(key, 1, (_, old) => old + 1);
             if (n <= 2)
             {
                 throw new InvalidOperationException(
@@ -146,7 +146,7 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
             }
             finally
             {
-                DeliveryAttempts.TryRemove(key, out _);
+                _deliveryAttempts.TryRemove(key, out _);
             }
         }
     }

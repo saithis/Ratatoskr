@@ -140,7 +140,7 @@ public class OutboxClaimConcurrencyTests(
                     entry.Entity is OutboxMessageEntity
                     {
                         ProcessingStartedAt: not null,
-                        ProcessedAt: null
+                        ProcessedAt: null,
                     }
                 )
                 {

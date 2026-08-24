@@ -29,7 +29,7 @@ internal partial class OutboxTriggerInterceptor<TDbContext>(
     /// ConditionalWeakTable ensures no memory leak -- entries are collected when the DbContext is GC'd.
     /// This is safe for a singleton interceptor shared across concurrent SaveChanges calls.
     /// </summary>
-    private static readonly ConditionalWeakTable<DbContext, StagedFlags> PerContextFlags = new();
+    private static readonly ConditionalWeakTable<DbContext, StagedFlags> _perContextFlags = new();
 
     private sealed class StagedFlags
     {
@@ -54,7 +54,7 @@ internal partial class OutboxTriggerInterceptor<TDbContext>(
             throw new InvalidOperationException("Expected IOutboxDbContext");
         }
 
-        var flags = PerContextFlags.GetOrCreateValue(context);
+        var flags = _perContextFlags.GetOrCreateValue(context);
         flags.OutboxEntitiesStaged = false;
         flags.InboxEntitiesStaged = false;
 
@@ -159,7 +159,7 @@ internal partial class OutboxTriggerInterceptor<TDbContext>(
                 timeProvider,
                 transport
             );
-            context.Set<OutboxMessageEntity>().Add(outboxMessage);
+            await context.Set<OutboxMessageEntity>().AddAsync(outboxMessage);
             flags.OutboxEntitiesStaged = true;
         }
 
@@ -293,7 +293,7 @@ internal partial class OutboxTriggerInterceptor<TDbContext>(
 
         if (
             eventData.Context != null
-            && PerContextFlags.TryGetValue(eventData.Context, out var flags)
+            && _perContextFlags.TryGetValue(eventData.Context, out var flags)
         )
         {
             if (flags.OutboxEntitiesStaged)
@@ -306,7 +306,7 @@ internal partial class OutboxTriggerInterceptor<TDbContext>(
                 await inboxProcessorTrigger.TriggerAsync(cancellationToken);
             }
 
-            PerContextFlags.Remove(eventData.Context);
+            _perContextFlags.Remove(eventData.Context);
         }
 
         return result;

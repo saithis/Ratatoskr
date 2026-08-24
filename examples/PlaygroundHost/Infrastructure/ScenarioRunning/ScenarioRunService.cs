@@ -70,7 +70,7 @@ public sealed class ScenarioRunService(
         var runId = Guid.NewGuid();
         await WithPlaygroundDbAsync(async db =>
         {
-            db.Runs.Add(
+            await db.Runs.AddAsync(
                 new PlaygroundRunEntity
                 {
                     Id = runId,
@@ -79,8 +79,7 @@ public sealed class ScenarioRunService(
                     StartedAt = time.GetUtcNow(),
                     StepIndex = 0,
                     CurrentStep = "execute",
-                }
-            );
+                }, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
         });
 
