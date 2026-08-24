@@ -498,7 +498,7 @@ public class MultiDbContextTests(
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            db.TestEntities.Add(new TestEntity { Name = "Business Data" });
+            await db.TestEntities.AddAsync(new TestEntity { Name = "Business Data" });
             db.OutboxMessages.Add(new TestEvent { Id = "e2e-multi-1", Data = "outbox-to-inbox" });
             await db.SaveChangesAsync();
         });

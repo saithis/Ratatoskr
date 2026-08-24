@@ -60,7 +60,7 @@ public class OutboxCleanupServiceTests(
             );
             entity.MarkAsProcessing(_timeProvider);
             entity.MarkAsProcessed(_timeProvider);
-            db.Set<OutboxMessageEntity>().Add(entity);
+            await db.Set<OutboxMessageEntity>().AddAsync(entity);
             await db.SaveChangesAsync();
         });
 
@@ -79,7 +79,7 @@ public class OutboxCleanupServiceTests(
             );
             entity.MarkAsProcessing(_timeProvider);
             entity.MarkAsProcessed(_timeProvider);
-            db.Set<OutboxMessageEntity>().Add(entity);
+            await db.Set<OutboxMessageEntity>().AddAsync(entity);
             await db.SaveChangesAsync();
         });
 
@@ -115,7 +115,7 @@ public class OutboxCleanupServiceTests(
                 _timeProvider,
                 "rabbitmq"
             );
-            db.Set<OutboxMessageEntity>().Add(entity);
+            await db.Set<OutboxMessageEntity>().AddAsync(entity);
             await db.SaveChangesAsync();
         });
 
@@ -155,7 +155,7 @@ public class OutboxCleanupServiceTests(
                 "rabbitmq"
             );
             entity.MarkAsPoisoned("test failure", _timeProvider);
-            db.Set<OutboxMessageEntity>().Add(entity);
+            await db.Set<OutboxMessageEntity>().AddAsync(entity);
             await db.SaveChangesAsync();
         });
 
@@ -198,7 +198,7 @@ public class OutboxCleanupServiceTests(
                 );
                 entity.MarkAsProcessing(_timeProvider);
                 entity.MarkAsProcessed(_timeProvider);
-                db.Set<OutboxMessageEntity>().Add(entity);
+                await db.Set<OutboxMessageEntity>().AddAsync(entity);
             }
             await db.SaveChangesAsync();
         });
@@ -245,7 +245,7 @@ public class OutboxCleanupServiceTests(
             );
             entity.MarkAsProcessing(_timeProvider);
             entity.MarkAsProcessed(_timeProvider);
-            db.Set<OutboxMessageEntity>().Add(entity);
+            await db.Set<OutboxMessageEntity>().AddAsync(entity);
             await db.SaveChangesAsync();
         });
 
@@ -311,7 +311,7 @@ public class OutboxCleanupServiceTests(
             );
             entity.MarkAsProcessing(_timeProvider);
             entity.MarkAsProcessed(_timeProvider);
-            db.Set<OutboxMessageEntity>().Add(entity);
+            await db.Set<OutboxMessageEntity>().AddAsync(entity);
             await db.SaveChangesAsync();
         });
 
@@ -346,7 +346,7 @@ public class OutboxCleanupServiceTests(
             );
             entity.MarkAsProcessing(_timeProvider);
             entity.MarkAsProcessed(_timeProvider);
-            db.Set<OutboxMessageEntity>().Add(entity);
+            await db.Set<OutboxMessageEntity>().AddAsync(entity);
             await db.SaveChangesAsync();
         });
 
@@ -385,7 +385,7 @@ public class OutboxCleanupServiceTests(
             );
             entity.MarkAsProcessing(_timeProvider);
             entity.MarkAsProcessed(_timeProvider);
-            db.Set<OutboxMessageEntity>().Add(entity);
+            await db.Set<OutboxMessageEntity>().AddAsync(entity);
             await db.SaveChangesAsync();
         });
 

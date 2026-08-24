@@ -62,11 +62,11 @@ public class InboxCleanupServiceTests(
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var message = CreateInboxMessage("msg-old");
-            db.Set<InboxMessageEntity>().Add(message);
+            await db.Set<InboxMessageEntity>().AddAsync(message);
             var status = InboxHandlerStatusEntity.Create("msg-old", "handler-a", _timeProvider);
             status.MarkAsProcessing(_timeProvider);
             status.MarkAsCompleted(_timeProvider);
-            db.Set<InboxHandlerStatusEntity>().Add(status);
+            await db.Set<InboxHandlerStatusEntity>().AddAsync(status);
             await db.SaveChangesAsync();
         });
 
@@ -78,11 +78,11 @@ public class InboxCleanupServiceTests(
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var message = CreateInboxMessage("msg-new");
-            db.Set<InboxMessageEntity>().Add(message);
+            await db.Set<InboxMessageEntity>().AddAsync(message);
             var status = InboxHandlerStatusEntity.Create("msg-new", "handler-a", _timeProvider);
             status.MarkAsProcessing(_timeProvider);
             status.MarkAsCompleted(_timeProvider);
-            db.Set<InboxHandlerStatusEntity>().Add(status);
+            await db.Set<InboxHandlerStatusEntity>().AddAsync(status);
             await db.SaveChangesAsync();
         });
 
@@ -123,14 +123,14 @@ public class InboxCleanupServiceTests(
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var message = CreateInboxMessage("msg-poisoned");
-            db.Set<InboxMessageEntity>().Add(message);
+            await db.Set<InboxMessageEntity>().AddAsync(message);
             var status = InboxHandlerStatusEntity.Create(
                 "msg-poisoned",
                 "handler-a",
                 _timeProvider
             );
             status.MarkAsPoisoned("test failure");
-            db.Set<InboxHandlerStatusEntity>().Add(status);
+            await db.Set<InboxHandlerStatusEntity>().AddAsync(status);
             await db.SaveChangesAsync();
         });
 
@@ -160,9 +160,9 @@ public class InboxCleanupServiceTests(
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var message = CreateInboxMessage("msg-pending");
-            db.Set<InboxMessageEntity>().Add(message);
+            await db.Set<InboxMessageEntity>().AddAsync(message);
             var status = InboxHandlerStatusEntity.Create("msg-pending", "handler-a", _timeProvider);
-            db.Set<InboxHandlerStatusEntity>().Add(status);
+            await db.Set<InboxHandlerStatusEntity>().AddAsync(status);
             await db.SaveChangesAsync();
         });
 
@@ -192,11 +192,11 @@ public class InboxCleanupServiceTests(
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var message = CreateInboxMessage("msg-recent");
-            db.Set<InboxMessageEntity>().Add(message);
+            await db.Set<InboxMessageEntity>().AddAsync(message);
             var status = InboxHandlerStatusEntity.Create("msg-recent", "handler-a", _timeProvider);
             status.MarkAsProcessing(_timeProvider);
             status.MarkAsCompleted(_timeProvider);
-            db.Set<InboxHandlerStatusEntity>().Add(status);
+            await db.Set<InboxHandlerStatusEntity>().AddAsync(status);
             await db.SaveChangesAsync();
         });
 
@@ -224,17 +224,17 @@ public class InboxCleanupServiceTests(
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var message = CreateInboxMessage("msg-multi");
-            db.Set<InboxMessageEntity>().Add(message);
+            await db.Set<InboxMessageEntity>().AddAsync(message);
 
             var statusA = InboxHandlerStatusEntity.Create("msg-multi", "handler-a", _timeProvider);
             statusA.MarkAsProcessing(_timeProvider);
             statusA.MarkAsCompleted(_timeProvider);
-            db.Set<InboxHandlerStatusEntity>().Add(statusA);
+            await db.Set<InboxHandlerStatusEntity>().AddAsync(statusA);
 
             var statusB = InboxHandlerStatusEntity.Create("msg-multi", "handler-b", _timeProvider);
             statusB.MarkAsProcessing(_timeProvider);
             statusB.MarkAsCompleted(_timeProvider);
-            db.Set<InboxHandlerStatusEntity>().Add(statusB);
+            await db.Set<InboxHandlerStatusEntity>().AddAsync(statusB);
 
             await db.SaveChangesAsync();
         });
@@ -277,7 +277,7 @@ public class InboxCleanupServiceTests(
                 var message = CreateInboxMessage(
                     $"msg-{i.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
                 );
-                db.Set<InboxMessageEntity>().Add(message);
+                await db.Set<InboxMessageEntity>().AddAsync(message);
                 var status = InboxHandlerStatusEntity.Create(
                     $"msg-{i.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
                     "handler-a",
@@ -285,7 +285,7 @@ public class InboxCleanupServiceTests(
                 );
                 status.MarkAsProcessing(_timeProvider);
                 status.MarkAsCompleted(_timeProvider);
-                db.Set<InboxHandlerStatusEntity>().Add(status);
+                await db.Set<InboxHandlerStatusEntity>().AddAsync(status);
             }
             await db.SaveChangesAsync();
         });
@@ -335,7 +335,7 @@ public class InboxCleanupServiceTests(
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            db.Set<InboxMessageEntity>().Add(CreateInboxMessage("msg-oldest"));
+            await db.Set<InboxMessageEntity>().AddAsync(CreateInboxMessage("msg-oldest"));
             await db.SaveChangesAsync();
         });
 
@@ -344,7 +344,7 @@ public class InboxCleanupServiceTests(
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            db.Set<InboxMessageEntity>().Add(CreateInboxMessage("msg-middle"));
+            await db.Set<InboxMessageEntity>().AddAsync(CreateInboxMessage("msg-middle"));
             await db.SaveChangesAsync();
         });
 
@@ -353,7 +353,7 @@ public class InboxCleanupServiceTests(
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            db.Set<InboxMessageEntity>().Add(CreateInboxMessage("msg-newest"));
+            await db.Set<InboxMessageEntity>().AddAsync(CreateInboxMessage("msg-newest"));
             await db.SaveChangesAsync();
         });
 
@@ -391,7 +391,7 @@ public class InboxCleanupServiceTests(
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var message = CreateInboxMessage("msg-partial");
-            db.Set<InboxMessageEntity>().Add(message);
+            await db.Set<InboxMessageEntity>().AddAsync(message);
 
             var completedStatus = InboxHandlerStatusEntity.Create(
                 "msg-partial",
@@ -400,14 +400,14 @@ public class InboxCleanupServiceTests(
             );
             completedStatus.MarkAsProcessing(_timeProvider);
             completedStatus.MarkAsCompleted(_timeProvider);
-            db.Set<InboxHandlerStatusEntity>().Add(completedStatus);
+            await db.Set<InboxHandlerStatusEntity>().AddAsync(completedStatus);
 
             var pendingStatus = InboxHandlerStatusEntity.Create(
                 "msg-partial",
                 "handler-b",
                 _timeProvider
             );
-            db.Set<InboxHandlerStatusEntity>().Add(pendingStatus);
+            await db.Set<InboxHandlerStatusEntity>().AddAsync(pendingStatus);
 
             await db.SaveChangesAsync();
         });
@@ -483,11 +483,11 @@ public class InboxCleanupServiceTests(
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var message = CreateInboxMessage("msg-metrics");
-            db.Set<InboxMessageEntity>().Add(message);
+            await db.Set<InboxMessageEntity>().AddAsync(message);
             var status = InboxHandlerStatusEntity.Create("msg-metrics", "handler-a", _timeProvider);
             status.MarkAsProcessing(_timeProvider);
             status.MarkAsCompleted(_timeProvider);
-            db.Set<InboxHandlerStatusEntity>().Add(status);
+            await db.Set<InboxHandlerStatusEntity>().AddAsync(status);
             await db.SaveChangesAsync();
         });
 
@@ -516,7 +516,7 @@ public class InboxCleanupServiceTests(
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var message = CreateInboxMessage("msg-lock-test");
-            db.Set<InboxMessageEntity>().Add(message);
+            await db.Set<InboxMessageEntity>().AddAsync(message);
             var status = InboxHandlerStatusEntity.Create(
                 "msg-lock-test",
                 "handler-a",
@@ -524,7 +524,7 @@ public class InboxCleanupServiceTests(
             );
             status.MarkAsProcessing(_timeProvider);
             status.MarkAsCompleted(_timeProvider);
-            db.Set<InboxHandlerStatusEntity>().Add(status);
+            await db.Set<InboxHandlerStatusEntity>().AddAsync(status);
             await db.SaveChangesAsync();
         });
 
@@ -556,7 +556,7 @@ public class InboxCleanupServiceTests(
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var message = CreateInboxMessage("msg-lock-skip");
-            db.Set<InboxMessageEntity>().Add(message);
+            await db.Set<InboxMessageEntity>().AddAsync(message);
             var status = InboxHandlerStatusEntity.Create(
                 "msg-lock-skip",
                 "handler-a",
@@ -564,7 +564,7 @@ public class InboxCleanupServiceTests(
             );
             status.MarkAsProcessing(_timeProvider);
             status.MarkAsCompleted(_timeProvider);
-            db.Set<InboxHandlerStatusEntity>().Add(status);
+            await db.Set<InboxHandlerStatusEntity>().AddAsync(status);
             await db.SaveChangesAsync();
         });
 

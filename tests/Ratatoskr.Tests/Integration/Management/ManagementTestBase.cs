@@ -118,7 +118,7 @@ public abstract class ManagementTestBase(
                 entity.PublishFailed("simulated error", time, 3, TimeSpan.FromSeconds(1));
             }
 
-            db.Set<OutboxMessageEntity>().Add(entity);
+            await db.Set<OutboxMessageEntity>().AddAsync(entity);
             await db.SaveChangesAsync();
             id = entity.Id;
         });
@@ -147,7 +147,7 @@ public abstract class ManagementTestBase(
                 props,
                 time
             );
-            db.Set<InboxMessageEntity>().Add(msg);
+            await db.Set<InboxMessageEntity>().AddAsync(msg);
 
             var handler = InboxHandlerStatusEntity.Create(msg.Id, "handler-a", time);
             for (var i = 0; i < 3; i++)
@@ -155,7 +155,7 @@ public abstract class ManagementTestBase(
                 handler.MarkAsFailed("simulated inbox error", time, 3, TimeSpan.FromSeconds(1));
             }
 
-            db.Set<InboxHandlerStatusEntity>().Add(handler);
+            await db.Set<InboxHandlerStatusEntity>().AddAsync(handler);
 
             await db.SaveChangesAsync();
             messageId = msg.Id;

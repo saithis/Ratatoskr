@@ -13,7 +13,9 @@ internal static class InboxTelemetry
     /// </summary>
     public static Activity? StartDeliverActivity(MessageProperties props, string handlerKey)
     {
+#pragma warning disable MA0060
         ActivityContext.TryParse(props.TraceParent, props.TraceState, out var parentContext);
+#pragma warning restore MA0060
 
         var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
             "deliver inbox",

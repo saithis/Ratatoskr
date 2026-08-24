@@ -136,15 +136,17 @@ public class InboxScopeAndIsolationTests(
     private class ChangeTrackerPollutingHandler(TestDbContext db, ScopeIsolationTracker tracker)
         : IMessageHandler<TestEvent>
     {
-        public Task HandleAsync(
+        public async Task HandleAsync(
             TestEvent message,
             MessageProperties properties,
             CancellationToken cancellationToken
         )
         {
-            db.TestEntities.Add(new TestEntity { Name = "leaked-from-polluting-handler" });
+            await db.TestEntities.AddAsync(
+                new TestEntity { Name = "leaked-from-polluting-handler" },
+                cancellationToken
+            );
             tracker.RecordHandler("polluting", db.GetHashCode());
-            return Task.CompletedTask;
         }
     }
 

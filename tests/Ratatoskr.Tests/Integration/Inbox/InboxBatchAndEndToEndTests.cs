@@ -223,8 +223,8 @@ public class InboxBatchAndEndToEndTests(
             var body = serializer.Serialize(testEvent);
             var props = new MessageProperties { Id = messageId, Type = "test.event" };
 
-            db.Set<InboxMessageEntity>()
-                .Add(
+            await db.Set<InboxMessageEntity>()
+                .AddAsync(
                     InboxMessageEntity.Create(
                         messageId,
                         EfCoreTransportConstants.TransportName,
@@ -236,7 +236,7 @@ public class InboxBatchAndEndToEndTests(
 
             var status = InboxHandlerStatusEntity.Create(messageId, "handler-a", timeProvider);
             status.MarkAsProcessing(timeProvider); // Simulate in-progress at startTime
-            db.Set<InboxHandlerStatusEntity>().Add(status);
+            await db.Set<InboxHandlerStatusEntity>().AddAsync(status);
 
             await db.SaveChangesAsync();
         });

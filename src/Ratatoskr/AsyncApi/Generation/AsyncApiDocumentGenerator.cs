@@ -24,7 +24,7 @@ public sealed partial class AsyncApiDocumentGenerator(
 {
     private readonly JsonSchemaGenerator _schemaGenerator = new();
 
-    [GeneratedRegex(@"(?<=[a-z])([A-Z])|(?<=[A-Z])([A-Z][a-z])")]
+    [GeneratedRegex(@"(?<=[a-z])(?<g1>[A-Z])|(?<=[A-Z])(?<g2>[A-Z][a-z])", RegexOptions.ExplicitCapture, matchTimeoutMilliseconds: 1000)]
     private static partial Regex SentenceCasePattern { get; }
 
     /// <summary>Generates the AsyncAPI v3 document from the registered channels and configuration.</summary>
@@ -313,5 +313,5 @@ public sealed partial class AsyncApiDocumentGenerator(
             : "receive";
 
     private static string SentenceCaseName(string typeName) =>
-        SentenceCasePattern.Replace(typeName, " $1$2").Trim();
+        SentenceCasePattern.Replace(typeName, " ${g1}${g2}").Trim();
 }

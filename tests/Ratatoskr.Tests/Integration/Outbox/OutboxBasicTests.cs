@@ -48,7 +48,7 @@ public class OutboxBasicTests(RabbitMqContainerFixture rabbitMq, PostgresContain
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
 
-            dbContext.TestEntities.Add(
+            await dbContext.TestEntities.AddAsync(
                 new TestEntity { Name = "Outbox Test", CreatedAt = DateTimeOffset.UtcNow }
             );
 
@@ -162,7 +162,7 @@ public class OutboxBasicTests(RabbitMqContainerFixture rabbitMq, PostgresContain
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
 
             var entity = new TestEntity { Name = "Test Entity", CreatedAt = DateTimeOffset.UtcNow };
-            dbContext.TestEntities.Add(entity);
+            await dbContext.TestEntities.AddAsync(entity);
 
             dbContext.OutboxMessages.Add(new TestEvent { Data = "event for entity" });
 

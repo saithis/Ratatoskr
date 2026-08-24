@@ -67,7 +67,7 @@ public class InboxManagementTests(
             var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
             var completed = InboxHandlerStatusEntity.Create(messageId, "handler-b", time);
             completed.MarkAsCompleted(time);
-            db.Set<InboxHandlerStatusEntity>().Add(completed);
+            await db.Set<InboxHandlerStatusEntity>().AddAsync(completed);
             await db.SaveChangesAsync();
         });
 
@@ -103,7 +103,7 @@ public class InboxManagementTests(
             var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
             var second = InboxHandlerStatusEntity.Create(messageId, "handler-b", time);
             second.MarkAsCompleted(time);
-            db.Set<InboxHandlerStatusEntity>().Add(second);
+            await db.Set<InboxHandlerStatusEntity>().AddAsync(second);
             await db.SaveChangesAsync();
         });
 
@@ -150,7 +150,7 @@ public class InboxManagementTests(
             var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
             var second = InboxHandlerStatusEntity.Create(messageId, "handler-b", time);
             second.MarkAsCompleted(time);
-            db.Set<InboxHandlerStatusEntity>().Add(second);
+            await db.Set<InboxHandlerStatusEntity>().AddAsync(second);
             await db.SaveChangesAsync();
         });
 
@@ -236,7 +236,7 @@ public class InboxManagementTests(
             var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
             var second = InboxHandlerStatusEntity.Create(messageId, "handler-b", time);
             second.MarkAsCompleted(time);
-            db.Set<InboxHandlerStatusEntity>().Add(second);
+            await db.Set<InboxHandlerStatusEntity>().AddAsync(second);
             await db.SaveChangesAsync();
             secondHandlerId = second.Id;
         });

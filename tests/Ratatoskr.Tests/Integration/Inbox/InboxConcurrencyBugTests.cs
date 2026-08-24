@@ -229,7 +229,7 @@ public class InboxConcurrencyBugTests(
                     entry.Entity is InboxHandlerStatusEntity
                     {
                         ProcessingStartedAt: not null,
-                        CompletedAt: null
+                        CompletedAt: null,
                     }
                 )
                 {

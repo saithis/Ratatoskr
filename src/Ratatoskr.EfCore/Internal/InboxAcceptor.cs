@@ -88,14 +88,15 @@ internal partial class InboxAcceptor<TDbContext>(
 
         // Insert-first: try to insert message and handler statuses directly.
         // The unique constraint handles deduplication, avoiding pre-check queries in the common case.
-        dbContext.Set<InboxMessageEntity>().Add(inboxMessage);
+        await dbContext.Set<InboxMessageEntity>().AddAsync(inboxMessage, cancellationToken);
 
         foreach (var handler in inboxHandlers)
         {
-            dbContext
+            await dbContext
                 .Set<InboxHandlerStatusEntity>()
-                .Add(
-                    InboxHandlerStatusEntity.Create(properties.Id, handler.InboxKey!, timeProvider)
+                .AddAsync(
+                    InboxHandlerStatusEntity.Create(properties.Id, handler.InboxKey!, timeProvider),
+                    cancellationToken
                 );
         }
 
@@ -169,7 +170,7 @@ internal partial class InboxAcceptor<TDbContext>(
             .Set<InboxHandlerStatusEntity>()
             .Where(s => s.MessageId == messageId)
             .Select(s => s.HandlerKey)
-            .ToHashSetAsync(cancellationToken);
+            .ToHashSetAsync(StringComparer.Ordinal, cancellationToken);
 
         var newHandlers = inboxHandlers.Where(h => !existingKeys.Contains(h.InboxKey!)).ToList();
         if (newHandlers.Count == 0)
@@ -180,9 +181,9 @@ internal partial class InboxAcceptor<TDbContext>(
 
         foreach (var handler in newHandlers)
         {
-            dbContext
+            await dbContext
                 .Set<InboxHandlerStatusEntity>()
-                .Add(InboxHandlerStatusEntity.Create(messageId, handler.InboxKey!, timeProvider));
+                .AddAsync(InboxHandlerStatusEntity.Create(messageId, handler.InboxKey!, timeProvider), cancellationToken);
         }
 
         try
