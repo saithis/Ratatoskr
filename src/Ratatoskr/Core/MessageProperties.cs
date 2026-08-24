@@ -46,6 +46,12 @@ public sealed class MessageProperties
     public DateTimeOffset? Time { get; set; }
 
     /// <summary>
+    /// Delivery timestamp when this message should be processed/delivered.
+    /// Null indicates immediate processing/delivery.
+    /// </summary>
+    public DateTimeOffset? ScheduledAt { get; set; }
+
+    /// <summary>
     /// W3C Traceparent header - Contains a version, trace ID, span ID, and trace options
     /// https://w3c.github.io/trace-context/#traceparent-header
     /// </summary>

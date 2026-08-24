@@ -19,6 +19,7 @@ internal static class RatatoskrEntityModelConfiguration
                 {
                     e.ProcessedAt,
                     e.IsPoisoned,
+                    e.ScheduledAt,
                     e.NextAttemptAt,
                     e.ProcessingStartedAt,
                     e.CreatedAt,

@@ -20,6 +20,32 @@ internal sealed partial class RatatoskrClient(
     private readonly IMessageActivityObserver[] _observers = [.. observers];
 
     /// <inheritdoc/>
+    public Task PublishDirectAsync<TMessage>(
+        TMessage message,
+        CancellationToken cancellationToken
+    )
+        where TMessage : notnull =>
+        PublishDirectAsync(message, (Action<PublishOptions>?)null, cancellationToken);
+
+    /// <inheritdoc/>
+    public Task PublishDirectAsync<TMessage>(
+        TMessage message,
+        Action<PublishOptions>? configure,
+        CancellationToken cancellationToken = default
+    )
+        where TMessage : notnull
+    {
+        PublishOptions? options = null;
+        if (configure != null)
+        {
+            options = new PublishOptions();
+            configure(options);
+        }
+
+        return PublishDirectAsync(message, options?.Properties, cancellationToken);
+    }
+
+    /// <inheritdoc/>
     [SuppressMessage(
         "Design",
         "CA1031:Do not catch general exception types",
@@ -32,6 +58,15 @@ internal sealed partial class RatatoskrClient(
     )
         where TMessage : notnull
     {
+        if (props?.ScheduledAt is { } scheduledAt)
+        {
+            var now = timeProvider.GetUtcNow();
+            var delay = scheduledAt - now;
+            if (delay > TimeSpan.Zero)
+            {
+                await Task.Delay(delay, timeProvider, cancellationToken);
+            }
+        }
         // https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/
         using var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
             "publish",

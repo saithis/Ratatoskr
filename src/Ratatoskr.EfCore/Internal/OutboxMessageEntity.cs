@@ -36,6 +36,12 @@ internal class OutboxMessageEntity : BaseMessageEntity
     public DateTimeOffset? ProcessingStartedAt { get; private set; }
 
     /// <summary>
+    /// Delivery timestamp when this message should be processed/delivered.
+    /// Null indicates immediate delivery.
+    /// </summary>
+    public DateTimeOffset? ScheduledAt { get; private set; }
+
+    /// <summary>
     /// Optimistic concurrency token. Incremented on every state mutation to prevent
     /// two concurrent processors from processing the same message.
     /// </summary>
@@ -52,7 +58,8 @@ internal class OutboxMessageEntity : BaseMessageEntity
         byte[] message,
         MessageProperties props,
         TimeProvider timeProvider,
-        string transportName
+        string transportName,
+        DateTimeOffset? scheduledAt = null
     )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(transportName);
@@ -71,6 +78,7 @@ internal class OutboxMessageEntity : BaseMessageEntity
             Content = message,
             CreatedAt = timeProvider.GetUtcNow(),
             TransportName = transportName,
+            ScheduledAt = scheduledAt ?? props.ScheduledAt,
         };
     }
 

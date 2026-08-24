@@ -9,6 +9,26 @@ namespace Ratatoskr;
 public interface IRatatoskr
 {
     /// <summary>
+    /// Publishes a message directly without transactional guarantees.
+    /// Supports configuration of publish options including deferred delivery timestamps.
+    /// </summary>
+    public Task PublishDirectAsync<TMessage>(
+        TMessage message,
+        Action<PublishOptions> configure,
+        CancellationToken cancellationToken = default
+    )
+        where TMessage : notnull;
+
+    /// <summary>
+    /// Publishes a message directly without transactional guarantees.
+    /// </summary>
+    public Task PublishDirectAsync<TMessage>(
+        TMessage message,
+        CancellationToken cancellationToken
+    )
+        where TMessage : notnull;
+
+    /// <summary>
     /// Publishes a message immediately without transactional guarantees.
     /// The message is sent directly to the message broker.
     /// </summary>
