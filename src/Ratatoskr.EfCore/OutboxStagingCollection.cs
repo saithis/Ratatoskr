@@ -32,6 +32,20 @@ public sealed class OutboxStagingCollection
     }
 
     /// <summary>
+    /// Stages a message with configured publish options (including deferred delivery) to be sent when SaveChanges is called.
+    /// </summary>
+    public void Add<TMessage>(TMessage message, Action<PublishOptions> configureOptions)
+        where TMessage : notnull
+    {
+        ArgumentNullException.ThrowIfNull(configureOptions);
+        var options = new PublishOptions();
+        configureOptions(options);
+        StagedItems.Add(
+            new Item { Message = message, Properties = options.Properties }
+        );
+    }
+
+    /// <summary>
     /// Stages a message to be sent when SaveChanges is called.
     /// </summary>
     public void Add(object message, MessageProperties? properties = null)
@@ -40,6 +54,21 @@ public sealed class OutboxStagingCollection
 
         StagedItems.Add(
             new Item { Message = message, Properties = properties ?? new MessageProperties() }
+        );
+    }
+
+    /// <summary>
+    /// Stages a message with configured publish options (including deferred delivery) to be sent when SaveChanges is called.
+    /// </summary>
+    public void Add(object message, Action<PublishOptions> configureOptions)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(configureOptions);
+
+        var options = new PublishOptions();
+        configureOptions(options);
+        StagedItems.Add(
+            new Item { Message = message, Properties = options.Properties }
         );
     }
 

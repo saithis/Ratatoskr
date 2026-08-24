@@ -59,6 +59,28 @@ The `OutboxTriggerInterceptor` hooks into `SaveChangesAsync` to:
 2. Serialize the message body
 3. Persist an `OutboxMessageEntity` in the same transaction
 
+### Message Scheduling & Deferred Delivery
+
+Ratatoskr supports deferred message delivery without external dependencies like Hangfire or Quartz.NET. You can schedule messages for delivery at a future timestamp or after a relative delay:
+
+```csharp
+// Schedule message for a specific timestamp
+db.OutboxMessages.Add(
+    new OrderPaymentReminder(orderId),
+    options => options.DeliverAt(DateTimeOffset.UtcNow.AddHours(24))
+);
+
+// Or schedule using a relative delay
+db.OutboxMessages.Add(
+    new FollowUpNotification(userId),
+    options => options.DeliverAfter(TimeSpan.FromMinutes(30))
+);
+
+await db.SaveChangesAsync();
+```
+
+Scheduled messages are stored with a `ScheduledAt` timestamp. The `OutboxProcessor` polling engine ignores scheduled messages until `ScheduledAt <= DateTimeOffset.UtcNow`.
+
 ## Processing Lifecycle
 
 The `OutboxProcessor` runs as a background `IHostedService`:
@@ -168,6 +190,7 @@ The cleanup service deletes processed messages older than the retention period. 
 | `SerializedProperties` | JSON-encoded MessageProperties |
 | `TransportName` | Target transport |
 | `CreatedAt` | When the message was staged |
+| `ScheduledAt` | Optional deferred delivery timestamp (null for immediate) |
 | `ProcessedAt` | When successfully sent (null while pending) |
 | `ProcessingStartedAt` | Set during processing, cleared on completion |
 | `ErrorCount` | Number of failed attempts |

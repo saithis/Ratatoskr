@@ -157,7 +157,8 @@ internal partial class OutboxTriggerInterceptor<TDbContext>(
                 serializedMessage,
                 enrichedProperties,
                 timeProvider,
-                transport
+                transport,
+                enrichedProperties.ScheduledAt
             );
             await context.Set<OutboxMessageEntity>().AddAsync(outboxMessage);
             flags.OutboxEntitiesStaged = true;

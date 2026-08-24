@@ -30,7 +30,7 @@ public interface IOutboxDbContext
     /// <remarks>
     /// This provides transactional message publishing - if the database transaction
     /// fails, the messages won't be sent. For non-transactional publishing,
-    /// use <see cref="IRatatoskr.PublishDirectAsync{TMessage}"/> instead.
+    /// use <see cref="IRatatoskr.PublishDirectAsync{TMessage}(TMessage,System.Action{Ratatoskr.Core.PublishOptions}?,System.Threading.CancellationToken)"/> instead.
     /// </remarks>
     public OutboxStagingCollection OutboxMessages { get; }
 }

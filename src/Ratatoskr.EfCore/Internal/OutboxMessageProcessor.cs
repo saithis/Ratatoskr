@@ -47,6 +47,7 @@ internal class OutboxMessageProcessor<TDbContext>(
             .Where(x =>
                 x.ProcessedAt == null
                 && !x.IsPoisoned
+                && (x.ScheduledAt == null || x.ScheduledAt <= now)
                 && (x.NextAttemptAt == null || x.NextAttemptAt <= now)
             );
 
