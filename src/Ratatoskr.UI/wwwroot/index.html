@@ -4,7 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Ratatoskr Management Dashboard</title>
-  <link rel="stylesheet" href="app.css">
+  <!-- __RATATOSKR_BASE__ is substituted server-side with the absolute path the UI is mounted
+       at, so assets resolve whether the page was opened as /ratatoskr or /ratatoskr/. -->
+  <link rel="stylesheet" href="__RATATOSKR_BASE__/app.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
@@ -210,6 +212,7 @@
             <div><strong>Type:</strong> <span id="modal-msg-type">-</span></div>
             <div><strong>Context:</strong> <span id="modal-msg-context">-</span></div>
             <div><strong>Retries:</strong> <span id="modal-msg-retries">-</span></div>
+            <div id="modal-msg-handler-row" class="hidden"><strong>Handler:</strong> <span id="modal-msg-handler">-</span></div>
           </div>
 
           <div class="form-group">
@@ -218,8 +221,9 @@
           </div>
 
           <div class="form-group">
-            <label for="modal-payload-editor">CloudEvents Payload JSON (Editable):</label>
+            <label for="modal-payload-editor">CloudEvents Payload JSON:</label>
             <textarea id="modal-payload-editor" class="code-editor" rows="12"></textarea>
+            <div id="modal-payload-hint" class="payload-hint"></div>
             <div id="modal-json-error" class="json-error hidden">Invalid JSON format</div>
           </div>
         </div>
@@ -231,6 +235,7 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script>window.RATATOSKR_BASE_PATH = "__RATATOSKR_BASE__";</script>
+  <script src="__RATATOSKR_BASE__/app.js"></script>
 </body>
 </html>

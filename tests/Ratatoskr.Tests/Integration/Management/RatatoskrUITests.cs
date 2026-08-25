@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using AwesomeAssertions;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.EfCore.Internal;
@@ -23,6 +25,56 @@ public class RatatoskrUITests(RabbitMqContainerFixture rabbitMq, PostgresContain
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var content = await response.Content.ReadAsStringAsync();
         content.Should().Contain("Ratatoskr Management Dashboard");
+    }
+
+    [Test]
+    public async Task MapRatatoskrUI_IndexHtml_ReferencesAssetsByAbsolutePath()
+    {
+        await StartManagementTestAsync();
+
+        // Opened without a trailing slash the browser resolves relative asset URLs against
+        // "/", so the served markup has to point at the mount point absolutely.
+        using var response = await HttpClient.GetAsync("/ratatoskr");
+        var html = await response.Content.ReadAsStringAsync();
+
+        html.Should().NotContain("__RATATOSKR_BASE__");
+        html.Should().Contain("href=\"/ratatoskr/app.css\"");
+        html.Should().Contain("src=\"/ratatoskr/app.js\"");
+        html.Should().Contain("window.RATATOSKR_BASE_PATH = \"/ratatoskr\"");
+    }
+
+    [Test]
+    public async Task MapRatatoskrUI_WithTrailingSlash_ServesTheSameIndexHtml()
+    {
+        await StartManagementTestAsync();
+
+        using var response = await HttpClient.GetAsync("/ratatoskr/");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var html = await response.Content.ReadAsStringAsync();
+        html.Should().Contain("src=\"/ratatoskr/app.js\"");
+    }
+
+    [Test]
+    public async Task MapRatatoskrUI_BehindPathBase_RootsAssetsAndApiPathsAtPathBase()
+    {
+        await StartManagementTestAsync(services =>
+            services.AddSingleton<IStartupFilter>(new PathBaseStartupFilter("/proxy"))
+        );
+
+        using var response = await HttpClient.GetAsync("/proxy/ratatoskr");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var html = await response.Content.ReadAsStringAsync();
+        html.Should().Contain("href=\"/proxy/ratatoskr/app.css\"");
+        html.Should().Contain("src=\"/proxy/ratatoskr/app.js\"");
+
+        using var cssResponse = await HttpClient.GetAsync("/proxy/ratatoskr/app.css");
+        cssResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var configResponse = await HttpClient.GetAsync("/proxy/ratatoskr/ui-api/config");
+        var config = await configResponse.Content.ReadFromJsonAsync<JsonElement>();
+        config.GetProperty("routePrefix").GetString().Should().Be("/proxy/ratatoskr");
+        config.GetProperty("defaultBasePath").GetString().Should().Be("/proxy/ratatoskr/api/v1");
     }
 
     [Test]
@@ -54,6 +106,58 @@ public class RatatoskrUITests(RabbitMqContainerFixture rabbitMq, PostgresContain
         config.GetProperty("routePrefix").GetString().Should().Be("/ratatoskr");
         config.GetProperty("pollingIntervalMs").GetInt32().Should().Be(5000);
         config.GetProperty("enablePayloadEditing").GetBoolean().Should().BeTrue();
+        config.GetProperty("defaultBasePath").GetString().Should().Be("/ratatoskr/api/v1");
+    }
+
+    [Test]
+    public async Task ContextsEndpoint_ReturnsNameUsableAsPoisonRouteSegment()
+    {
+        await StartManagementTestAsync();
+        await SeedPoisonedOutboxAsync();
+
+        using var contextsResponse = await HttpClient.GetAsync("/ratatoskr/api/v1/efcore/contexts");
+        contextsResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var contexts = await contextsResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var first = contexts.GetProperty("contexts")[0];
+        var contextName = first.GetProperty("name").GetString();
+        contextName.Should().Be(nameof(TestDbContext));
+        first.GetProperty("hasOutbox").GetBoolean().Should().BeTrue();
+        first.GetProperty("hasInbox").GetBoolean().Should().BeTrue();
+
+        // The workbench builds its URLs straight from the entry, so the name has to be a
+        // usable route segment on its own rather than a nested object the client must unwrap.
+        using var poisonedResponse = await HttpClient.GetAsync(
+            $"/ratatoskr/api/v1/efcore/contexts/{contextName}/outbox/poisoned"
+        );
+        poisonedResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var poisoned = await poisonedResponse.Content.ReadFromJsonAsync<JsonElement>();
+        poisoned.GetProperty("items").GetArrayLength().Should().BeGreaterThan(0);
+        poisoned.GetProperty("items")[0].TryGetProperty("id", out _).Should().BeTrue();
+    }
+
+    [Test]
+    public async Task InboxPoisonedList_ExposesHandlerStatusIdUsableForRowActions()
+    {
+        await StartManagementTestAsync();
+        var (_, handlerStatusId) = await SeedPoisonedInboxAsync();
+
+        using var listResponse = await HttpClient.GetAsync(
+            "/ratatoskr/api/v1/efcore/contexts/TestDbContext/inbox/poisoned"
+        );
+        listResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var list = await listResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var row = list.GetProperty("items")[0];
+        var rowId = row.GetProperty("handlerStatusId").GetGuid();
+        rowId.Should().Be(handlerStatusId);
+
+        // Inbox rows are keyed by handler status, not by message id: the per-row Inspect,
+        // Requeue and Delete actions all address that id.
+        using var detailResponse = await HttpClient.GetAsync(
+            $"/ratatoskr/api/v1/efcore/contexts/TestDbContext/inbox/poisoned/{rowId}"
+        );
+        detailResponse.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [Test]
@@ -97,5 +201,21 @@ public class RatatoskrUITests(RabbitMqContainerFixture rabbitMq, PostgresContain
         metricsResp.StatusCode.Should().Be(HttpStatusCode.OK);
         var metricsJson = await metricsResp.Content.ReadFromJsonAsync<JsonElement>();
         metricsJson.GetProperty("instanceId").GetString().Should().NotBeNullOrEmpty();
+    }
+
+    /// <summary>
+    /// Simulates hosting behind a reverse proxy sub-path. A startup filter is the only way to
+    /// insert middleware ahead of the test host's pipeline from a test's service configuration.
+    /// </summary>
+    private sealed class PathBaseStartupFilter(string pathBase) : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next)
+        {
+            return app =>
+            {
+                app.UsePathBase(pathBase);
+                next(app);
+            };
+        }
     }
 }

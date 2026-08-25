@@ -230,6 +230,10 @@ body {
   background-color: var(--primary);
   color: #fff;
 }
+.toggle-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 .search-filter-box {
   flex: 1;
@@ -322,6 +326,7 @@ body {
 
 .text-center { text-align: center; }
 .text-muted { color: var(--text-muted); }
+.hidden { display: none; }
 
 /* Topology Grid */
 .topology-grid {
@@ -465,6 +470,17 @@ body {
 
 .code-editor:focus {
   border-color: var(--primary);
+}
+
+.code-editor[readonly] {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.payload-hint {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
 }
 
 .json-error {

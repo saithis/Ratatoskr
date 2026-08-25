@@ -1,24 +1,50 @@
 (function () {
   'use strict';
 
+  // Injected by index.html so every request is rooted at the path the UI is mounted at.
+  // Falls back to the default mount point if the placeholder was not substituted.
+  const injectedBase = window.RATATOSKR_BASE_PATH;
+  const basePath = (
+    injectedBase && injectedBase !== '__RATATOSKR_BASE__' ? injectedBase : '/ratatoskr'
+  ).replace(/\/+$/, '');
+
   let config = {
     title: 'Ratatoskr Dashboard',
-    routePrefix: '/ratatoskr',
+    routePrefix: basePath,
     pollingIntervalMs: 5000,
     enablePayloadEditing: true,
-    defaultBasePath: '/ratatoskr/api/v1',
+    defaultBasePath: `${basePath}/api/v1`,
     remoteServices: []
+  };
+
+  // Outbox and inbox poison lists are keyed differently by the management API: outbox rows
+  // are identified by the message id, inbox rows by the per-handler status id.
+  const modes = {
+    outbox: {
+      label: 'Outbox',
+      idField: 'id',
+      timestampField: 'createdAt',
+      supportsPayloadEdit: true
+    },
+    inbox: {
+      label: 'Inbox',
+      idField: 'handlerStatusId',
+      timestampField: 'receivedAt',
+      supportsPayloadEdit: false
+    }
   };
 
   let state = {
     activeTab: 'tab-poison',
     currentServiceIndex: 'local', // 'local' or number index
-    currentContext: '',
+    currentContext: '', // DbContext name
     currentMode: 'outbox', // 'outbox' or 'inbox'
-    contexts: [],
+    contexts: [], // [{ name, hasOutbox, hasInbox }]
     poisonMessages: [],
+    poisonTotalCount: 0,
     selectedIds: new Set(),
-    inspectingItem: null
+    inspectingItem: null,
+    inspectingId: null
   };
 
   // DOM Elements
@@ -57,8 +83,11 @@
     modalMsgType: document.getElementById('modal-msg-type'),
     modalMsgContext: document.getElementById('modal-msg-context'),
     modalMsgRetries: document.getElementById('modal-msg-retries'),
+    modalMsgHandlerRow: document.getElementById('modal-msg-handler-row'),
+    modalMsgHandler: document.getElementById('modal-msg-handler'),
     modalMsgError: document.getElementById('modal-msg-error'),
     modalPayloadEditor: document.getElementById('modal-payload-editor'),
+    modalPayloadHint: document.getElementById('modal-payload-hint'),
     modalJsonError: document.getElementById('modal-json-error'),
     btnModalClose: document.getElementById('btn-modal-close'),
     btnModalCancel: document.getElementById('btn-modal-cancel'),
@@ -67,6 +96,10 @@
     toastContainer: document.getElementById('toast-container')
   };
 
+  function activeMode() {
+    return modes[state.currentMode];
+  }
+
   // Helper to determine target management API base URL
   function getManagementApiBaseUrl() {
     if (state.currentServiceIndex === 'local') {
@@ -74,6 +107,11 @@
     }
     const idx = parseInt(state.currentServiceIndex, 10);
     return `${config.routePrefix}/ui-api/proxy/${idx}/ratatoskr/api/v1`;
+  }
+
+  // Base URL for the poison endpoints of the selected context and mode.
+  function getPoisonBaseUrl() {
+    return `${getManagementApiBaseUrl()}/efcore/contexts/${encodeURIComponent(state.currentContext)}/${state.currentMode}/poisoned`;
   }
 
   // Toast Notification
@@ -96,7 +134,7 @@
   // Load Config
   async function loadConfig() {
     try {
-      const res = await fetch('./ui-api/config');
+      const res = await fetch(`${basePath}/ui-api/config`);
       if (res.ok) {
         config = await res.json();
         if (config.title) el.dashboardTitle.textContent = config.title;
@@ -107,7 +145,7 @@
           config.remoteServices.forEach((svc, index) => {
             const opt = document.createElement('option');
             opt.value = index;
-            opt.textContent = `${svc.Name} (${svc.ManagementApiUrl})`;
+            opt.textContent = `${svc.name} (${svc.managementApiUrl})`;
             el.serviceSelector.appendChild(opt);
           });
         }
@@ -137,6 +175,7 @@
     el.serviceSelector.addEventListener('change', (e) => {
       state.currentServiceIndex = e.target.value;
       state.currentContext = '';
+      state.contexts = [];
       loadData();
     });
 
@@ -144,23 +183,14 @@
     el.btnRefresh.addEventListener('click', loadData);
 
     // Workbench Mode Toggle
-    el.btnViewOutbox.addEventListener('click', () => {
-      el.btnViewOutbox.classList.add('active');
-      el.btnViewInbox.classList.remove('active');
-      state.currentMode = 'outbox';
-      loadPoisonMessages();
-    });
-
-    el.btnViewInbox.addEventListener('click', () => {
-      el.btnViewInbox.classList.add('active');
-      el.btnViewOutbox.classList.remove('active');
-      state.currentMode = 'inbox';
-      loadPoisonMessages();
-    });
+    el.btnViewOutbox.addEventListener('click', () => switchMode('outbox'));
+    el.btnViewInbox.addEventListener('click', () => switchMode('inbox'));
 
     // Context Selector
     el.contextSelector.addEventListener('change', (e) => {
       state.currentContext = e.target.value;
+      applyContextCapabilities();
+      state.selectedIds.clear();
       loadPoisonMessages();
     });
 
@@ -172,7 +202,8 @@
       const isChecked = e.target.checked;
       state.selectedIds.clear();
       if (isChecked) {
-        state.poisonMessages.forEach(item => state.selectedIds.add(item.Id));
+        const idField = activeMode().idField;
+        state.poisonMessages.forEach(item => state.selectedIds.add(item[idField]));
       }
       renderPoisonTable();
     });
@@ -199,6 +230,15 @@
     });
   }
 
+  function switchMode(mode) {
+    if (state.currentMode === mode) return;
+    state.currentMode = mode;
+    el.btnViewOutbox.classList.toggle('active', mode === 'outbox');
+    el.btnViewInbox.classList.toggle('active', mode === 'inbox');
+    state.selectedIds.clear();
+    loadPoisonMessages();
+  }
+
   // Main Data Loading Router
   async function loadData() {
     if (state.activeTab === 'tab-poison') {
@@ -219,48 +259,95 @@
       const baseUrl = getManagementApiBaseUrl();
       const res = await fetch(`${baseUrl}/efcore/contexts`);
       if (!res.ok) {
+        state.contexts = [];
+        state.currentContext = '';
         el.contextSelector.innerHTML = '<option value="">No EF Core contexts found</option>';
         return;
       }
       const data = await res.json();
-      state.contexts = data.Contexts || data.contexts || [];
+      state.contexts = (data.contexts || []).map(c => ({
+        name: c.name,
+        hasOutbox: c.hasOutbox === true,
+        hasInbox: c.hasInbox === true
+      }));
 
-      if (state.contexts.length > 0) {
-        if (!state.currentContext || !state.contexts.includes(state.currentContext)) {
-          state.currentContext = state.contexts[0];
-        }
-        el.contextSelector.innerHTML = state.contexts
-          .map(c => `<option value="${c}" ${c === state.currentContext ? 'selected' : ''}>${c}</option>`)
-          .join('');
-      } else {
+      if (state.contexts.length === 0) {
+        state.currentContext = '';
         el.contextSelector.innerHTML = '<option value="">None registered</option>';
+        return;
       }
+
+      if (!state.contexts.some(c => c.name === state.currentContext)) {
+        state.currentContext = state.contexts[0].name;
+      }
+
+      // Only rebuild the dropdown when the set of contexts actually changed, otherwise the
+      // background poll would reset the control every few seconds while it is in use.
+      const rendered = Array.from(el.contextSelector.options).map(o => o.value).join(' ');
+      const expected = state.contexts.map(c => c.name).join(' ');
+      if (rendered !== expected) {
+        el.contextSelector.innerHTML = state.contexts
+          .map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`)
+          .join('');
+      }
+      el.contextSelector.value = state.currentContext;
+      applyContextCapabilities();
     } catch (e) {
       console.warn('Failed to fetch contexts:', e);
+      state.contexts = [];
+      state.currentContext = '';
       el.contextSelector.innerHTML = '<option value="">Error loading contexts</option>';
+    }
+  }
+
+  // A context can be registered with only an outbox or only an inbox; the management API
+  // answers 404 for the missing half, so drive the toggle off the advertised capabilities.
+  function applyContextCapabilities() {
+    const ctx = state.contexts.find(c => c.name === state.currentContext);
+    const hasOutbox = ctx ? ctx.hasOutbox : true;
+    const hasInbox = ctx ? ctx.hasInbox : true;
+
+    el.btnViewOutbox.disabled = !hasOutbox;
+    el.btnViewInbox.disabled = !hasInbox;
+
+    if (state.currentMode === 'outbox' && !hasOutbox && hasInbox) {
+      switchMode('inbox');
+    } else if (state.currentMode === 'inbox' && !hasInbox && hasOutbox) {
+      switchMode('outbox');
     }
   }
 
   // Load Poison Messages
   async function loadPoisonMessages() {
     if (!state.currentContext) {
+      state.poisonMessages = [];
+      state.poisonTotalCount = 0;
+      el.badgePoisonCount.textContent = '0';
       el.poisonTableBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No DbContext selected.</td></tr>';
+      updateBulkButtons();
       return;
     }
 
     try {
-      const baseUrl = getManagementApiBaseUrl();
-      const endpoint = `${baseUrl}/efcore/contexts/${state.currentContext}/${state.currentMode}/poisoned`;
-      const res = await fetch(endpoint);
+      const res = await fetch(getPoisonBaseUrl());
       if (!res.ok) {
         el.poisonTableBody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">Error fetching ${state.currentMode} messages (${res.status})</td></tr>`;
         return;
       }
 
       const data = await res.json();
-      state.poisonMessages = data.Items || data.items || [];
-      el.badgePoisonCount.textContent = state.poisonMessages.length;
-      state.selectedIds.clear();
+      state.poisonMessages = data.items || [];
+      state.poisonTotalCount = data.totalCount ?? state.poisonMessages.length;
+      el.badgePoisonCount.textContent = state.poisonTotalCount;
+
+      // Keep the operator's selection across background refreshes, dropping rows that are
+      // no longer poisoned.
+      const idField = activeMode().idField;
+      const present = new Set(state.poisonMessages.map(item => item[idField]));
+      state.selectedIds.forEach(id => {
+        if (!present.has(id)) state.selectedIds.delete(id);
+      });
+
       renderPoisonTable();
     } catch (e) {
       console.error('Failed to load poison messages:', e);
@@ -270,41 +357,48 @@
 
   // Render Poison Table
   function renderPoisonTable() {
+    const mode = activeMode();
     const filter = el.filterInput.value.toLowerCase();
     const filtered = state.poisonMessages.filter(item => {
-      const msgType = (item.MessageType || item.messageType || '').toLowerCase();
-      const id = (item.Id || item.id || '').toLowerCase();
-      const err = (item.LastError || item.lastError || item.Error || item.error || '').toLowerCase();
-      return msgType.includes(filter) || id.includes(filter) || err.includes(filter);
+      const haystack = [
+        item.messageType,
+        item[mode.idField],
+        item.messageId,
+        item.handlerKey,
+        item.lastError
+      ];
+      return haystack.some(v => v && String(v).toLowerCase().includes(filter));
     });
 
     if (filtered.length === 0) {
       el.poisonTableBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No poisoned messages found.</td></tr>';
+      el.selectAllPoison.checked = false;
       updateBulkButtons();
       return;
     }
 
     el.poisonTableBody.innerHTML = filtered.map(item => {
-      const id = item.Id || item.id;
-      const type = item.MessageType || item.messageType || 'Unknown';
-      const created = item.FailedAt || item.failedAt || item.CreatedAt || item.createdAt || '-';
-      const retries = item.ErrorCount ?? item.errorCount ?? 0;
-      const error = item.LastError || item.lastError || item.Error || item.error || 'No error details';
+      const id = item[mode.idField];
+      const type = item.messageType || 'Unknown';
+      const timestamp = item[mode.timestampField];
+      const retries = item.errorCount ?? 0;
+      const error = item.lastError || 'No error details';
       const isChecked = state.selectedIds.has(id);
 
       return `
         <tr>
-          <td><input type="checkbox" class="row-select" data-id="${id}" ${isChecked ? 'checked' : ''}></td>
+          <td><input type="checkbox" class="row-select" data-id="${escapeHtml(id)}" ${isChecked ? 'checked' : ''}></td>
           <td>
             <strong>${escapeHtml(type)}</strong><br>
-            <small class="text-muted">${id}</small>
+            <small class="text-muted">${escapeHtml(id)}</small>
+            ${item.handlerKey ? `<br><small class="text-muted">Handler: ${escapeHtml(item.handlerKey)}</small>` : ''}
           </td>
-          <td>${new Date(created).toLocaleString()}</td>
+          <td>${timestamp ? new Date(timestamp).toLocaleString() : '-'}</td>
           <td><span class="badge badge-danger">${retries}</span></td>
           <td title="${escapeHtml(error)}">${escapeHtml(error.length > 80 ? error.substring(0, 80) + '...' : error)}</td>
           <td>
-            <button class="btn btn-secondary btn-sm btn-inspect" data-id="${id}">Inspect</button>
-            <button class="btn btn-danger btn-sm btn-delete-single" data-id="${id}">Delete</button>
+            <button class="btn btn-secondary btn-sm btn-inspect" data-id="${escapeHtml(id)}">Inspect</button>
+            <button class="btn btn-danger btn-sm btn-delete-single" data-id="${escapeHtml(id)}">Delete</button>
           </td>
         </tr>
       `;
@@ -328,6 +422,7 @@
       btn.addEventListener('click', () => deleteSingleMessage(btn.getAttribute('data-id')));
     });
 
+    el.selectAllPoison.checked = filtered.every(item => state.selectedIds.has(item[mode.idField]));
     updateBulkButtons();
   }
 
@@ -341,29 +436,44 @@
 
   // Open Inspect Modal
   async function openInspectModal(id) {
+    const mode = activeMode();
     try {
-      const baseUrl = getManagementApiBaseUrl();
-      const res = await fetch(`${baseUrl}/efcore/contexts/${state.currentContext}/${state.currentMode}/poisoned/${id}`);
+      const res = await fetch(`${getPoisonBaseUrl()}/${encodeURIComponent(id)}`);
       if (!res.ok) {
         showToast('Failed to fetch message detail', 'danger');
         return;
       }
       const data = await res.json();
       state.inspectingItem = data;
+      state.inspectingId = id;
 
-      el.modalTitle.textContent = `Inspect ${state.currentMode === 'outbox' ? 'Outbox' : 'Inbox'} Message`;
-      el.modalMsgId.textContent = data.Id || data.id;
-      el.modalMsgType.textContent = data.MessageType || data.messageType;
+      el.modalTitle.textContent = `Inspect ${mode.label} Message`;
+      el.modalMsgId.textContent = data.messageId || data.id || id;
+      el.modalMsgType.textContent = data.messageType || '-';
       el.modalMsgContext.textContent = state.currentContext;
-      el.modalMsgRetries.textContent = data.ErrorCount ?? data.errorCount ?? 0;
-      el.modalMsgError.textContent = data.LastError || data.lastError || data.Error || 'None';
+      el.modalMsgRetries.textContent = data.errorCount ?? 0;
+      el.modalMsgError.textContent = data.lastError || 'None';
 
-      let rawJson = data.JsonPayload || data.jsonPayload || '{}';
+      if (data.handlerKey) {
+        el.modalMsgHandler.textContent = data.handlerKey;
+        el.modalMsgHandlerRow.classList.remove('hidden');
+      } else {
+        el.modalMsgHandlerRow.classList.add('hidden');
+      }
+
+      let rawJson = data.jsonPayload || '{}';
       try {
         rawJson = JSON.stringify(JSON.parse(rawJson), null, 2);
-      } catch (e) {}
+      } catch (e) { /* payload is not JSON; show it verbatim */ }
 
+      // Payload edits are only honoured by the outbox requeue endpoint, and only when the
+      // host has not switched editing off.
+      const editable = mode.supportsPayloadEdit && config.enablePayloadEditing !== false;
       el.modalPayloadEditor.value = rawJson;
+      el.modalPayloadEditor.readOnly = !editable;
+      el.modalPayloadHint.textContent = editable
+        ? ''
+        : `Read-only: ${mode.label.toLowerCase()} requeue replays the stored payload.`;
       el.modalJsonError.classList.add('hidden');
       el.btnModalRequeue.disabled = false;
       el.modalBackdrop.classList.remove('hidden');
@@ -376,21 +486,24 @@
   function closeModal() {
     el.modalBackdrop.classList.add('hidden');
     state.inspectingItem = null;
+    state.inspectingId = null;
   }
 
   // Requeue from Modal
   async function handleModalRequeue() {
-    if (!state.inspectingItem) return;
-    const id = state.inspectingItem.Id || state.inspectingItem.id;
-    const payload = el.modalPayloadEditor.value;
+    if (!state.inspectingId) return;
+    const mode = activeMode();
+    const id = state.inspectingId;
+    const editable = mode.supportsPayloadEdit && config.enablePayloadEditing !== false;
 
     try {
-      const baseUrl = getManagementApiBaseUrl();
-      const res = await fetch(`${baseUrl}/efcore/contexts/${state.currentContext}/${state.currentMode}/poisoned/${id}/requeue`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payload: payload })
-      });
+      const init = { method: 'POST' };
+      if (editable) {
+        init.headers = { 'Content-Type': 'application/json' };
+        init.body = JSON.stringify({ payload: el.modalPayloadEditor.value });
+      }
+
+      const res = await fetch(`${getPoisonBaseUrl()}/${encodeURIComponent(id)}/requeue`, init);
 
       if (res.ok) {
         showToast(`Message '${id}' requeued successfully.`, 'success');
@@ -410,16 +523,16 @@
     if (!confirm(`Are you sure you want to delete poisoned message '${id}'?`)) return;
 
     try {
-      const baseUrl = getManagementApiBaseUrl();
-      const res = await fetch(`${baseUrl}/efcore/contexts/${state.currentContext}/${state.currentMode}/poisoned/${id}`, {
+      const res = await fetch(`${getPoisonBaseUrl()}/${encodeURIComponent(id)}`, {
         method: 'DELETE'
       });
 
       if (res.ok) {
         showToast('Message deleted.', 'success');
+        state.selectedIds.delete(id);
         await loadPoisonMessages();
       } else {
-        showToast('Delete failed.', 'danger');
+        showToast(`Delete failed (${res.status}).`, 'danger');
       }
     } catch (e) {
       showToast('Delete request error.', 'danger');
@@ -432,18 +545,26 @@
     const ids = Array.from(state.selectedIds);
 
     try {
-      const baseUrl = getManagementApiBaseUrl();
-      const res = await fetch(`${baseUrl}/efcore/contexts/${state.currentContext}/${state.currentMode}/bulk-requeue`, {
+      const res = await fetch(`${getPoisonBaseUrl()}/requeue`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: ids })
       });
 
       if (res.ok) {
-        showToast(`Requeued ${ids.length} messages.`, 'success');
+        const result = await res.json().catch(() => null);
+        const failed = result && result.failed ? result.failed.length : 0;
+        const succeeded = result && result.succeeded ? result.succeeded.length : ids.length;
+        showToast(
+          failed > 0
+            ? `Requeued ${succeeded} messages, ${failed} failed.`
+            : `Requeued ${succeeded} messages.`,
+          failed > 0 ? 'warning' : 'success'
+        );
+        state.selectedIds.clear();
         await loadPoisonMessages();
       } else {
-        showToast('Bulk requeue failed.', 'danger');
+        showToast(`Bulk requeue failed (${res.status}).`, 'danger');
       }
     } catch (e) {
       showToast('Bulk requeue request error.', 'danger');
@@ -457,18 +578,18 @@
     if (!confirm(`Delete ${ids.length} poisoned messages permanently?`)) return;
 
     try {
-      const baseUrl = getManagementApiBaseUrl();
-      const res = await fetch(`${baseUrl}/efcore/contexts/${state.currentContext}/${state.currentMode}/bulk-delete`, {
-        method: 'POST',
+      const res = await fetch(getPoisonBaseUrl(), {
+        method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: ids })
       });
 
       if (res.ok) {
         showToast(`Deleted ${ids.length} messages.`, 'success');
+        state.selectedIds.clear();
         await loadPoisonMessages();
       } else {
-        showToast('Bulk delete failed.', 'danger');
+        showToast(`Bulk delete failed (${res.status}).`, 'danger');
       }
     } catch (e) {
       showToast('Bulk delete request error.', 'danger');
@@ -485,7 +606,7 @@
         return;
       }
       const data = await res.json();
-      const channels = data.Channels || data.channels || [];
+      const channels = data.channels || [];
 
       if (channels.length === 0) {
         el.topologyContainer.innerHTML = '<div class="card text-muted">No active channels registered.</div>';
@@ -495,19 +616,19 @@
       el.topologyContainer.innerHTML = channels.map(ch => `
         <div class="card">
           <div class="card-title">
-            <span>${escapeHtml(ch.ChannelName || ch.channelName)}</span>
-            <span class="badge badge-success">${escapeHtml(ch.Intent || ch.intent)}</span>
+            <span>${escapeHtml(ch.channelName)}</span>
+            <span class="badge badge-success">${escapeHtml(ch.intent)}</span>
           </div>
-          <div class="card-subtitle">Registered Messages: ${(ch.Messages || ch.messages || []).length}</div>
+          <div class="card-subtitle">Registered Messages: ${(ch.messages || []).length}</div>
           <div class="channel-messages">
-            ${(ch.Messages || ch.messages || []).map(m => `
+            ${(ch.messages || []).map(m => `
               <div class="form-group" style="margin-top:0.75rem;">
-                <strong>${escapeHtml(m.MessageTypeName || m.messageTypeName)}</strong><br>
-                <small class="text-muted">${escapeHtml(m.MessageType || m.messageType)}</small>
-                ${(m.Handlers || m.handlers || []).length > 0 ? `
+                <strong>${escapeHtml(m.messageTypeName)}</strong><br>
+                <small class="text-muted">${escapeHtml(m.messageType)}</small>
+                ${(m.handlers || []).length > 0 ? `
                   <div style="margin-top:0.25rem;">
                     <small>Handlers:</small>
-                    ${(m.Handlers || m.handlers).map(h => `<span class="badge badge-secondary" style="margin-left:0.25rem;">${escapeHtml(h.HandlerType || h.handlerType)}</span>`).join('')}
+                    ${m.handlers.map(h => `<span class="badge badge-secondary" style="margin-left:0.25rem;">${escapeHtml(h.handlerType)}</span>`).join('')}
                   </div>
                 ` : ''}
               </div>
@@ -528,12 +649,12 @@
       if (!res.ok) return;
       const data = await res.json();
 
-      el.metricInstance.textContent = data.InstanceId || data.instanceId || '-';
-      el.metricEnv.textContent = data.EnvironmentName || data.environmentName || '-';
-      el.metricUptime.textContent = formatUptime(data.UptimeSeconds ?? data.uptimeSeconds ?? 0);
-      el.metricMemory.textContent = formatBytes(data.WorkingSetBytes ?? data.workingSetBytes ?? 0);
-      el.metricPublishChannels.textContent = data.PublishChannelCount ?? data.publishChannelCount ?? 0;
-      el.metricConsumeChannels.textContent = data.ConsumeChannelCount ?? data.consumeChannelCount ?? 0;
+      el.metricInstance.textContent = data.instanceId || '-';
+      el.metricEnv.textContent = data.environmentName || '-';
+      el.metricUptime.textContent = formatUptime(data.uptimeSeconds ?? 0);
+      el.metricMemory.textContent = formatBytes(data.workingSetBytes ?? 0);
+      el.metricPublishChannels.textContent = data.publishChannelCount ?? 0;
+      el.metricConsumeChannels.textContent = data.consumeChannelCount ?? 0;
     } catch (e) {
       console.warn('Failed to load metrics:', e);
     }
@@ -554,12 +675,12 @@
         if (res.ok) {
           statusHtml = '<span class="badge badge-success">Healthy</span>';
         }
-      } catch (e) {}
+      } catch (e) { /* offline is the default state */ }
 
       return `
         <tr>
-          <td><strong>${escapeHtml(svc.Name)}</strong></td>
-          <td><code>${escapeHtml(svc.ManagementApiUrl)}</code></td>
+          <td><strong>${escapeHtml(svc.name)}</strong></td>
+          <td><code>${escapeHtml(svc.managementApiUrl)}</code></td>
           <td>${statusHtml}</td>
           <td>
             <button class="btn btn-secondary btn-sm btn-switch-service" data-index="${index}">Switch To Service</button>
@@ -575,6 +696,8 @@
         const idx = e.target.getAttribute('data-index');
         el.serviceSelector.value = idx;
         state.currentServiceIndex = idx;
+        state.currentContext = '';
+        state.contexts = [];
         state.activeTab = 'tab-poison';
         document.querySelector('[data-tab="tab-poison"]').click();
       });

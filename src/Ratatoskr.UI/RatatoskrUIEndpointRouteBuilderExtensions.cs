@@ -20,6 +20,14 @@ public static class RatatoskrUIEndpointRouteBuilderExtensions
     );
 
     /// <summary>
+    /// Placeholder inside <c>index.html</c> that is replaced at request time with the absolute
+    /// path the UI is served from. Relative asset URLs cannot be used because the browser
+    /// resolves them against the current document path, which differs between
+    /// <c>/ratatoskr</c> and <c>/ratatoskr/</c>.
+    /// </summary>
+    private const string BasePathToken = "__RATATOSKR_BASE__";
+
+    /// <summary>
     /// Maps the Ratatoskr Management Dashboard web UI under <paramref name="routePrefix"/>.
     /// </summary>
     public static IEndpointRouteBuilder MapRatatoskrUI(
@@ -47,26 +55,36 @@ public static class RatatoskrUIEndpointRouteBuilderExtensions
         // UI Config Endpoint
         group.MapGet(
             "/ui-api/config",
-            (RatatoskrUIOptions? opt) =>
-                TypedResults.Ok(
+            (HttpContext httpContext, RatatoskrUIOptions? opt) =>
+            {
+                // Everything the browser sees has to be rooted at PathBase, otherwise the UI
+                // breaks as soon as the host is mounted behind a reverse proxy sub-path.
+                var pathBase = httpContext.Request.PathBase.Value?.TrimEnd('/') ?? string.Empty;
+                return TypedResults.Ok(
                     new
                     {
                         title = (opt ?? options).Title,
-                        routePrefix = normalizedPrefix,
+                        routePrefix = pathBase + normalizedPrefix,
                         pollingIntervalMs = (opt ?? options).PollingIntervalMs,
                         enablePayloadEditing = (opt ?? options).EnablePayloadEditing,
-                        defaultBasePath = "/ratatoskr/api/v1",
+                        defaultBasePath = pathBase + "/ratatoskr/api/v1",
                         remoteServices = (opt ?? options).RemoteServices,
                     }
-                )
+                );
+            }
         );
 
         // UI Multi-Service Relay Proxy Endpoint
         group.Map("/ui-api/proxy/{serviceIndex:int}/{*restPath}", ProxyRequestAsync);
 
         // Serve Static SPA Assets
-        group.MapGet("/", ServeEmbeddedAsset("index.html", "text/html; charset=utf-8"));
-        group.MapGet("/index.html", ServeEmbeddedAsset("index.html", "text/html; charset=utf-8"));
+        var indexHandler = ServeEmbeddedAsset(
+            "index.html",
+            "text/html; charset=utf-8",
+            normalizedPrefix
+        );
+        group.MapGet("/", indexHandler);
+        group.MapGet("/index.html", indexHandler);
         group.MapGet("/app.css", ServeEmbeddedAsset("app.css", "text/css; charset=utf-8"));
         group.MapGet(
             "/app.js",
@@ -165,10 +183,11 @@ public static class RatatoskrUIEndpointRouteBuilderExtensions
 
     private static Func<HttpContext, IResult> ServeEmbeddedAsset(
         string resourceName,
-        string contentType
+        string contentType,
+        string? routePrefixToInject = null
     )
     {
-        return _ =>
+        return httpContext =>
         {
             var fileInfo = FileProvider.GetFileInfo(resourceName);
             if (!fileInfo.Exists)
@@ -179,6 +198,16 @@ public static class RatatoskrUIEndpointRouteBuilderExtensions
             using var stream = fileInfo.CreateReadStream();
             using var reader = new StreamReader(stream);
             var content = reader.ReadToEnd();
+
+            if (routePrefixToInject is not null)
+            {
+                var pathBase = httpContext.Request.PathBase.Value?.TrimEnd('/') ?? string.Empty;
+                content = content.Replace(
+                    BasePathToken,
+                    pathBase + routePrefixToInject,
+                    StringComparison.Ordinal
+                );
+            }
 
             return Results.Content(content, contentType);
         };
