@@ -91,11 +91,29 @@ internal class InboxMessageProcessor<TDbContext>(
         InboxTelemetry.RecordBatchSize(statuses.Length);
         var batchStartTimestamp = Stopwatch.GetTimestamp();
 
-        foreach (var status in statuses)
+        foreach (var group in statuses.GroupBy(s => s.HandlerKey, StringComparer.Ordinal))
         {
-            if (!await ProcessStatusAsync(status, messages, cancellationToken))
+            var registration = channelHandlerRegistry.GetInboxRegistrationByKey(group.Key);
+            if (registration?.IsBatch == true)
             {
-                break;
+                var chunkSize = registration.BatchSize ?? _options.BatchSize;
+                foreach (var chunk in group.Chunk(chunkSize))
+                {
+                    if (!await ProcessBatchStatusGroupAsync(chunk, messages, registration, cancellationToken))
+                    {
+                        return statuses.Length;
+                    }
+                }
+            }
+            else
+            {
+                foreach (var status in group)
+                {
+                    if (!await ProcessStatusAsync(status, messages, cancellationToken))
+                    {
+                        return statuses.Length;
+                    }
+                }
             }
         }
 
@@ -361,6 +379,215 @@ internal class InboxMessageProcessor<TDbContext>(
         }
 
         return (true, handlerException, deliveredMessage);
+    }
+
+    private async Task<bool> ProcessBatchStatusGroupAsync(
+        InboxHandlerStatusEntity[] chunk,
+        Dictionary<string, InboxMessageEntity> messages,
+        ChannelHandlerRegistration registration,
+        CancellationToken cancellationToken
+    )
+    {
+        var (validStatuses, deserializedPayloads, propertiesList, transportNames) = PrepareBatchItems(chunk, messages, registration);
+
+        if (validStatuses.Count == 0)
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+
+        var (batchContainer, targetMessageType, isConsumedBatch) = BuildBatchContainer(registration, validStatuses.Count, deserializedPayloads, propertiesList);
+
+        Exception? handlerException = null;
+        try
+        {
+            await handlerInvoker.InvokeBatchAsync(
+                registration.HandlerType,
+                targetMessageType,
+                batchContainer,
+                cancellationToken,
+                registration.BatchTimeout ?? _options.HandlerTimeout
+            );
+
+            MarkBatchSuccess(validStatuses, registration.InboxKey!);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+        catch (Exception ex)
+        {
+            handlerException = ex;
+            MarkBatchFailed(validStatuses, registration.InboxKey!, ex);
+        }
+
+        await SaveBatchChangesWithConcurrencyHandlingAsync();
+
+        for (int i = 0; i < validStatuses.Count; i++)
+        {
+            await observers.NotifyAsync(
+                new MessageActivity
+                {
+                    Stage = MessageStage.InboxDispatched,
+                    Properties = propertiesList[i],
+                    Message = deserializedPayloads[i],
+                    MessageType = registration.MessageType,
+                    TransportName = transportNames[i],
+                    IsSuccess = handlerException == null,
+                    Exception = handlerException,
+                    Timestamp = timeProvider.GetUtcNow(),
+                },
+                logger
+            );
+        }
+
+        return true;
+    }
+
+    private (List<InboxHandlerStatusEntity> ValidStatuses, List<object> DeserializedPayloads, List<MessageProperties> PropertiesList, List<string> TransportNames) PrepareBatchItems(
+        InboxHandlerStatusEntity[] chunk,
+        Dictionary<string, InboxMessageEntity> messages,
+        ChannelHandlerRegistration registration
+    )
+    {
+        var deserializedPayloads = new List<object>();
+        var validStatuses = new List<InboxHandlerStatusEntity>();
+        var propertiesList = new List<MessageProperties>();
+        var transportNames = new List<string>();
+
+        foreach (var status in chunk)
+        {
+            if (!messages.TryGetValue(status.MessageId, out var inboxMessage))
+            {
+                InboxMessageProcessorLog.MessageNotFound(logger, status.MessageId, status.Id);
+                status.MarkAsPoisoned("InboxMessage record not found -- likely deleted.");
+                InboxTelemetry.RecordPoisoned();
+                continue;
+            }
+
+            MessageProperties props;
+            try
+            {
+                props = inboxMessage.GetProperties();
+            }
+            catch (Exception ex)
+            {
+                InboxMessageProcessorLog.DeserializationFailed(logger, status.MessageId, status.Id, ex);
+                status.MarkAsPoisoned($"Properties deserialization failed: {ex.Message}");
+                InboxTelemetry.RecordPoisoned();
+                continue;
+            }
+
+            try
+            {
+                var serializer = serializerResolver.GetSerializer(registration.MessageType);
+                var message = serializer.Deserialize(inboxMessage.Content, registration.MessageType)
+                    ?? throw new InvalidOperationException(
+                        $"Deserialized message of type '{registration.MessageType.Name}' was null."
+                    );
+                deserializedPayloads.Add(message);
+                validStatuses.Add(status);
+                propertiesList.Add(props);
+                transportNames.Add(inboxMessage.TransportName);
+            }
+            catch (Exception ex)
+            {
+                status.MarkAsFailed(ex.Message, timeProvider, _options.MaxRetries, _options.MaxRetryDelay);
+                if (status.IsPoisoned)
+                {
+                    InboxTelemetry.RecordPoisoned();
+                }
+            }
+        }
+
+        return (validStatuses, deserializedPayloads, propertiesList, transportNames);
+    }
+
+    private static (object BatchContainer, Type TargetMessageType, bool IsConsumedBatch) BuildBatchContainer(
+        ChannelHandlerRegistration registration,
+        int count,
+        List<object> payloads,
+        List<MessageProperties> properties
+    )
+    {
+        var consumedGenericType = typeof(ConsumedMessage<>).MakeGenericType(registration.MessageType);
+        bool isConsumedBatch = typeof(IBatchMessageHandler<>).MakeGenericType(consumedGenericType).IsAssignableFrom(registration.HandlerType);
+
+        if (isConsumedBatch)
+        {
+            var array = Array.CreateInstance(consumedGenericType, count);
+            var ctor = consumedGenericType.GetConstructors()[0];
+            for (int i = 0; i < count; i++)
+            {
+                array.SetValue(ctor.Invoke([payloads[i], properties[i]]), i);
+            }
+            return (array, consumedGenericType, true);
+        }
+        else
+        {
+            var array = Array.CreateInstance(registration.MessageType, count);
+            for (int i = 0; i < count; i++)
+            {
+                array.SetValue(payloads[i], i);
+            }
+            return (array, registration.MessageType, false);
+        }
+    }
+
+    private void MarkBatchSuccess(List<InboxHandlerStatusEntity> validStatuses, string handlerKey)
+    {
+        foreach (var status in validStatuses)
+        {
+            status.MarkAsCompleted(timeProvider);
+            InboxTelemetry.RecordDelivered(success: true);
+            InboxMessageProcessorLog.HandlerCompleted(logger, handlerKey, status.MessageId);
+        }
+    }
+
+    private void MarkBatchFailed(List<InboxHandlerStatusEntity> validStatuses, string handlerKey, Exception ex)
+    {
+        foreach (var status in validStatuses)
+        {
+            InboxTelemetry.RecordDelivered(success: false);
+            InboxMessageProcessorLog.HandlerFailed(
+                logger,
+                handlerKey,
+                status.MessageId,
+                status.ErrorCount + 1,
+                ex
+            );
+            status.MarkAsFailed(ex.Message, timeProvider, _options.MaxRetries, _options.MaxRetryDelay);
+            if (status.IsPoisoned)
+            {
+                InboxMessageProcessorLog.HandlerPoisoned(
+                    logger,
+                    handlerKey,
+                    status.MessageId,
+                    status.ErrorCount,
+                    ex.Message
+                );
+            }
+        }
+    }
+
+    private async Task SaveBatchChangesWithConcurrencyHandlingAsync()
+    {
+        try
+        {
+            await dbContext.SaveChangesAsync(CancellationToken.None);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            var conflictIds = new HashSet<Guid>();
+            foreach (var entry in ex.Entries)
+            {
+                conflictIds.Add(((InboxHandlerStatusEntity)entry.Entity).Id);
+                await entry.ReloadAsync(CancellationToken.None);
+            }
+
+            InboxMessageProcessorLog.SkippedConflicts(logger, conflictIds.Count);
+            await dbContext.SaveChangesAsync(CancellationToken.None);
+        }
     }
 }
 
