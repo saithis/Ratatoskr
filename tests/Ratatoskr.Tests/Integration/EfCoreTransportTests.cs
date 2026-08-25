@@ -4,7 +4,6 @@ using System.Diagnostics.Metrics;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.EfCore.Internal;
@@ -216,27 +215,15 @@ public class EfCoreTransportTests(
     }
 
     [Test]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage(
-        "Reliability",
-        "CA2000:Dispose objects before losing scope",
-        Justification = "Provider lifetime is owned by the logging infrastructure / host."
-    )]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage(
-        "IDisposableAnalyzers.Correctness",
-        "IDISP001:Dispose created",
-        Justification = "Provider lifetime is owned by the logging infrastructure / host."
-    )]
-    public async Task PublishDirectAsync_NoConsumeChannelForType_LogsWarningInsteadOfSilentlyDropping()
+    public async Task PublishDirectAsync_NoConsumeChannelForType_ThrowsInsteadOfSilentlyDropping()
     {
         // A message routed to the EF Core transport is delivered in-process by writing to the
-        // inbox of each matching consume channel. With no consume channel for the type the send
-        // is a no-op (intended for fan-out-to-nobody), but it must not be completely silent --
-        // EfCoreMessageSender now emits a warning so a misconfigured producer is observable.
-        var logCollector = new CapturingLoggerProvider();
-
+        // inbox of each matching consume channel. If no consume channel is registered for the
+        // type, EfCoreMessageSender used to complete successfully (and the outbox would mark the
+        // row processed) even though the message reached no inbox -- a silent message drop. It
+        // must now fail loudly instead.
         await StartTestAsync(services =>
         {
-            services.AddLogging(b => b.AddProvider(logCollector));
             services.AddRatatoskr(bus =>
             {
                 bus.AddEventPublishChannel(
@@ -266,11 +253,15 @@ public class EfCoreTransportTests(
         await InScopeAsync(async ctx =>
         {
             var bus = ctx.ServiceProvider.GetRequiredService<IRatatoskr>();
-            // No-op delivery is preserved (does not throw).
-            await bus.PublishDirectAsync(
-                new TestEvent { Id = "orphan-1", Data = "nowhere" },
-                new MessageProperties { Id = "msg-orphan-1" }
-            );
+            Func<Task> act = () =>
+                bus.PublishDirectAsync(
+                    new TestEvent { Id = "orphan-1", Data = "nowhere" },
+                    new MessageProperties { Id = "msg-orphan-1" }
+                );
+
+            await act.Should()
+                .ThrowAsync<InvalidOperationException>()
+                .WithMessage("*no consume channel*");
         });
 
         // Nothing should have been written to any inbox.
@@ -279,17 +270,6 @@ public class EfCoreTransportTests(
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             (await db.Set<InboxMessageEntity>().CountAsync()).Should().Be(0);
         });
-
-        // The drop must be observable: a warning naming the type was logged.
-        logCollector
-            .Entries.Should()
-            .Contain(
-                e =>
-                    e.Level == LogLevel.Warning
-                    && e.Message.Contains("test.event", StringComparison.Ordinal)
-                    && e.Message.Contains("no consume channel", StringComparison.Ordinal),
-                "routing to the EF Core transport with no consumer must not be silent"
-            );
     }
 
     private sealed class OrderCreatedInboxHandler : IMessageHandler<OrderCreatedEvent>
@@ -299,37 +279,6 @@ public class EfCoreTransportTests(
             MessageProperties properties,
             CancellationToken cancellationToken
         ) => Task.CompletedTask;
-    }
-
-    private sealed class CapturingLoggerProvider : ILoggerProvider
-    {
-        private readonly System.Collections.Concurrent.ConcurrentQueue<LogEntry> _entries = new();
-
-        public IReadOnlyCollection<LogEntry> Entries => _entries;
-
-        public ILogger CreateLogger(string categoryName) => new CapturingLogger(_entries);
-
-        public void Dispose() { }
-
-        internal sealed record LogEntry(LogLevel Level, string Message);
-
-        private sealed class CapturingLogger(
-            System.Collections.Concurrent.ConcurrentQueue<LogEntry> entries
-        ) : ILogger
-        {
-            public IDisposable? BeginScope<TState>(TState state)
-                where TState : notnull => null;
-
-            public bool IsEnabled(LogLevel logLevel) => true;
-
-            public void Log<TState>(
-                LogLevel logLevel,
-                EventId eventId,
-                TState state,
-                Exception? exception,
-                Func<TState, Exception?, string> formatter
-            ) => entries.Enqueue(new LogEntry(logLevel, formatter(state, exception)));
-        }
     }
 
     [Test]

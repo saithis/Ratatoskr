@@ -341,8 +341,14 @@ public class MultiDbContextTests(
                 );
             });
 
-            // Manually register outbox components for both DbContexts (without hosted services)
-            services.AddSingleton<IMessageSender, EfCoreMessageSender>();
+            // Manually register outbox components for both DbContexts (without hosted services).
+            // This test verifies outbox *processing isolation* per DbContext; delivery is
+            // irrelevant, so use a no-op sender for the EF Core transport. (The real
+            // EfCoreMessageSender now throws when a type has no consume channel, which these
+            // producers intentionally do not configure.)
+            services.AddSingleton<IMessageSender>(
+                new NoOpSender(EfCoreTransportConstants.TransportName)
+            );
 
             services.AddSingleton(
                 new OutboxOptionsHolder<TestDbContext>(
@@ -727,6 +733,17 @@ public class MultiDbContextTests(
     #endregion
 
     #region Test Handlers
+
+    private sealed class NoOpSender(string transportName) : IMessageSender
+    {
+        public string TransportName => transportName;
+
+        public Task SendAsync(
+            byte[] content,
+            MessageProperties props,
+            CancellationToken cancellationToken
+        ) => Task.CompletedTask;
+    }
 
     private class HandlerForDbContext1 : IMessageHandler<TestEvent>
     {
