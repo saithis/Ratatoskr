@@ -41,4 +41,37 @@ public sealed class HandlerInvoker(IServiceScopeFactory scopeFactory)
             await invoke(handler, message, properties, cancellationToken);
         }
     }
+
+    /// <summary>
+    /// Resolves a batch handler by type in a fresh DI scope and invokes it via a compiled delegate.
+    /// </summary>
+    public async Task InvokeBatchAsync(
+        Type handlerType,
+        Type messageType,
+        object messages,
+        CancellationToken cancellationToken,
+        TimeSpan? timeout = null
+    )
+    {
+        ArgumentNullException.ThrowIfNull(handlerType);
+        ArgumentNullException.ThrowIfNull(messageType);
+        ArgumentNullException.ThrowIfNull(messages);
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var handler = scope.ServiceProvider.GetRequiredService(handlerType);
+        var invoke = HandlerInvokerCache.GetBatch(messageType);
+
+        if (timeout.HasValue)
+        {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken
+            );
+            timeoutCts.CancelAfter(timeout.Value);
+            await invoke(handler, messages, timeoutCts.Token);
+        }
+        else
+        {
+            await invoke(handler, messages, cancellationToken);
+        }
+    }
 }
