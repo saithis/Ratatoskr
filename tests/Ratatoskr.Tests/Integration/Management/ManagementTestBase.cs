@@ -24,7 +24,17 @@ public abstract class ManagementTestBase(
     private bool _disposed;
     protected HttpClient HttpClient { get; private set; } = null!;
 
-    protected async Task StartManagementTestAsync(Action<IServiceCollection>? configure = null)
+    /// <summary>Boots the management API test host with the shared defaults.</summary>
+    /// <param name="configure">Extra service registrations applied after the defaults.</param>
+    /// <param name="configureBus">
+    /// Extra bus configuration folded into the same <c>AddRatatoskr</c> call as the default
+    /// <see cref="TestDbContext"/> durability, which is the only way to register a second
+    /// DbContext (<c>AddRatatoskr</c> may not be called twice).
+    /// </param>
+    protected async Task StartManagementTestAsync(
+        Action<IServiceCollection>? configure = null,
+        Action<RatatoskrBuilder>? configureBus = null
+    )
     {
         await StartTestAsync(services =>
         {
@@ -46,6 +56,7 @@ public abstract class ManagementTestBase(
             services.AddRatatoskr(bus =>
             {
                 bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox().UseOutbox());
+                configureBus?.Invoke(bus);
             });
 
             services.AddDbContext<TestDbContext>(

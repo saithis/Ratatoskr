@@ -19,6 +19,7 @@ internal static class RequeueOutboxEndpoint
         string contextName,
         Guid id,
         EfCoreManagementDbContextLookup lookup,
+        [Microsoft.AspNetCore.Mvc.FromBody] RequeueOutboxRequest? request,
         CancellationToken ct
     )
     {
@@ -42,6 +43,11 @@ internal static class RequeueOutboxEndpoint
             return ManagementResults.BadRequest("Outbox message is not poisoned.");
         }
 
+        if (!string.IsNullOrWhiteSpace(request?.Payload))
+        {
+            entity.Content = System.Text.Encoding.UTF8.GetBytes(request.Payload);
+        }
+
         entity.Requeue();
 
         try
@@ -57,3 +63,5 @@ internal static class RequeueOutboxEndpoint
         }
     }
 }
+
+internal record RequeueOutboxRequest(string? Payload);

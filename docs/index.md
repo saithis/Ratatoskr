@@ -91,6 +91,10 @@ _layout: landing
       <p>RabbitMQ transport with topology management, retry, and DLQ support.</p>
     </div>
     <div class="package-item">
+      <code>Ratatoskr.UI</code>
+      <p>Embedded management dashboard for poison messages, topology, and health across services.</p>
+    </div>
+    <div class="package-item">
       <code>Ratatoskr.Testing</code>
       <p>Test utilities with W3C trace-isolated sessions and assertion helpers.</p>
     </div>

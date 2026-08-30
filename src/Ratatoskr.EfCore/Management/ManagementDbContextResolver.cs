@@ -47,7 +47,9 @@ internal static class ManagementDbContextResolver
             return error;
         }
 
-        if (!dbContext.GetType().IsAssignableTo(typeof(IOutboxDbContext)))
+        // Every management DbContext implements both interfaces (the AddEfCoreDurability
+        // constraint requires it), so ask the descriptor which halves were actually configured.
+        if (lookup.Find(contextName) is not { HasOutbox: true })
         {
             dbContext = null!;
             return ManagementResults.NotFound(
@@ -68,7 +70,7 @@ internal static class ManagementDbContextResolver
             return error;
         }
 
-        if (!dbContext.GetType().IsAssignableTo(typeof(IInboxDbContext)))
+        if (lookup.Find(contextName) is not { HasInbox: true })
         {
             dbContext = null!;
             return ManagementResults.NotFound(

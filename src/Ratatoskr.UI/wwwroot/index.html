@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ratatoskr Management Dashboard</title>
+  <!-- __RATATOSKR_BASE__ is substituted server-side with the absolute path the UI is mounted
+       at, so assets resolve whether the page was opened as /ratatoskr or /ratatoskr/. -->
+  <link rel="stylesheet" href="__RATATOSKR_BASE__/app.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="navbar">
+      <div class="navbar-brand">
+        <div class="logo-icon">🐿️</div>
+        <div class="brand-text">
+          <span class="brand-name" id="dashboard-title">Ratatoskr</span>
+          <span class="brand-tag">Management UI</span>
+        </div>
+      </div>
+
+      <div class="navbar-controls">
+        <div class="service-selector-container">
+          <label for="service-selector" class="control-label">Service:</label>
+          <select id="service-selector" class="select-input">
+            <option value="local">This Host</option>
+          </select>
+        </div>
+
+        <div class="auto-refresh-indicator">
+          <span class="pulse-dot"></span>
+          <span id="refresh-timer">Live</span>
+        </div>
+
+        <button id="btn-refresh" class="btn btn-secondary">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+          Refresh
+        </button>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs">
+      <button class="nav-tab active" data-tab="tab-poison">
+        <span class="tab-icon">⚠️</span> Poison Workbench
+        <span id="badge-poison-count" class="badge badge-danger">0</span>
+      </button>
+      <button class="nav-tab" data-tab="tab-topology">
+        <span class="tab-icon">🗺️</span> Channel Topology
+      </button>
+      <button class="nav-tab" data-tab="tab-metrics">
+        <span class="tab-icon">📊</span> Telemetry &amp; Health
+      </button>
+      <button class="nav-tab" data-tab="tab-multiservice">
+        <span class="tab-icon">🌐</span> Services
+        <span id="badge-service-count" class="badge badge-secondary">1</span>
+      </button>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Notification Bar -->
+      <div id="toast-container" class="toast-container"></div>
+
+      <!-- TAB 1: Poison Workbench -->
+      <section id="tab-poison" class="tab-content active">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>Poison Message Workbench</h2>
+            <p class="panel-subtitle">Inspect, edit, and requeue failed messages across every DbContext of the selected service.</p>
+          </div>
+        </div>
+
+        <!-- DbContext picker. One card per registered DbContext so a backlog in a context the
+             operator is not currently looking at is still visible. -->
+        <div class="context-strip">
+          <div class="context-strip-header">
+            <span class="control-label">DbContexts on <strong id="context-strip-service">this host</strong></span>
+            <span class="context-strip-hint text-muted">Backlog counts come from the EF Core gauge poller and can trail the table by a few seconds.</span>
+          </div>
+          <div id="context-cards" class="context-cards">
+            <div class="context-empty text-muted">Loading DbContexts…</div>
+          </div>
+        </div>
+
+        <div class="workbench-subnav">
+          <div class="toggle-group">
+            <button id="btn-view-outbox" class="toggle-btn active">Outbox Poisoned</button>
+            <button id="btn-view-inbox" class="toggle-btn">Inbox Poisoned</button>
+          </div>
+
+          <div class="search-filter-box">
+            <input type="text" id="filter-input" class="search-input" placeholder="Search by Message Type, ID, or Error...">
+          </div>
+
+          <div class="bulk-actions">
+            <button id="btn-bulk-requeue" class="btn btn-primary" disabled>Requeue Selected</button>
+            <button id="btn-bulk-delete" class="btn btn-danger" disabled>Delete Selected</button>
+          </div>
+        </div>
+
+        <!-- Poison Table -->
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th width="40"><input type="checkbox" id="select-all-poison"></th>
+                <th>Message Type</th>
+                <th>Created / Failed At</th>
+                <th>Retries</th>
+                <th>Error Summary</th>
+                <th width="140">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="poison-table-body">
+              <tr>
+                <td colspan="6" class="text-center text-muted">Select a context or loading messages...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- TAB 2: Topology Explorer -->
+      <section id="tab-topology" class="tab-content">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>Channel Topology Explorer</h2>
+            <p class="panel-subtitle">Registered messaging channels, CloudEvents contracts, and inbox handlers of the selected service.</p>
+          </div>
+        </div>
+
+        <div id="topology-container" class="topology-grid">
+          <div class="loading-spinner">Loading topology...</div>
+        </div>
+      </section>
+
+      <!-- TAB 3: Telemetry & Metrics -->
+      <section id="tab-metrics" class="tab-content">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>Live System Telemetry</h2>
+            <p class="panel-subtitle">Real-time stats and health metrics for the selected service instance.</p>
+          </div>
+        </div>
+
+        <div class="metrics-cards-grid">
+          <div class="metric-card">
+            <div class="metric-title">Instance ID</div>
+            <div class="metric-value" id="metric-instance">-</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-title">Environment</div>
+            <div class="metric-value" id="metric-env">-</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-title">Process Uptime</div>
+            <div class="metric-value" id="metric-uptime">-</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-title">Working Set Memory</div>
+            <div class="metric-value" id="metric-memory">-</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-title">Publish Channels</div>
+            <div class="metric-value" id="metric-publish-channels">-</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-title">Consume Channels</div>
+            <div class="metric-value" id="metric-consume-channels">-</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: Multi-Service Matrix -->
+      <section id="tab-multiservice" class="tab-content">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>Services</h2>
+            <p class="panel-subtitle">Every Ratatoskr service this dashboard aggregates, with its DbContexts and current backlog.</p>
+          </div>
+        </div>
+
+        <div id="multiservice-hint" class="callout hidden">
+          Only this host is registered. Add more with
+          <code>services.AddRatatoskrUI(o =&gt; o.AddService("orders", "https://orders.internal"))</code>.
+        </div>
+
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Service</th>
+                <th>Management API</th>
+                <th>Status</th>
+                <th>Instance</th>
+                <th>DbContexts</th>
+                <th>Poisoned</th>
+                <th width="120">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="multiservice-table-body">
+              <tr>
+                <td colspan="7" class="text-center text-muted">Loading services...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <!-- Detail & Payload Editor Modal -->
+    <div id="modal-backdrop" class="modal-backdrop hidden">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="modal-title">Inspect Poison Message</h3>
+          <button id="btn-modal-close" class="modal-close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-meta-grid">
+            <div><strong>Message ID:</strong> <span id="modal-msg-id">-</span></div>
+            <div><strong>Type:</strong> <span id="modal-msg-type">-</span></div>
+            <div><strong>Service:</strong> <span id="modal-msg-service">-</span></div>
+            <div><strong>Context:</strong> <span id="modal-msg-context">-</span></div>
+            <div><strong>Retries:</strong> <span id="modal-msg-retries">-</span></div>
+            <div id="modal-msg-handler-row" class="hidden"><strong>Handler:</strong> <span id="modal-msg-handler">-</span></div>
+          </div>
+
+          <div class="form-group">
+            <label>Exception Stack Trace / Error Details:</label>
+            <pre id="modal-msg-error" class="code-block error-block">-</pre>
+          </div>
+
+          <div class="form-group">
+            <label for="modal-payload-editor">CloudEvents Payload JSON:</label>
+            <textarea id="modal-payload-editor" class="code-editor" rows="12"></textarea>
+            <div id="modal-payload-hint" class="payload-hint"></div>
+            <div id="modal-json-error" class="json-error hidden">Invalid JSON format</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-modal-cancel" class="btn btn-secondary">Cancel</button>
+          <button id="btn-modal-requeue" class="btn btn-primary">Requeue Message</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>window.RATATOSKR_BASE_PATH = "__RATATOSKR_BASE__";</script>
+  <script src="__RATATOSKR_BASE__/app.js"></script>
+</body>
+</html>

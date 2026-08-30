@@ -16,16 +16,17 @@ The easiest way to run the example application is using the .NET Aspire AppHost 
 aspire run
 ```
 
-This starts PostgreSQL (logical databases `publisherdb`, `consumerdb`, `playgrounddb`), RabbitMQ, and the **PlaygroundHost** web app, plus the Aspire dashboard (often at http://localhost:15000).
+This starts PostgreSQL (logical databases `publisherdb`, `consumerdb`, `playgrounddb`, `inventorydb`, `auditdb`), RabbitMQ, the **PlaygroundHost** web app and the **InventoryService**, plus the Aspire dashboard (often at http://localhost:15000).
 
-See [examples/README.md](examples/README.md) for the full demo guide.
+PlaygroundHost serves the Ratatoskr management dashboard at `/ratatoskr`, aggregating both services and all four of their `DbContext`s. See [examples/README.md](examples/README.md) for the full demo guide and [docs/management-ui.md](docs/management-ui.md) for the dashboard itself.
 
 ## Project Structure
 
 - `src/Ratatoskr` - Core library
 - `src/Ratatoskr.EfCore` - Entity Framework Core outbox/inbox implementation
 - `src/Ratatoskr.RabbitMq` - RabbitMQ transport
-- `examples/` - Playground (`PlaygroundHost` + AppHost)
+- `src/Ratatoskr.UI` - Embedded management dashboard
+- `examples/` - Playground (`PlaygroundHost` + `InventoryService` + AppHost)
 - `examples/AppHost` - .NET Aspire orchestration
 - `tests/Ratatoskr.Tests` - Integration and unit tests
 

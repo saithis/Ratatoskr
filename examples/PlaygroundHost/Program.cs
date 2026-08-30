@@ -13,9 +13,25 @@ using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.Management;
 using Ratatoskr.RabbitMq.Extensions;
+using Ratatoskr.UI;
 using ServiceDefaults;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// The dashboard aggregates every Ratatoskr service registered here. The playground host itself
+// is the local one; the inventory service is a separate process reached over its management API,
+// relayed through this host so the browser only ever talks to one origin.
+var inventoryServiceUrl = builder.Configuration["InventoryService:Url"];
+builder.Services.AddRatatoskrUI(ui =>
+{
+    ui.Title = "Ratatoskr Playground";
+    ui.LocalServiceName = "Playground Host";
+    if (!string.IsNullOrWhiteSpace(inventoryServiceUrl))
+    {
+        // Only the service root is needed: AddService appends the default management API path.
+        ui.AddService("Inventory Service", new Uri(inventoryServiceUrl));
+    }
+});
 
 builder.AddServiceDefaults();
 
@@ -223,6 +239,7 @@ app.MapGet(
     .RequireCors("LocalDashboard");
 
 app.MapRatatoskrManagementApi("DevOnlyNoAuth");
+app.MapRatatoskrUI("/ratatoskr");
 
 await PlaygroundEnsureCreatedGate.Semaphore.WaitAsync();
 try
