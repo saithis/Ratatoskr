@@ -25,9 +25,9 @@
 
       <div class="navbar-controls">
         <div class="service-selector-container">
-          <label for="service-selector" class="control-label">Target Service:</label>
+          <label for="service-selector" class="control-label">Service:</label>
           <select id="service-selector" class="select-input">
-            <option value="local">Local Service (This Host)</option>
+            <option value="local">This Host</option>
           </select>
         </div>
 
@@ -53,10 +53,11 @@
         <span class="tab-icon">🗺️</span> Channel Topology
       </button>
       <button class="nav-tab" data-tab="tab-metrics">
-        <span class="tab-icon">📊</span> Telemetry & Health
+        <span class="tab-icon">📊</span> Telemetry &amp; Health
       </button>
       <button class="nav-tab" data-tab="tab-multiservice">
-        <span class="tab-icon">🌐</span> Multi-Service Matrix
+        <span class="tab-icon">🌐</span> Services
+        <span id="badge-service-count" class="badge badge-secondary">1</span>
       </button>
     </nav>
 
@@ -70,14 +71,19 @@
         <div class="panel-header">
           <div class="panel-title-group">
             <h2>Poison Message Workbench</h2>
-            <p class="panel-subtitle">Inspect, edit, and requeue failed messages across persistent Outbox & Inbox storage.</p>
+            <p class="panel-subtitle">Inspect, edit, and requeue failed messages across every DbContext of the selected service.</p>
           </div>
+        </div>
 
-          <div class="context-selector-group">
-            <label for="context-selector">DbContext:</label>
-            <select id="context-selector" class="select-input">
-              <option value="">Loading contexts...</option>
-            </select>
+        <!-- DbContext picker. One card per registered DbContext so a backlog in a context the
+             operator is not currently looking at is still visible. -->
+        <div class="context-strip">
+          <div class="context-strip-header">
+            <span class="control-label">DbContexts on <strong id="context-strip-service">this host</strong></span>
+            <span class="context-strip-hint text-muted">Backlog counts come from the EF Core gauge poller and can trail the table by a few seconds.</span>
+          </div>
+          <div id="context-cards" class="context-cards">
+            <div class="context-empty text-muted">Loading DbContexts…</div>
           </div>
         </div>
 
@@ -124,7 +130,7 @@
         <div class="panel-header">
           <div class="panel-title-group">
             <h2>Channel Topology Explorer</h2>
-            <p class="panel-subtitle">Registered messaging channels, CloudEvents contracts, and inbox handlers.</p>
+            <p class="panel-subtitle">Registered messaging channels, CloudEvents contracts, and inbox handlers of the selected service.</p>
           </div>
         </div>
 
@@ -138,7 +144,7 @@
         <div class="panel-header">
           <div class="panel-title-group">
             <h2>Live System Telemetry</h2>
-            <p class="panel-subtitle">Real-time stats and health metrics for the target service instance.</p>
+            <p class="panel-subtitle">Real-time stats and health metrics for the selected service instance.</p>
           </div>
         </div>
 
@@ -174,24 +180,32 @@
       <section id="tab-multiservice" class="tab-content">
         <div class="panel-header">
           <div class="panel-title-group">
-            <h2>Multi-Service Cluster Matrix</h2>
-            <p class="panel-subtitle">Aggregated overview of all registered Ratatoskr microservices.</p>
+            <h2>Services</h2>
+            <p class="panel-subtitle">Every Ratatoskr service this dashboard aggregates, with its DbContexts and current backlog.</p>
           </div>
+        </div>
+
+        <div id="multiservice-hint" class="callout hidden">
+          Only this host is registered. Add more with
+          <code>services.AddRatatoskrUI(o =&gt; o.AddService("orders", "https://orders.internal"))</code>.
         </div>
 
         <div class="table-container">
           <table class="data-table">
             <thead>
               <tr>
-                <th>Service Name</th>
-                <th>Management API URL</th>
-                <th>Health Status</th>
-                <th>Actions</th>
+                <th>Service</th>
+                <th>Management API</th>
+                <th>Status</th>
+                <th>Instance</th>
+                <th>DbContexts</th>
+                <th>Poisoned</th>
+                <th width="120">Actions</th>
               </tr>
             </thead>
             <tbody id="multiservice-table-body">
               <tr>
-                <td colspan="4" class="text-center text-muted">No remote services configured. Running in single embedded mode.</td>
+                <td colspan="7" class="text-center text-muted">Loading services...</td>
               </tr>
             </tbody>
           </table>
@@ -210,6 +224,7 @@
           <div class="modal-meta-grid">
             <div><strong>Message ID:</strong> <span id="modal-msg-id">-</span></div>
             <div><strong>Type:</strong> <span id="modal-msg-type">-</span></div>
+            <div><strong>Service:</strong> <span id="modal-msg-service">-</span></div>
             <div><strong>Context:</strong> <span id="modal-msg-context">-</span></div>
             <div><strong>Retries:</strong> <span id="modal-msg-retries">-</span></div>
             <div id="modal-msg-handler-row" class="hidden"><strong>Handler:</strong> <span id="modal-msg-handler">-</span></div>

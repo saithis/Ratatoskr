@@ -8,11 +8,17 @@
     injectedBase && injectedBase !== '__RATATOSKR_BASE__' ? injectedBase : '/ratatoskr'
   ).replace(/\/+$/, '');
 
+  // Key of the service hosting the dashboard. Remote services are keyed by their configured
+  // name, which is also the segment the relay proxy route matches on.
+  const LOCAL_SERVICE_KEY = 'local';
+
   let config = {
     title: 'Ratatoskr Dashboard',
     routePrefix: basePath,
     pollingIntervalMs: 5000,
     enablePayloadEditing: true,
+    includeLocalService: true,
+    localServiceName: 'This Host',
     defaultBasePath: `${basePath}/api/v1`,
     remoteServices: []
   };
@@ -36,10 +42,11 @@
 
   let state = {
     activeTab: 'tab-poison',
-    currentServiceIndex: 'local', // 'local' or number index
-    currentContext: '', // DbContext name
+    currentService: LOCAL_SERVICE_KEY, // 'local' or a remote service name
+    currentContext: '', // DbContext name within the selected service
     currentMode: 'outbox', // 'outbox' or 'inbox'
-    contexts: [], // [{ name, hasOutbox, hasInbox }]
+    contexts: [], // [{ name, hasOutbox, hasInbox, health }]
+    contextsError: '',
     poisonMessages: [],
     poisonTotalCount: 0,
     selectedIds: new Set(),
@@ -51,7 +58,8 @@
   const el = {
     dashboardTitle: document.getElementById('dashboard-title'),
     serviceSelector: document.getElementById('service-selector'),
-    contextSelector: document.getElementById('context-selector'),
+    contextCards: document.getElementById('context-cards'),
+    contextStripService: document.getElementById('context-strip-service'),
     btnRefresh: document.getElementById('btn-refresh'),
     btnViewOutbox: document.getElementById('btn-view-outbox'),
     btnViewInbox: document.getElementById('btn-view-inbox'),
@@ -61,6 +69,7 @@
     btnBulkRequeue: document.getElementById('btn-bulk-requeue'),
     btnBulkDelete: document.getElementById('btn-bulk-delete'),
     badgePoisonCount: document.getElementById('badge-poison-count'),
+    badgeServiceCount: document.getElementById('badge-service-count'),
 
     // Topology
     topologyContainer: document.getElementById('topology-container'),
@@ -75,12 +84,14 @@
 
     // Multi-service
     multiserviceTableBody: document.getElementById('multiservice-table-body'),
+    multiserviceHint: document.getElementById('multiservice-hint'),
 
     // Modal
     modalBackdrop: document.getElementById('modal-backdrop'),
     modalTitle: document.getElementById('modal-title'),
     modalMsgId: document.getElementById('modal-msg-id'),
     modalMsgType: document.getElementById('modal-msg-type'),
+    modalMsgService: document.getElementById('modal-msg-service'),
     modalMsgContext: document.getElementById('modal-msg-context'),
     modalMsgRetries: document.getElementById('modal-msg-retries'),
     modalMsgHandlerRow: document.getElementById('modal-msg-handler-row'),
@@ -100,13 +111,51 @@
     return modes[state.currentMode];
   }
 
-  // Helper to determine target management API base URL
-  function getManagementApiBaseUrl() {
-    if (state.currentServiceIndex === 'local') {
+  // ── Service addressing ────────────────────────────────────────────────────
+
+  // Every service the dashboard can target, the local host first when it is included.
+  function allServices() {
+    const list = [];
+    if (config.includeLocalService !== false) {
+      list.push({
+        key: LOCAL_SERVICE_KEY,
+        name: config.localServiceName || 'This Host',
+        managementApiUrl: config.defaultBasePath,
+        isLocal: true
+      });
+    }
+    (config.remoteServices || []).forEach(svc => {
+      list.push({
+        key: svc.name,
+        name: svc.name,
+        managementApiUrl: svc.managementApiUrl,
+        isLocal: false
+      });
+    });
+    return list;
+  }
+
+  function findService(key) {
+    return allServices().find(svc => svc.key === key) || null;
+  }
+
+  function currentServiceName() {
+    const svc = findService(state.currentService);
+    return svc ? svc.name : state.currentService;
+  }
+
+  // Remote services are reached through the host's relay proxy, which prepends the configured
+  // absolute management API URL. The path appended here is therefore the endpoint path only,
+  // never a second copy of the management API base path.
+  function managementApiBaseFor(serviceKey) {
+    if (serviceKey === LOCAL_SERVICE_KEY) {
       return config.defaultBasePath;
     }
-    const idx = parseInt(state.currentServiceIndex, 10);
-    return `${config.routePrefix}/ui-api/proxy/${idx}/ratatoskr/api/v1`;
+    return `${config.routePrefix}/ui-api/proxy/${encodeURIComponent(serviceKey)}`;
+  }
+
+  function getManagementApiBaseUrl() {
+    return managementApiBaseFor(state.currentService);
   }
 
   // Base URL for the poison endpoints of the selected context and mode.
@@ -138,21 +187,26 @@
       if (res.ok) {
         config = await res.json();
         if (config.title) el.dashboardTitle.textContent = config.title;
-
-        // Populate service selector
-        el.serviceSelector.innerHTML = '<option value="local">Local Service (This Host)</option>';
-        if (config.remoteServices && config.remoteServices.length > 0) {
-          config.remoteServices.forEach((svc, index) => {
-            const opt = document.createElement('option');
-            opt.value = index;
-            opt.textContent = `${svc.name} (${svc.managementApiUrl})`;
-            el.serviceSelector.appendChild(opt);
-          });
-        }
       }
     } catch (e) {
       console.warn('Failed to load UI config, using defaults:', e);
     }
+
+    const services = allServices();
+    el.badgeServiceCount.textContent = services.length;
+
+    // A dashboard host that only aggregates remote services has no local management API, so
+    // fall back to the first registered service instead of querying endpoints that do not exist.
+    if (!services.some(svc => svc.key === state.currentService)) {
+      state.currentService = services.length > 0 ? services[0].key : LOCAL_SERVICE_KEY;
+    }
+
+    el.serviceSelector.innerHTML = services
+      .map(svc => `<option value="${escapeHtml(svc.key)}">${escapeHtml(svc.name)}</option>`)
+      .join('');
+    el.serviceSelector.value = state.currentService;
+    el.serviceSelector.disabled = services.length < 2;
+    el.contextStripService.textContent = currentServiceName();
   }
 
   // Setup Event Listeners
@@ -172,12 +226,7 @@
     });
 
     // Target Service Switcher
-    el.serviceSelector.addEventListener('change', (e) => {
-      state.currentServiceIndex = e.target.value;
-      state.currentContext = '';
-      state.contexts = [];
-      loadData();
-    });
+    el.serviceSelector.addEventListener('change', (e) => switchService(e.target.value));
 
     // Refresh Button
     el.btnRefresh.addEventListener('click', loadData);
@@ -185,14 +234,6 @@
     // Workbench Mode Toggle
     el.btnViewOutbox.addEventListener('click', () => switchMode('outbox'));
     el.btnViewInbox.addEventListener('click', () => switchMode('inbox'));
-
-    // Context Selector
-    el.contextSelector.addEventListener('change', (e) => {
-      state.currentContext = e.target.value;
-      applyContextCapabilities();
-      state.selectedIds.clear();
-      loadPoisonMessages();
-    });
 
     // Filter Input
     el.filterInput.addEventListener('input', renderPoisonTable);
@@ -230,11 +271,33 @@
     });
   }
 
-  function switchMode(mode) {
-    if (state.currentMode === mode) return;
+  function switchService(serviceKey) {
+    if (state.currentService === serviceKey) return;
+    state.currentService = serviceKey;
+    // Contexts are per service; keeping the old selection would address a DbContext that does
+    // not exist on the new target.
+    state.currentContext = '';
+    state.contexts = [];
+    state.contextsError = '';
+    state.selectedIds.clear();
+    state.poisonMessages = [];
+    el.serviceSelector.value = serviceKey;
+    el.contextStripService.textContent = currentServiceName();
+    renderContextCards();
+    loadData();
+  }
+
+  // Updates the mode state and toggle buttons without triggering a fetch, so callers that are
+  // about to reload anyway do not issue the request twice.
+  function setMode(mode) {
     state.currentMode = mode;
     el.btnViewOutbox.classList.toggle('active', mode === 'outbox');
     el.btnViewInbox.classList.toggle('active', mode === 'inbox');
+  }
+
+  function switchMode(mode) {
+    if (state.currentMode === mode) return;
+    setMode(mode);
     state.selectedIds.clear();
     loadPoisonMessages();
   }
@@ -249,55 +312,80 @@
     } else if (state.activeTab === 'tab-metrics') {
       await loadMetrics();
     } else if (state.activeTab === 'tab-multiservice') {
-      await loadMultiServiceMatrix();
+      await loadServiceMatrix();
     }
   }
 
-  // Load EF Core Contexts
+  // ── DbContexts ────────────────────────────────────────────────────────────
+
+  // Loads every DbContext registered on the selected service together with its backlog gauge,
+  // so a poisoned message in a context the operator is not looking at is still visible.
   async function loadContexts() {
+    const baseUrl = getManagementApiBaseUrl();
+    const contexts = await fetchContexts(baseUrl);
+
+    await Promise.all(
+      contexts.map(async ctx => {
+        ctx.health = await fetchContextHealth(baseUrl, ctx.name);
+      })
+    );
+
+    state.contexts = contexts;
+    if (contexts.length === 0) {
+      state.currentContext = '';
+    } else if (!contexts.some(c => c.name === state.currentContext)) {
+      state.currentContext = contexts[0].name;
+      state.selectedIds.clear();
+    }
+
+    applyContextCapabilities();
+    renderContextCards();
+    updatePoisonBadge();
+  }
+
+  async function fetchContexts(baseUrl) {
+    state.contextsError = '';
     try {
-      const baseUrl = getManagementApiBaseUrl();
       const res = await fetch(`${baseUrl}/efcore/contexts`);
       if (!res.ok) {
-        state.contexts = [];
-        state.currentContext = '';
-        el.contextSelector.innerHTML = '<option value="">No EF Core contexts found</option>';
-        return;
+        state.contextsError =
+          res.status === 404
+            ? 'This service does not expose EF Core durability management endpoints.'
+            : `Failed to load DbContexts (HTTP ${res.status}).`;
+        return [];
       }
       const data = await res.json();
-      state.contexts = (data.contexts || []).map(c => ({
+      return (data.contexts || []).map(c => ({
         name: c.name,
         hasOutbox: c.hasOutbox === true,
-        hasInbox: c.hasInbox === true
+        hasInbox: c.hasInbox === true,
+        health: null
       }));
-
-      if (state.contexts.length === 0) {
-        state.currentContext = '';
-        el.contextSelector.innerHTML = '<option value="">None registered</option>';
-        return;
-      }
-
-      if (!state.contexts.some(c => c.name === state.currentContext)) {
-        state.currentContext = state.contexts[0].name;
-      }
-
-      // Only rebuild the dropdown when the set of contexts actually changed, otherwise the
-      // background poll would reset the control every few seconds while it is in use.
-      const rendered = Array.from(el.contextSelector.options).map(o => o.value).join(' ');
-      const expected = state.contexts.map(c => c.name).join(' ');
-      if (rendered !== expected) {
-        el.contextSelector.innerHTML = state.contexts
-          .map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`)
-          .join('');
-      }
-      el.contextSelector.value = state.currentContext;
-      applyContextCapabilities();
     } catch (e) {
       console.warn('Failed to fetch contexts:', e);
-      state.contexts = [];
-      state.currentContext = '';
-      el.contextSelector.innerHTML = '<option value="">Error loading contexts</option>';
+      state.contextsError = 'Failed to reach the management API of this service.';
+      return [];
     }
+  }
+
+  async function fetchContextHealth(baseUrl, contextName) {
+    try {
+      const res = await fetch(
+        `${baseUrl}/efcore/contexts/${encodeURIComponent(contextName)}/health`
+      );
+      return res.ok ? await res.json() : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function selectContext(name) {
+    if (!name || name === state.currentContext) return;
+    state.currentContext = name;
+    state.selectedIds.clear();
+    applyContextCapabilities();
+    renderContextCards();
+    loadPoisonMessages();
   }
 
   // A context can be registered with only an outbox or only an inbox; the management API
@@ -311,19 +399,98 @@
     el.btnViewInbox.disabled = !hasInbox;
 
     if (state.currentMode === 'outbox' && !hasOutbox && hasInbox) {
-      switchMode('inbox');
+      setMode('inbox');
     } else if (state.currentMode === 'inbox' && !hasInbox && hasOutbox) {
-      switchMode('outbox');
+      setMode('outbox');
     }
   }
 
-  // Load Poison Messages
+  function renderContextCards() {
+    if (state.contexts.length === 0) {
+      const message =
+        state.contextsError || 'No EF Core DbContexts are registered on this service.';
+      el.contextCards.innerHTML = `<div class="context-empty text-muted">${escapeHtml(message)}</div>`;
+      return;
+    }
+
+    el.contextCards.innerHTML = state.contexts.map(renderContextCard).join('');
+
+    el.contextCards.querySelectorAll('.context-card').forEach(card => {
+      card.addEventListener('click', () => selectContext(card.getAttribute('data-context')));
+    });
+  }
+
+  function renderContextCard(ctx) {
+    const selected = ctx.name === state.currentContext;
+    const health = ctx.health || {};
+    const halves = [
+      renderContextHalf('Outbox', ctx.hasOutbox, health.poisonedOutboxCount, health.pendingOutboxCount),
+      renderContextHalf('Inbox', ctx.hasInbox, health.poisonedInboxCount, health.pendingInboxCount)
+    ].join('');
+
+    return `
+      <button type="button" class="context-card${selected ? ' active' : ''}"
+              data-context="${escapeHtml(ctx.name)}" aria-pressed="${selected}">
+        <span class="context-card-name">${escapeHtml(ctx.name)}</span>
+        <span class="context-card-stats">${halves}</span>
+      </button>
+    `;
+  }
+
+  function renderContextHalf(label, enabled, poisoned, pending) {
+    if (!enabled) {
+      return `
+        <span class="context-half">
+          <span class="context-half-label">${label}</span>
+          <span class="text-muted">not configured</span>
+        </span>
+      `;
+    }
+
+    const poisonedCount = poisoned ?? 0;
+    return `
+      <span class="context-half">
+        <span class="context-half-label">${label}</span>
+        <span class="badge ${poisonedCount > 0 ? 'badge-danger' : 'badge-success'}">${poisonedCount}</span>
+        <span class="text-muted">poisoned · ${pending ?? 0} pending</span>
+      </span>
+    `;
+  }
+
+  // Sums the poisoned backlog over every context of the service, so the tab badge does not go
+  // quiet just because the selected context happens to be clean. Returns null when no gauge has
+  // been read yet, in which case the caller falls back to the live list count.
+  function totalPoisonedAcrossContexts() {
+    let total = 0;
+    let known = false;
+    state.contexts.forEach(ctx => {
+      if (!ctx.health) return;
+      known = true;
+      if (ctx.hasOutbox) total += ctx.health.poisonedOutboxCount || 0;
+      if (ctx.hasInbox) total += ctx.health.poisonedInboxCount || 0;
+    });
+    return known ? total : null;
+  }
+
+  function updatePoisonBadge() {
+    const across = totalPoisonedAcrossContexts();
+    if (across === null) {
+      el.badgePoisonCount.textContent = state.poisonTotalCount;
+      el.badgePoisonCount.title = `Poisoned messages in ${state.currentContext || 'the selected context'}.`;
+      return;
+    }
+    el.badgePoisonCount.textContent = across;
+    el.badgePoisonCount.title = `Poisoned messages across all ${state.contexts.length} DbContext(s) of ${currentServiceName()}.`;
+  }
+
+  // ── Poison workbench ──────────────────────────────────────────────────────
+
   async function loadPoisonMessages() {
     if (!state.currentContext) {
       state.poisonMessages = [];
       state.poisonTotalCount = 0;
-      el.badgePoisonCount.textContent = '0';
       el.poisonTableBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No DbContext selected.</td></tr>';
+      updatePoisonBadge();
       updateBulkButtons();
       return;
     }
@@ -338,7 +505,7 @@
       const data = await res.json();
       state.poisonMessages = data.items || [];
       state.poisonTotalCount = data.totalCount ?? state.poisonMessages.length;
-      el.badgePoisonCount.textContent = state.poisonTotalCount;
+      updatePoisonBadge();
 
       // Keep the operator's selection across background refreshes, dropping rows that are
       // no longer poisoned.
@@ -405,7 +572,7 @@
     }).join('');
 
     // Table item event listeners
-    document.querySelectorAll('.row-select').forEach(cb => {
+    el.poisonTableBody.querySelectorAll('.row-select').forEach(cb => {
       cb.addEventListener('change', (e) => {
         const id = e.target.getAttribute('data-id');
         if (e.target.checked) state.selectedIds.add(id);
@@ -414,11 +581,11 @@
       });
     });
 
-    document.querySelectorAll('.btn-inspect').forEach(btn => {
+    el.poisonTableBody.querySelectorAll('.btn-inspect').forEach(btn => {
       btn.addEventListener('click', () => openInspectModal(btn.getAttribute('data-id')));
     });
 
-    document.querySelectorAll('.btn-delete-single').forEach(btn => {
+    el.poisonTableBody.querySelectorAll('.btn-delete-single').forEach(btn => {
       btn.addEventListener('click', () => deleteSingleMessage(btn.getAttribute('data-id')));
     });
 
@@ -450,6 +617,7 @@
       el.modalTitle.textContent = `Inspect ${mode.label} Message`;
       el.modalMsgId.textContent = data.messageId || data.id || id;
       el.modalMsgType.textContent = data.messageType || '-';
+      el.modalMsgService.textContent = currentServiceName();
       el.modalMsgContext.textContent = state.currentContext;
       el.modalMsgRetries.textContent = data.errorCount ?? 0;
       el.modalMsgError.textContent = data.lastError || 'None';
@@ -596,7 +764,8 @@
     }
   }
 
-  // Load Topology
+  // ── Topology & metrics ────────────────────────────────────────────────────
+
   async function loadTopology() {
     try {
       const baseUrl = getManagementApiBaseUrl();
@@ -641,7 +810,6 @@
     }
   }
 
-  // Load Metrics
   async function loadMetrics() {
     try {
       const baseUrl = getManagementApiBaseUrl();
@@ -660,53 +828,111 @@
     }
   }
 
-  // Load Multi-Service Matrix
-  async function loadMultiServiceMatrix() {
-    if (!config.remoteServices || config.remoteServices.length === 0) {
-      el.multiserviceTableBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Single embedded mode: No remote services registered in options.</td></tr>';
+  // ── Service matrix ────────────────────────────────────────────────────────
+
+  async function loadServiceMatrix() {
+    const services = allServices();
+    el.badgeServiceCount.textContent = services.length;
+    el.multiserviceHint.classList.toggle(
+      'hidden',
+      (config.remoteServices || []).length > 0
+    );
+
+    if (services.length === 0) {
+      el.multiserviceTableBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No services registered.</td></tr>';
       return;
     }
 
-    const rows = await Promise.all(config.remoteServices.map(async (svc, index) => {
-      let statusHtml = '<span class="badge badge-danger">Offline</span>';
-      try {
-        const proxyUrl = `${config.routePrefix}/ui-api/proxy/${index}/ratatoskr/api/v1/system/metrics`;
-        const res = await fetch(proxyUrl);
-        if (res.ok) {
-          statusHtml = '<span class="badge badge-success">Healthy</span>';
-        }
-      } catch (e) { /* offline is the default state */ }
-
-      return `
-        <tr>
-          <td><strong>${escapeHtml(svc.name)}</strong></td>
-          <td><code>${escapeHtml(svc.managementApiUrl)}</code></td>
-          <td>${statusHtml}</td>
-          <td>
-            <button class="btn btn-secondary btn-sm btn-switch-service" data-index="${index}">Switch To Service</button>
-          </td>
-        </tr>
-      `;
-    }));
-
+    const rows = await Promise.all(services.map(buildServiceRow));
     el.multiserviceTableBody.innerHTML = rows.join('');
 
-    document.querySelectorAll('.btn-switch-service').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const idx = e.target.getAttribute('data-index');
-        el.serviceSelector.value = idx;
-        state.currentServiceIndex = idx;
-        state.currentContext = '';
-        state.contexts = [];
-        state.activeTab = 'tab-poison';
+    el.multiserviceTableBody.querySelectorAll('.btn-switch-service').forEach(btn => {
+      btn.addEventListener('click', () => {
+        switchService(btn.getAttribute('data-service'));
         document.querySelector('[data-tab="tab-poison"]').click();
       });
     });
   }
 
+  async function buildServiceRow(svc) {
+    const baseUrl = managementApiBaseFor(svc.key);
+    const isCurrent = svc.key === state.currentService;
+
+    let statusHtml = '<span class="badge badge-danger">Unreachable</span>';
+    let instance = '-';
+    let contextsHtml = '<span class="text-muted">-</span>';
+    let poisonedHtml = '<span class="text-muted">-</span>';
+
+    try {
+      const res = await fetch(`${baseUrl}/system/metrics`);
+      if (res.ok) {
+        const metrics = await res.json();
+        statusHtml = '<span class="badge badge-success">Healthy</span>';
+        instance = metrics.instanceId || '-';
+
+        const storage = await fetchStorageSummary(baseUrl);
+        if (storage.contexts.length > 0) {
+          contextsHtml = storage.contexts
+            .map(name => `<span class="badge badge-secondary">${escapeHtml(name)}</span>`)
+            .join(' ');
+          poisonedHtml = `<span class="badge ${storage.poisoned > 0 ? 'badge-danger' : 'badge-success'}">${storage.poisoned}</span>`;
+        } else {
+          contextsHtml = '<span class="text-muted">no EF Core durability</span>';
+        }
+      } else {
+        statusHtml = `<span class="badge badge-warning">HTTP ${res.status}</span>`;
+      }
+    } catch (e) { /* unreachable is the default state */ }
+
+    return `
+      <tr${isCurrent ? ' class="row-current"' : ''}>
+        <td>
+          <strong>${escapeHtml(svc.name)}</strong>
+          ${svc.isLocal ? '<br><small class="text-muted">dashboard host</small>' : ''}
+        </td>
+        <td><code>${escapeHtml(svc.managementApiUrl)}</code></td>
+        <td>${statusHtml}</td>
+        <td><small>${escapeHtml(instance)}</small></td>
+        <td>${contextsHtml}</td>
+        <td>${poisonedHtml}</td>
+        <td>
+          ${isCurrent
+            ? '<span class="text-muted">selected</span>'
+            : `<button class="btn btn-secondary btn-sm btn-switch-service" data-service="${escapeHtml(svc.key)}">Inspect</button>`}
+        </td>
+      </tr>
+    `;
+  }
+
+  // Rolls the per-context backlog gauges of one service up into a single poisoned total for
+  // the matrix row.
+  async function fetchStorageSummary(baseUrl) {
+    const contexts = [];
+    let poisoned = 0;
+    try {
+      const res = await fetch(`${baseUrl}/efcore/contexts`);
+      if (!res.ok) return { contexts, poisoned };
+      const data = await res.json();
+      const entries = data.contexts || [];
+
+      const healths = await Promise.all(
+        entries.map(entry => fetchContextHealth(baseUrl, entry.name))
+      );
+
+      entries.forEach((entry, index) => {
+        contexts.push(entry.name);
+        const health = healths[index];
+        if (!health) return;
+        if (entry.hasOutbox) poisoned += health.poisonedOutboxCount || 0;
+        if (entry.hasInbox) poisoned += health.poisonedInboxCount || 0;
+      });
+    } catch (e) { /* leave the summary empty */ }
+    return { contexts, poisoned };
+  }
+
   // Utility Functions
   function escapeHtml(str) {
-    if (!str) return '';
+    if (str === null || str === undefined) return '';
     return String(str)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')

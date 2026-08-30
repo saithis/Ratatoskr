@@ -21,7 +21,7 @@ public static class RatatoskrUIServiceCollectionExtensions
         configure?.Invoke(options);
 
         _ = services.AddSingleton(options);
-        _ = services.AddHttpClient("RatatoskrUIProxy");
+        _ = services.AddHttpClient(RatatoskrUIEndpointRouteBuilderExtensions.ProxyHttpClientName);
 
         return services;
     }

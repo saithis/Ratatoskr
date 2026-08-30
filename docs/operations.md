@@ -54,6 +54,10 @@ services.AddHealthChecks()
 
 Poisoned messages have exhausted their retry budget and remain in the database for manual investigation.
 
+The [management API and dashboard](management-ui.md) do everything in this section over HTTP —
+listing, inspecting, requeueing and deleting poisoned rows per `DbContext` and per service. The
+SQL below is the equivalent for hosts that do not map it.
+
 **Outbox (PostgreSQL):**
 ```sql
 SELECT "Id", "TransportName", "ErrorCount", "Error", "CreatedAt", "FailedAt"
@@ -389,6 +393,7 @@ After deploying a new version, monitor these signals for 15-30 minutes:
 
 ## What's Next
 
+- [Management API & Dashboard](management-ui.md) — Inspect and requeue poisoned messages over HTTP
 - [Observability](observability.md) — Complete metrics reference and setup
 - [Configuration Reference](configuration.md) — All configuration options at a glance
 - [Outbox](outbox.md) — Outbox configuration and processing details

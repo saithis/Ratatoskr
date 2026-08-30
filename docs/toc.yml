@@ -31,6 +31,8 @@ items:
     href: observability.md
   - name: Testing
     href: testing.md
+  - name: Management API & Dashboard
+    href: management-ui.md
   - name: AsyncAPI
     href: asyncapi.md
   - name: Operations Guide

@@ -19,8 +19,21 @@ internal sealed class EfCoreManagementDbContextDescriptor<TDbContext>(
     public Type DbContextType { get; } = typeof(TDbContext);
     public string DbContextName => DbContextType.Name;
     public string DbContextFullName => DbContextType.FullName ?? DbContextType.Name;
-    public bool HasOutbox => DbContextType.IsAssignableTo(typeof(IOutboxDbContext));
-    public bool HasInbox => DbContextType.IsAssignableTo(typeof(IInboxDbContext));
+
+    /// <summary>Whether <c>UseOutbox()</c> was configured for this DbContext.</summary>
+    /// <remarks>
+    /// The generic constraint forces every registered context to implement both interfaces, so
+    /// testing assignability would report every context as having both an outbox and an inbox.
+    /// What the dashboard needs to know is which halves were actually configured, and the options
+    /// holders exist only for the ones <c>UseOutbox()</c>/<c>UseInbox()</c> were called for.
+    /// </remarks>
+    public bool HasOutbox { get; } =
+        serviceProvider.GetService<OutboxOptionsHolder<TDbContext>>() is not null;
+
+    /// <summary>Whether <c>UseInbox()</c> was configured for this DbContext.</summary>
+    public bool HasInbox { get; } =
+        serviceProvider.GetService<InboxOptionsHolder<TDbContext>>() is not null;
+
     public DateTimeOffset? LastOutboxProcessingAt => _outboxProcessor?.LastSuccessfulProcessingAt;
     public DateTimeOffset? LastInboxProcessingAt => _inboxProcessor?.LastSuccessfulProcessingAt;
 
