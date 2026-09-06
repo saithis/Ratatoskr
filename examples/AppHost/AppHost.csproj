@@ -17,6 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\InventoryService\InventoryService.csproj" />
     <ProjectReference Include="..\PlaygroundHost\PlaygroundHost.csproj" />
   </ItemGroup>
 </Project>

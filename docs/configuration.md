@@ -195,6 +195,48 @@ services.AddRatatoskrTesting();
 | `CreateTrackingSession()` | Create a trace-isolated test session | [Testing](testing.md) |
 | `TrackActivity()` | Start the action-based tracking API | [Testing](testing.md) |
 
+## Management Agent (`Ratatoskr.Management`)
+
+```csharp
+services.AddRatatoskrManagement(options =>
+{
+    options.ServiceName = "orders-service";
+    options.InstanceId = Environment.MachineName;
+    options.UiExchangePrefix = "ratatoskr.ui";
+    options.HeartbeatInterval = TimeSpan.FromSeconds(15);
+    options.EnableHeartbeat = true;
+});
+```
+
+| Property | Default | Description | Details |
+|---|---|---|---|
+| `ServiceName` | Assembly Name | Logical name of the service | [Management & UI](management-ui.md) |
+| `InstanceId` | `Guid.NewGuid()` | Identifier for this specific replica | [Management & UI](management-ui.md) |
+| `UiExchangePrefix` | `"ratatoskr.ui"` | Name prefix for UI command & inbox exchanges | [Management & UI](management-ui.md) |
+| `HeartbeatInterval` | `15 seconds` | Heartbeat announcement broadcast interval | [Management & UI](management-ui.md) |
+| `EnableHeartbeat` | `true` | Set to `false` in in-process monoliths without broker | [Management & UI](management-ui.md) |
+
+## Management UI Dashboard (`Ratatoskr.UI`)
+
+```csharp
+services.AddRatatoskrUI(options =>
+{
+    options.UiExchangePrefix = "ratatoskr.ui";
+    options.RequestTimeout = TimeSpan.FromSeconds(15);
+    options.ServiceOfflineThreshold = TimeSpan.FromSeconds(45);
+});
+
+// In pipeline:
+app.MapRatatoskrUI("RatatoskrAdmin", "/ratatoskr");
+```
+
+| Property | Default | Description | Details |
+|---|---|---|---|
+| `UiExchangePrefix` | `"ratatoskr.ui"` | Name prefix for UI command & inbox exchanges | [Management & UI](management-ui.md) |
+| `RequestTimeout` | `15 seconds` | Maximum wait timeout for RPC command replies | [Management & UI](management-ui.md) |
+| `ServiceOfflineThreshold` | `45 seconds` | Time without heartbeats before marking offline | [Management & UI](management-ui.md) |
+
 ## Distributed Lock Provider
 
 The lock provider is registered as `IDistributedLockProvider` in DI. See [Operations](operations.md) for provider options (File, PostgreSQL, SQL Server, Redis).
+

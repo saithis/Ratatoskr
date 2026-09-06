@@ -1,20 +1,19 @@
 # Ratatoskr examples playground
 
-Single ASP.NET Core host (**PlaygroundHost**) plus Aspire **AppHost** demonstrates Ratatoskr building blocks: EF Core outbox/inbox on two logical PostgreSQL databases (publisher vs consumer), RabbitMQ fan-out and retries, a **playground** HTTP surface (activities, diagnostics, Rabbit queue depths), a **server-driven scenario runner** (catalog, run status, cancel), and the static dashboard under `examples/PlaygroundHost/wwwroot/`.
-
-Each **scenario** is a fixed script with its own **wire types** (`[RatatoskrMessage("{slug}.{kind}")]` style names) and **per-slug Rabbit topology** (`pg.{slug}.events`, `pg.{slug}.commands`, and queues such as `pg.{slug}.orders`) so concurrent runs do not share retry or DLQ mailboxes. Scenarios register only the channels, message CLR types, and handlers their script actually uses (for example `direct-consume-dlq` wires only `OrderPlaced` on the notifications queue). There are no global playground toggles; failure paths are encoded in the scenario handlers or run-scoped helpers (for example outbox send simulation).
-
-`examples/Docs` remains a **docfx-only** snippet project; it is not part of the runnable playground.
+Two ASP.NET Core hosts (**PlaygroundHost** and **InventoryService**) orchestrated by an Aspire **AppHost** demonstrate Ratatoskr building blocks: EF Core outbox/inbox on PostgreSQL, RabbitMQ fan-out and retries, a **playground** scenario runner, and the **Ratatoskr Management Dashboard** (`Ratatoskr.UI` + `Ratatoskr.Management`).
 
 ## Topology
 
 | Piece | Role |
 |---|---|
-| **PlaygroundHost** | Ratatoskr bus, handlers, minimal HTTP APIs, scenario runner, static UI, Rabbit depth probe |
-| **publisherdb** | Publisher `DbContext`: order row where scenarios need it, outbox, inbox, EF Core internal channel where registered |
-| **consumerdb** | Consumer `DbContext`: command inbox + outcome outbox |
+| **PlaygroundHost** | Scenario runner, activity recorder, playground UI at `/`, and the **Ratatoskr Management Dashboard** at `/ratatoskr` |
+| **InventoryService** | Companion microservice managed purely over RabbitMQ (`Ratatoskr.Management`), hosting two DbContexts (`InventoryDbContext` and `AuditDbContext`) |
+| **publisherdb** | Publisher `DbContext` on PostgreSQL: orders table, outbox, inbox, EF Core internal channel |
+| **consumerdb** | Consumer `DbContext` on PostgreSQL: command inbox + outcome outbox |
 | **playgrounddb** | Scenario run ledger (`Runs` table) |
-| **RabbitMQ** | Per-scenario exchanges and queues derived from slug (see `PlaygroundAmqpNames`) |
+| **inventorydb** | Inventory `DbContext`: outbox **and** inbox for stock reservations |
+| **auditdb** | Audit `DbContext`: outbox **only**, demonstrating asymmetric multi-DbContext configurations in the Management UI |
+| **RabbitMQ** | Message broker for scenario channels, plus the Management UI 2-exchange control plane (`ratatoskr.ui.commands` and `ratatoskr.ui.inbox`) |
 
 ## Quick start
 
@@ -24,17 +23,52 @@ aspire run
 # or: dotnet run
 ```
 
-Aspire opens the dashboard (often `http://localhost:15000`). Open the **playgroundhost** HTTP endpoint for the UI. Playground APIs and scenarios respond with **404** unless the host enables the playground (`RATATOSKR_EXAMPLES_PLAYGROUND=1` is set from AppHost, or configure `Playground:Enabled` for local runs).
+1. Open the Aspire dashboard (typically `http://localhost:15000`) to inspect resource status, console logs, and distributed traces.
+2. Open the **playgroundhost** HTTP endpoint (`http://localhost:<port>/`) to launch scenarios.
+3. Open the **Ratatoskr Management Dashboard** at **`/ratatoskr`** (`http://localhost:<port>/ratatoskr`) to see the new management UI in action.
 
-## Environment
+---
 
-| Variable / setting | Effect |
-|---|---|
-| `RATATOSKR_EXAMPLES_PLAYGROUND=1` | Forces `Playground:Enabled` on (used by AppHost). |
-| `Playground:Enabled` | When false, `/api/playground/*` returns 404 (except static files and health). |
-| `Playground:RunTimeoutSeconds` | Server-side cap for scenario execution (default 120). |
+## Demonstrating Management UI Capabilities
 
-Scenarios marked **dangerous** in the catalog require `POST .../run?confirmDanger=true` (the dashboard asks for confirmation before sending this).
+The new **`Ratatoskr.UI`** and **`Ratatoskr.Management`** packages provide a distributed control plane operating over RabbitMQ:
+
+### 1. Multi-Service Automatic Discovery
+- Both `playground-host` and `inventory-service` periodically publish health heartbeats to `ratatoskr.ui.inbox`.
+- The dashboard automatically discovers connected microservices in real-time without needing hardcoded HTTP addresses or direct inter-service HTTP ingress.
+- Real-time updates stream directly to the browser via **Server-Sent Events (SSE)** (`/ratatoskr/api/events`).
+
+### 2. Multi-DbContext per Service
+- Switch between services in the sidebar or header:
+  - **`playground-host`**: Features `PublisherDbContext` (Outbox + Inbox) and `ConsumerDbContext` (Outbox + Inbox).
+  - **`inventory-service`**: Features `InventoryDbContext` (Outbox + Inbox) and `AuditDbContext` (Outbox only). The UI clearly displays which durability patterns are active for each context.
+
+### 3. Active Replicas & Instance Tracking
+- Under **Replicas & Stats**, inspect active instance IDs, host/machine names, environment names, start time, and last heartbeat timestamps.
+
+### 4. Channels & Topology Visualization
+- Under **Channels & Topology**, inspect registered publish and consume channels, intents (`CommandConsume`, `EventPublish`, etc.), transport details (`rabbitmq` / `efcore`), queue/exchange names, and accepted message types.
+
+### 5. Outbox & Inbox Poison Inspection & Remediation
+- **Generate Outbox Poison** (`PlaygroundHost`):
+  - Run the `outbox-poison` scenario from `/`.
+  - Open `/ratatoskr`, select `playground-host` -> `PublisherDbContext` -> Outbox.
+  - Inspect the poisoned message, view CloudEvents headers and decoded JSON payload, and click **Requeue** or **Bulk Requeue**.
+- **Generate Inbox Poison** (`PlaygroundHost`):
+  - Run the `inbox-poison` scenario from `/`.
+  - Open `/ratatoskr`, select `playground-host` -> `ConsumerDbContext` -> Inbox.
+  - View the failing handler (`inbox-poison.process`), attempt count, and full exception stack trace.
+  - Test **Requeue Handler**, **Requeue Message**, or **Bulk Requeue**.
+- **Generate Multi-Service Inbox Poison** (`InventoryService`):
+  - Trigger a failing stock reservation on `InventoryService`:
+    ```bash
+    curl -X POST http://localhost:<inventory-port>/inventory/reservations/simulate-failure
+    ```
+  - Open `/ratatoskr`, select `inventory-service` -> `InventoryDbContext` -> Inbox.
+  - Notice the row is poisoned in `InventoryDbContext` with the simulated error stack trace.
+  - Click **Requeue** — the management UI dispatches the command over RabbitMQ to `inventory-service.mgmt`, where the agent unpoisons the message and clears the error counter.
+
+---
 
 ## Feature coverage (where)
 
@@ -46,32 +80,30 @@ Scenarios marked **dangerous** in the catalog require `POST .../run?confirmDange
 | Outbox max message size | `WithMaxMessageSize` on publisher outbox; scenario `oversized-payload-rolls-back` |
 | EF Core internal channel | Scenario `efcore-internal-command` |
 | Direct publish / consume | Scenarios `direct-consume-success`, `direct-consume-retry`, `direct-consume-dlq` |
-| Replay deduplication | Scenario `replay-dedups` (two `PublishDirectAsync` calls with the same id: `UseInbox` consumer runs once, `AllowConsumeWithoutInbox` consumer runs twice) |
+| Replay deduplication | Scenario `replay-dedups` |
 | Fan-out (two handlers, one queue) | Scenario `fanout-two-handlers-on-orderplaced` |
 | Inbox retries / poison | Scenarios `inbox-poison`, `inbox-retry-then-success` |
 | Business rejection path | Scenario `business-rejection` |
-| Management API + requeue | `MapRatatoskrManagementApi` — paths under `ratatoskr/api/v1/efcore/contexts/{PublisherDbContext\|ConsumerDbContext}/...` |
-| Diagnostics summary | `GET /api/playground/diagnostics/poisoned-summary` |
+| Management Dashboard | Embedded SPA at `http://localhost:<playground-port>/ratatoskr` (`Ratatoskr.UI`) |
+| Multi-service broker management | Real-time discovery & RPC over RabbitMQ between `PlaygroundHost` and `InventoryService` |
+| Asymmetric multi-DbContexts | `InventoryService` (`InventoryDbContext` outbox+inbox vs `AuditDbContext` outbox only) |
 | Activity log | `PlaygroundActivityRecorder` — `GET /api/playground/activities?orderId=` or `?scenarioRunId=` |
-
-## Scenario catalog
-
-Scenarios are **server-side** (`GET /api/playground/scenarios`, `POST /api/playground/scenarios/{slug}/run`, `GET /api/playground/runs/{id}`, `POST /api/playground/runs/{id}/cancel`). The dashboard loads the catalog from the server (no duplicate JSON in `wwwroot`).
-
-Implementation lives under `examples/PlaygroundHost/Scenarios/{Topic}/{slug}/` (messages, handlers, `*Scenario.cs`). Each scenario class implements `IPlaygroundScenario` with `RegisterRatatoskrTopology(RatatoskrBuilder)` and optional `RabbitDepthQueues` for `/api/playground/rabbit-depths`. All scenario types are listed once in `PlaygroundScenarioManifest` (`PlaygroundScenarioManifest.cs`) via typed `Entry<T>()` entries; `RegisterScenarioTopologies` and `RegisterScenarioServices` are called from `Program.cs` during `AddRatatoskr` and service registration respectively.
-
-Slug examples: `outbox-success`, `outbox-retry-then-success`, `outbox-poison`, `inbox-retry-then-success`, `inbox-poison`, `business-rejection`, `direct-consume-success`, `direct-consume-retry`, `direct-consume-dlq`, `replay-dedups`, `efcore-internal-command`, `fanout-two-handlers-on-orderplaced`, `oversized-payload-rolls-back`, `blocking-hold`, `cancel-smoke`.
 
 ## Project layout
 
 ```
 examples/
-  AppHost/           Aspire — postgres (publisherdb, consumerdb, playgrounddb) + rabbit + PlaygroundHost
-  PlaygroundHost/    Single demo host + wwwroot dashboard + Scenarios/
-  ServiceDefaults/   Shared OpenTelemetry + health
+  AppHost/           Aspire — postgres (5 databases) + rabbitmq + PlaygroundHost + InventoryService
+  PlaygroundHost/    Scenario runner host + wwwroot playground + Ratatoskr.UI dashboard at /ratatoskr
+  InventoryService/  Dedicated microservice managed over RabbitMQ (Ratatoskr.Management)
+  ServiceDefaults/   Shared OpenTelemetry + health check extensions
   Docs/              Docfx snippets only
 ```
 
 ## Tests
 
-HTTP integration coverage for the playground host lives in **`tests/Ratatoskr.Tests`** (`Examples/PlaygroundHostScenarioHttpTests.cs`), using `WebApplicationFactory<PlaygroundHost.PlaygroundHostAppMarker>` together with the shared RabbitMQ and PostgreSQL Testcontainers fixtures. Library-level Ratatoskr integration tests remain in the same project under `Integration/`.
+Integration test coverage for the examples and management dashboard lives in **`tests/Ratatoskr.Tests`**:
+- `Examples/PlaygroundHostScenarioHttpTests.cs`: Playground scenario runner execution tests.
+- `Examples/PlaygroundHostManagementUiTests.cs`: PlaygroundHost `/ratatoskr` UI endpoint and asset verification.
+- `Examples/InventoryServiceManagementTests.cs`: InventoryService broker management agent, multi-DbContext, and poison requeue verification.
+- `Integration/Management/`: Library-level RabbitMQ and In-Process management tests.

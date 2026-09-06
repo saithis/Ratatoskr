@@ -19,7 +19,9 @@
   <ItemGroup>
     <ProjectReference Include="..\ServiceDefaults\ServiceDefaults.csproj" />
     <ProjectReference Include="..\..\src\Ratatoskr.EfCore\Ratatoskr.EfCore.csproj" />
+    <ProjectReference Include="..\..\src\Ratatoskr.Management\Ratatoskr.Management.csproj" />
     <ProjectReference Include="..\..\src\Ratatoskr.RabbitMq\Ratatoskr.RabbitMq.csproj" />
+    <ProjectReference Include="..\..\src\Ratatoskr.UI\Ratatoskr.UI.csproj" />
     <ProjectReference Include="..\..\src\Ratatoskr\Ratatoskr.csproj" />
   </ItemGroup>
 </Project>

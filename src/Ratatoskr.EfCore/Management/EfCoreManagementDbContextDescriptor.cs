@@ -19,8 +19,10 @@ internal sealed class EfCoreManagementDbContextDescriptor<TDbContext>(
     public Type DbContextType { get; } = typeof(TDbContext);
     public string DbContextName => DbContextType.Name;
     public string DbContextFullName => DbContextType.FullName ?? DbContextType.Name;
-    public bool HasOutbox => DbContextType.IsAssignableTo(typeof(IOutboxDbContext));
-    public bool HasInbox => DbContextType.IsAssignableTo(typeof(IInboxDbContext));
+    public bool HasOutbox { get; } =
+        serviceProvider.GetService<OutboxOptionsHolder<TDbContext>>() is not null;
+    public bool HasInbox { get; } =
+        serviceProvider.GetService<InboxOptionsHolder<TDbContext>>() is not null;
     public DateTimeOffset? LastOutboxProcessingAt => _outboxProcessor?.LastSuccessfulProcessingAt;
     public DateTimeOffset? LastInboxProcessingAt => _inboxProcessor?.LastSuccessfulProcessingAt;
 

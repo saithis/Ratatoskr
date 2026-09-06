@@ -25,6 +25,8 @@ See [examples/README.md](examples/README.md) for the full demo guide.
 - `src/Ratatoskr` - Core library
 - `src/Ratatoskr.EfCore` - Entity Framework Core outbox/inbox implementation
 - `src/Ratatoskr.RabbitMq` - RabbitMQ transport
+- `src/Ratatoskr.Management` - Management agent and broker control plane
+- `src/Ratatoskr.UI` - Embedded management web dashboard
 - `examples/` - Playground (`PlaygroundHost` + AppHost)
 - `examples/AppHost` - .NET Aspire orchestration
 - `tests/Ratatoskr.Tests` - Integration and unit tests

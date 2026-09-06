@@ -25,11 +25,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\examples\InventoryService\InventoryService.csproj" />
     <ProjectReference Include="..\..\examples\PlaygroundHost\PlaygroundHost.csproj" />
     <ProjectReference Include="..\..\src\Ratatoskr\Ratatoskr.csproj" />
     <ProjectReference Include="..\..\src\Ratatoskr.EfCore\Ratatoskr.EfCore.csproj" />
+    <ProjectReference Include="..\..\src\Ratatoskr.Management\Ratatoskr.Management.csproj" />
     <ProjectReference Include="..\..\src\Ratatoskr.RabbitMq\Ratatoskr.RabbitMq.csproj" />
     <ProjectReference Include="..\..\src\Ratatoskr.Testing\Ratatoskr.Testing.csproj" />
+    <ProjectReference Include="..\..\src\Ratatoskr.UI\Ratatoskr.UI.csproj" />
     <ProjectReference Include="..\Ratatoskr.TestHost\Ratatoskr.TestHost.csproj" />
   </ItemGroup>
 </Project>

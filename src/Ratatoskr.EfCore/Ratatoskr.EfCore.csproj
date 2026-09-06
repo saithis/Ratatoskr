@@ -29,5 +29,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Ratatoskr.Tests" />
+    <InternalsVisibleTo Include="Ratatoskr.Management" />
+    <InternalsVisibleTo Include="Ratatoskr.UI" />
   </ItemGroup>
 </Project>

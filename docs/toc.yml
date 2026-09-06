@@ -35,5 +35,7 @@ items:
     href: asyncapi.md
   - name: Operations Guide
     href: operations.md
+  - name: Management & UI Dashboard
+    href: management-ui.md
 - name: API Reference
   href: api/

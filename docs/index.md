@@ -94,6 +94,14 @@ _layout: landing
       <code>Ratatoskr.Testing</code>
       <p>Test utilities with W3C trace-isolated sessions and assertion helpers.</p>
     </div>
+    <div class="package-item">
+      <code>Ratatoskr.Management</code>
+      <p>Microservice agent for metrics reporting and broker RPC control plane.</p>
+    </div>
+    <div class="package-item">
+      <code>Ratatoskr.UI</code>
+      <p>Embedded web management dashboard with real-time SSE updates and retry actions.</p>
+    </div>
   </div>
 </div>
 

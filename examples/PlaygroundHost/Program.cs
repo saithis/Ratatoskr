@@ -1,4 +1,5 @@
 // Local development example only. See examples/README.md.
+using System.Globalization;
 using Medallion.Threading;
 using Medallion.Threading.FileSystem;
 using Microsoft.AspNetCore.Mvc;
@@ -13,6 +14,7 @@ using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.Management;
 using Ratatoskr.RabbitMq.Extensions;
+using Ratatoskr.UI;
 using ServiceDefaults;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -85,6 +87,22 @@ builder.Services.AddRatatoskr(bus =>
 });
 
 PlaygroundMessageSenderDecoration.WrapAllMessageSenders(builder.Services);
+
+builder.Services.AddRatatoskrManagement(options =>
+{
+    options.ServiceName = "playground-host";
+    options.InstanceId = $"{Environment.MachineName}-{Environment.ProcessId.ToString(CultureInfo.InvariantCulture)}";
+    options.UiExchangePrefix = "ratatoskr.ui";
+    options.HeartbeatInterval = TimeSpan.FromSeconds(5);
+    options.EnableHeartbeat = true;
+});
+
+builder.Services.AddRatatoskrUI(options =>
+{
+    options.UiExchangePrefix = "ratatoskr.ui";
+    options.RequestTimeout = TimeSpan.FromSeconds(15);
+    options.ServiceOfflineThreshold = TimeSpan.FromSeconds(45);
+});
 
 var publisherCs =
     builder.Configuration.GetConnectionString("publisherdb")
@@ -223,6 +241,7 @@ app.MapGet(
     .RequireCors("LocalDashboard");
 
 app.MapRatatoskrManagementApi("DevOnlyNoAuth");
+app.MapRatatoskrUI("DevOnlyNoAuth", "/ratatoskr");
 
 await PlaygroundEnsureCreatedGate.Semaphore.WaitAsync();
 try

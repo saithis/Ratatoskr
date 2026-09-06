@@ -1,7 +1,8 @@
-﻿<Solution>
+<Solution>
   <Folder Name="/examples/">
     <Project Path="examples/AppHost/AppHost.csproj" />
     <Project Path="examples/Docs/Docs.csproj" />
+    <Project Path="examples/InventoryService/InventoryService.csproj" />
     <Project Path="examples/PlaygroundHost/PlaygroundHost.csproj" />
     <Project Path="examples/ServiceDefaults/ServiceDefaults.csproj" />
   </Folder>
@@ -14,7 +15,9 @@
     <Project Path="tests\Ratatoskr.Tests\Ratatoskr.Tests.csproj" />
   </Folder>
   <Project Path="src\Ratatoskr.EfCore\Ratatoskr.EfCore.csproj" />
+  <Project Path="src\Ratatoskr.Management\Ratatoskr.Management.csproj" />
   <Project Path="src\Ratatoskr.RabbitMq\Ratatoskr.RabbitMq.csproj" />
   <Project Path="src\Ratatoskr.Testing\Ratatoskr.Testing.csproj" />
+  <Project Path="src\Ratatoskr.UI\Ratatoskr.UI.csproj" />
   <Project Path="src\Ratatoskr\Ratatoskr.csproj" />
 </Solution>

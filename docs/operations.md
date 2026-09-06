@@ -50,6 +50,10 @@ services.AddHealthChecks()
 
 ## Handling Poisoned Messages
 
+> [!TIP]
+> **Use the Ratatoskr Management Dashboard**  
+> Instead of running raw SQL queries, you can inspect CloudEvents metadata, view failure stack traces, and execute single or bulk retries directly from the web dashboard. See [Management & UI Dashboard](management-ui.md).
+
 ### Investigation
 
 Poisoned messages have exhausted their retry budget and remain in the database for manual investigation.
