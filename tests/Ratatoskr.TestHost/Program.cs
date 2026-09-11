@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
 using Ratatoskr.Management;
 using Ratatoskr.UI;
-using Ratatoskr.UI.Client;
+using Ratatoskr.Management.Contracts;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddLogging();
@@ -17,7 +17,7 @@ if (authOptions?.GetPolicy("RatatoskrAdmin") is not null)
     app.UseAuthentication();
     app.UseAuthorization();
     app.MapRatatoskrManagementApi("RatatoskrAdmin");
-    if (app.Services.GetService<IRatatoskrBrokerManagementClient>() is not null)
+    if (app.Services.GetService<IManagementClient>() is not null)
     {
         app.MapRatatoskrUI("RatatoskrAdmin", "/ratatoskr");
     }

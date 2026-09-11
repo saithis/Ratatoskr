@@ -9,7 +9,6 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Ratatoskr.Management.Contracts;
-using Ratatoskr.UI.Client;
 
 namespace Ratatoskr.UI;
 
@@ -34,12 +33,6 @@ public static class RatatoskrUiEndpointExtensions
         {
             services.Configure(configure);
         }
-
-        services.TryAddSingleton<ActiveServiceRegistry>();
-        services.TryAddSingleton<RatatoskrBrokerManagementClient>();
-        services.TryAddSingleton<IRatatoskrBrokerManagementClient>(sp =>
-            sp.GetRequiredService<RatatoskrBrokerManagementClient>());
-        services.AddHostedService(sp => sp.GetRequiredService<RatatoskrBrokerManagementClient>());
 
         return services;
     }
@@ -87,7 +80,7 @@ public static class RatatoskrUiEndpointExtensions
         // ── Server-Sent Events (SSE) ─────────────────────────────────────────
         group.MapGet("/api/events", async (
             HttpContext context,
-            IRatatoskrBrokerManagementClient client,
+            IServiceCatalog catalog,
             CancellationToken ct
         ) =>
         {
@@ -98,13 +91,13 @@ public static class RatatoskrUiEndpointExtensions
             var tcs = new TaskCompletionSource();
             await using var reg = ct.Register(() => tcs.TrySetResult());
 
-            void OnServiceUpdate(ServiceHeartbeat hb)
+            void OnServiceUpdate(object? sender, ServiceHeartbeatEventArgs args)
             {
                 _ = Task.Run(async () =>
                 {
                     try
                     {
-                        var json = JsonSerializer.Serialize(hb, JsonOptions);
+                        var json = JsonSerializer.Serialize(args.Heartbeat, JsonOptions);
                         await context.Response.WriteAsync($"event: service-heartbeat\ndata: {json}\n\n", ct);
                         await context.Response.Body.FlushAsync(ct);
                     }
@@ -115,11 +108,11 @@ public static class RatatoskrUiEndpointExtensions
                 }, CancellationToken.None);
             }
 
-            client.Registry.OnServiceUpdated += OnServiceUpdate;
+            catalog.ServiceUpdated += OnServiceUpdate;
             try
             {
                 // Send initial snapshot
-                var initialServices = JsonSerializer.Serialize(client.Registry.GetAllServices(), JsonOptions);
+                var initialServices = JsonSerializer.Serialize(catalog.GetAllServices(), JsonOptions);
                 await context.Response.WriteAsync($"event: snapshot\ndata: {initialServices}\n\n", ct);
                 await context.Response.Body.FlushAsync(ct);
 
@@ -136,25 +129,25 @@ public static class RatatoskrUiEndpointExtensions
             }
             finally
             {
-                client.Registry.OnServiceUpdated -= OnServiceUpdate;
+                catalog.ServiceUpdated -= OnServiceUpdate;
             }
         });
 
         // ── Management Proxy APIs ────────────────────────────────────────────
         var api = group.MapGroup("/api");
 
-        api.MapGet("/services", (IRatatoskrBrokerManagementClient client) =>
-            TypedResults.Ok(client.Registry.GetAllServices()));
+        api.MapGet("/services", (IServiceCatalog catalog) =>
+            TypedResults.Ok(catalog.GetAllServices()));
 
-        api.MapGet("/services/{serviceName}", (string serviceName, IRatatoskrBrokerManagementClient client) =>
+        api.MapGet("/services/{serviceName}", (string serviceName, IServiceCatalog catalog) =>
         {
-            var detail = client.Registry.GetService(serviceName);
+            var detail = catalog.GetService(serviceName);
             return detail != null ? Results.Ok(detail) : Results.NotFound();
         });
 
         api.MapGet("/services/{serviceName}/stats", async (
             string serviceName,
-            IRatatoskrBrokerManagementClient client,
+            IManagementClient client,
             CancellationToken ct
         ) =>
         {
@@ -169,7 +162,7 @@ public static class RatatoskrUiEndpointExtensions
             string? status,
             int? page,
             int? pageSize,
-            IRatatoskrBrokerManagementClient client,
+            IManagementClient client,
             CancellationToken ct
         ) =>
         {
@@ -183,7 +176,7 @@ public static class RatatoskrUiEndpointExtensions
             string serviceName,
             string contextName,
             Guid id,
-            IRatatoskrBrokerManagementClient client,
+            IManagementClient client,
             CancellationToken ct
         ) =>
         {
@@ -196,7 +189,7 @@ public static class RatatoskrUiEndpointExtensions
             string serviceName,
             string contextName,
             Guid id,
-            IRatatoskrBrokerManagementClient client,
+            IManagementClient client,
             CancellationToken ct
         ) =>
         {
@@ -208,7 +201,7 @@ public static class RatatoskrUiEndpointExtensions
         api.MapPost("/services/{serviceName}/contexts/{contextName}/outbox/bulk-requeue", async (
             string serviceName,
             string contextName,
-            IRatatoskrBrokerManagementClient client,
+            IManagementClient client,
             CancellationToken ct
         ) =>
         {
@@ -221,7 +214,7 @@ public static class RatatoskrUiEndpointExtensions
             string serviceName,
             string contextName,
             Guid id,
-            IRatatoskrBrokerManagementClient client,
+            IManagementClient client,
             CancellationToken ct
         ) =>
         {
@@ -233,7 +226,7 @@ public static class RatatoskrUiEndpointExtensions
         api.MapDelete("/services/{serviceName}/contexts/{contextName}/outbox/bulk-delete", async (
             string serviceName,
             string contextName,
-            IRatatoskrBrokerManagementClient client,
+            IManagementClient client,
             CancellationToken ct
         ) =>
         {
@@ -249,7 +242,7 @@ public static class RatatoskrUiEndpointExtensions
             string? status,
             int? page,
             int? pageSize,
-            IRatatoskrBrokerManagementClient client,
+            IManagementClient client,
             CancellationToken ct
         ) =>
         {
@@ -263,7 +256,7 @@ public static class RatatoskrUiEndpointExtensions
             string serviceName,
             string contextName,
             Guid id,
-            IRatatoskrBrokerManagementClient client,
+            IManagementClient client,
             CancellationToken ct
         ) =>
         {
@@ -276,7 +269,7 @@ public static class RatatoskrUiEndpointExtensions
             string serviceName,
             string contextName,
             Guid id,
-            IRatatoskrBrokerManagementClient client,
+            IManagementClient client,
             CancellationToken ct
         ) =>
         {
@@ -289,7 +282,7 @@ public static class RatatoskrUiEndpointExtensions
             string serviceName,
             string contextName,
             string messageId,
-            IRatatoskrBrokerManagementClient client,
+            IManagementClient client,
             CancellationToken ct
         ) =>
         {
@@ -301,7 +294,7 @@ public static class RatatoskrUiEndpointExtensions
         api.MapPost("/services/{serviceName}/contexts/{contextName}/inbox/bulk-requeue", async (
             string serviceName,
             string contextName,
-            IRatatoskrBrokerManagementClient client,
+            IManagementClient client,
             CancellationToken ct
         ) =>
         {
@@ -314,7 +307,7 @@ public static class RatatoskrUiEndpointExtensions
             string serviceName,
             string contextName,
             Guid id,
-            IRatatoskrBrokerManagementClient client,
+            IManagementClient client,
             CancellationToken ct
         ) =>
         {
@@ -326,7 +319,7 @@ public static class RatatoskrUiEndpointExtensions
         api.MapDelete("/services/{serviceName}/contexts/{contextName}/inbox/bulk-delete", async (
             string serviceName,
             string contextName,
-            IRatatoskrBrokerManagementClient client,
+            IManagementClient client,
             CancellationToken ct
         ) =>
         {

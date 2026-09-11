@@ -12,7 +12,6 @@ using Ratatoskr.Management.Contracts;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Tests.Fixtures;
 using Ratatoskr.UI;
-using Ratatoskr.UI.Client;
 using TUnit.Core;
 
 namespace Ratatoskr.Tests.Examples;
@@ -43,7 +42,7 @@ public sealed class InventoryServiceManagementTests : IAsyncDisposable
     }
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Disposed in DisposeAsync")]
-    private async Task<(HttpClient Client, IRatatoskrBrokerManagementClient UiClient, string ServiceName, string QueuePrefix)> StartAsync()
+    private async Task<(HttpClient Client, IManagementClient UiClient, IServiceCatalog Catalog, string ServiceName, string QueuePrefix)> StartAsync()
     {
         var invDb = $"inv_{_testId}";
         var audDb = $"aud_{_testId}";
@@ -95,8 +94,8 @@ public sealed class InventoryServiceManagementTests : IAsyncDisposable
         _serviceFactory = factory;
         _ = factory.Server; // ensure server startup
 
-        var uiClient = _uiProvider.GetRequiredService<IRatatoskrBrokerManagementClient>();
-        return (factory.CreateClient(), uiClient, serviceName, queuePrefix);
+        var uiClient = _uiProvider.GetRequiredService<IManagementClient>();
+        return (factory.CreateClient(), uiClient, _uiProvider.GetRequiredService<IServiceCatalog>(), serviceName, queuePrefix);
     }
 
     private static string MaintenanceConnectionString(string fixtureCs)
@@ -124,13 +123,13 @@ public sealed class InventoryServiceManagementTests : IAsyncDisposable
     [Test]
     public async Task InventoryService_HeartbeatDiscoveredOverBroker_ShowsMultiDbContextWithAsymmetricInbox()
     {
-        var (_, uiClient, serviceName, queuePrefix) = await StartAsync();
+        var (_, uiClient, catalog, serviceName, queuePrefix) = await StartAsync();
 
         ServiceDetailDto? discovered = null;
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
         while (DateTime.UtcNow < deadline)
         {
-            discovered = uiClient.Registry.GetService(serviceName);
+            discovered = catalog.GetService(serviceName);
             if (discovered?.Status == "online")
             {
                 break;
@@ -165,13 +164,13 @@ public sealed class InventoryServiceManagementTests : IAsyncDisposable
     [Test]
     public async Task InventoryService_SimulateFailure_PoisonedInboxRowCanBeInspectedAndRequeuedOverBroker()
     {
-        var (client, uiClient, serviceName, _) = await StartAsync();
+        var (client, uiClient, catalog, serviceName, _) = await StartAsync();
 
         // Ensure service has announced itself
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
         while (DateTime.UtcNow < deadline)
         {
-            if (uiClient.Registry.GetService(serviceName)?.Status == "online")
+            if (catalog.GetService(serviceName)?.Status == "online")
             {
                 break;
             }

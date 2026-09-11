@@ -9,7 +9,6 @@ using Ratatoskr.Management;
 using Ratatoskr.Management.Contracts;
 using Ratatoskr.Tests.Fixtures;
 using Ratatoskr.UI;
-using Ratatoskr.UI.Client;
 using TUnit.Core;
 
 namespace Ratatoskr.Tests.Integration.Management;
@@ -141,7 +140,7 @@ public class InProcessBrokerManagementTests(
             statusId = handler.Id;
         });
 
-        var client = Services.GetRequiredService<IRatatoskrBrokerManagementClient>();
+        var client = Services.GetRequiredService<IManagementClient>();
 
         // 1. GetStats
         var stats = await client.ExecuteAsync<object, ServiceHeartbeat>(

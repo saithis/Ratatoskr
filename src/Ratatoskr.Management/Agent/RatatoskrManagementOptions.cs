@@ -1,4 +1,5 @@
 using System.Reflection;
+using Microsoft.Extensions.Options;
 
 namespace Ratatoskr.Management.Agent;
 
@@ -46,4 +47,27 @@ public sealed class RatatoskrManagementOptions
     /// Defaults to true.
     /// </summary>
     public bool EnableHeartbeat { get; set; } = true;
+}
+
+internal sealed class RatatoskrManagementOptionsValidator : IValidateOptions<RatatoskrManagementOptions>
+{
+    public ValidateOptionsResult Validate(string? name, RatatoskrManagementOptions options)
+    {
+        if (string.IsNullOrWhiteSpace(options.ServiceName))
+        {
+            return ValidateOptionsResult.Fail("Management service name must be specified.");
+        }
+
+        if (string.IsNullOrWhiteSpace(options.InstanceId))
+        {
+            return ValidateOptionsResult.Fail("Management instance ID must be specified.");
+        }
+
+        if (options.HeartbeatInterval <= TimeSpan.Zero)
+        {
+            return ValidateOptionsResult.Fail("Management heartbeat interval must be greater than zero.");
+        }
+
+        return ValidateOptionsResult.Success;
+    }
 }

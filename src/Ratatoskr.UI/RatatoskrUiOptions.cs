@@ -6,15 +6,12 @@ namespace Ratatoskr.UI;
 public sealed class RatatoskrUiOptions
 {
     /// <summary>
-    /// Name prefix for the UI management exchanges ({UiExchangePrefix}.commands and {UiExchangePrefix}.inbox).
-    /// Must match the UiExchangePrefix configured on managed services.
-    /// Defaults to "ratatoskr-ui".
+    /// Legacy broker-provider setting. The in-process provider ignores it.
     /// </summary>
     public string UiExchangePrefix { get; set; } = "ratatoskr-ui";
 
     /// <summary>
-    /// Timeout for RPC management requests to remote services.
-    /// Defaults to 10 seconds.
+    /// Legacy broker-provider request timeout. Transport-neutral providers configure their own runtime timeout.
     /// </summary>
     public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromSeconds(10);
 

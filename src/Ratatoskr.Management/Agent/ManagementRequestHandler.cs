@@ -13,7 +13,7 @@ namespace Ratatoskr.Management.Agent;
 
 /// <summary>
 /// Executes management queries and operations against the local host's DbContexts and channels.
-/// Used both by the RabbitMQ management consumer and by the in-process management transport.
+/// Used by transport-neutral management command hosts.
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created", Justification = "DbContext is managed and disposed by the IServiceScope.")]
 public sealed class EfCoreManagementOperations(

@@ -6,7 +6,7 @@ namespace Ratatoskr.Management.Agent;
 public sealed class ManagementOperationDispatcher(
     IEnumerable<IManagementOperationHandler> handlers,
     ILogger<ManagementOperationDispatcher> logger
-)
+): IManagementCommandDispatcher
 {
     private readonly Dictionary<string, IManagementOperationHandler> _handlers = handlers
         .GroupBy(handler => handler.Operation, StringComparer.Ordinal)

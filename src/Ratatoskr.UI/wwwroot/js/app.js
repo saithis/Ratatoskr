@@ -329,7 +329,7 @@
         <div style="grid-column:1/-1;background:var(--bg-card);border:1px solid var(--border-color);border-radius:8px;padding:2rem;text-align:center;">
           <p style="font-size:1.1rem;font-weight:600;margin-bottom:0.5rem;">Waiting for Connected Services</p>
           <p style="color:var(--text-secondary);font-size:0.875rem;">
-            Services using <code>Ratatoskr.Management</code> will automatically announce their presence over RabbitMQ or in-process.
+            Services using <code>Ratatoskr.Management</code> announce their presence through the configured management provider.
           </p>
         </div>`;
       return;

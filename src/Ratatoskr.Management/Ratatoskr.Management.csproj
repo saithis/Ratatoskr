@@ -18,7 +18,6 @@
     <ProjectReference Include="..\Ratatoskr\Ratatoskr.csproj" />
     <ProjectReference Include="..\Ratatoskr.EfCore\Ratatoskr.EfCore.csproj" />
     <ProjectReference Include="..\Ratatoskr.Management.Abstractions\Ratatoskr.Management.Abstractions.csproj" />
-    <ProjectReference Include="..\Ratatoskr.RabbitMq\Ratatoskr.RabbitMq.csproj" />
   </ItemGroup>
 
   <ItemGroup>

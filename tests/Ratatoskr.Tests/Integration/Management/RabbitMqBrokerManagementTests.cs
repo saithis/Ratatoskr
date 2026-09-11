@@ -11,7 +11,6 @@ using Ratatoskr.Management.Contracts;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Tests.Fixtures;
 using Ratatoskr.UI;
-using Ratatoskr.UI.Client;
 using TUnit.Core;
 
 namespace Ratatoskr.Tests.Integration.Management;
@@ -99,13 +98,14 @@ public class RabbitMqBrokerManagementTests(
 
         try
         {
-            var uiClient = uiProvider.GetRequiredService<IRatatoskrBrokerManagementClient>();
+            var uiClient = uiProvider.GetRequiredService<IManagementClient>();
+            var catalog = uiProvider.GetRequiredService<IServiceCatalog>();
 
             // 3. Verify Heartbeat discovery over RabbitMQ
             ServiceDetailDto? discoveredService = null;
             await WaitForConditionAsync(async () =>
             {
-                discoveredService = uiClient.Registry.GetService(serviceName);
+                discoveredService = catalog.GetService(serviceName);
                 return await Task.FromResult(discoveredService?.Status == "online");
             }, timeout: TimeSpan.FromSeconds(15));
 

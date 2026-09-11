@@ -122,9 +122,9 @@ public class RatatoskrUiEndpointTests(
 
         // Ensure registry is populated after DB initialization
         var handler = Services.GetRequiredService<Ratatoskr.Management.Agent.ManagementRequestHandler>();
-        var client = Services.GetRequiredService<Ratatoskr.UI.Client.IRatatoskrBrokerManagementClient>();
+        var publisher = Services.GetRequiredService<IManagementEventPublisher>();
         var hb = await handler.BuildHeartbeatAsync();
-        client.Registry.RegisterHeartbeat(hb);
+        await publisher.PublishAsync(hb);
 
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{UiBasePath}/api/events");
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
