@@ -17,6 +17,7 @@
   <Project Path="src\Ratatoskr.EfCore\Ratatoskr.EfCore.csproj" />
   <Project Path="src\Ratatoskr.Management.Abstractions\Ratatoskr.Management.Abstractions.csproj" />
   <Project Path="src\Ratatoskr.Management\Ratatoskr.Management.csproj" />
+  <Project Path="src\Ratatoskr.Management.RabbitMq\Ratatoskr.Management.RabbitMq.csproj" />
   <Project Path="src\Ratatoskr.RabbitMq\Ratatoskr.RabbitMq.csproj" />
   <Project Path="src\Ratatoskr.Testing\Ratatoskr.Testing.csproj" />
   <Project Path="src\Ratatoskr.UI\Ratatoskr.UI.csproj" />

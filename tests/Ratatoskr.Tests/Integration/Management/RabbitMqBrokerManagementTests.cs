@@ -8,6 +8,7 @@ using Ratatoskr.EfCore;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.Management;
 using Ratatoskr.Management.Contracts;
+using Ratatoskr.Management.RabbitMq;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Tests.Fixtures;
 using Ratatoskr.UI;
@@ -63,6 +64,7 @@ public class RabbitMqBrokerManagementTests(
             o.UiExchangePrefix = uiPrefix;
             o.RequestTimeout = TimeSpan.FromSeconds(15);
         });
+        uiServices.AddRabbitMqManagement(o => o.ExchangePrefix = uiPrefix);
 
         await using var uiProvider = uiServices.BuildServiceProvider();
         var uiHostedServices = uiProvider.GetServices<IHostedService>().ToList();
@@ -88,6 +90,7 @@ public class RabbitMqBrokerManagementTests(
             o.HeartbeatInterval = TimeSpan.FromMilliseconds(500);
             o.EnableHeartbeat = true;
         });
+        serviceCollection.AddRabbitMqManagement(o => o.ExchangePrefix = uiPrefix);
 
         await using var serviceProvider = serviceCollection.BuildServiceProvider();
         var serviceHostedServices = serviceProvider.GetServices<IHostedService>().ToList();

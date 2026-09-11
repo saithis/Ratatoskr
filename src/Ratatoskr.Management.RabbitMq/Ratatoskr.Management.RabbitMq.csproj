@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>RabbitMQ management control-plane provider for Ratatoskr.</Description>
+    <PackageTags>ratatoskr;management;rabbitmq</PackageTags>
+    <IsPackable>true</IsPackable>
+    <NoWarn>$(NoWarn);1591;CA1848;MA0051;MA0007;MA0046</NoWarn>
+  </PropertyGroup>
+  <ItemGroup><FrameworkReference Include="Microsoft.AspNetCore.App" /></ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Ratatoskr.Management\Ratatoskr.Management.csproj" />
+    <ProjectReference Include="..\Ratatoskr.Management.Abstractions\Ratatoskr.Management.Abstractions.csproj" />
+    <ProjectReference Include="..\Ratatoskr.RabbitMq\Ratatoskr.RabbitMq.csproj" />
+  </ItemGroup>
+  <ItemGroup><InternalsVisibleTo Include="Ratatoskr.Tests" /></ItemGroup>
+</Project>
