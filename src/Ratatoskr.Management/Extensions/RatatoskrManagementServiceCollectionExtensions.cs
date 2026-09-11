@@ -24,6 +24,9 @@ public static class RatatoskrManagementServiceCollectionExtensions
             services.Configure(configure);
         }
 
+        services.TryAddSingleton<EfCoreManagementOperations>();
+        services.TryAddSingleton<ManagementOperationDispatcher>();
+        EfCoreManagementOperationHandlers.Add(services);
         services.TryAddSingleton<ManagementRequestHandler>();
 
         services.TryAddSingleton<RabbitMqManagementAgentConsumer>();

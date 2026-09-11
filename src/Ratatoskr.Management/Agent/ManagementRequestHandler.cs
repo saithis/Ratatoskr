@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -17,178 +16,13 @@ namespace Ratatoskr.Management.Agent;
 /// Used both by the RabbitMQ management consumer and by the in-process management transport.
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created", Justification = "DbContext is managed and disposed by the IServiceScope.")]
-public sealed class ManagementRequestHandler(
+public sealed class EfCoreManagementOperations(
     IServiceProvider serviceProvider,
     ChannelRegistry channelRegistry,
     IOptions<RatatoskrManagementOptions> options,
-    ILogger<ManagementRequestHandler> logger
+    ILogger<EfCoreManagementOperations> logger
 )
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-
-    public async Task<ManagementResponseEnvelope> HandleAsync(
-        ManagementRequestEnvelope request,
-        CancellationToken cancellationToken = default
-    )
-    {
-        ArgumentNullException.ThrowIfNull(request);
-
-        try
-        {
-            return request.Action switch
-            {
-                "GetStats" => ManagementResponseEnvelope.Ok(
-                    request.RequestId,
-                    JsonSerializer.Serialize(await BuildHeartbeatAsync(cancellationToken), JsonOptions)
-                ),
-                "GetOutbox" => ManagementResponseEnvelope.Ok(
-                    request.RequestId,
-                    JsonSerializer.Serialize(
-                        await GetOutboxMessagesAsync(
-                            request.TargetContext ?? throw new ArgumentException("TargetContext required", nameof(request)),
-                            Deserialize<GetOutboxMessagesRequest>(request.PayloadJson) ?? new GetOutboxMessagesRequest(),
-                            cancellationToken
-                        ),
-                        JsonOptions
-                    )
-                ),
-                "GetOutboxDetail" => ManagementResponseEnvelope.Ok(
-                    request.RequestId,
-                    JsonSerializer.Serialize(
-                        await GetOutboxDetailAsync(
-                            request.TargetContext ?? throw new ArgumentException("TargetContext required", nameof(request)),
-                            Deserialize<GetOutboxDetailRequest>(request.PayloadJson)?.Id ?? throw new ArgumentException("Id required", nameof(request)),
-                            cancellationToken
-                        ),
-                        JsonOptions
-                    )
-                ),
-                "RequeueOutbox" => ManagementResponseEnvelope.Ok(
-                    request.RequestId,
-                    JsonSerializer.Serialize(
-                        await RequeueOutboxAsync(
-                            request.TargetContext ?? throw new ArgumentException("TargetContext required", nameof(request)),
-                            Deserialize<RequeueOutboxRequest>(request.PayloadJson)?.Id ?? throw new ArgumentException("Id required", nameof(request)),
-                            cancellationToken
-                        ),
-                        JsonOptions
-                    )
-                ),
-                "BulkRequeueOutbox" => ManagementResponseEnvelope.Ok(
-                    request.RequestId,
-                    JsonSerializer.Serialize(
-                        await BulkRequeueOutboxAsync(
-                            request.TargetContext ?? throw new ArgumentException("TargetContext required", nameof(request)),
-                            cancellationToken
-                        ),
-                        JsonOptions
-                    )
-                ),
-                "DeleteOutbox" => ManagementResponseEnvelope.Ok(
-                    request.RequestId,
-                    JsonSerializer.Serialize(
-                        await DeleteOutboxAsync(
-                            request.TargetContext ?? throw new ArgumentException("TargetContext required", nameof(request)),
-                            Deserialize<DeleteOutboxRequest>(request.PayloadJson)?.Id ?? throw new ArgumentException("Id required", nameof(request)),
-                            cancellationToken
-                        ),
-                        JsonOptions
-                    )
-                ),
-                "BulkDeleteOutbox" => ManagementResponseEnvelope.Ok(
-                    request.RequestId,
-                    JsonSerializer.Serialize(
-                        await BulkDeleteOutboxAsync(
-                            request.TargetContext ?? throw new ArgumentException("TargetContext required", nameof(request)),
-                            cancellationToken
-                        ),
-                        JsonOptions
-                    )
-                ),
-                "GetInbox" => ManagementResponseEnvelope.Ok(
-                    request.RequestId,
-                    JsonSerializer.Serialize(
-                        await GetInboxMessagesAsync(
-                            request.TargetContext ?? throw new ArgumentException("TargetContext required", nameof(request)),
-                            Deserialize<GetInboxMessagesRequest>(request.PayloadJson) ?? new GetInboxMessagesRequest(),
-                            cancellationToken
-                        ),
-                        JsonOptions
-                    )
-                ),
-                "GetInboxDetail" => ManagementResponseEnvelope.Ok(
-                    request.RequestId,
-                    JsonSerializer.Serialize(
-                        await GetInboxDetailAsync(
-                            request.TargetContext ?? throw new ArgumentException("TargetContext required", nameof(request)),
-                            Deserialize<GetInboxDetailRequest>(request.PayloadJson)?.StatusId ?? throw new ArgumentException("StatusId required", nameof(request)),
-                            cancellationToken
-                        ),
-                        JsonOptions
-                    )
-                ),
-                "RequeueInboxHandler" => ManagementResponseEnvelope.Ok(
-                    request.RequestId,
-                    JsonSerializer.Serialize(
-                        await RequeueInboxHandlerAsync(
-                            request.TargetContext ?? throw new ArgumentException("TargetContext required", nameof(request)),
-                            Deserialize<RequeueInboxHandlerRequest>(request.PayloadJson)?.StatusId ?? throw new ArgumentException("StatusId required", nameof(request)),
-                            cancellationToken
-                        ),
-                        JsonOptions
-                    )
-                ),
-                "RequeueInboxMessage" => ManagementResponseEnvelope.Ok(
-                    request.RequestId,
-                    JsonSerializer.Serialize(
-                        await RequeueInboxMessageAsync(
-                            request.TargetContext ?? throw new ArgumentException("TargetContext required", nameof(request)),
-                            Deserialize<RequeueInboxMessageRequest>(request.PayloadJson)?.MessageId ?? throw new ArgumentException("MessageId required", nameof(request)),
-                            cancellationToken
-                        ),
-                        JsonOptions
-                    )
-                ),
-                "BulkRequeueInbox" => ManagementResponseEnvelope.Ok(
-                    request.RequestId,
-                    JsonSerializer.Serialize(
-                        await BulkRequeueInboxAsync(
-                            request.TargetContext ?? throw new ArgumentException("TargetContext required", nameof(request)),
-                            cancellationToken
-                        ),
-                        JsonOptions
-                    )
-                ),
-                "DeleteInboxHandler" => ManagementResponseEnvelope.Ok(
-                    request.RequestId,
-                    JsonSerializer.Serialize(
-                        await DeleteInboxHandlerAsync(
-                            request.TargetContext ?? throw new ArgumentException("TargetContext required", nameof(request)),
-                            Deserialize<DeleteInboxHandlerRequest>(request.PayloadJson)?.StatusId ?? throw new ArgumentException("StatusId required", nameof(request)),
-                            cancellationToken
-                        ),
-                        JsonOptions
-                    )
-                ),
-                "BulkDeleteInbox" => ManagementResponseEnvelope.Ok(
-                    request.RequestId,
-                    JsonSerializer.Serialize(
-                        await BulkDeleteInboxAsync(
-                            request.TargetContext ?? throw new ArgumentException("TargetContext required", nameof(request)),
-                            cancellationToken
-                        ),
-                        JsonOptions
-                    )
-                ),
-                _ => ManagementResponseEnvelope.Failed(request, new ManagementError(ManagementProtocol.UnsupportedOperation, "The operation is not supported."))
-            };
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to handle management request {Action} for {TargetService}", request.Action, request.TargetService);
-            return ManagementResponseEnvelope.Failed(request, new ManagementError(ManagementProtocol.InternalError, "The management operation failed."));
-        }
-    }
 
     public async Task<ServiceHeartbeat> BuildHeartbeatAsync(CancellationToken cancellationToken = default)
     {
@@ -670,15 +504,6 @@ public sealed class ManagementRequestHandler(
             ?? throw new InvalidOperationException($"DbContext '{contextName}' is not registered.");
 
         return match.GetDbContext(sp);
-    }
-
-    private static T? Deserialize<T>(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return default;
-        }
-        return JsonSerializer.Deserialize<T>(json, JsonOptions);
     }
 
     private static MessagePropertiesDto ToPropertiesDto(MessageProperties props) =>
