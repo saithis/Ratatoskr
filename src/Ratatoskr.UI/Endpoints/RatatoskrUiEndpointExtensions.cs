@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
+using System.Threading.Channels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -45,27 +46,45 @@ public static class RatatoskrUiEndpointExtensions
         this IEndpointRouteBuilder endpoints,
         string policyName,
         string basePath = "/ratatoskr"
+    ) => endpoints.MapRatatoskrUI(
+        new RatatoskrUiAuthorizationPolicies(policyName, policyName, policyName, policyName, policyName),
+        basePath);
+
+    /// <summary>Maps the UI with separate policies for read, sensitive-data, and mutation capabilities.</summary>
+    public static IEndpointRouteBuilder MapRatatoskrUI(
+        this IEndpointRouteBuilder endpoints,
+        RatatoskrUiAuthorizationPolicies policies,
+        string basePath = "/ratatoskr"
     )
     {
         ArgumentNullException.ThrowIfNull(endpoints);
-        ArgumentException.ThrowIfNullOrWhiteSpace(policyName);
+        ArgumentNullException.ThrowIfNull(policies);
         ArgumentException.ThrowIfNullOrWhiteSpace(basePath);
 
         basePath = basePath.TrimEnd('/');
 
         // Validate policy existence at startup
         var authOptions = endpoints.ServiceProvider.GetRequiredService<IOptions<AuthorizationOptions>>().Value;
-        if (authOptions.GetPolicy(policyName) is null)
+        var policyNames = new[] { policies.ViewMetadata, policies.ViewPayloads, policies.RequeueMessages, policies.DeleteMessages, policies.BulkOperations };
+        if (policyNames.Any(string.IsNullOrWhiteSpace) || policyNames.Any(name => authOptions.GetPolicy(name) is null))
         {
             throw new InvalidOperationException(
-                $"Authorization policy '{policyName}' is not registered. "
-                    + "Call services.AddAuthorization() and define the policy before calling MapRatatoskrUI."
+                "Every Ratatoskr UI authorization policy must be registered. "
+                    + "Call services.AddAuthorization() before calling MapRatatoskrUI."
             );
         }
 
         var group = endpoints.MapGroup(basePath)
-            .RequireAuthorization(policyName)
+            .RequireAuthorization(policies.ViewMetadata)
             .DisableAntiforgery();
+
+        group.AddEndpointFilter(async (context, next) =>
+        {
+            context.HttpContext.Response.Headers.ContentSecurityPolicy =
+                "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; object-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'";
+            context.HttpContext.Response.Headers.XContentTypeOptions = "nosniff";
+            return await next(context);
+        });
 
         // ── Static Web Assets ────────────────────────────────────────────────
         group.MapGet("/", ServeIndexHtml);
@@ -88,39 +107,40 @@ public static class RatatoskrUiEndpointExtensions
             context.Response.Headers.CacheControl = "no-cache";
             context.Response.Headers.Connection = "keep-alive";
 
-            var tcs = new TaskCompletionSource();
-            await using var reg = ct.Register(() => tcs.TrySetResult());
+            var updates = Channel.CreateBounded<ServiceHeartbeat>(new BoundedChannelOptions(1)
+            {
+                FullMode = BoundedChannelFullMode.DropOldest,
+                SingleReader = true,
+                SingleWriter = false
+            });
 
             void OnServiceUpdate(object? sender, ServiceHeartbeatEventArgs args)
             {
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        var json = JsonSerializer.Serialize(args.Heartbeat, JsonOptions);
-                        await context.Response.WriteAsync($"event: service-heartbeat\ndata: {json}\n\n", ct);
-                        await context.Response.Body.FlushAsync(ct);
-                    }
-                    catch
-                    {
-                        // ignore broken client pipe
-                    }
-                }, CancellationToken.None);
+                // The bounded, latest-value queue coalesces heartbeat bursts for slow browsers.
+                updates.Writer.TryWrite(args.Heartbeat);
             }
 
             catalog.ServiceUpdated += OnServiceUpdate;
             try
             {
-                // Send initial snapshot
-                var initialServices = JsonSerializer.Serialize(catalog.GetAllServices(), JsonOptions);
-                await context.Response.WriteAsync($"event: snapshot\ndata: {initialServices}\n\n", ct);
-                await context.Response.Body.FlushAsync(ct);
+                await WriteSnapshotAsync(context, catalog, ct);
 
-                while (!ct.IsCancellationRequested)
+                while (true)
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(15), ct);
-                    await context.Response.WriteAsync(":\n\n", ct); // keep-alive
-                    await context.Response.Body.FlushAsync(ct);
+                    var update = updates.Reader.WaitToReadAsync(ct).AsTask();
+                    var heartbeat = Task.Delay(TimeSpan.FromSeconds(15), ct);
+                    var completed = await Task.WhenAny(update, heartbeat);
+                    if (completed == update && await update)
+                    {
+                        while (updates.Reader.TryRead(out _)) { }
+                        // A snapshot avoids inconsistent browser state when updates were coalesced.
+                        await WriteSnapshotAsync(context, catalog, ct);
+                    }
+                    else if (completed == heartbeat)
+                    {
+                        await context.Response.WriteAsync(":\n\n", ct);
+                        await context.Response.Body.FlushAsync(ct);
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -130,6 +150,7 @@ public static class RatatoskrUiEndpointExtensions
             finally
             {
                 catalog.ServiceUpdated -= OnServiceUpdate;
+                updates.Writer.TryComplete();
             }
         });
 
@@ -183,7 +204,7 @@ public static class RatatoskrUiEndpointExtensions
             var res = await client.ExecuteAsync<GetOutboxDetailRequest, OutboxDetailDto>(
                 serviceName, contextName, "GetOutboxDetail", new GetOutboxDetailRequest(id), ct);
             return res != null ? Results.Ok(res) : Results.NotFound();
-        });
+        }).RequireAuthorization(policies.ViewPayloads);
 
         api.MapPost("/services/{serviceName}/contexts/{contextName}/outbox/{id:guid}/requeue", async (
             string serviceName,
@@ -196,7 +217,7 @@ public static class RatatoskrUiEndpointExtensions
             var res = await client.ExecuteAsync<RequeueOutboxRequest, RequeueResultDto>(
                 serviceName, contextName, "RequeueOutbox", new RequeueOutboxRequest(id), ct);
             return Results.Ok(res);
-        });
+        }).RequireAuthorization(policies.RequeueMessages);
 
         api.MapPost("/services/{serviceName}/contexts/{contextName}/outbox/bulk-requeue", async (
             string serviceName,
@@ -208,7 +229,7 @@ public static class RatatoskrUiEndpointExtensions
             var res = await client.ExecuteAsync<BulkRequeueOutboxRequest, RequeueResultDto>(
                 serviceName, contextName, "BulkRequeueOutbox", new BulkRequeueOutboxRequest(), ct);
             return Results.Ok(res);
-        });
+        }).RequireAuthorization(policies.BulkOperations);
 
         api.MapDelete("/services/{serviceName}/contexts/{contextName}/outbox/{id:guid}", async (
             string serviceName,
@@ -221,7 +242,7 @@ public static class RatatoskrUiEndpointExtensions
             var res = await client.ExecuteAsync<DeleteOutboxRequest, DeleteResultDto>(
                 serviceName, contextName, "DeleteOutbox", new DeleteOutboxRequest(id), ct);
             return Results.Ok(res);
-        });
+        }).RequireAuthorization(policies.DeleteMessages);
 
         api.MapDelete("/services/{serviceName}/contexts/{contextName}/outbox/bulk-delete", async (
             string serviceName,
@@ -233,7 +254,7 @@ public static class RatatoskrUiEndpointExtensions
             var res = await client.ExecuteAsync<BulkDeleteOutboxRequest, DeleteResultDto>(
                 serviceName, contextName, "BulkDeleteOutbox", new BulkDeleteOutboxRequest(), ct);
             return Results.Ok(res);
-        });
+        }).RequireAuthorization(policies.BulkOperations);
 
         // Inbox
         api.MapGet("/services/{serviceName}/contexts/{contextName}/inbox", async (
@@ -263,7 +284,7 @@ public static class RatatoskrUiEndpointExtensions
             var res = await client.ExecuteAsync<GetInboxDetailRequest, InboxDetailDto>(
                 serviceName, contextName, "GetInboxDetail", new GetInboxDetailRequest(id), ct);
             return res != null ? Results.Ok(res) : Results.NotFound();
-        });
+        }).RequireAuthorization(policies.ViewPayloads);
 
         api.MapPost("/services/{serviceName}/contexts/{contextName}/inbox/{id:guid}/requeue", async (
             string serviceName,
@@ -276,7 +297,7 @@ public static class RatatoskrUiEndpointExtensions
             var res = await client.ExecuteAsync<RequeueInboxHandlerRequest, RequeueResultDto>(
                 serviceName, contextName, "RequeueInboxHandler", new RequeueInboxHandlerRequest(id), ct);
             return Results.Ok(res);
-        });
+        }).RequireAuthorization(policies.RequeueMessages);
 
         api.MapPost("/services/{serviceName}/contexts/{contextName}/inbox/message/{messageId}/requeue", async (
             string serviceName,
@@ -289,7 +310,7 @@ public static class RatatoskrUiEndpointExtensions
             var res = await client.ExecuteAsync<RequeueInboxMessageRequest, RequeueResultDto>(
                 serviceName, contextName, "RequeueInboxMessage", new RequeueInboxMessageRequest(messageId), ct);
             return Results.Ok(res);
-        });
+        }).RequireAuthorization(policies.RequeueMessages);
 
         api.MapPost("/services/{serviceName}/contexts/{contextName}/inbox/bulk-requeue", async (
             string serviceName,
@@ -301,7 +322,7 @@ public static class RatatoskrUiEndpointExtensions
             var res = await client.ExecuteAsync<BulkRequeueInboxRequest, RequeueResultDto>(
                 serviceName, contextName, "BulkRequeueInbox", new BulkRequeueInboxRequest(), ct);
             return Results.Ok(res);
-        });
+        }).RequireAuthorization(policies.BulkOperations);
 
         api.MapDelete("/services/{serviceName}/contexts/{contextName}/inbox/{id:guid}", async (
             string serviceName,
@@ -314,7 +335,7 @@ public static class RatatoskrUiEndpointExtensions
             var res = await client.ExecuteAsync<DeleteInboxHandlerRequest, DeleteResultDto>(
                 serviceName, contextName, "DeleteInboxHandler", new DeleteInboxHandlerRequest(id), ct);
             return Results.Ok(res);
-        });
+        }).RequireAuthorization(policies.DeleteMessages);
 
         api.MapDelete("/services/{serviceName}/contexts/{contextName}/inbox/bulk-delete", async (
             string serviceName,
@@ -326,13 +347,20 @@ public static class RatatoskrUiEndpointExtensions
             var res = await client.ExecuteAsync<BulkDeleteInboxRequest, DeleteResultDto>(
                 serviceName, contextName, "BulkDeleteInbox", new BulkDeleteInboxRequest(), ct);
             return Results.Ok(res);
-        });
+        }).RequireAuthorization(policies.BulkOperations);
 
         return endpoints;
     }
 
     private static IResult ServeIndexHtml() =>
         ServeEmbeddedFile("index.html", "text/html; charset=utf-8");
+
+    private static async Task WriteSnapshotAsync(HttpContext context, IServiceCatalog catalog, CancellationToken cancellationToken)
+    {
+        var services = JsonSerializer.Serialize(catalog.GetAllServices(), JsonOptions);
+        await context.Response.WriteAsync($"event: snapshot\ndata: {services}\n\n", cancellationToken);
+        await context.Response.Body.FlushAsync(cancellationToken);
+    }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created", Justification = "Stream is transferred to IResult which disposes it upon HTTP response completion")]
     [System.Diagnostics.CodeAnalysis.SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning", Justification = "Fallback stream retrieval")]

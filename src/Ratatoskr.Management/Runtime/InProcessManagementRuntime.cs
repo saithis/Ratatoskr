@@ -21,42 +21,38 @@ public sealed class InProcessManagementCommandHost(
 /// <summary>In-memory discovery catalog for the in-process provider.</summary>
 public sealed class InProcessServiceCatalog : IServiceCatalog, IManagementEventPublisher, IManagementEventSource
 {
-    private ServiceHeartbeat? _current;
-    public event EventHandler<ServiceHeartbeatEventArgs>? ServiceUpdated;
+    private readonly ServiceRegistry _registry;
+
+    public InProcessServiceCatalog(TimeProvider timeProvider)
+    {
+        _registry = new ServiceRegistry(timeProvider, TimeSpan.FromSeconds(45));
+    }
+    public event EventHandler<ServiceHeartbeatEventArgs>? ServiceUpdated
+    {
+        add => _registry.ServiceUpdated += value;
+        remove => _registry.ServiceUpdated -= value;
+    }
     public event EventHandler<ServiceHeartbeatEventArgs>? AnnouncementReceived;
 
     public ValueTask PublishAsync(ServiceHeartbeat announcement, CancellationToken cancellationToken = default)
     {
-        _current = announcement;
-        var args = new ServiceHeartbeatEventArgs(announcement);
-        ServiceUpdated?.Invoke(this, args);
-        AnnouncementReceived?.Invoke(this, args);
+        if (_registry.Publish(announcement))
+        {
+            AnnouncementReceived?.Invoke(this, new ServiceHeartbeatEventArgs(announcement));
+        }
         return ValueTask.CompletedTask;
     }
 
-    public IReadOnlyList<ServiceCardDto> GetAllServices() => _current is null ? [] : [ToCard(_current)];
-
-    public ServiceDetailDto? GetService(string serviceName) =>
-        _current is not null && string.Equals(_current.ServiceName, serviceName, StringComparison.OrdinalIgnoreCase)
-            ? ToDetail(_current) : null;
-
-    private static ServiceCardDto ToCard(ServiceHeartbeat heartbeat) => new(
-        heartbeat.ServiceName, "online", 1,
-        heartbeat.DbContexts.Sum(x => x.PendingOutboxCount), heartbeat.DbContexts.Sum(x => x.PoisonedOutboxCount),
-        heartbeat.DbContexts.Sum(x => x.PendingInboxCount), heartbeat.DbContexts.Sum(x => x.PoisonedInboxCount), heartbeat.Timestamp,
-        heartbeat.DbContexts.Select(x => x.DbContextName).ToArray());
-
-    private static ServiceDetailDto ToDetail(ServiceHeartbeat heartbeat) => new(
-        heartbeat.ServiceName, "online",
-        [new ServiceInstanceRecordDto(heartbeat.InstanceId, heartbeat.MachineName, heartbeat.Environment, heartbeat.StartedAt, heartbeat.Timestamp, true)],
-        heartbeat.DbContexts, heartbeat.Channels);
+    public IReadOnlyList<ServiceCardDto> GetAllServices() => _registry.GetAllServices();
+    public ServiceDetailDto? GetService(string serviceName) => _registry.GetService(serviceName);
 }
 
 /// <summary>Transport-neutral client for a co-hosted management command host.</summary>
 public sealed class InProcessManagementClient(
     IManagementCommandHost host,
     IOptions<RatatoskrManagementOptions> managementOptions,
-    IOptions<ManagementRuntimeOptions> runtimeOptions) : IManagementClient
+    IOptions<ManagementRuntimeOptions> runtimeOptions,
+    TimeProvider timeProvider) : IManagementClient
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -80,7 +76,7 @@ public sealed class InProcessManagementClient(
             OperationId = Guid.NewGuid().ToString("N"),
             Operation = operation,
             Target = target,
-            Deadline = DateTimeOffset.UtcNow.Add(timeout),
+            Deadline = timeProvider.GetUtcNow().Add(timeout),
             Payload = new ManagementPayload(typeof(TRequest).FullName ?? typeof(TRequest).Name, JsonSerializer.Serialize(request, JsonOptions))
         };
 

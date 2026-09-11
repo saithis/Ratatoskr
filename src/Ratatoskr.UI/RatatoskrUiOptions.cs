@@ -21,3 +21,11 @@ public sealed class RatatoskrUiOptions
     /// </summary>
     public TimeSpan ServiceOfflineThreshold { get; set; } = TimeSpan.FromSeconds(45);
 }
+
+/// <summary>Authorization policies required by the distinct UI capabilities.</summary>
+public sealed record RatatoskrUiAuthorizationPolicies(
+    string ViewMetadata,
+    string ViewPayloads,
+    string RequeueMessages,
+    string DeleteMessages,
+    string BulkOperations);

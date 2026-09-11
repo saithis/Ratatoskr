@@ -1,791 +1,107 @@
-// Ratatoskr Management Dashboard Client
+// Ratatoskr Management Dashboard Client. All untrusted values are assigned with textContent.
+(() => {
+  const byId = (id) => document.getElementById(id);
+  const state = { services: [], selected: null, tab: "overview", outbox: { status: "Poisoned", page: 1 }, inbox: { status: "Poisoned", page: 1 } };
+  const basePath = location.pathname.replace(/\/$/, "");
+  const api = `${basePath}/api`;
+  const element = (tag, text, className) => { const value = document.createElement(tag); if (text !== undefined) value.textContent = text; if (className) value.className = className; return value; };
+  const clear = (node, ...children) => node.replaceChildren(...children);
+  const format = (value) => value ? new Date(value).toLocaleString() : "—";
+  const status = (value) => element("span", value, `card-status ${value}`);
+  const button = (text, className, listener) => { const value = element("button", text, className); value.type = "button"; value.addEventListener("click", listener); return value; };
+  const target = (kind) => `${api}/services/${encodeURIComponent(state.selected)}/contexts/${encodeURIComponent(byId(`${kind}-context-select`).value)}/${kind}`;
 
-(function () {
-  const state = {
-    services: [],
-    selectedService: null,
-    selectedTab: "overview",
-    outbox: { context: "", status: "Poisoned", page: 1, pageSize: 20, data: null },
-    inbox: { context: "", status: "Poisoned", page: 1, pageSize: 20, data: null },
-    autoRefreshTimer: null,
-  };
-
-  // Base API url derived from current page location
-  const basePath = window.location.pathname.replace(/\/$/, "");
-  const apiUrl = `${basePath}/api`;
-
-  // Elements
-  const sseBadge = document.getElementById("sse-badge");
-  const sseStatusText = document.getElementById("sse-status-text");
-  const autoRefreshSelect = document.getElementById("auto-refresh-select");
-  const btnRefresh = document.getElementById("btn-refresh");
-  const totalServicesBadge = document.getElementById("total-services-badge");
-  const sidebarServiceList = document.getElementById("sidebar-service-list");
-
-  const serviceHeader = document.getElementById("service-header");
-  const selectedServiceTitle = document.getElementById("selected-service-title");
-  const selectedServiceMeta = document.getElementById("selected-service-meta");
-  const selectedServiceStatus = document.getElementById("selected-service-status");
-
-  const viewAllServices = document.getElementById("view-all-services");
-  const servicesGrid = document.getElementById("services-grid");
-  const viewOverview = document.getElementById("view-overview");
-  const viewOutbox = document.getElementById("view-outbox");
-  const viewInbox = document.getElementById("view-inbox");
-  const viewChannels = document.getElementById("view-channels");
-
-  const replicasTbody = document.getElementById("replicas-tbody");
-  const contextsTbody = document.getElementById("contexts-tbody");
-  const channelsTbody = document.getElementById("channels-tbody");
-
-  const outboxContextSelect = document.getElementById("outbox-context-select");
-  const outboxTbody = document.getElementById("outbox-tbody");
-  const outboxPageInfo = document.getElementById("outbox-page-info");
-  const outboxPrevPage = document.getElementById("outbox-prev-page");
-  const outboxNextPage = document.getElementById("outbox-next-page");
-
-  const inboxContextSelect = document.getElementById("inbox-context-select");
-  const inboxTbody = document.getElementById("inbox-tbody");
-  const inboxPageInfo = document.getElementById("inbox-page-info");
-  const inboxPrevPage = document.getElementById("inbox-prev-page");
-  const inboxNextPage = document.getElementById("inbox-next-page");
-
-  const detailModal = document.getElementById("detail-modal");
-  const modalTitle = document.getElementById("modal-title");
-  const modalBody = document.getElementById("modal-body");
-  const modalFooter = document.getElementById("modal-footer");
-  const btnCloseModal = document.getElementById("btn-close-modal");
-
-  // Init
-  function init() {
-    setupSse();
-    setupEventListeners();
-    fetchServices();
-    setupAutoRefresh();
+  async function request(url, options) {
+    const response = await fetch(url, options);
+    if (!response.ok) throw new Error(`Request failed (${response.status})`);
+    return response.status === 204 ? null : response.json();
   }
 
-  // SSE Setup
-  function setupSse() {
-    const sse = new EventSource(`${apiUrl}/events`);
-
-    sse.onopen = () => {
-      sseBadge.classList.add("connected");
-      sseStatusText.textContent = "Live SSE Stream";
-    };
-
-    sse.addEventListener("snapshot", (e) => {
-      try {
-        state.services = JSON.parse(e.data);
-        renderServicesList();
-        if (!state.selectedService) renderServicesGrid();
-      } catch (err) {
-        console.error("Failed to parse snapshot", err);
-      }
-    });
-
-    sse.addEventListener("service-heartbeat", (e) => {
-      try {
-        const hb = JSON.parse(e.data);
-        updateServiceFromHeartbeat(hb);
-      } catch (err) {
-        console.error("Failed to parse heartbeat", err);
-      }
-    });
-
-    sse.onerror = () => {
-      sseBadge.classList.remove("connected");
-      sseStatusText.textContent = "Reconnecting...";
-    };
+  async function refreshServices() {
+    try { state.services = await request(`${api}/services`); renderServices(); if (state.selected) await detail(); }
+    catch (error) { console.error("Could not load services", error); }
   }
 
-  function updateServiceFromHeartbeat(hb) {
-    let svc = state.services.find((s) => s.serviceName.toLowerCase() === hb.serviceName.toLowerCase());
-    if (!svc) {
-      fetchServices();
-      return;
-    }
-
-    svc.lastHeartbeat = hb.timestamp;
-    svc.status = "online";
-    svc.dbContextNames = hb.dbContexts.map((d) => d.dbContextName);
-    svc.totalPendingOutbox = hb.dbContexts.reduce((acc, d) => acc + d.pendingOutboxCount, 0);
-    svc.totalPoisonedOutbox = hb.dbContexts.reduce((acc, d) => acc + d.poisonedOutboxCount, 0);
-    svc.totalPendingInbox = hb.dbContexts.reduce((acc, d) => acc + d.pendingInboxCount, 0);
-    svc.totalPoisonedInbox = hb.dbContexts.reduce((acc, d) => acc + d.poisonedInboxCount, 0);
-
-    renderServicesList();
-    if (!state.selectedService) {
-      renderServicesGrid();
-    } else if (state.selectedService.toLowerCase() === hb.serviceName.toLowerCase() && state.selectedTab === "overview") {
-      fetchServiceDetail(state.selectedService);
-    }
-  }
-
-  // Event Listeners
-  function setupEventListeners() {
-    document.querySelector('[data-nav="all"]').addEventListener("click", () => selectService(null));
-
-    document.querySelectorAll(".tab-button").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        document.querySelectorAll(".tab-button").forEach((b) => b.classList.remove("active"));
-        btn.classList.add("active");
-        selectTab(btn.dataset.tab);
+  function renderServices() {
+    byId("total-services-badge").textContent = String(state.services.length);
+    const list = byId("sidebar-service-list");
+    if (!state.services.length) return clear(list, element("li", "No services discovered yet…"));
+    clear(list, ...state.services.map((service) => {
+      const item = element("li", undefined, `service-nav-item ${state.selected === service.serviceName ? "active" : ""}`);
+      item.append(element("span", service.serviceName), status(service.status));
+      item.addEventListener("click", () => selectService(service.serviceName));
+      return item;
+    }));
+    const grid = byId("services-grid");
+    clear(grid, ...state.services.map((service) => {
+      const card = element("div", undefined, "service-card");
+      const header = element("div", undefined, "card-header"); header.append(element("span", service.serviceName, "card-title"), status(service.status)); card.append(header);
+      card.append(element("p", `${service.instanceCount} active replica(s) • Contexts: ${(service.dbContextNames || []).join(", ") || "None"}`));
+      const metrics = element("div", undefined, "card-metrics");
+      [["Poisoned Outbox", service.totalPoisonedOutbox], ["Pending Outbox", service.totalPendingOutbox], ["Poisoned Inbox", service.totalPoisonedInbox], ["Pending Inbox", service.totalPendingInbox]].forEach(([name, value]) => {
+        const box = element("div", undefined, "metric-box"); box.append(element("span", name, "metric-label"), element("span", String(value), `metric-val ${value > 0 && name.startsWith("Poisoned") ? "poisoned" : ""}`)); metrics.append(box);
       });
-    });
-
-    btnRefresh.addEventListener("click", () => refreshCurrentView());
-
-    autoRefreshSelect.addEventListener("change", () => setupAutoRefresh());
-
-    // Outbox filter listeners
-    document.querySelectorAll("#outbox-status-pills button").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        document.querySelectorAll("#outbox-status-pills button").forEach((b) => b.classList.remove("active"));
-        btn.classList.add("active");
-        state.outbox.status = btn.dataset.status;
-        state.outbox.page = 1;
-        fetchOutbox();
-      });
-    });
-
-    outboxContextSelect.addEventListener("change", () => {
-      state.outbox.context = outboxContextSelect.value;
-      state.outbox.page = 1;
-      fetchOutbox();
-    });
-
-    outboxPrevPage.addEventListener("click", () => {
-      if (state.outbox.page > 1) {
-        state.outbox.page--;
-        fetchOutbox();
-      }
-    });
-
-    outboxNextPage.addEventListener("click", () => {
-      if (state.outbox.data && state.outbox.page * state.outbox.pageSize < state.outbox.data.totalCount) {
-        state.outbox.page++;
-        fetchOutbox();
-      }
-    });
-
-    document.getElementById("btn-bulk-requeue-outbox").addEventListener("click", () => bulkRequeueOutbox());
-    document.getElementById("btn-bulk-delete-outbox").addEventListener("click", () => bulkDeleteOutbox());
-
-    // Inbox filter listeners
-    document.querySelectorAll("#inbox-status-pills button").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        document.querySelectorAll("#inbox-status-pills button").forEach((b) => b.classList.remove("active"));
-        btn.classList.add("active");
-        state.inbox.status = btn.dataset.status;
-        state.inbox.page = 1;
-        fetchInbox();
-      });
-    });
-
-    inboxContextSelect.addEventListener("change", () => {
-      state.inbox.context = inboxContextSelect.value;
-      state.inbox.page = 1;
-      fetchInbox();
-    });
-
-    inboxPrevPage.addEventListener("click", () => {
-      if (state.inbox.page > 1) {
-        state.inbox.page--;
-        fetchInbox();
-      }
-    });
-
-    inboxNextPage.addEventListener("click", () => {
-      if (state.inbox.data && state.inbox.page * state.inbox.pageSize < state.inbox.data.totalCount) {
-        state.inbox.page++;
-        fetchInbox();
-      }
-    });
-
-    document.getElementById("btn-bulk-requeue-inbox").addEventListener("click", () => bulkRequeueInbox());
-    document.getElementById("btn-bulk-delete-inbox").addEventListener("click", () => bulkDeleteInbox());
-
-    btnCloseModal.addEventListener("click", () => closeModal());
-    detailModal.addEventListener("click", (e) => {
-      if (e.target === detailModal) closeModal();
-    });
+      card.append(metrics); card.addEventListener("click", () => selectService(service.serviceName)); return card;
+    }));
   }
 
-  function setupAutoRefresh() {
-    if (state.autoRefreshTimer) clearInterval(state.autoRefreshTimer);
-    const secs = parseInt(autoRefreshSelect.value, 10);
-    if (secs > 0) {
-      state.autoRefreshTimer = setInterval(() => refreshCurrentView(), secs * 1000);
-    }
+  async function selectService(name) {
+    state.selected = name; byId("service-header").style.display = "block"; byId("view-all-services").style.display = "none";
+    const service = state.services.find((item) => item.serviceName === name); byId("selected-service-title").textContent = name; byId("selected-service-meta").textContent = service ? `${service.instanceCount} replicas` : "";
+    clear(byId("selected-service-status"), status(service?.status || "online")); renderServices(); await showTab(state.tab);
   }
 
-  function refreshCurrentView() {
-    if (!state.selectedService) {
-      fetchServices();
-    } else {
-      if (state.selectedTab === "overview") fetchServiceDetail(state.selectedService);
-      else if (state.selectedTab === "outbox") fetchOutbox();
-      else if (state.selectedTab === "inbox") fetchInbox();
-      else if (state.selectedTab === "channels") fetchServiceDetail(state.selectedService);
-    }
+  async function detail() {
+    if (!state.selected) return; const value = await request(`${api}/services/${encodeURIComponent(state.selected)}`); renderDetail(value); return value;
+  }
+  function cells(row, values) { values.forEach((value) => row.append(element("td", String(value)))); return row; }
+  function renderDetail(value) {
+    clear(byId("replicas-tbody"), ...value.instances.map((item) => cells(element("tr"), [item.instanceId, item.machineName, item.environment || "Production", format(item.startedAt), format(item.lastHeartbeat), item.isActive ? "active" : "stale"])));
+    clear(byId("contexts-tbody"), ...value.dbContexts.map((item) => cells(element("tr"), [item.dbContextName, item.hasOutbox ? "✓" : "—", item.hasInbox ? "✓" : "—", item.pendingOutboxCount, item.poisonedOutboxCount, item.pendingInboxCount, item.poisonedInboxCount])));
+    clear(byId("channels-tbody"), ...value.channels.map((item) => cells(element("tr"), [item.logicalName, item.intent, (item.transportBindings || []).map((binding) => binding.providerKind).join(", "), (item.transportBindings || []).map((binding) => binding.displayName).join(", "), "", (item.messageTypes || []).join(", ")])));
+    ["outbox", "inbox"].forEach((kind) => { const select = byId(`${kind}-context-select`); const current = select.value; clear(select, ...value.dbContexts.map((context) => element("option", context.dbContextName))); select.value = current || value.dbContexts[0]?.dbContextName || ""; });
   }
 
-  // Navigation
-  function selectService(serviceName) {
-    state.selectedService = serviceName;
-
-    document.querySelectorAll(".service-nav-item").forEach((item) => {
-      item.classList.toggle("active", item.dataset.nav === (serviceName || "all"));
-    });
-
-    if (!serviceName) {
-      serviceHeader.style.display = "none";
-      showView(viewAllServices);
-      renderServicesGrid();
-      return;
-    }
-
-    const svc = state.services.find((s) => s.serviceName.toLowerCase() === serviceName.toLowerCase());
-    selectedServiceTitle.textContent = serviceName;
-    selectedServiceMeta.textContent = svc ? `${svc.instanceCount} active replica(s) • Contexts: ${svc.dbContextNames.join(", ")}` : "";
-    selectedServiceStatus.innerHTML = svc ? `<span class="card-status ${svc.status}">${svc.status}</span>` : "";
-
-    serviceHeader.style.display = "block";
-
-    // Populate Context dropdowns if service found
-    if (svc && svc.dbContextNames.length > 0) {
-      outboxContextSelect.innerHTML = svc.dbContextNames.map((c) => `<option value="${c}">${c}</option>`).join("");
-      inboxContextSelect.innerHTML = svc.dbContextNames.map((c) => `<option value="${c}">${c}</option>`).join("");
-      state.outbox.context = svc.dbContextNames[0];
-      state.inbox.context = svc.dbContextNames[0];
-    }
-
-    selectTab(state.selectedTab);
+  async function messages(kind) {
+    if (!state.selected || !byId(`${kind}-context-select`).value) return;
+    const page = state[kind].page; const result = await request(`${target(kind)}?status=${encodeURIComponent(state[kind].status)}&page=${page}&pageSize=20`); renderMessages(kind, result);
+  }
+  function renderMessages(kind, result) {
+    const body = byId(`${kind}-tbody`); const info = byId(`${kind}-page-info`); info.textContent = `Showing ${result.totalCount ? (result.page - 1) * result.pageSize + 1 : 0}-${Math.min(result.page * result.pageSize, result.totalCount)} of ${result.totalCount}`;
+    byId(`${kind}-prev-page`).disabled = result.page <= 1; byId(`${kind}-next-page`).disabled = result.page * result.pageSize >= result.totalCount;
+    if (!result.items.length) return clear(body, cells(element("tr"), ["No messages found."]));
+    clear(body, ...result.items.map((item) => {
+      const row = element("tr"); const id = kind === "outbox" ? item.id : item.messageId; const error = kind === "outbox" ? item.error : item.lastError;
+      cells(row, [id, kind === "inbox" ? item.handlerKey : item.transportName, kind === "inbox" ? item.transportName : format(item.createdAt), kind === "inbox" ? format(item.createdAt) : item.errorCount, kind === "inbox" ? item.errorCount : (item.isPoisoned ? "Poisoned" : item.processedAt ? "Processed" : "Pending"), kind === "inbox" ? (item.isPoisoned ? "Poisoned" : item.completedAt ? "Completed" : "Pending") : (error || "—")]);
+      if (kind === "inbox") row.append(element("td", error || "—"));
+      const actions = element("td"); actions.append(button("Inspect", "btn btn-secondary btn-sm", () => inspect(kind, item.id)));
+      if (item.isPoisoned) actions.append(button("↺", "btn btn-primary btn-sm", () => mutate(kind, item.id, "requeue")));
+      actions.append(button("🗑", "btn btn-danger btn-sm", () => mutate(kind, item.id, "delete"))); row.append(actions); return row;
+    }));
   }
 
-  function selectTab(tab) {
-    state.selectedTab = tab;
-    if (tab === "overview") {
-      showView(viewOverview);
-      fetchServiceDetail(state.selectedService);
-    } else if (tab === "outbox") {
-      showView(viewOutbox);
-      fetchOutbox();
-    } else if (tab === "inbox") {
-      showView(viewInbox);
-      fetchInbox();
-    } else if (tab === "channels") {
-      showView(viewChannels);
-      fetchServiceDetail(state.selectedService);
-    }
+  async function mutate(kind, id, action) {
+    const deleting = action === "delete"; if (deleting && !confirm("This permanently deletes the selected message. Continue?")) return;
+    try { await request(`${target(kind)}/${id}${action === "requeue" ? "/requeue" : ""}`, { method: deleting ? "DELETE" : "POST" }); closeModal(); await messages(kind); }
+    catch (error) { console.error("Management mutation failed", error); }
   }
-
-  function showView(viewElement) {
-    [viewAllServices, viewOverview, viewOutbox, viewInbox, viewChannels].forEach((v) => (v.style.display = "none"));
-    viewElement.style.display = "block";
+  async function bulk(kind, action) {
+    const phrase = action === "delete" ? "permanently delete" : "requeue";
+    if (!confirm(`This will ${phrase} all messages matching the current explicit poisoned filter. Continue?`)) return;
+    try { await request(`${target(kind)}/bulk-${action}`, { method: action === "delete" ? "DELETE" : "POST" }); await messages(kind); }
+    catch (error) { console.error("Bulk management mutation failed", error); }
   }
-
-  // Fetch Services API
-  async function fetchServices() {
-    try {
-      const res = await fetch(`${apiUrl}/services`);
-      if (res.ok) {
-        state.services = await res.json();
-        totalServicesBadge.textContent = state.services.length;
-        renderServicesList();
-        if (!state.selectedService) renderServicesGrid();
-      }
-    } catch (err) {
-      console.error("Error fetching services", err);
-    }
+  async function inspect(kind, id) {
+    try { const item = await request(`${target(kind)}/${id}`); byId("modal-title").textContent = `${kind === "outbox" ? "Outbox Message" : "Inbox Handler"}: ${kind === "outbox" ? item.id : item.handlerKey}`;
+      const content = byId("modal-body"); const fields = [["Error", kind === "outbox" ? item.error : item.lastError], ["CloudEvents Metadata", JSON.stringify(item.properties, null, 2)], ["Payload", formatJson(item.content)]];
+      clear(content, ...fields.filter(([, value]) => value).map(([label, value]) => { const section = element("div"); section.append(element("strong", label), element("pre", value, "code-viewer")); return section; }));
+      const footer = byId("modal-footer"); clear(footer, ...(item.isPoisoned ? [button("↺ Requeue", "btn btn-primary", () => mutate(kind, item.id, "requeue"))] : []), button("🗑 Delete", "btn btn-danger", () => mutate(kind, item.id, "delete")), button("Close", "btn btn-secondary", closeModal)); byId("detail-modal").style.display = "flex";
+    } catch (error) { console.error("Could not load message detail", error); }
   }
-
-  function renderServicesList() {
-    totalServicesBadge.textContent = state.services.length;
-    if (state.services.length === 0) {
-      sidebarServiceList.innerHTML = `<li style="color:var(--text-muted);font-size:0.8rem;padding:0.5rem;">No services discovered yet...</li>`;
-      return;
-    }
-
-    sidebarServiceList.innerHTML = state.services
-      .map(
-        (s) => `
-      <li class="service-nav-item ${state.selectedService === s.serviceName ? "active" : ""}" data-nav="${s.serviceName}">
-        <span>${escapeHtml(s.serviceName)}</span>
-        <span class="card-status ${s.status}" style="font-size:0.65rem;">${s.status}</span>
-      </li>
-    `
-      )
-      .join("");
-
-    sidebarServiceList.querySelectorAll(".service-nav-item").forEach((item) => {
-      item.addEventListener("click", () => selectService(item.dataset.nav));
-    });
-  }
-
-  function renderServicesGrid() {
-    if (state.services.length === 0) {
-      servicesGrid.innerHTML = `
-        <div style="grid-column:1/-1;background:var(--bg-card);border:1px solid var(--border-color);border-radius:8px;padding:2rem;text-align:center;">
-          <p style="font-size:1.1rem;font-weight:600;margin-bottom:0.5rem;">Waiting for Connected Services</p>
-          <p style="color:var(--text-secondary);font-size:0.875rem;">
-            Services using <code>Ratatoskr.Management</code> announce their presence through the configured management provider.
-          </p>
-        </div>`;
-      return;
-    }
-
-    servicesGrid.innerHTML = state.services
-      .map(
-        (s) => `
-      <div class="service-card" data-service="${escapeHtml(s.serviceName)}">
-        <div class="card-header">
-          <span class="card-title">${escapeHtml(s.serviceName)}</span>
-          <span class="card-status ${s.status}">${s.status}</span>
-        </div>
-        <p style="font-size:0.75rem;color:var(--text-secondary);">
-          ${s.instanceCount} active replica(s) • Contexts: ${escapeHtml(s.dbContextNames.join(", ") || "None")}
-        </p>
-        <div class="card-metrics">
-          <div class="metric-box">
-            <span class="metric-label">Poisoned Outbox</span>
-            <span class="metric-val ${s.totalPoisonedOutbox > 0 ? "poisoned" : ""}">${s.totalPoisonedOutbox}</span>
-          </div>
-          <div class="metric-box">
-            <span class="metric-label">Pending Outbox</span>
-            <span class="metric-val">${s.totalPendingOutbox}</span>
-          </div>
-          <div class="metric-box">
-            <span class="metric-label">Poisoned Inbox</span>
-            <span class="metric-val ${s.totalPoisonedInbox > 0 ? "poisoned" : ""}">${s.totalPoisonedInbox}</span>
-          </div>
-          <div class="metric-box">
-            <span class="metric-label">Pending Inbox</span>
-            <span class="metric-val">${s.totalPendingInbox}</span>
-          </div>
-        </div>
-      </div>
-    `
-      )
-      .join("");
-
-    servicesGrid.querySelectorAll(".service-card").forEach((card) => {
-      card.addEventListener("click", () => selectService(card.dataset.service));
-    });
-  }
-
-  // Fetch Service Detail (Replicas, Contexts, Channels)
-  async function fetchServiceDetail(serviceName) {
-    try {
-      const res = await fetch(`${apiUrl}/services/${encodeURIComponent(serviceName)}`);
-      if (res.ok) {
-        const detail = await res.json();
-        renderServiceDetail(detail);
-      }
-    } catch (err) {
-      console.error("Error fetching service detail", err);
-    }
-  }
-
-  function renderServiceDetail(detail) {
-    // Render Replicas
-    replicasTbody.innerHTML = detail.instances
-      .map(
-        (i) => `
-      <tr>
-        <td><span class="code-snippet">${escapeHtml(i.instanceId)}</span></td>
-        <td>${escapeHtml(i.machineName)}</td>
-        <td><span class="badge badge-transport">${escapeHtml(i.environment || "Production")}</span></td>
-        <td>${new Date(i.startedAt).toLocaleString()}</td>
-        <td>${new Date(i.lastHeartbeat).toLocaleTimeString()}</td>
-        <td><span class="card-status ${i.isActive ? "online" : "stale"}">${i.isActive ? "active" : "stale"}</span></td>
-      </tr>
-    `
-      )
-      .join("");
-
-    // Render Contexts
-    contextsTbody.innerHTML = detail.dbContexts
-      .map(
-        (d) => `
-      <tr>
-        <td><strong>${escapeHtml(d.dbContextName)}</strong></td>
-        <td>${d.hasOutbox ? "✓" : "—"}</td>
-        <td>${d.hasInbox ? "✓" : "—"}</td>
-        <td>${d.pendingOutboxCount}</td>
-        <td><span class="${d.poisonedOutboxCount > 0 ? "badge badge-poisoned" : ""}">${d.poisonedOutboxCount}</span></td>
-        <td>${d.pendingInboxCount}</td>
-        <td><span class="${d.poisonedInboxCount > 0 ? "badge badge-poisoned" : ""}">${d.poisonedInboxCount}</span></td>
-      </tr>
-    `
-      )
-      .join("");
-
-    // Render Channels
-    channelsTbody.innerHTML = detail.channels
-      .map(
-        (ch) => `
-      <tr>
-        <td><strong>${escapeHtml(ch.logicalName)}</strong></td>
-        <td><span class="badge badge-transport">${escapeHtml(ch.intent)}</span></td>
-        <td><span class="badge badge-transport">${escapeHtml((ch.transportBindings || []).map((b) => b.providerKind).join(", "))}</span></td>
-        <td colspan="2"><span class="code-snippet">${escapeHtml((ch.transportBindings || []).map((b) => b.displayName).join(", ") || "—")}</span></td>
-        <td><small>${escapeHtml(ch.messageTypes.join(", ") || "None")}</small></td>
-      </tr>
-    `
-      )
-      .join("");
-  }
-
-  // Fetch Outbox
-  async function fetchOutbox() {
-    if (!state.selectedService || !state.outbox.context) return;
-    try {
-      const { context, status, page, pageSize } = state.outbox;
-      const url = `${apiUrl}/services/${encodeURIComponent(state.selectedService)}/contexts/${encodeURIComponent(
-        context
-      )}/outbox?status=${encodeURIComponent(status)}&page=${page}&pageSize=${pageSize}`;
-
-      const res = await fetch(url);
-      if (res.ok) {
-        state.outbox.data = await res.json();
-        renderOutboxTable(state.outbox.data);
-      }
-    } catch (err) {
-      console.error("Error fetching outbox", err);
-    }
-  }
-
-  function renderOutboxTable(paged) {
-    const { items, totalCount, page, pageSize } = paged;
-    outboxPageInfo.textContent = `Showing ${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, totalCount)} of ${totalCount}`;
-    outboxPrevPage.disabled = page <= 1;
-    outboxNextPage.disabled = page * pageSize >= totalCount;
-
-    if (items.length === 0) {
-      outboxTbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:2rem;">No outbox messages found.</td></tr>`;
-      return;
-    }
-
-    outboxTbody.innerHTML = items
-      .map(
-        (item) => `
-      <tr>
-        <td><span class="code-snippet" title="${item.id}">${item.id.substring(0, 8)}…</span></td>
-        <td><span class="badge ${item.transportName === "RabbitMQ" ? "badge-transport" : "badge-pending"}">${item.transportName}</span></td>
-        <td>${new Date(item.createdAt).toLocaleString()}</td>
-        <td>${item.errorCount}</td>
-        <td><span class="badge ${item.isPoisoned ? "badge-poisoned" : item.processedAt ? "badge-success" : "badge-pending"}">${item.isPoisoned ? "Poisoned" : item.processedAt ? "Processed" : "Pending"}</span></td>
-        <td><small style="color:var(--danger);">${escapeHtml(item.error ? item.error.substring(0, 60) + (item.error.length > 60 ? "…" : "") : "—")}</small></td>
-        <td style="text-align:right;">
-          <button class="btn btn-secondary btn-sm" onclick="window.viewOutboxDetail('${item.id}')">Inspect</button>
-          ${item.isPoisoned ? `<button class="btn btn-primary btn-sm" onclick="window.requeueOutboxItem('${item.id}')">↺</button>` : ""}
-          <button class="btn btn-danger btn-sm" onclick="window.deleteOutboxItem('${item.id}')">🗑</button>
-        </td>
-      </tr>
-    `
-      )
-      .join("");
-  }
-
-  // Fetch Inbox
-  async function fetchInbox() {
-    if (!state.selectedService || !state.inbox.context) return;
-    try {
-      const { context, status, page, pageSize } = state.inbox;
-      const url = `${apiUrl}/services/${encodeURIComponent(state.selectedService)}/contexts/${encodeURIComponent(
-        context
-      )}/inbox?status=${encodeURIComponent(status)}&page=${page}&pageSize=${pageSize}`;
-
-      const res = await fetch(url);
-      if (res.ok) {
-        state.inbox.data = await res.json();
-        renderInboxTable(state.inbox.data);
-      }
-    } catch (err) {
-      console.error("Error fetching inbox", err);
-    }
-  }
-
-  function renderInboxTable(paged) {
-    const { items, totalCount, page, pageSize } = paged;
-    inboxPageInfo.textContent = `Showing ${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, totalCount)} of ${totalCount}`;
-    inboxPrevPage.disabled = page <= 1;
-    inboxNextPage.disabled = page * pageSize >= totalCount;
-
-    if (items.length === 0) {
-      inboxTbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:2rem;">No inbox messages found.</td></tr>`;
-      return;
-    }
-
-    inboxTbody.innerHTML = items
-      .map(
-        (item) => `
-      <tr>
-        <td><span class="code-snippet" title="${item.messageId}">${item.messageId.substring(0, 10)}…</span></td>
-        <td><strong>${escapeHtml(item.handlerKey)}</strong></td>
-        <td><span class="badge ${item.transportName === "RabbitMQ" ? "badge-transport" : "badge-pending"}">${item.transportName}</span></td>
-        <td>${new Date(item.createdAt).toLocaleString()}</td>
-        <td>${item.errorCount}</td>
-        <td><span class="badge ${item.isPoisoned ? "badge-poisoned" : item.completedAt ? "badge-success" : "badge-pending"}">${item.isPoisoned ? "Poisoned" : item.completedAt ? "Completed" : "Pending"}</span></td>
-        <td><small style="color:var(--danger);">${escapeHtml(item.lastError ? item.lastError.substring(0, 60) + (item.lastError.length > 60 ? "…" : "") : "—")}</small></td>
-        <td style="text-align:right;">
-          <button class="btn btn-secondary btn-sm" onclick="window.viewInboxDetail('${item.id}')">Inspect</button>
-          ${item.isPoisoned ? `<button class="btn btn-primary btn-sm" onclick="window.requeueInboxItem('${item.id}')">↺</button>` : ""}
-          <button class="btn btn-danger btn-sm" onclick="window.deleteInboxItem('${item.id}')">🗑</button>
-        </td>
-      </tr>
-    `
-      )
-      .join("");
-  }
-
-  // Actions: Requeue & Delete
-  window.requeueOutboxItem = async function (id) {
-    try {
-      const res = await fetch(
-        `${apiUrl}/services/${encodeURIComponent(state.selectedService)}/contexts/${encodeURIComponent(
-          state.outbox.context
-        )}/outbox/${id}/requeue`,
-        { method: "POST" }
-      );
-      if (res.ok) {
-        closeModal();
-        fetchOutbox();
-      } else {
-        alert("Failed to requeue outbox message");
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  async function bulkRequeueOutbox() {
-    if (!confirm("Are you sure you want to requeue all poisoned outbox messages?")) return;
-    try {
-      const res = await fetch(
-        `${apiUrl}/services/${encodeURIComponent(state.selectedService)}/contexts/${encodeURIComponent(
-          state.outbox.context
-        )}/outbox/bulk-requeue`,
-        { method: "POST" }
-      );
-      if (res.ok) fetchOutbox();
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  window.deleteOutboxItem = async function (id) {
-    if (!confirm("Are you sure you want to delete this outbox message?")) return;
-    try {
-      const res = await fetch(
-        `${apiUrl}/services/${encodeURIComponent(state.selectedService)}/contexts/${encodeURIComponent(
-          state.outbox.context
-        )}/outbox/${id}`,
-        { method: "DELETE" }
-      );
-      if (res.ok) {
-        closeModal();
-        fetchOutbox();
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  async function bulkDeleteOutbox() {
-    if (!confirm("Are you sure you want to permanently delete all poisoned outbox messages?")) return;
-    try {
-      const res = await fetch(
-        `${apiUrl}/services/${encodeURIComponent(state.selectedService)}/contexts/${encodeURIComponent(
-          state.outbox.context
-        )}/outbox/bulk-delete`,
-        { method: "DELETE" }
-      );
-      if (res.ok) fetchOutbox();
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  window.requeueInboxItem = async function (id) {
-    try {
-      const res = await fetch(
-        `${apiUrl}/services/${encodeURIComponent(state.selectedService)}/contexts/${encodeURIComponent(
-          state.inbox.context
-        )}/inbox/${id}/requeue`,
-        { method: "POST" }
-      );
-      if (res.ok) {
-        closeModal();
-        fetchInbox();
-      } else {
-        alert("Failed to requeue inbox handler");
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  async function bulkRequeueInbox() {
-    if (!confirm("Are you sure you want to requeue all poisoned inbox handlers?")) return;
-    try {
-      const res = await fetch(
-        `${apiUrl}/services/${encodeURIComponent(state.selectedService)}/contexts/${encodeURIComponent(
-          state.inbox.context
-        )}/inbox/bulk-requeue`,
-        { method: "POST" }
-      );
-      if (res.ok) fetchInbox();
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  window.deleteInboxItem = async function (id) {
-    if (!confirm("Are you sure you want to delete this inbox handler status?")) return;
-    try {
-      const res = await fetch(
-        `${apiUrl}/services/${encodeURIComponent(state.selectedService)}/contexts/${encodeURIComponent(
-          state.inbox.context
-        )}/inbox/${id}`,
-        { method: "DELETE" }
-      );
-      if (res.ok) {
-        closeModal();
-        fetchInbox();
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  async function bulkDeleteInbox() {
-    if (!confirm("Are you sure you want to delete all poisoned inbox handlers?")) return;
-    try {
-      const res = await fetch(
-        `${apiUrl}/services/${encodeURIComponent(state.selectedService)}/contexts/${encodeURIComponent(
-          state.inbox.context
-        )}/inbox/bulk-delete`,
-        { method: "DELETE" }
-      );
-      if (res.ok) fetchInbox();
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  // Detail Modals
-  window.viewOutboxDetail = async function (id) {
-    try {
-      const res = await fetch(
-        `${apiUrl}/services/${encodeURIComponent(state.selectedService)}/contexts/${encodeURIComponent(
-          state.outbox.context
-        )}/outbox/${id}`
-      );
-      if (res.ok) {
-        const item = await res.json();
-        modalTitle.textContent = `Outbox Message: ${item.id}`;
-        modalBody.innerHTML = `
-          ${item.error ? `<div><strong style="color:var(--danger);">Error & Stack Trace:</strong><pre class="code-viewer error">${escapeHtml(item.error)}</pre></div>` : ""}
-          <div>
-            <strong>CloudEvents Metadata:</strong>
-            <pre class="code-viewer">${escapeHtml(JSON.stringify(item.properties, null, 2))}</pre>
-          </div>
-          <div>
-            <strong>Payload:</strong>
-            <pre class="code-viewer">${escapeHtml(tryFormatJson(item.content))}</pre>
-          </div>
-        `;
-        modalFooter.innerHTML = `
-          ${item.isPoisoned ? `<button class="btn btn-primary" onclick="window.requeueOutboxItem('${item.id}')">↺ Requeue</button>` : ""}
-          <button class="btn btn-danger" onclick="window.deleteOutboxItem('${item.id}')">🗑 Delete</button>
-          <button class="btn btn-secondary" onclick="document.getElementById('detail-modal').style.display='none'">Close</button>
-        `;
-        detailModal.style.display = "flex";
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  window.viewInboxDetail = async function (statusId) {
-    try {
-      const res = await fetch(
-        `${apiUrl}/services/${encodeURIComponent(state.selectedService)}/contexts/${encodeURIComponent(
-          state.inbox.context
-        )}/inbox/${statusId}`
-      );
-      if (res.ok) {
-        const item = await res.json();
-        modalTitle.textContent = `Inbox Handler: ${item.handlerKey} (${item.messageId})`;
-        modalBody.innerHTML = `
-          ${item.lastError ? `<div><strong style="color:var(--danger);">Error & Stack Trace:</strong><pre class="code-viewer error">${escapeHtml(item.lastError)}</pre></div>` : ""}
-          <div>
-            <strong>CloudEvents Metadata:</strong>
-            <pre class="code-viewer">${escapeHtml(JSON.stringify(item.properties, null, 2))}</pre>
-          </div>
-          <div>
-            <strong>Payload:</strong>
-            <pre class="code-viewer">${escapeHtml(tryFormatJson(item.content))}</pre>
-          </div>
-          ${
-            item.otherHandlers && item.otherHandlers.length > 0
-              ? `<div>
-                  <strong>Other Handlers for this Message:</strong>
-                  <ul style="margin-top:0.5rem;padding-left:1.2rem;font-size:0.85rem;">
-                    ${item.otherHandlers
-                      .map(
-                        (h) => `
-                      <li>
-                        <strong>${escapeHtml(h.handlerKey)}</strong>: 
-                        <span class="badge ${h.isPoisoned ? "badge-poisoned" : h.completedAt ? "badge-success" : "badge-pending"}">
-                          ${h.isPoisoned ? "Poisoned" : h.completedAt ? "Completed" : "Pending"}
-                        </span>
-                      </li>`
-                      )
-                      .join("")}
-                  </ul>
-                </div>`
-              : ""
-          }
-        `;
-        modalFooter.innerHTML = `
-          ${item.isPoisoned ? `<button class="btn btn-primary" onclick="window.requeueInboxItem('${item.id}')">↺ Requeue Handler</button>` : ""}
-          <button class="btn btn-danger" onclick="window.deleteInboxItem('${item.id}')">🗑 Delete Handler</button>
-          <button class="btn btn-secondary" onclick="document.getElementById('detail-modal').style.display='none'">Close</button>
-        `;
-        detailModal.style.display = "flex";
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  function closeModal() {
-    detailModal.style.display = "none";
-  }
-
-  function tryFormatJson(str) {
-    if (!str) return "—";
-    try {
-      const parsed = JSON.parse(str);
-      return JSON.stringify(parsed, null, 2);
-    } catch {
-      return str;
-    }
-  }
-
-  function escapeHtml(str) {
-    if (!str) return "";
-    return str
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-  }
-
-  // Start app
-  init();
+  function formatJson(value) { try { return value ? JSON.stringify(JSON.parse(value), null, 2) : "—"; } catch { return value || "—"; } }
+  function closeModal() { byId("detail-modal").style.display = "none"; }
+  async function showTab(tab) { state.tab = tab; ["overview", "outbox", "inbox", "channels"].forEach((name) => byId(`view-${name}`).style.display = name === tab ? "block" : "none"); document.querySelectorAll(".tab-button").forEach((item) => item.classList.toggle("active", item.dataset.tab === tab)); if (tab === "outbox" || tab === "inbox") await messages(tab); else await detail(); }
+  function setupSse() { const source = new EventSource(`${api}/events`); source.onopen = () => { byId("sse-badge").classList.add("connected"); byId("sse-status-text").textContent = "Live SSE Stream"; }; source.addEventListener("snapshot", (event) => { try { state.services = JSON.parse(event.data); renderServices(); } catch (error) { console.error("Invalid service snapshot", error); } }); source.onerror = () => { byId("sse-badge").classList.remove("connected"); byId("sse-status-text").textContent = "Reconnecting…"; }; }
+  function setup() { byId("btn-refresh").addEventListener("click", () => state.selected ? showTab(state.tab) : refreshServices()); byId("btn-close-modal").addEventListener("click", closeModal); document.querySelector('[data-nav="all"]').addEventListener("click", () => { state.selected = null; byId("service-header").style.display = "none"; byId("view-all-services").style.display = "block"; renderServices(); }); document.querySelectorAll(".tab-button").forEach((item) => item.addEventListener("click", () => showTab(item.dataset.tab))); ["outbox", "inbox"].forEach((kind) => { byId(`${kind}-context-select`).addEventListener("change", () => { state[kind].page = 1; messages(kind); }); byId(`${kind}-prev-page`).addEventListener("click", () => { state[kind].page--; messages(kind); }); byId(`${kind}-next-page`).addEventListener("click", () => { state[kind].page++; messages(kind); }); byId(`btn-bulk-requeue-${kind}`).addEventListener("click", () => bulk(kind, "requeue")); byId(`btn-bulk-delete-${kind}`).addEventListener("click", () => bulk(kind, "delete")); document.querySelectorAll(`#${kind}-status-pills [data-status]`).forEach((item) => item.addEventListener("click", () => { state[kind].status = item.dataset.status; state[kind].page = 1; messages(kind); })); }); }
+  setup(); setupSse(); refreshServices();
 })();

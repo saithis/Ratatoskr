@@ -20,9 +20,11 @@ public sealed class EfCoreManagementOperations(
     IServiceProvider serviceProvider,
     ChannelRegistry channelRegistry,
     IOptions<RatatoskrManagementOptions> options,
+    TimeProvider timeProvider,
     ILogger<EfCoreManagementOperations> logger
 )
 {
+    private readonly DateTimeOffset _startedAt = timeProvider.GetUtcNow();
 
     public async Task<ServiceHeartbeat> BuildHeartbeatAsync(CancellationToken cancellationToken = default)
     {
@@ -100,8 +102,8 @@ public sealed class EfCoreManagementOperations(
             InstanceId = opt.InstanceId,
             MachineName = opt.MachineName,
             Environment = System.Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production",
-            StartedAt = DateTimeOffset.UtcNow,
-            Timestamp = DateTimeOffset.UtcNow,
+            StartedAt = _startedAt,
+            Timestamp = timeProvider.GetUtcNow(),
             DbContexts = dbSummaries,
             Channels = channels
         };

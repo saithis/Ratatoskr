@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Hosting;
@@ -6,6 +5,7 @@ using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using Ratatoskr.Management.Contracts;
+using Ratatoskr.Management.Runtime;
 using Ratatoskr.RabbitMq;
 
 namespace Ratatoskr.Management.RabbitMq;
@@ -17,14 +17,18 @@ public sealed class RabbitMqManagementRuntime(
     TimeProvider timeProvider) : BackgroundService, IManagementClient, IServiceCatalog, IManagementEventSource, IManagementEventPublisher
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private readonly ConcurrentDictionary<string, TaskCompletionSource<ManagementResponseEnvelope>> _pending = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, ServiceHeartbeat> _services = new(StringComparer.OrdinalIgnoreCase);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, TaskCompletionSource<ManagementResponseEnvelope>> _pending = new(StringComparer.Ordinal);
+    private readonly ServiceRegistry _registry = new(timeProvider, options.Value.HeartbeatInterval * 3);
 #pragma warning disable IDISP002 // Disposed when the hosted service is disposed.
     private readonly SemaphoreSlim _publishLock = new(1, 1);
 #pragma warning restore IDISP002
     private IChannel? _channel;
     private string? _replyQueue;
-    public event EventHandler<ServiceHeartbeatEventArgs>? ServiceUpdated;
+    public event EventHandler<ServiceHeartbeatEventArgs>? ServiceUpdated
+    {
+        add => _registry.ServiceUpdated += value;
+        remove => _registry.ServiceUpdated -= value;
+    }
     public event EventHandler<ServiceHeartbeatEventArgs>? AnnouncementReceived;
 
     public async Task<TResponse?> ExecuteAsync<TRequest, TResponse>(ManagementTarget target, string operation, TRequest request, CancellationToken cancellationToken = default)
@@ -50,8 +54,8 @@ public sealed class RabbitMqManagementRuntime(
         finally { _pending.TryRemove(envelope.RequestId, out _); }
     }
 
-    public IReadOnlyList<ServiceCardDto> GetAllServices() => _services.Values.Select(ToCard).OrderBy(x => x.ServiceName, StringComparer.OrdinalIgnoreCase).ToArray();
-    public ServiceDetailDto? GetService(string serviceName) => _services.TryGetValue(serviceName, out var heartbeat) ? ToDetail(heartbeat) : null;
+    public IReadOnlyList<ServiceCardDto> GetAllServices() => _registry.GetAllServices();
+    public ServiceDetailDto? GetService(string serviceName) => _registry.GetService(serviceName);
     public async ValueTask PublishAsync(ServiceHeartbeat announcement, CancellationToken cancellationToken = default)
     {
         var channel = _channel ?? throw new InvalidOperationException("RabbitMQ management runtime has not started.");
@@ -93,7 +97,10 @@ public sealed class RabbitMqManagementRuntime(
             else
             {
                 var heartbeat = JsonSerializer.Deserialize<ServiceHeartbeat>(delivery.Body.Span, JsonOptions);
-                if (heartbeat is not null) { _services[heartbeat.ServiceName] = heartbeat; var args = new ServiceHeartbeatEventArgs(heartbeat); AnnouncementReceived?.Invoke(this, args); ServiceUpdated?.Invoke(this, args); }
+                if (heartbeat is not null && _registry.Publish(heartbeat))
+                {
+                    AnnouncementReceived?.Invoke(this, new ServiceHeartbeatEventArgs(heartbeat));
+                }
             }
             await _channel!.BasicAckAsync(deliveryTag: delivery.DeliveryTag, multiple: false, cancellationToken: CancellationToken.None);
         }
@@ -112,8 +119,6 @@ public sealed class RabbitMqManagementRuntime(
         _publishLock.Dispose();
         base.Dispose();
     }
-    private static ServiceCardDto ToCard(ServiceHeartbeat x) => new(x.ServiceName, "online", 1, x.DbContexts.Sum(d => d.PendingOutboxCount), x.DbContexts.Sum(d => d.PoisonedOutboxCount), x.DbContexts.Sum(d => d.PendingInboxCount), x.DbContexts.Sum(d => d.PoisonedInboxCount), x.Timestamp, x.DbContexts.Select(d => d.DbContextName).ToArray());
-    private static ServiceDetailDto ToDetail(ServiceHeartbeat x) => new(x.ServiceName, "online", [new ServiceInstanceRecordDto(x.InstanceId, x.MachineName, x.Environment, x.StartedAt, x.Timestamp, true)], x.DbContexts, x.Channels);
 }
 
 internal static class Names { public static string Commands(RabbitMqManagementOptions o) => $"{o.ExchangePrefix}.commands"; public static string Discovery(RabbitMqManagementOptions o) => $"{o.ExchangePrefix}.discovery"; }
