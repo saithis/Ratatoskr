@@ -19,6 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Ratatoskr.Management.Abstractions\Ratatoskr.Management.Abstractions.csproj" />
     <ProjectReference Include="..\Ratatoskr.Management\Ratatoskr.Management.csproj" />
   </ItemGroup>
 

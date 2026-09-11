@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Versioned, transport-neutral management contracts for Ratatoskr.</Description>
+    <PackageTags>cloudevents;eventbus;management;contracts;ratatoskr</PackageTags>
+    <IsPackable>true</IsPackable>
+    <NoWarn>$(NoWarn);1591;MA0016;RCS1181;RCS1161;MA0007</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

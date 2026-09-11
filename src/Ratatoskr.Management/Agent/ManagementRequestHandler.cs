@@ -9,7 +9,6 @@ using Ratatoskr.EfCore;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.EfCore.Management;
 using Ratatoskr.Management.Contracts;
-using Ratatoskr.RabbitMq.Extensions;
 
 namespace Ratatoskr.Management.Agent;
 
@@ -181,13 +180,13 @@ public sealed class ManagementRequestHandler(
                         JsonOptions
                     )
                 ),
-                _ => ManagementResponseEnvelope.Error(request.RequestId, $"Unknown action '{request.Action}'")
+                _ => ManagementResponseEnvelope.Failed(request, new ManagementError(ManagementProtocol.UnsupportedOperation, "The operation is not supported."))
             };
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to handle management request {Action} for {TargetService}", request.Action, request.TargetService);
-            return ManagementResponseEnvelope.Error(request.RequestId, ex.Message);
+            return ManagementResponseEnvelope.Failed(request, new ManagementError(ManagementProtocol.InternalError, "The management operation failed."));
         }
     }
 
@@ -249,20 +248,16 @@ public sealed class ManagementRequestHandler(
             });
         }
 
-        var channels = new List<ChannelSummaryDto>();
+        var channels = new List<ChannelTopology>();
         var allChannels = channelRegistry.GetPublishChannels().Concat(channelRegistry.GetConsumeChannels());
         foreach (var ch in allChannels)
         {
-            var rmqOpts = ch.GetRabbitMqChannelOptions();
-            channels.Add(new ChannelSummaryDto
-            {
-                ChannelName = ch.ChannelName,
-                ChannelType = ch.Intent.ToString(),
-                TransportName = string.Join(", ", ch.Transports),
-                MessageTypes = ch.Messages.Select(m => m.MessageTypeName).ToList(),
-                QueueName = rmqOpts?.QueueName,
-                ExchangeName = rmqOpts?.AmqpExchangeName ?? ch.ChannelName
-            });
+            channels.Add(new ChannelTopology(
+                ch.ChannelName,
+                ch.Intent is ChannelType.EventPublish or ChannelType.CommandPublish ? ChannelIntent.Publish : ChannelIntent.Consume,
+                ch.Messages.Select(m => m.MessageTypeName).ToList(),
+                ch.Transports.Select(transport => new TransportBinding(transport, transport, new Dictionary<string, string>(StringComparer.Ordinal))).ToList()
+            ));
         }
 
         return new ServiceHeartbeat

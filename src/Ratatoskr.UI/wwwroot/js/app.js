@@ -426,11 +426,10 @@
       .map(
         (ch) => `
       <tr>
-        <td><strong>${escapeHtml(ch.channelName)}</strong></td>
-        <td><span class="badge badge-transport">${escapeHtml(ch.channelType)}</span></td>
-        <td><span class="badge ${ch.transportName === "RabbitMQ" ? "badge-transport" : "badge-pending"}">${escapeHtml(ch.transportName)}</span></td>
-        <td><span class="code-snippet">${escapeHtml(ch.exchangeName || "—")}</span></td>
-        <td><span class="code-snippet">${escapeHtml(ch.queueName || "—")}</span></td>
+        <td><strong>${escapeHtml(ch.logicalName)}</strong></td>
+        <td><span class="badge badge-transport">${escapeHtml(ch.intent)}</span></td>
+        <td><span class="badge badge-transport">${escapeHtml((ch.transportBindings || []).map((b) => b.providerKind).join(", "))}</span></td>
+        <td colspan="2"><span class="code-snippet">${escapeHtml((ch.transportBindings || []).map((b) => b.displayName).join(", ") || "—")}</span></td>
         <td><small>${escapeHtml(ch.messageTypes.join(", ") || "None")}</small></td>
       </tr>
     `

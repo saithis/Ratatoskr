@@ -30,7 +30,7 @@ public sealed record ServiceDetailDto(
     string Status,
     IReadOnlyList<ServiceInstanceRecordDto> Instances,
     IReadOnlyList<DbContextSummaryDto> DbContexts,
-    IReadOnlyList<ChannelSummaryDto> Channels
+    IReadOnlyList<ChannelTopology> Channels
 );
 
 /// <summary>
@@ -74,7 +74,7 @@ public sealed class ActiveServiceRegistry(IOptions<RatatoskrUiOptions> options)
         public string ServiceName { get; } = serviceName;
         private readonly ConcurrentDictionary<string, InstanceState> _instances = new(StringComparer.OrdinalIgnoreCase);
         private List<DbContextSummaryDto> _dbContexts = [];
-        private List<ChannelSummaryDto> _channels = [];
+        private List<ChannelTopology> _channels = [];
         private DateTimeOffset _lastHeartbeat = DateTimeOffset.MinValue;
 
         public void Update(ServiceHeartbeat heartbeat)

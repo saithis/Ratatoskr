@@ -161,9 +161,12 @@ public sealed class RatatoskrBrokerManagementClient(
                         basicProperties: new BasicProperties { Type = "ratatoskr.management.ping" },
                         body: JsonSerializer.SerializeToUtf8Bytes(new ManagementRequestEnvelope
                         {
+                            ProtocolVersion = ManagementProtocol.Current,
                             RequestId = Guid.NewGuid().ToString("N"),
-                            Action = "GetStats",
-                            TargetService = "*"
+                            OperationId = Guid.NewGuid().ToString("N"),
+                            Operation = "GetStats",
+                            Target = new ManagementTarget("*"),
+                            Deadline = DateTimeOffset.UtcNow.Add(opt.RequestTimeout)
                         }, JsonOptions),
                         cancellationToken: stoppingToken
                     );
@@ -217,11 +220,13 @@ public sealed class RatatoskrBrokerManagementClient(
 
             var envelope = new ManagementRequestEnvelope
             {
+                ProtocolVersion = ManagementProtocol.Current,
                 RequestId = Guid.NewGuid().ToString("N"),
-                Action = action,
-                TargetService = serviceName,
-                TargetContext = contextName,
-                PayloadJson = JsonSerializer.Serialize(request, JsonOptions)
+                OperationId = Guid.NewGuid().ToString("N"),
+                Operation = action,
+                Target = new ManagementTarget(serviceName, ResourceId: contextName),
+                Deadline = DateTimeOffset.UtcNow.Add(options.Value.RequestTimeout),
+                Payload = new ManagementPayload(typeof(TRequest).FullName ?? typeof(TRequest).Name, JsonSerializer.Serialize(request, JsonOptions))
             };
 
             var localResponse = await localHandler.HandleAsync(envelope, cancellationToken);
@@ -246,11 +251,13 @@ public sealed class RatatoskrBrokerManagementClient(
 
         var requestEnvelope = new ManagementRequestEnvelope
         {
+            ProtocolVersion = ManagementProtocol.Current,
             RequestId = requestId,
-            Action = action,
-            TargetService = serviceName,
-            TargetContext = contextName,
-            PayloadJson = JsonSerializer.Serialize(request, JsonOptions)
+            OperationId = requestId,
+            Operation = action,
+            Target = new ManagementTarget(serviceName, ResourceId: contextName),
+            Deadline = DateTimeOffset.UtcNow.Add(options.Value.RequestTimeout),
+            Payload = new ManagementPayload(typeof(TRequest).FullName ?? typeof(TRequest).Name, JsonSerializer.Serialize(request, JsonOptions))
         };
 
         var tcs = new TaskCompletionSource<ManagementResponseEnvelope>(TaskCreationOptions.RunContinuationsAsynchronously);

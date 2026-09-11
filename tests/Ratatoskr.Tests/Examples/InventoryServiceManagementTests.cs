@@ -158,8 +158,8 @@ public sealed class InventoryServiceManagementTests : IAsyncDisposable
 
         // Check Channels
         discovered.Channels.Should().NotBeEmpty();
-        discovered.Channels.Should().Contain(c => c.ChannelName == $"{queuePrefix}.commands");
-        discovered.Channels.Should().Contain(c => c.ChannelName == $"{queuePrefix}.audit");
+        discovered.Channels.Should().Contain(c => c.LogicalName == $"{queuePrefix}.commands");
+        discovered.Channels.Should().Contain(c => c.LogicalName == $"{queuePrefix}.audit");
     }
 
     [Test]
