@@ -163,15 +163,14 @@ public class InProcessBrokerManagementTests(
         secondDbSummary.PoisonedInboxCount.Should().Be(1);
 
         // 2. Query Outbox List & Detail
-        var outboxList = await client.ExecuteAsync<GetOutboxMessagesRequest, PagedResult<OutboxItemDto>>(
+        var outboxList = await client.ExecuteAsync<GetOutboxMessagesRequest, CursorPagedResult<OutboxItemDto>>(
             "monolith",
             "TestDbContext",
             "GetOutbox",
-            new GetOutboxMessagesRequest(Status: "Poisoned", Page: 1, PageSize: 10)
+            new GetOutboxMessagesRequest(Status: "Poisoned", Limit: 10)
         );
 
         outboxList.Should().NotBeNull();
-        outboxList!.TotalCount.Should().Be(1);
         outboxList.Items.Should().HaveCount(1);
         outboxList.Items[0].Id.Should().Be(outboxId);
         outboxList.Items[0].IsPoisoned.Should().BeTrue();
@@ -213,15 +212,14 @@ public class InProcessBrokerManagementTests(
         });
 
         // 4. Query Inbox List & Detail
-        var inboxList = await client.ExecuteAsync<GetInboxMessagesRequest, PagedResult<InboxItemDto>>(
+        var inboxList = await client.ExecuteAsync<GetInboxMessagesRequest, CursorPagedResult<InboxItemDto>>(
             "monolith",
             "SecondTestDbContext",
             "GetInbox",
-            new GetInboxMessagesRequest(Status: "Poisoned", Page: 1, PageSize: 10)
+            new GetInboxMessagesRequest(Status: "Poisoned", Limit: 10)
         );
 
         inboxList.Should().NotBeNull();
-        inboxList!.TotalCount.Should().Be(1);
         inboxList.Items.Should().HaveCount(1);
         inboxList.Items[0].Id.Should().Be(statusId);
         inboxList.Items[0].HandlerKey.Should().Be("second-handler");

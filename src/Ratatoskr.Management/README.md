@@ -30,3 +30,8 @@ builder.Services.AddRatatoskrManagement(options =>
     options.InstanceId = Environment.MachineName; // or pod ID
 });
 ```
+
+`AddRatatoskrManagement` includes the in-process management provider. To use a distributed
+control plane, install a provider package and register it after this call; for RabbitMQ, call
+`AddRabbitMqManagement`. Provider selection is independent of the application's message
+transport.

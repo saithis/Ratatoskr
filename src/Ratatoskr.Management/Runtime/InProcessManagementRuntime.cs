@@ -94,8 +94,15 @@ internal sealed class InProcessManagementAnnouncementService(
     IManagementCommandHost host,
     IManagementEventPublisher publisher) : IHostedService
 {
-    public async Task StartAsync(CancellationToken cancellationToken) =>
-        await publisher.PublishAsync(await host.GetAnnouncementAsync(cancellationToken), cancellationToken);
+    public async Task StartAsync(CancellationToken cancellationToken)
+    {
+        // Distributed providers publish announcements from their own command host after their
+        // topology is ready. Publishing here would race their hosted-service startup.
+        if (publisher is InProcessServiceCatalog)
+        {
+            await publisher.PublishAsync(await host.GetAnnouncementAsync(cancellationToken), cancellationToken);
+        }
+    }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

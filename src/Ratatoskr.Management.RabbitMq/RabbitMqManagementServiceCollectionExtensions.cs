@@ -19,8 +19,13 @@ public static class RabbitMqManagementServiceCollectionExtensions
         services.Replace(ServiceDescriptor.Singleton<IManagementEventSource>(sp => sp.GetRequiredService<RabbitMqManagementRuntime>()));
         services.Replace(ServiceDescriptor.Singleton<IManagementEventPublisher>(sp => sp.GetRequiredService<RabbitMqManagementRuntime>()));
         services.AddHostedService(sp => sp.GetRequiredService<RabbitMqManagementRuntime>());
-        services.TryAddSingleton<IManagementCommandHost, RabbitMqManagementCommandHost>();
-        services.AddHostedService<RabbitMqManagementCommandConsumer>();
+        // A dashboard needs only discovery and a client. Registering a command consumer there
+        // would require an application dispatcher that it deliberately does not have.
+        if (services.Any(descriptor => descriptor.ServiceType == typeof(IManagementCommandDispatcher)))
+        {
+            services.TryAddSingleton<IManagementCommandHost, RabbitMqManagementCommandHost>();
+            services.AddHostedService<RabbitMqManagementCommandConsumer>();
+        }
         return services;
     }
 }

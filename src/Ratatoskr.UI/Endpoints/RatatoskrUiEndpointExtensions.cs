@@ -181,14 +181,14 @@ public static class RatatoskrUiEndpointExtensions
             string serviceName,
             string contextName,
             string? status,
-            int? page,
-            int? pageSize,
+            string? cursor,
+            int? limit,
             IManagementClient client,
             CancellationToken ct
         ) =>
         {
-            var req = new GetOutboxMessagesRequest(status ?? "Poisoned", page ?? 1, pageSize ?? 20);
-            var res = await client.ExecuteAsync<GetOutboxMessagesRequest, PagedResult<OutboxItemDto>>(
+            var req = new GetOutboxMessagesRequest(status ?? "Poisoned", cursor, limit ?? 20);
+            var res = await client.ExecuteAsync<GetOutboxMessagesRequest, CursorPagedResult<OutboxItemDto>>(
                 serviceName, contextName, "GetOutbox", req, ct);
             return Results.Ok(res);
         });
@@ -261,14 +261,14 @@ public static class RatatoskrUiEndpointExtensions
             string serviceName,
             string contextName,
             string? status,
-            int? page,
-            int? pageSize,
+            string? cursor,
+            int? limit,
             IManagementClient client,
             CancellationToken ct
         ) =>
         {
-            var req = new GetInboxMessagesRequest(status ?? "Poisoned", page ?? 1, pageSize ?? 20);
-            var res = await client.ExecuteAsync<GetInboxMessagesRequest, PagedResult<InboxItemDto>>(
+            var req = new GetInboxMessagesRequest(status ?? "Poisoned", cursor, limit ?? 20);
+            var res = await client.ExecuteAsync<GetInboxMessagesRequest, CursorPagedResult<InboxItemDto>>(
                 serviceName, contextName, "GetInbox", req, ct);
             return Results.Ok(res);
         });

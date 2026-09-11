@@ -59,11 +59,7 @@ public class RabbitMqBrokerManagementTests(
         {
             bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
         });
-        uiServices.AddRatatoskrUI(o =>
-        {
-            o.UiExchangePrefix = uiPrefix;
-            o.RequestTimeout = TimeSpan.FromSeconds(15);
-        });
+        uiServices.AddRatatoskrUI();
         uiServices.AddRabbitMqManagement(o => o.ExchangePrefix = uiPrefix);
 
         await using var uiProvider = uiServices.BuildServiceProvider();
@@ -86,7 +82,6 @@ public class RabbitMqBrokerManagementTests(
         {
             o.ServiceName = serviceName;
             o.InstanceId = "orders-node-1";
-            o.UiExchangePrefix = uiPrefix;
             o.HeartbeatInterval = TimeSpan.FromMilliseconds(500);
             o.EnableHeartbeat = true;
         });
@@ -123,15 +118,14 @@ public class RabbitMqBrokerManagementTests(
             dbSummary.PoisonedOutboxCount.Should().Be(1);
 
             // 4. Execute RPC over RabbitMQ: GetOutbox
-            var outboxResult = await uiClient.ExecuteAsync<GetOutboxMessagesRequest, PagedResult<OutboxItemDto>>(
+            var outboxResult = await uiClient.ExecuteAsync<GetOutboxMessagesRequest, CursorPagedResult<OutboxItemDto>>(
                 serviceName,
                 "TestDbContext",
                 "GetOutbox",
-                new GetOutboxMessagesRequest(Status: "Poisoned", Page: 1, PageSize: 10)
+                new GetOutboxMessagesRequest(Status: "Poisoned", Limit: 10)
             );
 
             outboxResult.Should().NotBeNull();
-            outboxResult!.TotalCount.Should().Be(1);
             outboxResult.Items.Should().HaveCount(1);
             outboxResult.Items[0].Id.Should().Be(poisonedId);
             outboxResult.Items[0].IsPoisoned.Should().BeTrue();
@@ -173,15 +167,15 @@ public class RabbitMqBrokerManagementTests(
             });
 
             // 7. Verify via RPC that poisoned list is now empty
-            var outboxAfterRequeue = await uiClient.ExecuteAsync<GetOutboxMessagesRequest, PagedResult<OutboxItemDto>>(
+            var outboxAfterRequeue = await uiClient.ExecuteAsync<GetOutboxMessagesRequest, CursorPagedResult<OutboxItemDto>>(
                 serviceName,
                 "TestDbContext",
                 "GetOutbox",
-                new GetOutboxMessagesRequest(Status: "Poisoned", Page: 1, PageSize: 10)
+                new GetOutboxMessagesRequest(Status: "Poisoned", Limit: 10)
             );
 
             outboxAfterRequeue.Should().NotBeNull();
-            outboxAfterRequeue!.TotalCount.Should().Be(0);
+            outboxAfterRequeue!.Items.Should().BeEmpty();
         }
         finally
         {

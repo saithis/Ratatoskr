@@ -9,6 +9,7 @@ using Microsoft.Extensions.Hosting;
 using Npgsql;
 using Ratatoskr;
 using Ratatoskr.Management.Contracts;
+using Ratatoskr.Management.RabbitMq;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Tests.Fixtures;
 using Ratatoskr.UI;
@@ -64,11 +65,8 @@ public sealed class InventoryServiceManagementTests : IAsyncDisposable
         {
             bus.UseRabbitMq(o => o.ConnectionString = new Uri(_rabbit.ConnectionString));
         });
-        uiServices.AddRatatoskrUI(o =>
-        {
-            o.UiExchangePrefix = uiPrefix;
-            o.RequestTimeout = TimeSpan.FromSeconds(15);
-        });
+        uiServices.AddRatatoskrUI();
+        uiServices.AddRabbitMqManagement(o => o.ExchangePrefix = uiPrefix);
 
         _uiProvider = uiServices.BuildServiceProvider();
         _uiHostedServices = _uiProvider.GetServices<IHostedService>().ToList();
@@ -85,7 +83,7 @@ public sealed class InventoryServiceManagementTests : IAsyncDisposable
                 builder.UseSetting("ConnectionStrings:inventorydb", invCs);
                 builder.UseSetting("ConnectionStrings:auditdb", audCs);
                 builder.UseSetting("Ratatoskr:Management:ServiceName", serviceName);
-                builder.UseSetting("Ratatoskr:Management:UiExchangePrefix", uiPrefix);
+                builder.UseSetting("Ratatoskr:Management:ExchangePrefix", uiPrefix);
                 builder.UseSetting("Inventory:QueuePrefix", queuePrefix);
                 builder.UseSetting("ASPNETCORE_ENVIRONMENT", "Development");
             }
@@ -183,20 +181,20 @@ public sealed class InventoryServiceManagementTests : IAsyncDisposable
         postResp.StatusCode.Should().Be(HttpStatusCode.Accepted);
 
         // Wait for inbox message to exhaust retries and become poisoned
-        PagedResult<InboxItemDto>? inboxResult = null;
+        CursorPagedResult<InboxItemDto>? inboxResult = null;
         var poisonDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(20);
         while (DateTime.UtcNow < poisonDeadline)
         {
             try
             {
-                inboxResult = await uiClient.ExecuteAsync<GetInboxMessagesRequest, PagedResult<InboxItemDto>>(
+                inboxResult = await uiClient.ExecuteAsync<GetInboxMessagesRequest, CursorPagedResult<InboxItemDto>>(
                     serviceName,
                     "InventoryDbContext",
                     "GetInbox",
-                    new GetInboxMessagesRequest(Status: "Poisoned", Page: 1, PageSize: 10)
+                    new GetInboxMessagesRequest(Status: "Poisoned", Limit: 10)
                 );
 
-                if (inboxResult is { TotalCount: > 0 })
+                if (inboxResult is { Items.Count: > 0 })
                 {
                     break;
                 }
@@ -210,7 +208,7 @@ public sealed class InventoryServiceManagementTests : IAsyncDisposable
         }
 
         inboxResult.Should().NotBeNull();
-        inboxResult!.TotalCount.Should().BeGreaterThanOrEqualTo(1);
+        inboxResult!.Items.Should().NotBeEmpty();
 
         var poisonedItem = inboxResult.Items[0];
         poisonedItem.IsPoisoned.Should().BeTrue();
@@ -241,15 +239,15 @@ public sealed class InventoryServiceManagementTests : IAsyncDisposable
         requeueResult!.RequeuedCount.Should().Be(1);
 
         // Verify it is no longer poisoned
-        var inboxAfter = await uiClient.ExecuteAsync<GetInboxMessagesRequest, PagedResult<InboxItemDto>>(
+        var inboxAfter = await uiClient.ExecuteAsync<GetInboxMessagesRequest, CursorPagedResult<InboxItemDto>>(
             serviceName,
             "InventoryDbContext",
             "GetInbox",
-            new GetInboxMessagesRequest(Status: "Poisoned", Page: 1, PageSize: 10)
+            new GetInboxMessagesRequest(Status: "Poisoned", Limit: 10)
         );
 
         inboxAfter.Should().NotBeNull();
-        inboxAfter!.TotalCount.Should().Be(0);
+        inboxAfter!.Items.Should().BeEmpty();
     }
 
     public async ValueTask DisposeAsync()

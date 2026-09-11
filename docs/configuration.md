@@ -202,9 +202,7 @@ services.AddRatatoskrManagement(options =>
 {
     options.ServiceName = "orders-service";
     options.InstanceId = Environment.MachineName;
-    options.UiExchangePrefix = "ratatoskr.ui";
     options.HeartbeatInterval = TimeSpan.FromSeconds(15);
-    options.EnableHeartbeat = true;
 });
 ```
 
@@ -212,17 +210,13 @@ services.AddRatatoskrManagement(options =>
 |---|---|---|---|
 | `ServiceName` | Assembly Name | Logical name of the service | [Management & UI](management-ui.md) |
 | `InstanceId` | `Guid.NewGuid()` | Identifier for this specific replica | [Management & UI](management-ui.md) |
-| `UiExchangePrefix` | `"ratatoskr.ui"` | Name prefix for UI command & inbox exchanges | [Management & UI](management-ui.md) |
-| `HeartbeatInterval` | `15 seconds` | Heartbeat announcement broadcast interval | [Management & UI](management-ui.md) |
-| `EnableHeartbeat` | `true` | Set to `false` in in-process monoliths without broker | [Management & UI](management-ui.md) |
+| `HeartbeatInterval` | `15 seconds` | Frequency of provider-neutral service announcements | [Management & UI](management-ui.md) |
 
 ## Management UI Dashboard (`Ratatoskr.UI`)
 
 ```csharp
 services.AddRatatoskrUI(options =>
 {
-    options.UiExchangePrefix = "ratatoskr.ui";
-    options.RequestTimeout = TimeSpan.FromSeconds(15);
     options.ServiceOfflineThreshold = TimeSpan.FromSeconds(45);
 });
 
@@ -232,11 +226,28 @@ app.MapRatatoskrUI("RatatoskrAdmin", "/ratatoskr");
 
 | Property | Default | Description | Details |
 |---|---|---|---|
-| `UiExchangePrefix` | `"ratatoskr.ui"` | Name prefix for UI command & inbox exchanges | [Management & UI](management-ui.md) |
-| `RequestTimeout` | `15 seconds` | Maximum wait timeout for RPC command replies | [Management & UI](management-ui.md) |
 | `ServiceOfflineThreshold` | `45 seconds` | Time without heartbeats before marking offline | [Management & UI](management-ui.md) |
+
+### RabbitMQ management provider (`Ratatoskr.Management.RabbitMq`)
+
+```csharp
+services.AddRabbitMqManagement(options =>
+{
+    options.ExchangePrefix = "operations";
+    options.RequestTimeout = TimeSpan.FromSeconds(10);
+});
+```
+
+| Property | Default | Description | Details |
+|---|---|---|---|
+| `ExchangePrefix` | `"ratatoskr-management"` | Provider-owned RabbitMQ topology prefix | [Management & UI](management-ui.md) |
+| `UiInstanceId` | Random GUID | Unique dashboard reply address | [Management & UI](management-ui.md) |
+| `RequestTimeout` | `10 seconds` | Provider command/reply deadline | [Management & UI](management-ui.md) |
+| `HeartbeatInterval` | `15 seconds` | Distributed discovery announcement interval | [Management & UI](management-ui.md) |
+| `PrefetchCount` | `10` | Bounded command-consumer prefetch | [Management & UI](management-ui.md) |
+| `ConsumerConcurrency` | `1` | Bounded command-consumer concurrency | [Management & UI](management-ui.md) |
+| `ResponseQueueMaxLength` | `1000` | Maximum buffered replies | [Management & UI](management-ui.md) |
 
 ## Distributed Lock Provider
 
 The lock provider is registered as `IDistributedLockProvider` in DI. See [Operations](operations.md) for provider options (File, PostgreSQL, SQL Server, Redis).
-

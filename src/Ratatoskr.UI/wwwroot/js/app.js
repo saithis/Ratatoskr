@@ -1,7 +1,7 @@
 // Ratatoskr Management Dashboard Client. All untrusted values are assigned with textContent.
 (() => {
   const byId = (id) => document.getElementById(id);
-  const state = { services: [], selected: null, tab: "overview", outbox: { status: "Poisoned", page: 1 }, inbox: { status: "Poisoned", page: 1 } };
+  const state = { services: [], selected: null, tab: "overview", outbox: { status: "Poisoned", cursors: [null] }, inbox: { status: "Poisoned", cursors: [null] } };
   const basePath = location.pathname.replace(/\/$/, "");
   const api = `${basePath}/api`;
   const element = (tag, text, className) => { const value = document.createElement(tag); if (text !== undefined) value.textContent = text; if (className) value.className = className; return value; };
@@ -64,11 +64,14 @@
 
   async function messages(kind) {
     if (!state.selected || !byId(`${kind}-context-select`).value) return;
-    const page = state[kind].page; const result = await request(`${target(kind)}?status=${encodeURIComponent(state[kind].status)}&page=${page}&pageSize=20`); renderMessages(kind, result);
+    const cursor = state[kind].cursors.at(-1); const cursorQuery = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
+    const result = await request(`${target(kind)}?status=${encodeURIComponent(state[kind].status)}&limit=20${cursorQuery}`); renderMessages(kind, result);
   }
   function renderMessages(kind, result) {
-    const body = byId(`${kind}-tbody`); const info = byId(`${kind}-page-info`); info.textContent = `Showing ${result.totalCount ? (result.page - 1) * result.pageSize + 1 : 0}-${Math.min(result.page * result.pageSize, result.totalCount)} of ${result.totalCount}`;
-    byId(`${kind}-prev-page`).disabled = result.page <= 1; byId(`${kind}-next-page`).disabled = result.page * result.pageSize >= result.totalCount;
+    const body = byId(`${kind}-tbody`); const info = byId(`${kind}-page-info`); const page = state[kind].cursors.length;
+    info.textContent = result.items.length ? `Page ${page} · ${result.items.length} item(s)` : "No messages found.";
+    byId(`${kind}-prev-page`).disabled = page === 1; byId(`${kind}-next-page`).disabled = !result.nextCursor;
+    state[kind].nextCursor = result.nextCursor;
     if (!result.items.length) return clear(body, cells(element("tr"), ["No messages found."]));
     clear(body, ...result.items.map((item) => {
       const row = element("tr"); const id = kind === "outbox" ? item.id : item.messageId; const error = kind === "outbox" ? item.error : item.lastError;
@@ -102,6 +105,7 @@
   function closeModal() { byId("detail-modal").style.display = "none"; }
   async function showTab(tab) { state.tab = tab; ["overview", "outbox", "inbox", "channels"].forEach((name) => byId(`view-${name}`).style.display = name === tab ? "block" : "none"); document.querySelectorAll(".tab-button").forEach((item) => item.classList.toggle("active", item.dataset.tab === tab)); if (tab === "outbox" || tab === "inbox") await messages(tab); else await detail(); }
   function setupSse() { const source = new EventSource(`${api}/events`); source.onopen = () => { byId("sse-badge").classList.add("connected"); byId("sse-status-text").textContent = "Live SSE Stream"; }; source.addEventListener("snapshot", (event) => { try { state.services = JSON.parse(event.data); renderServices(); } catch (error) { console.error("Invalid service snapshot", error); } }); source.onerror = () => { byId("sse-badge").classList.remove("connected"); byId("sse-status-text").textContent = "Reconnecting…"; }; }
-  function setup() { byId("btn-refresh").addEventListener("click", () => state.selected ? showTab(state.tab) : refreshServices()); byId("btn-close-modal").addEventListener("click", closeModal); document.querySelector('[data-nav="all"]').addEventListener("click", () => { state.selected = null; byId("service-header").style.display = "none"; byId("view-all-services").style.display = "block"; renderServices(); }); document.querySelectorAll(".tab-button").forEach((item) => item.addEventListener("click", () => showTab(item.dataset.tab))); ["outbox", "inbox"].forEach((kind) => { byId(`${kind}-context-select`).addEventListener("change", () => { state[kind].page = 1; messages(kind); }); byId(`${kind}-prev-page`).addEventListener("click", () => { state[kind].page--; messages(kind); }); byId(`${kind}-next-page`).addEventListener("click", () => { state[kind].page++; messages(kind); }); byId(`btn-bulk-requeue-${kind}`).addEventListener("click", () => bulk(kind, "requeue")); byId(`btn-bulk-delete-${kind}`).addEventListener("click", () => bulk(kind, "delete")); document.querySelectorAll(`#${kind}-status-pills [data-status]`).forEach((item) => item.addEventListener("click", () => { state[kind].status = item.dataset.status; state[kind].page = 1; messages(kind); })); }); }
+  function resetPagination(kind) { state[kind].cursors = [null]; state[kind].nextCursor = null; }
+  function setup() { byId("btn-refresh").addEventListener("click", () => state.selected ? showTab(state.tab) : refreshServices()); byId("btn-close-modal").addEventListener("click", closeModal); document.querySelector('[data-nav="all"]').addEventListener("click", () => { state.selected = null; byId("service-header").style.display = "none"; byId("view-all-services").style.display = "block"; renderServices(); }); document.querySelectorAll(".tab-button").forEach((item) => item.addEventListener("click", () => showTab(item.dataset.tab))); ["outbox", "inbox"].forEach((kind) => { byId(`${kind}-context-select`).addEventListener("change", () => { resetPagination(kind); messages(kind); }); byId(`${kind}-prev-page`).addEventListener("click", () => { state[kind].cursors.pop(); messages(kind); }); byId(`${kind}-next-page`).addEventListener("click", () => { if (state[kind].nextCursor) { state[kind].cursors.push(state[kind].nextCursor); messages(kind); } }); byId(`btn-bulk-requeue-${kind}`).addEventListener("click", () => bulk(kind, "requeue")); byId(`btn-bulk-delete-${kind}`).addEventListener("click", () => bulk(kind, "delete")); document.querySelectorAll(`#${kind}-status-pills [data-status]`).forEach((item) => item.addEventListener("click", () => { state[kind].status = item.dataset.status; resetPagination(kind); messages(kind); })); }); }
   setup(); setupSse(); refreshServices();
 })();

@@ -25,8 +25,11 @@ public sealed record DbContextSummaryDto
     public long PoisonedInboxCount { get; init; }
 }
 
-// Existing operation DTOs stay transport-neutral until they are replaced by the shared operation layer.
-public sealed record PagedResult<T>(IReadOnlyList<T> Items, int TotalCount, int Page, int PageSize);
+/// <summary>
+/// A keyset-paginated result. <see cref="NextCursor"/> is opaque to callers and is
+/// supplied as <see cref="CursorPageRequest.Cursor"/> to read the following page.
+/// </summary>
+public sealed record CursorPagedResult<T>(IReadOnlyList<T> Items, string? NextCursor);
 public sealed record OutboxItemDto(Guid Id, string TransportName, DateTimeOffset CreatedAt, DateTimeOffset? ProcessedAt, DateTimeOffset? FailedAt, bool IsPoisoned, short ErrorCount, string Error, int RequeuedCount, DateTimeOffset? ScheduledAt);
 public sealed record MessagePropertiesDto(string? Id, string? Type, string? Source, string? Subject, string? DataSchema, string? ContentType, DateTimeOffset? Time, DateTimeOffset? ScheduledAt, string? TraceParent);
 public sealed record OutboxDetailDto(Guid Id, string TransportName, DateTimeOffset CreatedAt, DateTimeOffset? ProcessedAt, DateTimeOffset? FailedAt, bool IsPoisoned, short ErrorCount, string Error, int RequeuedCount, DateTimeOffset? ScheduledAt, MessagePropertiesDto? Properties, string? Content);
@@ -36,13 +39,13 @@ public sealed record InboxDetailDto(Guid Id, string MessageId, string HandlerKey
 public sealed record RequeueResultDto(int RequeuedCount);
 public sealed record DeleteResultDto(int DeletedCount);
 
-public sealed record GetOutboxMessagesRequest(string? Status = "Poisoned", int Page = 1, int PageSize = 20);
+public sealed record GetOutboxMessagesRequest(string? Status = "Poisoned", string? Cursor = null, int Limit = 20);
 public sealed record GetOutboxDetailRequest(Guid Id);
 public sealed record RequeueOutboxRequest(Guid Id);
 public sealed record DeleteOutboxRequest(Guid Id);
 public sealed record BulkRequeueOutboxRequest;
 public sealed record BulkDeleteOutboxRequest;
-public sealed record GetInboxMessagesRequest(string? Status = "Poisoned", int Page = 1, int PageSize = 20);
+public sealed record GetInboxMessagesRequest(string? Status = "Poisoned", string? Cursor = null, int Limit = 20);
 public sealed record GetInboxDetailRequest(Guid StatusId);
 public sealed record RequeueInboxHandlerRequest(Guid StatusId);
 public sealed record RequeueInboxMessageRequest(string MessageId);

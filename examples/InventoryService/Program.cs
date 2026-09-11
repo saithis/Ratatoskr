@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Ratatoskr;
 using Ratatoskr.EfCore;
 using Ratatoskr.Management;
+using Ratatoskr.Management.RabbitMq;
 using Ratatoskr.RabbitMq.Extensions;
 using ServiceDefaults;
 
@@ -88,9 +89,12 @@ builder.Services.AddRatatoskrManagement(options =>
 {
     options.ServiceName = builder.Configuration["Ratatoskr:Management:ServiceName"] ?? "inventory-service";
     options.InstanceId = $"{Environment.MachineName}-{Environment.ProcessId.ToString(CultureInfo.InvariantCulture)}";
-    options.UiExchangePrefix = builder.Configuration["Ratatoskr:Management:UiExchangePrefix"] ?? "ratatoskr.ui";
     options.HeartbeatInterval = TimeSpan.FromSeconds(5);
     options.EnableHeartbeat = true;
+});
+builder.Services.AddRabbitMqManagement(options =>
+{
+    options.ExchangePrefix = builder.Configuration["Ratatoskr:Management:ExchangePrefix"] ?? "ratatoskr-management";
 });
 
 var inventoryCs =

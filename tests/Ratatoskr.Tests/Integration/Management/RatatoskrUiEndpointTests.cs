@@ -89,11 +89,11 @@ public class RatatoskrUiEndpointTests(
         outboxResp.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var outboxJson = await outboxResp.Content.ReadFromJsonAsync<JsonElement>();
-        outboxJson.GetProperty("totalCount").GetInt32().Should().Be(1);
-
         var items = outboxJson.GetProperty("items");
         items.GetArrayLength().Should().Be(1);
         items[0].GetProperty("id").GetGuid().Should().Be(outboxId);
+        outboxJson.TryGetProperty("nextCursor", out var nextCursor).Should().BeTrue();
+        nextCursor.ValueKind.Should().Be(JsonValueKind.Null);
 
         // 4. POST /ratatoskr/api/services/portal-service/contexts/TestDbContext/outbox/{id}/requeue
         using var requeueResp = await HttpClient.PostAsync(

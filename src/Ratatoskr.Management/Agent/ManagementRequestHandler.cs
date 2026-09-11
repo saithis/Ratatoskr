@@ -109,7 +109,7 @@ public sealed class EfCoreManagementOperations(
         };
     }
 
-    public async Task<PagedResult<OutboxItemDto>> GetOutboxMessagesAsync(
+    public async Task<CursorPagedResult<OutboxItemDto>> GetOutboxMessagesAsync(
         string contextName,
         GetOutboxMessagesRequest request,
         CancellationToken cancellationToken = default
@@ -129,14 +129,21 @@ public sealed class EfCoreManagementOperations(
             _ => query
         };
 
-        var total = await query.CountAsync(cancellationToken);
-        var page = Math.Max(1, request.Page);
-        var pageSize = Math.Clamp(request.PageSize, 1, 100);
+        if (!ManagementCursor.TryDecode(request.Cursor, out var cursor))
+        {
+            throw new ArgumentException("The pagination cursor is invalid.", nameof(request));
+        }
+
+        var limit = Math.Clamp(request.Limit, 1, 100);
+        if (!string.IsNullOrWhiteSpace(request.Cursor))
+        {
+            query = query.Where(x => x.CreatedAt < cursor.CreatedAt || (x.CreatedAt == cursor.CreatedAt && x.Id.CompareTo(cursor.Id) < 0));
+        }
 
         var items = await query
             .OrderByDescending(x => x.CreatedAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .ThenByDescending(x => x.Id)
+            .Take(limit + 1)
             .Select(x => new OutboxItemDto(
                 x.Id,
                 x.TransportName,
@@ -151,7 +158,10 @@ public sealed class EfCoreManagementOperations(
             ))
             .ToListAsync(cancellationToken);
 
-        return new PagedResult<OutboxItemDto>(items, total, page, pageSize);
+        var hasNext = items.Count > limit;
+        if (hasNext) items.RemoveAt(items.Count - 1);
+        var nextCursor = hasNext ? ManagementCursor.Encode(items[^1].CreatedAt, items[^1].Id) : null;
+        return new CursorPagedResult<OutboxItemDto>(items, nextCursor);
     }
 
     public async Task<OutboxDetailDto?> GetOutboxDetailAsync(
@@ -273,7 +283,7 @@ public sealed class EfCoreManagementOperations(
         return new DeleteResultDto(entities.Count);
     }
 
-    public async Task<PagedResult<InboxItemDto>> GetInboxMessagesAsync(
+    public async Task<CursorPagedResult<InboxItemDto>> GetInboxMessagesAsync(
         string contextName,
         GetInboxMessagesRequest request,
         CancellationToken cancellationToken = default
@@ -293,14 +303,21 @@ public sealed class EfCoreManagementOperations(
             _ => statusQuery
         };
 
-        var total = await statusQuery.CountAsync(cancellationToken);
-        var page = Math.Max(1, request.Page);
-        var pageSize = Math.Clamp(request.PageSize, 1, 100);
+        if (!ManagementCursor.TryDecode(request.Cursor, out var cursor))
+        {
+            throw new ArgumentException("The pagination cursor is invalid.", nameof(request));
+        }
+
+        var limit = Math.Clamp(request.Limit, 1, 100);
+        if (!string.IsNullOrWhiteSpace(request.Cursor))
+        {
+            statusQuery = statusQuery.Where(x => x.CreatedAt < cursor.CreatedAt || (x.CreatedAt == cursor.CreatedAt && x.Id.CompareTo(cursor.Id) < 0));
+        }
 
         var query = from s in statusQuery
                     join m in db.Set<InboxMessageEntity>().AsNoTracking() on s.MessageId equals m.Id into msgGroup
                     from msg in msgGroup.DefaultIfEmpty()
-                    orderby s.CreatedAt descending
+                    orderby s.CreatedAt descending, s.Id descending
                     select new InboxItemDto(
                         s.Id,
                         s.MessageId,
@@ -314,8 +331,11 @@ public sealed class EfCoreManagementOperations(
                         msg != null ? msg.TransportName : "Unknown"
                     );
 
-        var items = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
-        return new PagedResult<InboxItemDto>(items, total, page, pageSize);
+        var items = await query.Take(limit + 1).ToListAsync(cancellationToken);
+        var hasNext = items.Count > limit;
+        if (hasNext) items.RemoveAt(items.Count - 1);
+        var nextCursor = hasNext ? ManagementCursor.Encode(items[^1].CreatedAt, items[^1].Id) : null;
+        return new CursorPagedResult<InboxItemDto>(items, nextCursor);
     }
 
     public async Task<InboxDetailDto?> GetInboxDetailAsync(

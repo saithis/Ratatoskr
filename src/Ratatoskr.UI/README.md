@@ -28,17 +28,14 @@ builder.Services.AddRatatoskr(bus =>
 {
 });
 
-builder.Services.AddRatatoskrManagement();
+builder.Services.AddRatatoskrManagement(); // includes the in-process provider
 
 // Configure authorization policy
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy("RatatoskrAdmin", policy => policy.RequireRole("Admin"));
 
 // Register Ratatoskr UI
-builder.Services.AddRatatoskrUI(options =>
-{
-    options.ServiceOfflineThreshold = TimeSpan.FromSeconds(45);
-});
+builder.Services.AddRatatoskrUI();
 
 var app = builder.Build();
 
@@ -52,3 +49,7 @@ app.Run();
 ```
 
 Open `http://localhost:<port>/ratatoskr` in your browser to view the management dashboard.
+
+For a distributed dashboard, install and register a management provider (for example,
+`AddRabbitMqManagement`) in both the dashboard and managed-service processes. The UI itself
+does not reference a broker package.

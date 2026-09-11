@@ -92,15 +92,12 @@ builder.Services.AddRatatoskrManagement(options =>
 {
     options.ServiceName = "playground-host";
     options.InstanceId = $"{Environment.MachineName}-{Environment.ProcessId.ToString(CultureInfo.InvariantCulture)}";
-    options.UiExchangePrefix = "ratatoskr.ui";
     options.HeartbeatInterval = TimeSpan.FromSeconds(5);
     options.EnableHeartbeat = true;
 });
 
 builder.Services.AddRatatoskrUI(options =>
 {
-    options.UiExchangePrefix = "ratatoskr.ui";
-    options.RequestTimeout = TimeSpan.FromSeconds(15);
     options.ServiceOfflineThreshold = TimeSpan.FromSeconds(45);
 });
 

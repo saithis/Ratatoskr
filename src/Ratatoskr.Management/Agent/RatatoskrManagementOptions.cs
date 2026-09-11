@@ -31,12 +31,6 @@ public sealed class RatatoskrManagementOptions
     public string MachineName { get; set; } = Environment.MachineName;
 
     /// <summary>
-    /// Name prefix for the UI management exchanges ({UiExchangePrefix}.commands and {UiExchangePrefix}.inbox).
-    /// Defaults to "ratatoskr-ui".
-    /// </summary>
-    public string UiExchangePrefix { get; set; } = "ratatoskr-ui";
-
-    /// <summary>
     /// Interval between heartbeat reports sent to the UI.
     /// Defaults to 15 seconds.
     /// </summary>
