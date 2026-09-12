@@ -9,6 +9,11 @@ public sealed record ServiceHeartbeat
     public string? Environment { get; init; }
     public required DateTimeOffset StartedAt { get; init; }
     public required DateTimeOffset Timestamp { get; init; }
+    /// <summary>
+    /// Provider-specific endpoint at which this instance accepts management commands.
+    /// Providers treat this as an opaque address; it is not exposed by the dashboard API.
+    /// </summary>
+    public string? ManagementEndpoint { get; init; }
     public IReadOnlyList<CapabilityDescriptor> Capabilities { get; init; } = [];
     public List<DbContextSummaryDto> DbContexts { get; init; } = [];
     public List<ChannelTopology> Channels { get; init; } = [];

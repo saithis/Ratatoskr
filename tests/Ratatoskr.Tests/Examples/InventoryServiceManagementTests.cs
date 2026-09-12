@@ -66,7 +66,7 @@ public sealed class InventoryServiceManagementTests : IAsyncDisposable
             bus.UseRabbitMq(o => o.ConnectionString = new Uri(_rabbit.ConnectionString));
         });
         uiServices.AddRatatoskrUI();
-        uiServices.AddRabbitMqManagement(o => o.ExchangePrefix = uiPrefix);
+        uiServices.AddRabbitMqManagement(o => o.ResourcePrefix = uiPrefix);
 
         _uiProvider = uiServices.BuildServiceProvider();
         _uiHostedServices = _uiProvider.GetServices<IHostedService>().ToList();
@@ -83,7 +83,7 @@ public sealed class InventoryServiceManagementTests : IAsyncDisposable
                 builder.UseSetting("ConnectionStrings:inventorydb", invCs);
                 builder.UseSetting("ConnectionStrings:auditdb", audCs);
                 builder.UseSetting("Ratatoskr:Management:ServiceName", serviceName);
-                builder.UseSetting("Ratatoskr:Management:ExchangePrefix", uiPrefix);
+                builder.UseSetting("Ratatoskr:Management:ResourcePrefix", uiPrefix);
                 builder.UseSetting("Inventory:QueuePrefix", queuePrefix);
                 builder.UseSetting("ASPNETCORE_ENVIRONMENT", "Development");
             }

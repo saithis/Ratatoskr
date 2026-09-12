@@ -14,7 +14,9 @@ namespace Ratatoskr.Management.RabbitMq;
 public sealed class RabbitMqManagementRuntime(
     RabbitMqConnectionManager connections,
     IOptions<RabbitMqManagementOptions> options,
-    TimeProvider timeProvider) : BackgroundService, IManagementClient, IServiceCatalog, IManagementEventSource, IManagementEventPublisher
+    RabbitMqOptions rabbitMqOptions,
+    TimeProvider timeProvider,
+    IManagementCommandDispatcher? commandDispatcher = null) : BackgroundService, IManagementClient, IServiceCatalog, IManagementEventSource, IManagementEventPublisher
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, TaskCompletionSource<ManagementResponseEnvelope>> _pending = new(StringComparer.Ordinal);
@@ -24,6 +26,9 @@ public sealed class RabbitMqManagementRuntime(
 #pragma warning restore IDISP002
     private IChannel? _channel;
     private string? _replyQueue;
+    private RabbitMqManagementResourceNames? _names;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _commandEndpoints = new(StringComparer.OrdinalIgnoreCase);
+    private readonly bool _receivesDiscovery = commandDispatcher is null;
     public event EventHandler<ServiceHeartbeatEventArgs>? ServiceUpdated
     {
         add => _registry.ServiceUpdated += value;
@@ -41,9 +46,13 @@ public sealed class RabbitMqManagementRuntime(
         try
         {
             var channel = _channel ?? throw new InvalidOperationException("RabbitMQ management runtime has not started.");
+            if (!_commandEndpoints.TryGetValue(EndpointKey(target), out var commandInbox))
+            {
+                throw new InvalidOperationException($"No RabbitMQ management endpoint has been discovered for service '{target.LogicalServiceName}'.");
+            }
             var properties = new BasicProperties { MessageId = envelope.OperationId, CorrelationId = envelope.RequestId, ReplyTo = _replyQueue, Expiration = ((long)timeout.TotalMilliseconds).ToString(System.Globalization.CultureInfo.InvariantCulture), ContentType = "application/json", DeliveryMode = DeliveryModes.Persistent };
             await _publishLock.WaitAsync(cancellationToken);
-            try { await channel.BasicPublishAsync(exchange: Names.Commands(options.Value), routingKey: target.InstanceId is null ? target.LogicalServiceName : $"{target.LogicalServiceName}.{target.InstanceId}", mandatory: false, basicProperties: properties, body: Encoding.UTF8.GetBytes(JsonSerializer.Serialize(envelope, JsonOptions)), cancellationToken: cancellationToken); }
+            try { await channel.BasicPublishAsync(exchange: "", routingKey: commandInbox, mandatory: false, basicProperties: properties, body: Encoding.UTF8.GetBytes(JsonSerializer.Serialize(envelope, JsonOptions)), cancellationToken: cancellationToken); }
             finally { _publishLock.Release(); }
             using var timeoutSource = new CancellationTokenSource(timeout);
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token);
@@ -59,8 +68,9 @@ public sealed class RabbitMqManagementRuntime(
     public async ValueTask PublishAsync(ServiceHeartbeat announcement, CancellationToken cancellationToken = default)
     {
         var channel = _channel ?? throw new InvalidOperationException("RabbitMQ management runtime has not started.");
+        var names = _names ?? throw new InvalidOperationException("RabbitMQ management runtime has not started.");
         await _publishLock.WaitAsync(cancellationToken);
-        try { await channel.BasicPublishAsync(exchange: Names.Discovery(options.Value), routingKey: "", mandatory: false, basicProperties: new BasicProperties { ContentType = "application/json", DeliveryMode = DeliveryModes.Transient }, body: Encoding.UTF8.GetBytes(JsonSerializer.Serialize(announcement, JsonOptions)), cancellationToken: cancellationToken); }
+        try { await channel.BasicPublishAsync(exchange: "", routingKey: names.DiscoveryTargetInbox, mandatory: false, basicProperties: new BasicProperties { ContentType = "application/json", DeliveryMode = DeliveryModes.Transient }, body: Encoding.UTF8.GetBytes(JsonSerializer.Serialize(announcement, JsonOptions)), cancellationToken: cancellationToken); }
         finally { _publishLock.Release(); }
     }
 
@@ -71,17 +81,23 @@ public sealed class RabbitMqManagementRuntime(
         _channel = await connections.CreateChannelAsync(enablePublisherConfirms: true, cancellationToken: stoppingToken);
 #pragma warning restore IDISP003
         var prefix = options.Value;
-        await _channel.ExchangeDeclareAsync(exchange: Names.Commands(prefix), type: ExchangeType.Direct, durable: true, autoDelete: false, arguments: null, cancellationToken: stoppingToken);
-        await _channel.ExchangeDeclareAsync(exchange: Names.Discovery(prefix), type: ExchangeType.Fanout, durable: false, autoDelete: true, arguments: null, cancellationToken: stoppingToken);
-        var reply = await _channel.QueueDeclareAsync(queue: $"{prefix.ExchangePrefix}.replies.{prefix.UiInstanceId}", durable: false, exclusive: true, autoDelete: true, arguments: new Dictionary<string, object?>(StringComparer.Ordinal) { ["x-expires"] = (long)prefix.RequestTimeout.TotalMilliseconds * 3, ["x-message-ttl"] = (long)prefix.RequestTimeout.TotalMilliseconds, ["x-max-length"] = prefix.ResponseQueueMaxLength }, cancellationToken: stoppingToken);
+        _names = RabbitMqManagementResourceNames.Create(prefix, rabbitMqOptions);
+        var names = _names;
+        var reply = await _channel.QueueDeclareAsync(queue: names.ReplyInbox, durable: false, exclusive: true, autoDelete: true, arguments: new Dictionary<string, object?>(StringComparer.Ordinal) { ["x-expires"] = (long)prefix.RequestTimeout.TotalMilliseconds * 3, ["x-message-ttl"] = (long)prefix.RequestTimeout.TotalMilliseconds, ["x-max-length"] = prefix.ResponseQueueMaxLength }, cancellationToken: stoppingToken);
         _replyQueue = reply.QueueName;
-        var discovery = await _channel.QueueDeclareAsync(queue: $"{prefix.ExchangePrefix}.discovery.{prefix.UiInstanceId}", durable: false, exclusive: true, autoDelete: true, arguments: new Dictionary<string, object?>(StringComparer.Ordinal) { ["x-expires"] = (long)prefix.HeartbeatInterval.TotalMilliseconds * 3, ["x-message-ttl"] = (long)prefix.HeartbeatInterval.TotalMilliseconds * 2, ["x-max-length"] = prefix.ResponseQueueMaxLength }, cancellationToken: stoppingToken);
-        await _channel.QueueBindAsync(queue: discovery.QueueName, exchange: Names.Discovery(prefix), routingKey: "", arguments: null, cancellationToken: stoppingToken);
+        string? discoveryQueue = null;
+        if (_receivesDiscovery)
+        {
+            discoveryQueue = (await _channel.QueueDeclareAsync(queue: names.LocalDiscoveryInbox, durable: false, exclusive: false, autoDelete: true, arguments: new Dictionary<string, object?>(StringComparer.Ordinal) { ["x-expires"] = (long)prefix.HeartbeatInterval.TotalMilliseconds * 3, ["x-message-ttl"] = (long)prefix.HeartbeatInterval.TotalMilliseconds * 2, ["x-max-length"] = prefix.ResponseQueueMaxLength }, cancellationToken: stoppingToken)).QueueName;
+        }
         await _channel.BasicQosAsync(prefetchSize: 0, prefetchCount: prefix.PrefetchCount, global: false, cancellationToken: stoppingToken);
         var consumer = new AsyncEventingBasicConsumer(_channel);
         consumer.ReceivedAsync += OnReceivedAsync;
         await _channel.BasicConsumeAsync(queue: _replyQueue, autoAck: false, consumer: consumer, cancellationToken: stoppingToken);
-        await _channel.BasicConsumeAsync(queue: discovery.QueueName, autoAck: false, consumer: consumer, cancellationToken: stoppingToken);
+        if (discoveryQueue is not null)
+        {
+            await _channel.BasicConsumeAsync(queue: discoveryQueue, autoAck: false, consumer: consumer, cancellationToken: stoppingToken);
+        }
         await Task.Delay(Timeout.Infinite, stoppingToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
     }
 
@@ -99,6 +115,11 @@ public sealed class RabbitMqManagementRuntime(
                 var heartbeat = JsonSerializer.Deserialize<ServiceHeartbeat>(delivery.Body.Span, JsonOptions);
                 if (heartbeat is not null && _registry.Publish(heartbeat))
                 {
+                    if (!string.IsNullOrWhiteSpace(heartbeat.ManagementEndpoint))
+                    {
+                        _commandEndpoints[EndpointKey(new ManagementTarget(heartbeat.ServiceName, InstanceId: heartbeat.InstanceId))] = heartbeat.ManagementEndpoint;
+                        _commandEndpoints[EndpointKey(new ManagementTarget(heartbeat.ServiceName))] = heartbeat.ManagementEndpoint;
+                    }
                     AnnouncementReceived?.Invoke(this, new ServiceHeartbeatEventArgs(heartbeat));
                 }
             }
@@ -119,6 +140,6 @@ public sealed class RabbitMqManagementRuntime(
         _publishLock.Dispose();
         base.Dispose();
     }
-}
 
-internal static class Names { public static string Commands(RabbitMqManagementOptions o) => $"{o.ExchangePrefix}.commands"; public static string Discovery(RabbitMqManagementOptions o) => $"{o.ExchangePrefix}.discovery"; }
+    private static string EndpointKey(ManagementTarget target) => $"{target.LogicalServiceName}\u001f{target.InstanceId ?? string.Empty}";
+}

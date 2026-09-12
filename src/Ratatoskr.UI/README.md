@@ -53,3 +53,24 @@ Open `http://localhost:<port>/ratatoskr` in your browser to view the management 
 For a distributed dashboard, install and register a management provider (for example,
 `AddRabbitMqManagement`) in both the dashboard and managed-service processes. The UI itself
 does not reference a broker package.
+
+### RabbitMQ least-privilege setup
+
+RabbitMQ management uses only queues; it does not declare exchanges. Set `ResourcePrefix` to
+the RabbitMQ identity's resource prefix (or leave it unset to derive it from the connection
+string user name). All queues end in `.inbox`, so they work with permissions that allow each
+user to configure its own `{user}.*` resources and publish to any `*.inbox` queue.
+
+The dashboard owns its discovery inbox. Configure every managed service with that inbox:
+
+```csharp
+// Dashboard, authenticated as "dashboard"
+services.AddRabbitMqManagement(o => o.ResourcePrefix = "dashboard");
+
+// Managed service, authenticated as "orders"
+services.AddRabbitMqManagement(o =>
+{
+    o.ResourcePrefix = "orders";
+    o.DiscoveryInbox = "dashboard.management.discovery.inbox";
+});
+```

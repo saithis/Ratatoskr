@@ -27,7 +27,9 @@ public class RabbitMqBrokerManagementTests(
         await CreateDatabaseAsync();
         await EnsureTestDatabaseSchemaAsync();
 
-        var uiPrefix = $"test.ui.{TestId}";
+        var uiPrefix = $"dashboard.{TestId}";
+        var servicePrefix = $"orders.{TestId}";
+        var dashboardDiscoveryInbox = $"{uiPrefix}.management.discovery.inbox";
         var serviceName = "orders-service";
 
         // Seed a poisoned outbox message in the database for the orders service
@@ -60,7 +62,7 @@ public class RabbitMqBrokerManagementTests(
             bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
         });
         uiServices.AddRatatoskrUI();
-        uiServices.AddRabbitMqManagement(o => o.ExchangePrefix = uiPrefix);
+        uiServices.AddRabbitMqManagement(o => o.ResourcePrefix = uiPrefix);
 
         await using var uiProvider = uiServices.BuildServiceProvider();
         var uiHostedServices = uiProvider.GetServices<IHostedService>().ToList();
@@ -85,7 +87,11 @@ public class RabbitMqBrokerManagementTests(
             o.HeartbeatInterval = TimeSpan.FromMilliseconds(500);
             o.EnableHeartbeat = true;
         });
-        serviceCollection.AddRabbitMqManagement(o => o.ExchangePrefix = uiPrefix);
+        serviceCollection.AddRabbitMqManagement(o =>
+        {
+            o.ResourcePrefix = servicePrefix;
+            o.DiscoveryInbox = dashboardDiscoveryInbox;
+        });
 
         await using var serviceProvider = serviceCollection.BuildServiceProvider();
         var serviceHostedServices = serviceProvider.GetServices<IHostedService>().ToList();

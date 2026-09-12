@@ -94,7 +94,7 @@ builder.Services.AddRatatoskrManagement(options =>
 });
 builder.Services.AddRabbitMqManagement(options =>
 {
-    options.ExchangePrefix = builder.Configuration["Ratatoskr:Management:ExchangePrefix"] ?? "ratatoskr-management";
+    options.ResourcePrefix = builder.Configuration["Ratatoskr:Management:ResourcePrefix"];
 });
 
 var inventoryCs =
