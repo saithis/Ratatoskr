@@ -19,6 +19,8 @@ public sealed class RabbitMqTransportConformanceTests(RestrictedRabbitMqFixture 
         // A unique replica id per test keeps each run's exclusive reply and discovery queues to
         // itself, so tests sharing the session's broker cannot steal each other's messages.
         var replicaId = $"r{Guid.NewGuid().ToString("N")[..8]}";
+        var serviceName = $"conf-{Guid.NewGuid().ToString("N")[..10]}";
+        var instanceId = $"inst-{Guid.NewGuid().ToString("N")[..10]}";
 
         var dashboard = await RabbitMqControlPlane.StartDashboardAsync(
             broker,
@@ -29,13 +31,15 @@ public sealed class RabbitMqTransportConformanceTests(RestrictedRabbitMqFixture 
         var agent = await RabbitMqControlPlane.StartAgentAsync(
             broker,
             TransportName,
-            ConformanceServiceName,
-            ConformanceInstanceId,
+            serviceName,
+            instanceId,
             dashboard.DiscoveryExchange
         );
 
         return new ConformanceHost(
             dashboard.Client,
+            serviceName,
+            instanceId,
             async () =>
             {
                 await agent.DisposeAsync();

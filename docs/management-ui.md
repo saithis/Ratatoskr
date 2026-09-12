@@ -1,91 +1,274 @@
-# Management UI and control plane
+# Management UI and Control Plane
 
-Ratatoskr management is optional and transport-neutral. `Ratatoskr.UI` depends only on
-`IManagementClient` and `IServiceCatalog`; it does not reference RabbitMQ or the application's
-message transport. Providers own their topology and registration, so a second provider can be
-added without changing the dashboard, shared protocol contracts, or operation handlers.
+Ratatoskr includes an optional, transport-neutral management control plane and embedded web dashboard. It allows operators to inspect service instances, monitor inbox and outbox message processing, triage and retry poisoned messages, and review audit trails across multiple services and transports.
 
-## Package topology
+The architecture strictly decouples the management control plane from application messaging:
+- `Ratatoskr.UI` contains the embedded dashboard, REST facade, Server-Sent Events (SSE), and authorization policies.
+- It does **not** reference RabbitMQ or application message transports.
+- Transports (in-process or RabbitMQ) implement provider interfaces (`IManagementTransport`, `IManagementDiscoverySource`), enabling hybrid topologies, zero-broker local development, and distributed production control planes without modifying dashboard code or shared contracts.
 
-- `Ratatoskr.Management.Abstractions` contains dependency-free versioned contracts, targets,
-  discovery, topology, and provider interfaces.
-- `Ratatoskr.Management` contains the agent, EF Core operations, dispatcher, and in-process
-  provider.
-- `Ratatoskr.Management.RabbitMq` contains the RabbitMQ command, reply, and discovery provider.
-- `Ratatoskr.UI` contains the embedded dashboard, REST facade, SSE, and authorization.
+---
 
-## In-process registration
+## Package Graph
 
-Use the default provider for a modular monolith, local development, or a co-hosted dashboard.
+| Package | Purpose | Dependencies |
+|---|---|---|
+| `Ratatoskr.Management.Abstractions` | Versioned protocol envelopes, stable error codes, cursor contracts, capability/topology models, and transport interfaces (`IManagementTransport`, `IManagementDiscoverySource`, `IManagementOperation`). | None (pure contracts) |
+| `Ratatoskr.Management` | Core control-plane runtime: operation registry, dispatcher, agent host, in-process transport, and shared route descriptors. | `Ratatoskr.Management.Abstractions` |
+| `Ratatoskr.Management.EfCore` | Inbox/outbox operations (listing, detail, retry, delete, count, preview), EF Core schema integration for operation tracking, and per-service REST endpoint mappings (`MapRatatoskrManagementApi`). | `Ratatoskr.Management`, `Ratatoskr.EfCore` |
+| `Ratatoskr.Management.RabbitMq` | RabbitMQ control-plane provider: dedicated connection, least-privilege AMQP topology (`*.inbox` exchanges, durable service queues, exclusive instance and reply queues), caller authentication (`user_id` and HMAC). | `Ratatoskr.Management.Abstractions`, `RabbitMQ.Client` |
+| `Ratatoskr.UI` | Web dashboard: vanilla modular ES frontend, dashboard database store (`RatatoskrDashboardDbContext`), audit logging and retention, SSE service events, and antiforgery. | `Ratatoskr.Management` |
+
+---
+
+## Architecture Overview
+
+```
+                        +---------------------------------------------+
+                        |           Ratatoskr UI Dashboard            |
+                        |  (Modular ES Frontend + SSE + Audit Store)  |
+                        +----------------------+----------------------+
+                                               |
+                          +--------------------+--------------------+
+                          | IManagementTransportRegistry            |
+                          +--------------------+--------------------+
+                                               |
+                  +----------------------------+----------------------------+
+                  |                                                         |
+         [ In-Process Transport ]                                 [ RabbitMQ Transport ]
+                  |                                                         |
+                  v                                                         v
+       +--------------------+                                    +--------------------+
+       | Local Agent Host   |                                    | Remote Agent Host  |
+       |  (In-Memory Dispatch)                                   | (AMQP Inbox Queues)|
+       +---------+----------+                                    +---------+----------+
+                 |                                                         |
+                 v                                                         v
+     +-----------------------+                                 +-----------------------+
+     | IManagementDispatcher |                                 | IManagementDispatcher |
+     +-----------+-----------+                                 +-----------+-----------+
+                 |                                                         |
+        [ Operations Layer ]                                      [ Operations Layer ]
+   (Outbox / Inbox / DbContext)                               (Outbox / Inbox / DbContext)
+```
+
+---
+
+## Quick Start: Co-hosted (In-Process) Dashboard
+
+For single-service applications, modular monoliths, or local development, you can host the dashboard and management agent in the same process without external broker dependencies.
+
+### 1. Register Services
 
 ```csharp
-builder.Services.AddRatatoskrManagement(options =>
+// 1. Add the Management Agent
+builder.Services.AddRatatoskrManagementAgent(agent =>
 {
-    options.ServiceName = "orders";
-    options.InstanceId = Environment.MachineName;
+    agent.ServiceName = "orders-service";
+    agent.InstanceId = Environment.MachineName;
+    agent.Configure(options =>
+    {
+        options.HeartbeatInterval = TimeSpan.FromSeconds(15);
+    });
+
+    // Register in-process transport
+    agent.AddInProcess("local");
 });
 
+// 2. Add the Management UI Dashboard
+builder.Services.AddRatatoskrUI(dashboard =>
+{
+    dashboard.Configure(options =>
+    {
+        options.StaleAfter = TimeSpan.FromSeconds(45);
+        options.AutoMigrate = true;
+    });
+
+    // Dashboard storage (SQLite for local/testing, or PostgreSQL for production)
+    dashboard.UseSqlite("Data Source=ratatoskr-dashboard.db");
+
+    // Connect dashboard to the in-process transport
+    dashboard.AddInProcess("local");
+});
+
+// 3. Configure Authorization Policies
 builder.Services.AddAuthorizationBuilder()
-    .AddPolicy("RatatoskrMetadata", policy => policy.RequireRole("Operator"))
-    .AddPolicy("RatatoskrPayloads", policy => policy.RequireRole("Operator"))
-    .AddPolicy("RatatoskrRequeue", policy => policy.RequireRole("Operator"))
+    .AddPolicy("RatatoskrMetadata", policy => policy.RequireRole("Operator", "Administrator"))
+    .AddPolicy("RatatoskrPayloads", policy => policy.RequireRole("Operator", "Administrator"))
+    .AddPolicy("RatatoskrRequeue", policy => policy.RequireRole("Operator", "Administrator"))
     .AddPolicy("RatatoskrDelete", policy => policy.RequireRole("Administrator"))
     .AddPolicy("RatatoskrBulk", policy => policy.RequireRole("Administrator"));
-
-builder.Services.AddRatatoskrUI();
-
-var app = builder.Build();
-app.UseAuthentication();
-app.UseAuthorization();
-app.MapRatatoskrUI(new RatatoskrUiAuthorizationPolicies(
-    "RatatoskrMetadata", "RatatoskrPayloads", "RatatoskrRequeue", "RatatoskrDelete", "RatatoskrBulk"));
 ```
 
-## RabbitMQ provider registration
-
-Provider selection is independent of `bus.UseRabbitMq`. Install
-`Ratatoskr.Management.RabbitMq` in every dashboard and managed-service process, then register
-it after `AddRatatoskrManagement`:
+### 2. Map Endpoints in HTTP Pipeline
 
 ```csharp
-builder.Services.AddRabbitMqManagement(options =>
+var app = builder.Build();
+
+app.UseAuthentication();
+app.UseAuthorization();
+
+// Map UI dashboard under /ratatoskr
+app.MapRatatoskrUI(
+    new RatatoskrUiAuthorizationPolicies(
+        Metadata: "RatatoskrMetadata",
+        Payloads: "RatatoskrPayloads",
+        Requeue: "RatatoskrRequeue",
+        Delete: "RatatoskrDelete",
+        Bulk: "RatatoskrBulk"
+    ),
+    prefix: "/ratatoskr"
+);
+
+app.Run();
+```
+
+---
+
+## Distributed Setup (RabbitMQ Control Plane)
+
+In a microservices architecture, individual services run `Ratatoskr.Management.RabbitMq` agents, while one or more dedicated dashboard instances connect over RabbitMQ to discover and manage them.
+
+> [!IMPORTANT]
+> The management control plane uses its own dedicated AMQP connection and connection string independent of `bus.UseRabbitMq(...)`. This ensures control-plane traffic is isolated from application message backlogs.
+
+### Managed Service Configuration
+
+Install `Ratatoskr.Management.RabbitMq` and `Ratatoskr.Management.EfCore`:
+
+```csharp
+builder.Services.AddRatatoskrManagementAgent(agent =>
 {
-    options.ExchangePrefix = "operations";
-    options.RequestTimeout = TimeSpan.FromSeconds(10);
+    agent.ServiceName = "inventory-service";
+    agent.InstanceId = $"{Environment.MachineName}-{Guid.NewGuid():N}"[..16];
+
+    agent.AddRabbitMq("primary-broker", rmq =>
+    {
+        rmq.ConnectionString = new Uri("amqp://inventory:secret@rabbitmq:5672/");
+        rmq.ResourcePrefix = "inventory";
+        rmq.DiscoveryExchange = "dashboard.mgmt.discovery.inbox";
+
+        // Security: only accept commands from authorized dashboard identities
+        rmq.AllowedCallers.Add("dashboard");
+    });
 });
 ```
 
-Each dashboard instance has an ephemeral reply queue, so replicas do not consume one another's
-replies. Discovery is broadcast to each dashboard replica. The provider declares bounded,
-expiring queues and uses publisher confirms for replies whose loss would make a mutation
-ambiguous.
+### Central Dashboard Configuration
 
-## Protocol, delivery, and targeting
+Install `Ratatoskr.UI` and `Ratatoskr.Management.RabbitMq`:
 
-Requests, responses, and discovery announcements carry a protocol major/minor version. A
-receiver accepts the same major version and a minor version no newer than it supports.
-Unsupported versions and operations return stable protocol error codes.
+```csharp
+builder.Services.AddRatatoskrUI(dashboard =>
+{
+    dashboard.Configure(options =>
+    {
+        options.StaleAfter = TimeSpan.FromSeconds(30);
+        options.PruneAfter = TimeSpan.FromHours(2);
+        options.AutoMigrate = true;
+    });
 
-Commands are delivered at least once. Mutations carry an operation ID; retry a lost response
-with the same ID, and the receiver must apply the mutation only once logically. A logical-service
-target reaches one eligible replica per delivery attempt. Adding `InstanceId` targets exactly that
-replica, while `ResourceId` identifies a provider-neutral resource such as a DbContext.
+    // Central dashboard database
+    dashboard.UseNpgsql(builder.Configuration.GetConnectionString("DashboardDb"));
 
-## Pagination and topology
+    // Connect to the RabbitMQ control plane
+    dashboard.AddRabbitMq("primary-broker", rmq =>
+    {
+        rmq.ConnectionString = new Uri("amqp://dashboard:secret@rabbitmq:5672/");
+        rmq.ResourcePrefix = "dashboard";
+        rmq.ReplicaId = Environment.MachineName;
+    });
+});
+```
 
-The dashboard list APIs use keyset pagination. Request `limit` and, for subsequent pages, supply
-the opaque `cursor` returned as `nextCursor`. Do not use page numbers or derive cursors. Results
-are ordered by newest `CreatedAt`, then resource ID.
+---
 
-Topology is exposed as logical channels with provider-owned transport bindings. RabbitMQ can
-contribute exchange, queue, and routing-key properties; another provider can contribute topics,
-partitions, and consumer groups without changing the UI API.
+## Dashboard Persistence & Migrations
 
-## Authorization and auditing
+The dashboard stores service discovery state, instance topology, capability manifests, and audit logs in `RatatoskrDashboardDbContext`.
 
-`MapRatatoskrUI` requires policies. Use separate policies for metadata, payloads, requeueing,
-deletion, and bulk operations; the single-policy overload is for deployments that intentionally
-grant all capabilities together. Protect cookie-authenticated mutations with the application's
-antiforgery strategy. Audit mutations with the actor, operation ID, target, filter or selected
-IDs, start/completion timestamps, and outcome. Bulk actions must be explicitly filtered or
-selected and bounded by batch and total-operation limits.
+### Storage Providers
+
+- **SQLite**: `dashboard.UseSqlite(connectionString)` — ideal for single-replica dashboards, testing, and local development.
+- **PostgreSQL**: `dashboard.UseNpgsql(connectionString)` — recommended for high-availability multi-replica dashboard clusters.
+
+### Migrations and AutoMigrate
+
+- Set `options.AutoMigrate = true` to automatically apply migrations at dashboard startup.
+- `RatatoskrDashboardDbContext` ships with embedded EF Core migrations.
+- When sharing a database with application contexts, configure `options.Schema = "ratatoskr_mgmt"` to isolate dashboard tables into a separate database schema.
+
+---
+
+## Multi-Transport Identity & Navigation
+
+The control plane models resources across a clean four-tier hierarchy:
+
+$$\text{Transport} \longrightarrow \text{Service} \longrightarrow \text{Instance} \longrightarrow \text{Context}$$
+
+- **Transport**: The communication channel (`"local"`, `"primary-broker"`, `"eu-broker"`). A dashboard can register multiple transports simultaneously.
+- **Service**: The logical application name (e.g. `"orders-service"`).
+- **Instance**: A specific replica of the service (e.g. `"orders-pod-4a2f"`).
+- **Context**: An EF Core `DbContext` registered in that service managing Outbox/Inbox tables.
+
+### Targeting Modes
+
+1. **Logical Service Targeting**: Commands without an `InstanceId` are routed to the shared durable service queue (`{prefix}.mgmt.cmd.{service}.q`). Any healthy replica competing on that queue can handle the command.
+2. **Instance Targeting**: Commands specifying an `InstanceId` route directly to that replica's exclusive instance queue (`{prefix}.mgmt.cmd.{service}.{instance}.q`). If the replica is stopped or disconnected, the broker immediately returns the command as unroutable (`target_unreachable`), failing fast without waiting out the deadline.
+
+---
+
+## Security & Authentication
+
+### Least-Privilege AMQP Permissions
+
+The RabbitMQ control plane operates under strict, locked-down permissions:
+
+| Operation | AMQP Resource | Permission Rule |
+|---|---|---|
+| Declare queues/exchanges | `{prefix}.*` | Configure: `{user}\..*` |
+| Publish heartbeats / replies | `*.inbox` | Write: `{user}\..*\|.*\.inbox$` |
+| Consume commands / replies | `{prefix}.*` | Read: `{user}\..*\|.*(?<!internal)$` |
+
+See [RabbitMQ Least-Privilege Guide](rabbitmq.md#least-privilege-permissions) for exact `rabbitmqctl` commands.
+
+### Caller Authentication
+
+Because AMQP write access to `*.inbox` exchanges is broad, agents strictly verify callers:
+1. **Broker-Validated `user_id` (Default)**: The broker enforces that the `user_id` message property matches the authenticated AMQP username. Agents verify that `user_id` is present in `AllowedCallers`.
+2. **HMAC Signature**: For environments where services share a broker identity or cross untrusted boundaries, configure `options.SharedSecret`. The transport attaches an SHA-256 HMAC signature calculated over request headers and payload.
+
+### Antiforgery
+
+`Ratatoskr.UI` enforces ASP.NET Core Antiforgery protection scoped specifically to cookie-authenticated browser sessions. API requests bearing `Authorization: Bearer <token>` bypass antiforgery validation, allowing external automation and monitoring tools to interact with the management endpoints cleanly.
+
+### Granular Authorization Policies
+
+`RatatoskrUiAuthorizationPolicies` enforces role-based separation across sensitive operations:
+- **Metadata**: Viewing service cards, instance lists, channel topology, and message counts.
+- **Payloads**: Inspecting serialized message bodies and exception stack traces.
+- **Requeue**: Triggering single or matching retries for failed messages.
+- **Delete**: Deleting messages from outbox or inbox stores.
+- **Bulk**: Performing batch operations and pattern-matched mutations.
+
+---
+
+## Bounded Bulk Mutations & Previews
+
+Bulk operations are preview-first and bounded to prevent accidental database locks or runaway transactions:
+
+1. **Mandatory Filters**: Bulk requests (`*Matching`) require explicit criteria (`Status`, `From`, `To`, `Search`, or specific IDs). Unbounded operations are rejected with HTTP 400.
+2. **Two-Phase Preview**:
+   - The UI or caller calls `*.count` to query the matching count without mutating.
+   - The caller reviews the count and preview sample before confirming execution.
+3. **Execution Caps**: Operations are processed in batches (default `100`, max `MaxBatchSize`) up to a hard ceiling (`MaxTotalOperations`, default `10,000`). If more items match, the operation returns `{ processed: 10000, remaining: 2450, capped: true }`.
+4. **Idempotency**: All mutations accept an `X-Ratatoskr-Operation-Id` header (or envelope `OperationId`). Retrying a request with the same ID returns the original result without re-executing.
+
+---
+
+## Frontend Architecture
+
+The embedded web dashboard (`src/Ratatoskr.UI/wwwroot/`) is built using modern vanilla ES modules without npm build steps:
+- **Zero NPM**: Directly served from embedded assembly resources.
+- **Strict CSP**: No `unsafe-inline` or `unsafe-eval`. All dynamic rendering uses `textContent` and safe DOM manipulation (stored-XSS immune).
+- **Server-Sent Events (SSE)**: Real-time service discovery updates, instance status transitions, and liveness heartbeats stream over `/api/events`.

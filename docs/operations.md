@@ -244,7 +244,22 @@ WHERE "Id" IN (
 DELETE TOP (10000) FROM [OutboxMessages]
 WHERE [ProcessedAt] IS NOT NULL
   AND [ProcessedAt] < DATEADD(DAY, -7, GETUTCDATE());
-```
+### Management Control Plane Retention
+
+#### Operation Idempotency Log Cleanup (`ManagementOperationCleanupService<TDbContext>`)
+
+Services running `Ratatoskr.Management.EfCore` persist management mutations (`POST /outbox/requeue`, `POST /inbox/delete`, etc.) into `ManagementOperationEntity` tables within the application database to ensure idempotency.
+
+The background worker `ManagementOperationCleanupService<TDbContext>` periodically prunes completed operation logs whose retention window has expired. It runs automatically in all managed service processes, including outbox-only and inbox-only configurations.
+
+#### Dashboard Audit Retention (`AuditRetentionWorker`)
+
+The central `Ratatoskr.UI` dashboard logs operator actions (actor, operation ID, target, filter, outcome, and timestamp) in `RatatoskrDashboardDbContext`.
+
+The `AuditRetentionWorker` runs periodically as a background hosted service to prune old audit entries:
+- **Default Retention**: 90 days (`options.AuditRetention = TimeSpan.FromDays(90)`).
+- **Batching**: Deletes are executed in bounded batches (`options.AuditPruneBatchSize = 1000`) to prevent transaction log saturation.
+- **Interval**: Runs every hour (`options.AuditPruneInterval = TimeSpan.FromHours(1)`).
 
 ## Distributed Lock Provider
 

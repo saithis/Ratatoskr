@@ -86,7 +86,7 @@ public class LeastPrivilegeBrokerProbeTests(RestrictedRabbitMqFixture broker)
 
         var act = async () =>
             await channel.BasicPublishAsync(
-                exchange: "dashboard.mgmt.discovery.inbox",
+                exchange: $"dashboard.mgmt.discovery.{Guid.NewGuid():N}.inbox",
                 routingKey: string.Empty,
                 mandatory: false,
                 basicProperties: new BasicProperties(),

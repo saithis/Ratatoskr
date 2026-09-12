@@ -198,55 +198,106 @@ services.AddRatatoskrTesting();
 ## Management Agent (`Ratatoskr.Management`)
 
 ```csharp
-services.AddRatatoskrManagement(options =>
+services.AddRatatoskrManagementAgent(agent =>
 {
-    options.ServiceName = "orders-service";
-    options.InstanceId = Environment.MachineName;
-    options.HeartbeatInterval = TimeSpan.FromSeconds(15);
+    agent.ServiceName = "orders-service";
+    agent.InstanceId = Environment.MachineName;
+    agent.Configure(options =>
+    {
+        options.HeartbeatInterval = TimeSpan.FromSeconds(15);
+        options.CommandTimeout = TimeSpan.FromSeconds(30);
+        options.MaxBatchSize = 100;
+        options.MaxTotalOperations = 10_000;
+    });
+
+    // In-process transport
+    agent.AddInProcess("local");
+
+    // Or RabbitMQ control plane transport (Ratatoskr.Management.RabbitMq)
+    agent.AddRabbitMq("primary-broker", options =>
+    {
+        options.ConnectionString = new Uri("amqp://orders:secret@rabbitmq:5672/");
+        options.ResourcePrefix = "orders";
+        options.AllowedCallers.Add("dashboard");
+    });
 });
 ```
+
+### Agent Options (`ManagementAgentOptions`)
 
 | Property | Default | Description | Details |
 |---|---|---|---|
 | `ServiceName` | Assembly Name | Logical name of the service | [Management & UI](management-ui.md) |
 | `InstanceId` | `Guid.NewGuid()` | Identifier for this specific replica | [Management & UI](management-ui.md) |
-| `HeartbeatInterval` | `15 seconds` | Frequency of provider-neutral service announcements | [Management & UI](management-ui.md) |
+| `HeartbeatInterval` | `15 seconds` | Frequency of discovery announcements | [Management & UI](management-ui.md) |
+| `CommandTimeout` | `30 seconds` | Maximum execution time per command before cancellation | [Management & UI](management-ui.md) |
+| `MaxBatchSize` | `100` | Maximum items processed per transaction batch | [Management & UI](management-ui.md) |
+| `MaxTotalOperations` | `10,000` | Hard cap on total operations mutated per matching request | [Management & UI](management-ui.md) |
+
+### Agent RabbitMQ Transport Options (`RabbitMqManagementOptions`)
+
+| Property | Default | Description | Details |
+|---|---|---|---|
+| `ConnectionString` | — | AMQP URI for the management control plane | [Management & UI](management-ui.md) |
+| `ResourcePrefix` | Connection user name | Resource prefix for declared command queues | [Management & UI](management-ui.md) |
+| `DiscoveryExchange` | `"dashboard.mgmt.discovery.inbox"` | Fanout exchange to send discovery heartbeats to | [Management & UI](management-ui.md) |
+| `AllowedCallers` | *empty* | List of AMQP `user_id` identities authorized to send commands | [Management & UI](management-ui.md) |
+| `SharedSecret` | *none* | Optional HMAC-SHA256 secret for cryptographic caller verification | [Management & UI](management-ui.md) |
+| `HeartbeatInterval` | `15 seconds` | Periodic heartbeat transmission interval | [Management & UI](management-ui.md) |
+| `CommandTimeout` | `30 seconds` | Time allowed for incoming command handling | [Management & UI](management-ui.md) |
+| `PrefetchCount` | `10` | Bounded prefetch for command consumption | [Management & UI](management-ui.md) |
 
 ## Management UI Dashboard (`Ratatoskr.UI`)
 
 ```csharp
-services.AddRatatoskrUI(options =>
+services.AddRatatoskrUI(dashboard =>
 {
-    options.ServiceOfflineThreshold = TimeSpan.FromSeconds(45);
+    dashboard.Configure(options =>
+    {
+        options.StaleAfter = TimeSpan.FromSeconds(45);
+        options.PruneAfter = TimeSpan.FromHours(2);
+        options.AutoMigrate = true;
+        options.AuditRetention = TimeSpan.FromDays(90);
+    });
+
+    // Store (SQLite or PostgreSQL)
+    dashboard.UseNpgsql(connectionString);
+
+    // RabbitMQ transport (Ratatoskr.Management.RabbitMq)
+    dashboard.AddRabbitMq("primary-broker", options =>
+    {
+        options.ConnectionString = new Uri("amqp://dashboard:secret@rabbitmq:5672/");
+        options.ResourcePrefix = "dashboard";
+        options.ReplicaId = Environment.MachineName;
+    });
 });
 
 // In pipeline:
-app.MapRatatoskrUI("RatatoskrAdmin", "/ratatoskr");
+app.MapRatatoskrUI(policies, "/ratatoskr");
 ```
+
+### Dashboard Options (`ManagementDashboardOptions`)
 
 | Property | Default | Description | Details |
 |---|---|---|---|
-| `ServiceOfflineThreshold` | `45 seconds` | Time without heartbeats before marking offline | [Management & UI](management-ui.md) |
+| `StaleAfter` | `45 seconds` | Time without heartbeats before an instance is marked Stale | [Management & UI](management-ui.md) |
+| `PruneAfter` | `2 hours` | Time without heartbeats before a stale instance is pruned | [Management & UI](management-ui.md) |
+| `AutoMigrate` | `false` | Automatically apply `RatatoskrDashboardDbContext` migrations on startup | [Management & UI](management-ui.md) |
+| `Schema` | *none* | Database schema for dashboard tables (e.g. `"ratatoskr_mgmt"`) | [Management & UI](management-ui.md) |
+| `AuditRetention` | `90 days` | Retention window for dashboard audit log entries | [Management & UI](management-ui.md) |
+| `AuditPruneInterval` | `1 hour` | Background worker execution interval for audit cleanup | [Management & UI](management-ui.md) |
+| `AuditPruneBatchSize` | `1,000` | Maximum audit rows pruned per deletion transaction | [Management & UI](management-ui.md) |
 
-### RabbitMQ management provider (`Ratatoskr.Management.RabbitMq`)
-
-```csharp
-services.AddRabbitMqManagement(options =>
-{
-    options.ExchangePrefix = "operations";
-    options.RequestTimeout = TimeSpan.FromSeconds(10);
-});
-```
+### Dashboard RabbitMQ Transport Options (`RabbitMqManagementOptions`)
 
 | Property | Default | Description | Details |
 |---|---|---|---|
-| `ExchangePrefix` | `"ratatoskr-management"` | Provider-owned RabbitMQ topology prefix | [Management & UI](management-ui.md) |
-| `UiInstanceId` | Random GUID | Unique dashboard reply address | [Management & UI](management-ui.md) |
-| `RequestTimeout` | `10 seconds` | Provider command/reply deadline | [Management & UI](management-ui.md) |
-| `HeartbeatInterval` | `15 seconds` | Distributed discovery announcement interval | [Management & UI](management-ui.md) |
-| `PrefetchCount` | `10` | Bounded command-consumer prefetch | [Management & UI](management-ui.md) |
-| `ConsumerConcurrency` | `1` | Bounded command-consumer concurrency | [Management & UI](management-ui.md) |
-| `ResponseQueueMaxLength` | `1000` | Maximum buffered replies | [Management & UI](management-ui.md) |
+| `ConnectionString` | — | AMQP URI for the management control plane | [Management & UI](management-ui.md) |
+| `ResourcePrefix` | Connection user name | Prefix used for declaring discovery & reply exchanges | [Management & UI](management-ui.md) |
+| `ReplicaId` | `Guid.NewGuid()` | Unique replica ID for binding dedicated reply queues | [Management & UI](management-ui.md) |
+| `RequestTimeout` | `30 seconds` | Maximum wait time for command execution replies | [Management & UI](management-ui.md) |
+| `SharedSecret` | *none* | Optional HMAC-SHA256 secret for signing outbound commands | [Management & UI](management-ui.md) |
+| `PrefetchCount` | `16` | Bounded prefetch for incoming reply consumption | [Management & UI](management-ui.md) |
 
 ## Distributed Lock Provider
 

@@ -25,6 +25,8 @@ public sealed class RabbitMqControlPlaneTests(RestrictedRabbitMqFixture broker)
 
     private static string NewServiceName() => $"svc{Guid.NewGuid().ToString("N")[..8]}";
 
+    private static string NewInstanceId() => $"inst{Guid.NewGuid().ToString("N")[..8]}";
+
     [Test]
     public async Task TwoDashboardReplicas_BothSeeEveryHeartbeatAndKeepTheirOwnReplies()
     {
@@ -77,6 +79,8 @@ public sealed class RabbitMqControlPlaneTests(RestrictedRabbitMqFixture broker)
         // Replicas share the durable service queue, so exactly one handles each logical command —
         // and a replica that dies takes no traffic with it.
         var serviceName = NewServiceName();
+        var instanceOne = NewInstanceId();
+        var instanceTwo = NewInstanceId();
         var firstEcho = new EchoManagementOperation();
         var secondEcho = new EchoManagementOperation();
 
@@ -89,7 +93,7 @@ public sealed class RabbitMqControlPlaneTests(RestrictedRabbitMqFixture broker)
             broker,
             Transport,
             serviceName,
-            "instance-1",
+            instanceOne,
             dashboard.DiscoveryExchange,
             echo: firstEcho
         );
@@ -97,7 +101,7 @@ public sealed class RabbitMqControlPlaneTests(RestrictedRabbitMqFixture broker)
             broker,
             Transport,
             serviceName,
-            "instance-2",
+            instanceTwo,
             dashboard.DiscoveryExchange,
             echo: secondEcho
         );
@@ -128,6 +132,8 @@ public sealed class RabbitMqControlPlaneTests(RestrictedRabbitMqFixture broker)
     public async Task InstanceTargeting_ReachesThatReplicaAndNoOther()
     {
         var serviceName = NewServiceName();
+        var instanceOne = NewInstanceId();
+        var instanceTwo = NewInstanceId();
         var firstEcho = new EchoManagementOperation();
         var secondEcho = new EchoManagementOperation();
 
@@ -140,7 +146,7 @@ public sealed class RabbitMqControlPlaneTests(RestrictedRabbitMqFixture broker)
             broker,
             Transport,
             serviceName,
-            "instance-1",
+            instanceOne,
             dashboard.DiscoveryExchange,
             echo: firstEcho
         );
@@ -148,7 +154,7 @@ public sealed class RabbitMqControlPlaneTests(RestrictedRabbitMqFixture broker)
             broker,
             Transport,
             serviceName,
-            "instance-2",
+            instanceTwo,
             dashboard.DiscoveryExchange,
             echo: secondEcho
         );
@@ -166,7 +172,7 @@ public sealed class RabbitMqControlPlaneTests(RestrictedRabbitMqFixture broker)
                 serviceName,
                 EchoManagementOperation.OperationName,
                 new EchoRequest { Message = "targeted" },
-                instanceId: "instance-2"
+                instanceId: instanceTwo
             );
         }
 

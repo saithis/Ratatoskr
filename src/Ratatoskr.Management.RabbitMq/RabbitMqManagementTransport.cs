@@ -32,6 +32,9 @@ internal sealed partial class RabbitMqManagementTransport(
     private readonly ConcurrentDictionary<string, TaskCompletionSource<ManagementResponseEnvelope>> _pending =
         new(StringComparer.Ordinal);
 
+    private readonly TaskCompletionSource _readyCompletion =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     private IChannel? _publishChannel;
     private IChannel? _replyChannel;
     private RabbitMqManagementNames? _names;
@@ -73,13 +76,21 @@ internal sealed partial class RabbitMqManagementTransport(
 
             await DeclareAsync(_replyChannel, options, stoppingToken);
             _ready = true;
+            _readyCompletion.TrySetResult();
 
             await Task.Delay(Timeout.Infinite, stoppingToken)
                 .ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Management transport '{Name}' failed during startup.", Name);
+            _readyCompletion.TrySetException(ex);
+            throw;
+        }
         finally
         {
             _ready = false;
+            _readyCompletion.TrySetCanceled(stoppingToken);
             connection.ConnectionLost -= OnConnectionLost;
             FailPending(ManagementErrorCodes.TransportUnavailable, "The management transport stopped.");
         }
@@ -150,8 +161,29 @@ internal sealed partial class RabbitMqManagementTransport(
         ArgumentNullException.ThrowIfNull(address);
         ArgumentNullException.ThrowIfNull(request);
 
+        if (!_ready)
+        {
+            try
+            {
+                using var startupCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    startupCts.Token
+                );
+                await _readyCompletion.Task.WaitAsync(linkedCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                // Startup deadline elapsed or caller cancelled.
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Transport '{Name}' startup failed while awaiting readiness.", Name);
+            }
+        }
+
         var channel = _publishChannel;
-        if (!_ready || channel is null || !channel.IsOpen)
+        if (!_ready || channel is not { IsOpen: true })
         {
             return Failure(
                 request,

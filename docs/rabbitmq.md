@@ -229,6 +229,20 @@ these answers fails the build rather than silently breaking the control plane.
   the channel. Any publisher of this kind owns a channel it can afford to lose and retries with
   backoff.
 
+### Control Plane Topology Rules
+
+The management control plane (`Ratatoskr.Management.RabbitMq`) follows strict topology naming rules derived from the least-privilege permissions:
+
+| Topology Element | Naming Convention | AMQP Type | Durability / Exclusivity | Purpose |
+|---|---|---|---|---|
+| **Command Exchange** | `{prefix}.mgmt.cmd.inbox` | Direct | Durable | Declared by the agent under its own prefix. Callers publish commands here. |
+| **Service Queue** | `{prefix}.mgmt.cmd.{service}.q` | Queue | Durable, Shared | Bound to `svc.{service}`. Competing consumers route logical commands across replicas. |
+| **Instance Queue** | `{prefix}.mgmt.cmd.{service}.{instance}.q` | Queue | Exclusive, Auto-delete | Bound to `inst.{instance}`. Addresses this specific replica; broker returns commands fast if replica disconnects. |
+| **Discovery Exchange** | `{prefix}.mgmt.discovery.inbox` | Fanout | Durable | Declared by the dashboard under its prefix. Agents broadcast periodic heartbeats here. |
+| **Discovery Queue** | `{prefix}.mgmt.discovery.{replicaId}.q` | Queue | Exclusive, Auto-delete | Bound by each dashboard replica to receive all heartbeats. |
+| **Reply Exchange** | `{prefix}.mgmt.reply.inbox` | Direct | Durable | Declared by the dashboard. Agents route command replies here. |
+| **Reply Queue** | `{prefix}.mgmt.reply.{replicaId}.q` | Queue | Exclusive, Auto-delete | Bound to `replicaId`. Ensures each dashboard replica only consumes its own replies. |
+
 ## What's Next
 
 - [EF Core Transport](efcore-transport.md) — Database-based message delivery without a broker

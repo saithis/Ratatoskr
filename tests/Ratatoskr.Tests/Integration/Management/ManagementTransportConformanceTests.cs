@@ -16,16 +16,6 @@ namespace Ratatoskr.Tests.Integration.Management;
 /// </remarks>
 public abstract class ManagementTransportConformanceTests
 {
-    /// <summary>
-    /// The service name the agent under test announces. Unique per test, because the suite runs
-    /// in parallel against one shared broker: a fixed name would make two runs declare the same
-    /// exclusive instance queue, and the loser would never finish starting.
-    /// </summary>
-    public string ConformanceServiceName { get; } = $"conf-{Guid.NewGuid().ToString("N")[..10]}";
-
-    /// <summary>The replica identity the agent under test announces. Unique per test.</summary>
-    public string ConformanceInstanceId { get; } = $"inst-{Guid.NewGuid().ToString("N")[..10]}";
-
     /// <summary>The name the transport under test is registered under.</summary>
     protected abstract string TransportName { get; }
 
@@ -37,19 +27,19 @@ public abstract class ManagementTransportConformanceTests
     {
         await using var host = await StartAsync();
 
-        var detail = await host.Client.WaitForServiceAsync(TransportName, ConformanceServiceName);
+        var detail = await host.Client.WaitForServiceAsync(TransportName, host.ServiceName);
 
         detail.TransportName.Should().Be(TransportName);
-        detail.ServiceName.Should().Be(ConformanceServiceName);
+        detail.ServiceName.Should().Be(host.ServiceName);
         detail.Liveness.Should().Be(ServiceLiveness.Online);
-        detail.Instances.Should().ContainSingle(i => i.InstanceId == ConformanceInstanceId);
+        detail.Instances.Should().ContainSingle(i => i.InstanceId == host.InstanceId);
     }
 
     [Test]
     public async Task LogicalTargeting_ReachesTheService()
     {
         await using var host = await StartAsync();
-        await host.Client.WaitForServiceAsync(TransportName, ConformanceServiceName);
+        await host.Client.WaitForServiceAsync(TransportName, host.ServiceName);
 
         var response = await EchoAsync(host, "hello");
 
@@ -60,14 +50,14 @@ public abstract class ManagementTransportConformanceTests
     public async Task InstanceTargeting_ReachesTheNamedReplica()
     {
         await using var host = await StartAsync();
-        await host.Client.WaitForServiceAsync(TransportName, ConformanceServiceName);
+        await host.Client.WaitForServiceAsync(TransportName, host.ServiceName);
 
         var response = await host.Client.ExecuteAsync<EchoResponse>(
             TransportName,
-            ConformanceServiceName,
+            host.ServiceName,
             EchoManagementOperation.OperationName,
             new EchoRequest { Message = "addressed" },
-            instanceId: ConformanceInstanceId
+            instanceId: host.InstanceId
         );
 
         response.Message.Should().Be("addressed");
@@ -77,12 +67,12 @@ public abstract class ManagementTransportConformanceTests
     public async Task InstanceTargeting_AtAReplicaThatDoesNotExist_FailsFast()
     {
         await using var host = await StartAsync();
-        await host.Client.WaitForServiceAsync(TransportName, ConformanceServiceName);
+        await host.Client.WaitForServiceAsync(TransportName, host.ServiceName);
 
         var started = DateTimeOffset.UtcNow;
         var response = await host.Client.SendAsync(
             TransportName,
-            ConformanceServiceName,
+            host.ServiceName,
             EchoManagementOperation.OperationName,
             new EchoRequest { Message = "nobody home" },
             instanceId: "no-such-replica",
@@ -100,7 +90,7 @@ public abstract class ManagementTransportConformanceTests
     public async Task UnknownService_FailsWithoutWaitingOutTheDeadline()
     {
         await using var host = await StartAsync();
-        await host.Client.WaitForServiceAsync(TransportName, ConformanceServiceName);
+        await host.Client.WaitForServiceAsync(TransportName, host.ServiceName);
 
         var response = await host.Client.SendAsync(
             TransportName,
@@ -118,11 +108,11 @@ public abstract class ManagementTransportConformanceTests
     public async Task UnsupportedOperation_ComesBackAsAValueNotAnException()
     {
         await using var host = await StartAsync();
-        await host.Client.WaitForServiceAsync(TransportName, ConformanceServiceName);
+        await host.Client.WaitForServiceAsync(TransportName, host.ServiceName);
 
         var response = await host.Client.SendAsync(
             TransportName,
-            ConformanceServiceName,
+            host.ServiceName,
             "test.no-such-operation",
             new EchoRequest()
         );
@@ -136,11 +126,11 @@ public abstract class ManagementTransportConformanceTests
     public async Task Deadline_IsEnforcedByTheCaller()
     {
         await using var host = await StartAsync();
-        await host.Client.WaitForServiceAsync(TransportName, ConformanceServiceName);
+        await host.Client.WaitForServiceAsync(TransportName, host.ServiceName);
 
         var response = await host.Client.SendAsync(
             TransportName,
-            ConformanceServiceName,
+            host.ServiceName,
             EchoManagementOperation.OperationName,
             new EchoRequest { Delay = TimeSpan.FromSeconds(10) },
             timeout: TimeSpan.FromSeconds(2)
@@ -157,7 +147,7 @@ public abstract class ManagementTransportConformanceTests
         // The failure this guards against is the quiet one: a correlation bug delivers answers to
         // the wrong callers, and every request still "succeeds".
         await using var host = await StartAsync();
-        await host.Client.WaitForServiceAsync(TransportName, ConformanceServiceName);
+        await host.Client.WaitForServiceAsync(TransportName, host.ServiceName);
 
         var messages = Enumerable.Range(0, 16).Select(index => $"message-{index}").ToArray();
 
@@ -170,11 +160,11 @@ public abstract class ManagementTransportConformanceTests
     public async Task OperationFailure_IsReportedWithoutLeakingExceptionText()
     {
         await using var host = await StartAsync();
-        await host.Client.WaitForServiceAsync(TransportName, ConformanceServiceName);
+        await host.Client.WaitForServiceAsync(TransportName, host.ServiceName);
 
         var response = await host.Client.SendAsync(
             TransportName,
-            ConformanceServiceName,
+            host.ServiceName,
             EchoManagementOperation.OperationName,
             new EchoRequest { Throw = true }
         );
@@ -191,7 +181,7 @@ public abstract class ManagementTransportConformanceTests
     public async Task Shutdown_CompletesWithoutAbandonedWork()
     {
         var host = await StartAsync();
-        await host.Client.WaitForServiceAsync(TransportName, ConformanceServiceName);
+        await host.Client.WaitForServiceAsync(TransportName, host.ServiceName);
         await EchoAsync(host, "before shutdown");
 
         var stop = host.DisposeAsync().AsTask();
@@ -203,20 +193,30 @@ public abstract class ManagementTransportConformanceTests
     private Task<EchoResponse> EchoAsync(ConformanceHost host, string message) =>
         host.Client.ExecuteAsync<EchoResponse>(
             TransportName,
-            ConformanceServiceName,
+            host.ServiceName,
             EchoManagementOperation.OperationName,
             new EchoRequest { Message = message }
         );
 }
 
 /// <summary>One running agent plus one running dashboard, connected by a transport.</summary>
-public sealed class ConformanceHost(ManagementTestClient client, Func<ValueTask> disposeAsync)
-    : IAsyncDisposable
+public sealed class ConformanceHost(
+    ManagementTestClient client,
+    string serviceName,
+    string instanceId,
+    Func<ValueTask> disposeAsync
+) : IAsyncDisposable
 {
     private bool _disposed;
 
     /// <summary>The dashboard's view of the control plane.</summary>
     public ManagementTestClient Client { get; } = client;
+
+    /// <summary>The service name under test.</summary>
+    public string ServiceName { get; } = serviceName;
+
+    /// <summary>The instance ID under test.</summary>
+    public string InstanceId { get; } = instanceId;
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()

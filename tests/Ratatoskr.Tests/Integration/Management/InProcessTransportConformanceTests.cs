@@ -19,8 +19,8 @@ public sealed class InProcessTransportConformanceTests : ManagementTransportConf
     protected override Task<ConformanceHost> StartAsync() =>
         InProcessControlPlane.StartAsync(
             TransportName,
-            ConformanceServiceName,
-            ConformanceInstanceId,
+            $"conf-{Guid.NewGuid().ToString("N")[..10]}",
+            $"inst-{Guid.NewGuid().ToString("N")[..10]}",
             TimeProvider.System
         );
 
@@ -31,14 +31,16 @@ public sealed class InProcessTransportConformanceTests : ManagementTransportConf
         // co-hosted dashboard showing its own service until the staleness window elapsed, and
         // then showing nothing — an outage indistinguishable from a real one.
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 9, 12, 8, 0, 0, TimeSpan.Zero));
+        var serviceName = $"conf-{Guid.NewGuid().ToString("N")[..10]}";
+        var instanceId = $"inst-{Guid.NewGuid().ToString("N")[..10]}";
         await using var host = await InProcessControlPlane.StartAsync(
             "in-process",
-            ConformanceServiceName,
-            ConformanceInstanceId,
+            serviceName,
+            instanceId,
             clock
         );
 
-        await host.Client.WaitForServiceAsync("in-process", ConformanceServiceName);
+        await host.Client.WaitForServiceAsync("in-process", serviceName);
 
         for (var beat = 0; beat < 6; beat++)
         {
@@ -55,7 +57,7 @@ public sealed class InProcessTransportConformanceTests : ManagementTransportConf
     public async Task Transport_RefusesAServiceItDoesNotHost()
     {
         await using var host = await StartAsync();
-        await host.Client.WaitForServiceAsync(TransportName, ConformanceServiceName);
+        await host.Client.WaitForServiceAsync(TransportName, host.ServiceName);
 
         // Address a service that was never announced, so the registry has no address for it and
         // the transport is asked to reach something that is not in this process.
@@ -111,6 +113,8 @@ internal static class InProcessControlPlane
 
         return new ConformanceHost(
             new ManagementTestClient(provider),
+            serviceName,
+            instanceId,
             async () =>
             {
                 foreach (var service in hosted)

@@ -37,5 +37,7 @@ items:
     href: operations.md
   - name: Management & UI Dashboard
     href: management-ui.md
+  - name: Management HTTP API
+    href: management-api.md
 - name: API Reference
   href: api/
