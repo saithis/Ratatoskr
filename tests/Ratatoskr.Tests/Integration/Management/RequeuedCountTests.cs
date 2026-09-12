@@ -1,7 +1,9 @@
+using System.Net.Http.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.EfCore.Internal;
+using Ratatoskr.Management.Contracts;
 using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Management;
@@ -11,16 +13,13 @@ public class RequeuedCountTests(
     PostgresContainerFixture postgres
 ) : ManagementTestBase(rabbitMq, postgres)
 {
-    private const string BaseUrl = "/ratatoskr/api/v1/efcore/contexts/TestDbContext/outbox";
-
     [Test]
     public async Task RequeuedCount_IncrementsOnEachRequeue()
     {
         await StartManagementTestAsync();
         var id = await SeedPoisonedOutboxAsync();
 
-        // First requeue
-        await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", content: null);
+        await RequeueAsync(id);
 
         // Re-poison the entity so we can requeue again
         await InScopeAsync(async ctx =>
@@ -32,8 +31,7 @@ public class RequeuedCountTests(
             await db.SaveChangesAsync();
         });
 
-        // Second requeue
-        await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", content: null);
+        await RequeueAsync(id);
 
         await InScopeAsync(async ctx =>
         {
@@ -49,7 +47,7 @@ public class RequeuedCountTests(
         await StartManagementTestAsync();
         var id = await SeedPoisonedOutboxAsync();
 
-        await HttpClient.PostAsync($"{BaseUrl}/poisoned/{id}/requeue", content: null);
+        await RequeueAsync(id);
 
         await InScopeAsync(async ctx =>
         {
@@ -91,5 +89,20 @@ public class RequeuedCountTests(
             e.Should().NotBeNull();
             e.IsPoisoned.Should().BeTrue();
         });
+    }
+
+    /// <summary>
+    /// A fresh operation id per call: reusing one would be a retry of the same request, and the
+    /// idempotency record would replay the first answer instead of requeueing again.
+    /// </summary>
+    private async Task RequeueAsync(Guid id)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{OutboxUrl}/requeue")
+        {
+            Content = JsonContent.Create(new MutateByIdsRequest { Ids = [id] }),
+        };
+        request.Headers.Add("X-Ratatoskr-Operation-Id", Guid.NewGuid().ToString());
+        using var response = await HttpClient.SendAsync(request);
+        response.EnsureSuccessStatusCode();
     }
 }

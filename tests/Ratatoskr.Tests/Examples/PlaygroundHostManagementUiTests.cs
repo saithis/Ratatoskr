@@ -151,55 +151,79 @@ public sealed class PlaygroundHostManagementUiTests : IAsyncDisposable
         var factory = await GetOrCreateFactoryAsync();
         using var client = factory.CreateClient();
 
-        // Wait until playground-host registers its local heartbeat
-        JsonElement? service = null;
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
-        while (DateTime.UtcNow < deadline)
+        // The playground hosts its own dashboard, so it discovers itself over the in-process
+        // transport rather than a broker.
+        JsonElement? card = null;
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+        while (DateTime.UtcNow < deadline && card is null)
         {
-            using var servicesResp = await client.GetAsync("/ratatoskr/api/services");
-            if (servicesResp.StatusCode == HttpStatusCode.OK)
+            using var response = await client.GetAsync("/ratatoskr/api/services");
+            if (response.StatusCode == HttpStatusCode.OK)
             {
-                var services = await servicesResp.Content.ReadFromJsonAsync<JsonElement>();
-                if (services.ValueKind == JsonValueKind.Array && services.GetArrayLength() > 0)
+                var services = await response.Content.ReadFromJsonAsync<JsonElement>();
+                if (services.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var item in services.EnumerateArray())
                     {
-                        if (string.Equals(item.GetProperty("serviceName").GetString(), "playground-host", StringComparison.OrdinalIgnoreCase))
+                        if (
+                            string.Equals(
+                                item.GetProperty("serviceName").GetString(),
+                                "playground-host",
+                                StringComparison.OrdinalIgnoreCase
+                            )
+                        )
                         {
-                            service = item;
+                            card = item;
                             break;
                         }
                     }
                 }
             }
 
-            if (service is not null)
+            if (card is null)
             {
-                break;
+                await Task.Delay(250);
             }
-
-            await Task.Delay(250);
         }
 
-        service.Should().NotBeNull();
-        service!.Value.GetProperty("serviceName").GetString().Should().Be("playground-host");
+        card.Should().NotBeNull();
+        card!.Value.GetProperty("transportName").GetString().Should().Be("in-process");
 
-        // Fetch detail
-        using var detailResp = await client.GetAsync("/ratatoskr/api/services/playground-host");
-        detailResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var detailResponse = await client.GetAsync(
+            "/ratatoskr/api/transports/in-process/services/playground-host"
+        );
+        detailResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var detail = await detailResp.Content.ReadFromJsonAsync<JsonElement>();
+        var detail = await detailResponse.Content.ReadFromJsonAsync<JsonElement>();
         detail.GetProperty("serviceName").GetString().Should().Be("playground-host");
 
-        var dbContexts = detail.GetProperty("dbContexts");
-        var dbNames = new List<string>();
-        foreach (var db in dbContexts.EnumerateArray())
-        {
-            dbNames.Add(db.GetProperty("dbContextName").GetString()!);
-        }
+        var contextNames = detail
+            .GetProperty("dbContexts")
+            .EnumerateArray()
+            .Select(context => context.GetProperty("name").GetString())
+            .ToList();
 
-        dbNames.Should().Contain("PublisherDbContext");
-        dbNames.Should().Contain("ConsumerDbContext");
+        contextNames.Should().Contain("PublisherDbContext");
+        contextNames.Should().Contain("ConsumerDbContext");
+    }
+
+    [Test]
+    public async Task ManagementUI_PerServiceApi_AndDashboardFacade_BothAnswer()
+    {
+        // The playground mounts both surfaces, which is the configuration most likely to expose a
+        // drift between them.
+        var factory = await GetOrCreateFactoryAsync();
+        using var client = factory.CreateClient();
+
+        using var direct = await client.GetAsync("/ratatoskr/api/v1/contexts");
+        direct.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await direct.Content.ReadAsStringAsync()).Should().Contain("PublisherDbContext");
+
+        using var viaDashboard = await client.GetAsync(
+            "/ratatoskr/api/transports/in-process/services/playground-host/contexts"
+        );
+        viaDashboard.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await viaDashboard.Content.ReadAsStringAsync()).Should().Contain("PublisherDbContext");
     }
 
     public async ValueTask DisposeAsync()

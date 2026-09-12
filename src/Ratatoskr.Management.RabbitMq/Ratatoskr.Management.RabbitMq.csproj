@@ -1,15 +1,35 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>RabbitMQ management control-plane provider for Ratatoskr.</Description>
+    <Description>RabbitMQ control-plane transport for Ratatoskr management.</Description>
     <PackageTags>ratatoskr;management;rabbitmq</PackageTags>
     <IsPackable>true</IsPackable>
-    <NoWarn>$(NoWarn);1591;CA1848;MA0051;MA0007;MA0046</NoWarn>
+    <!--
+      IDISP001/IDISP002/IDISP003: AMQP channels and the connection are long-lived, owned by the
+      hosted services that open them, and disposed asynchronously in StopAsync. The analyzer looks
+      for a synchronous Dispose and cannot follow ownership across a field assigned inside an
+      async loop.
+    -->
+    <NoWarn>$(NoWarn);1591;CA1848;CA1873;IDISP001;IDISP002;IDISP003</NoWarn>
   </PropertyGroup>
-  <ItemGroup><FrameworkReference Include="Microsoft.AspNetCore.App" /></ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="RabbitMQ.Client" />
+  </ItemGroup>
+
+  <!--
+    Deliberately no reference to Ratatoskr.RabbitMq. A dashboard process then needs no messaging
+    stack at all, and the control plane can point at a different broker with different credentials
+    from the one the application publishes on.
+  -->
   <ItemGroup>
     <ProjectReference Include="..\Ratatoskr.Management\Ratatoskr.Management.csproj" />
-    <ProjectReference Include="..\Ratatoskr.Management.Abstractions\Ratatoskr.Management.Abstractions.csproj" />
-    <ProjectReference Include="..\Ratatoskr.RabbitMq\Ratatoskr.RabbitMq.csproj" />
   </ItemGroup>
-  <ItemGroup><InternalsVisibleTo Include="Ratatoskr.Tests" /></ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Ratatoskr.Tests" />
+  </ItemGroup>
 </Project>

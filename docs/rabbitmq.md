@@ -164,6 +164,71 @@ On application shutdown, `RabbitMqConsumer` stops new deliveries before closing 
 
 Set `ShutdownDrainTimeout` if handlers can run longer than the default. Also set the host’s [`HostOptions.ShutdownTimeout`](https://learn.microsoft.com/dotnet/api/microsoft.extensions.hosting.hostoptions.shutdowntimeout) (default 30 seconds) so the process is not torn down while the consumer is still draining.
 
+## Least-privilege permissions
+
+Ratatoskr is designed to run under a narrow, per-identity permission set. For a RabbitMQ user
+`u`, these are the only permissions it needs:
+
+| Permission | Pattern |
+|---|---|
+| configure | `{u}\..*` |
+| write | `{u}\..*\|.*\.inbox$` |
+| read | `{u}\..*\|.*(?<!internal)$` |
+
+```bash
+rabbitmqctl set_permissions -p / orders \
+  'orders\..*' \
+  'orders\..*|.*\.inbox$' \
+  'orders\..*|.*(?<!internal)$'
+```
+
+In words: an identity may declare and bind anything under its own `{u}.` prefix, may publish to
+its own resources **and to any exchange whose name ends in `.inbox`**, and may read almost
+everything. The `.inbox` suffix is the only cross-identity publish channel, which is why every
+resource another party has to reach is an exchange named `{receiverPrefix}....inbox`, declared by
+the receiver.
+
+### What the broker allows and refuses
+
+The following matrix is verified by `LeastPrivilegeBrokerProbeTests` against `rabbitmq:4.3-alpine`
+with exactly the permissions above. Each row is a test, so a broker upgrade that changes one of
+these answers fails the build rather than silently breaking the control plane.
+
+| Attempt | Result |
+|---|---|
+| Publish to the default exchange (`amq.default`) | **Refused**, `403 ACCESS_REFUSED` |
+| Declare a server-named (`amq.gen-*`) queue | **Refused**, `403 ACCESS_REFUSED` |
+| Declare a transient non-exclusive queue | **Refused** (removed in RabbitMQ 4.1+) |
+| Publish to an exchange that has not been declared yet | **Refused**, `404 NOT_FOUND`, **and the channel is closed** |
+| Publish with a `user_id` that is not the authenticated user | **Refused**, `406 PRECONDITION_FAILED` |
+| Declare a durable queue `{u}.mgmt.cmd.{service}.q` | Allowed |
+| Declare a direct exchange `{u}.mgmt.cmd.inbox` and bind a queue to it | Allowed |
+| Publish from another identity into `{u}.mgmt.cmd.inbox` | **Allowed and delivered**, with or without `user_id` |
+| Declare a **named** exclusive queue under the own prefix | Allowed |
+| Two replicas bind named exclusive queues to a fanout `.inbox` and both receive each message | Allowed |
+| `mandatory: true` publish to a routing key with no binding | Returned as `312 NO_ROUTE` |
+| `mandatory: true` publish to a bound queue with no consumer | Not returned |
+
+### Consequences you have to design for
+
+- **Never publish to the default exchange.** Address a receiver through its own `*.inbox` exchange.
+- **Never use server-named or transient non-exclusive queues.** Name every queue `{u}....`, and
+  make it either durable or exclusive.
+- **The broker is not a confidentiality boundary.** Read access is broad, so any identity in the
+  vhost can consume most queues. Management payloads can contain message bodies and exception
+  detail; treat everything on the vhost as visible to every identity on it.
+- **The broker is not an authentication boundary either.** Write access to `*.inbox` is equally
+  broad, so any identity can inject a command into any service's command exchange. Agents
+  therefore authenticate the caller themselves — see
+  [Management UI](management-ui.md) for `AllowedCallers` and the signed-envelope alternative.
+- **`user_id` is trustworthy when present.** The broker validates it against the authenticated
+  connection, so it is a free sender identity that needs no shared secret. It is absent unless the
+  publisher sets it, so an absent `user_id` must be treated as untrusted, never as trusted.
+- **Boot order cannot be controlled.** A publisher cannot declare a receiver-owned exchange, so it
+  will publish into a missing exchange whenever the receiver has not started yet, and that closes
+  the channel. Any publisher of this kind owns a channel it can afford to lose and retries with
+  backoff.
+
 ## What's Next
 
 - [EF Core Transport](efcore-transport.md) — Database-based message delivery without a broker

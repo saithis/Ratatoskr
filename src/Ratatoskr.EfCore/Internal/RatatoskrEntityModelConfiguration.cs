@@ -42,6 +42,25 @@ internal static class RatatoskrEntityModelConfiguration
         });
     }
 
+    internal static void ConfigureManagementEntities(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ManagementOperationEntity>(entity =>
+        {
+            entity.HasKey(e => e.OperationId);
+
+            // The caller supplies the key, so EF must not try to generate one — a duplicate
+            // delivery has to collide on insert, which is the entire idempotency mechanism.
+            entity.Property(e => e.OperationId).ValueGeneratedNever();
+
+            entity.Property(e => e.Operation).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Actor).HasMaxLength(400);
+
+            // Retention sweeps by completion time, so the cleanup worker deletes in bounded,
+            // index-backed batches rather than scanning a growing table every hour.
+            entity.HasIndex(e => e.CompletedAt, "IX_ManagementOperations_CompletedAt");
+        });
+    }
+
     internal static void ConfigureInboxEntities(ModelBuilder modelBuilder, DatabaseFacade database)
     {
         modelBuilder.Entity<InboxMessageEntity>(entity =>

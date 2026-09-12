@@ -1,59 +1,41 @@
 using System.Reflection;
-using System.Text.Json;
-using System.Threading.Channels;
-using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Options;
 using Ratatoskr.Management.Contracts;
+using Ratatoskr.Management.Http;
+using Ratatoskr.Management.Registry;
+using Ratatoskr.UI.Endpoints;
+using Ratatoskr.UI.Store;
 
 namespace Ratatoskr.UI;
 
-/// <summary>
-/// Extension methods for configuring and mounting the Ratatoskr management UI dashboard.
-/// </summary>
+/// <summary>Mounts the Ratatoskr management dashboard.</summary>
 public static class RatatoskrUiEndpointExtensions
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly Assembly UiAssembly = typeof(RatatoskrUiEndpointExtensions).Assembly;
 
-    /// <summary>
-    /// Adds Ratatoskr UI services, background broker listeners, and active service tracking.
-    /// </summary>
-    public static IServiceCollection AddRatatoskrUI(
-        this IServiceCollection services,
-        Action<RatatoskrUiOptions>? configure = null
-    )
-    {
-        services.AddOptions<RatatoskrUiOptions>();
-        if (configure != null)
-        {
-            services.Configure(configure);
-        }
+    private const string ContentSecurityPolicy =
+        "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; "
+        + "object-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'";
 
-        return services;
-    }
-
-    /// <summary>
-    /// Maps the Ratatoskr management UI dashboard and proxy API endpoints.
-    /// Requires a registered authorization policy name to ensure secure access.
-    /// </summary>
+    /// <summary>Mounts the dashboard with a single authorization policy for every capability.</summary>
     public static IEndpointRouteBuilder MapRatatoskrUI(
         this IEndpointRouteBuilder endpoints,
         string policyName,
         string basePath = "/ratatoskr"
-    ) => endpoints.MapRatatoskrUI(
-        new RatatoskrUiAuthorizationPolicies(policyName, policyName, policyName, policyName, policyName),
-        basePath);
+    ) => endpoints.MapRatatoskrUI(ManagementApiPolicies.Single(policyName), basePath);
 
-    /// <summary>Maps the UI with separate policies for read, sensitive-data, and mutation capabilities.</summary>
+    /// <summary>
+    /// Mounts the dashboard with separate policies for reading metadata, reading payloads,
+    /// requeueing, deleting and bulk operations.
+    /// </summary>
     public static IEndpointRouteBuilder MapRatatoskrUI(
         this IEndpointRouteBuilder endpoints,
-        RatatoskrUiAuthorizationPolicies policies,
+        ManagementApiPolicies policies,
         string basePath = "/ratatoskr"
     )
     {
@@ -61,329 +43,152 @@ public static class RatatoskrUiEndpointExtensions
         ArgumentNullException.ThrowIfNull(policies);
         ArgumentException.ThrowIfNullOrWhiteSpace(basePath);
 
-        basePath = basePath.TrimEnd('/');
+        policies.ValidateRegistered(endpoints);
 
-        // Validate policy existence at startup
-        var authOptions = endpoints.ServiceProvider.GetRequiredService<IOptions<AuthorizationOptions>>().Value;
-        var policyNames = new[] { policies.ViewMetadata, policies.ViewPayloads, policies.RequeueMessages, policies.DeleteMessages, policies.BulkOperations };
-        if (policyNames.Any(string.IsNullOrWhiteSpace) || policyNames.Any(name => authOptions.GetPolicy(name) is null))
-        {
-            throw new InvalidOperationException(
-                "Every Ratatoskr UI authorization policy must be registered. "
-                    + "Call services.AddAuthorization() before calling MapRatatoskrUI."
-            );
-        }
+        var strategy = endpoints.ServiceProvider.GetRequiredService<AuditingManagementDispatchStrategy>();
 
-        var group = endpoints.MapGroup(basePath)
-            .RequireAuthorization(policies.ViewMetadata)
-            .DisableAntiforgery();
+        var group = endpoints
+            .MapGroup(basePath.TrimEnd('/'))
+            .RequireAuthorization(policies.ViewMetadata);
 
-        group.AddEndpointFilter(async (context, next) =>
-        {
-            context.HttpContext.Response.Headers.ContentSecurityPolicy =
-                "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; object-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'";
-            context.HttpContext.Response.Headers.XContentTypeOptions = "nosniff";
-            return await next(context);
-        });
-
-        // ── Static Web Assets ────────────────────────────────────────────────
-        group.MapGet("/", ServeIndexHtml);
-        group.MapGet("/index.html", ServeIndexHtml);
-
-        group.MapGet("/css/{filename}", (string filename) =>
-            ServeEmbeddedFile($"css.{filename}", "text/css"));
-
-        group.MapGet("/js/{filename}", (string filename) =>
-            ServeEmbeddedFile($"js.{filename}", "application/javascript"));
-
-        // ── Server-Sent Events (SSE) ─────────────────────────────────────────
-        group.MapGet("/api/events", async (
-            HttpContext context,
-            IServiceCatalog catalog,
-            CancellationToken ct
-        ) =>
-        {
-            context.Response.Headers.ContentType = "text/event-stream";
-            context.Response.Headers.CacheControl = "no-cache";
-            context.Response.Headers.Connection = "keep-alive";
-
-            var updates = Channel.CreateBounded<ServiceHeartbeat>(new BoundedChannelOptions(1)
+        group.AddEndpointFilter(
+            async (context, next) =>
             {
-                FullMode = BoundedChannelFullMode.DropOldest,
-                SingleReader = true,
-                SingleWriter = false
-            });
-
-            void OnServiceUpdate(object? sender, ServiceHeartbeatEventArgs args)
-            {
-                // The bounded, latest-value queue coalesces heartbeat bursts for slow browsers.
-                updates.Writer.TryWrite(args.Heartbeat);
+                var headers = context.HttpContext.Response.Headers;
+                headers.ContentSecurityPolicy = ContentSecurityPolicy;
+                headers.XContentTypeOptions = "nosniff";
+                return await next(context);
             }
+        );
 
-            catalog.ServiceUpdated += OnServiceUpdate;
-            try
-            {
-                await WriteSnapshotAsync(context, catalog, ct);
+        MapStaticAssets(group);
+        MapDiscoveryApi(group);
+        MapAuditApi(group);
 
-                while (true)
-                {
-                    var update = updates.Reader.WaitToReadAsync(ct).AsTask();
-                    var heartbeat = Task.Delay(TimeSpan.FromSeconds(15), ct);
-                    var completed = await Task.WhenAny(update, heartbeat);
-                    if (completed == update && await update)
-                    {
-                        while (updates.Reader.TryRead(out _)) { }
-                        // A snapshot avoids inconsistent browser state when updates were coalesced.
-                        await WriteSnapshotAsync(context, catalog, ct);
-                    }
-                    else if (completed == heartbeat)
-                    {
-                        await context.Response.WriteAsync(":\n\n", ct);
-                        await context.Response.Body.FlushAsync(ct);
-                    }
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                // client disconnected
-            }
-            finally
-            {
-                catalog.ServiceUpdated -= OnServiceUpdate;
-                updates.Writer.TryComplete();
-            }
-        });
-
-        // ── Management Proxy APIs ────────────────────────────────────────────
-        var api = group.MapGroup("/api");
-
-        api.MapGet("/services", (IServiceCatalog catalog) =>
-            TypedResults.Ok(catalog.GetAllServices()));
-
-        api.MapGet("/services/{serviceName}", (string serviceName, IServiceCatalog catalog) =>
-        {
-            var detail = catalog.GetService(serviceName);
-            return detail != null ? Results.Ok(detail) : Results.NotFound();
-        });
-
-        api.MapGet("/services/{serviceName}/stats", async (
-            string serviceName,
-            IManagementClient client,
-            CancellationToken ct
-        ) =>
-        {
-            var res = await client.ExecuteAsync<object, ServiceHeartbeat>(serviceName, null, "GetStats", new { }, ct);
-            return res != null ? Results.Ok(res) : Results.NotFound();
-        });
-
-        // Outbox
-        api.MapGet("/services/{serviceName}/contexts/{contextName}/outbox", async (
-            string serviceName,
-            string contextName,
-            string? status,
-            string? cursor,
-            int? limit,
-            IManagementClient client,
-            CancellationToken ct
-        ) =>
-        {
-            var req = new GetOutboxMessagesRequest(status ?? "Poisoned", cursor, limit ?? 20);
-            var res = await client.ExecuteAsync<GetOutboxMessagesRequest, CursorPagedResult<OutboxItemDto>>(
-                serviceName, contextName, "GetOutbox", req, ct);
-            return Results.Ok(res);
-        });
-
-        api.MapGet("/services/{serviceName}/contexts/{contextName}/outbox/{id:guid}", async (
-            string serviceName,
-            string contextName,
-            Guid id,
-            IManagementClient client,
-            CancellationToken ct
-        ) =>
-        {
-            var res = await client.ExecuteAsync<GetOutboxDetailRequest, OutboxDetailDto>(
-                serviceName, contextName, "GetOutboxDetail", new GetOutboxDetailRequest(id), ct);
-            return res != null ? Results.Ok(res) : Results.NotFound();
-        }).RequireAuthorization(policies.ViewPayloads);
-
-        api.MapPost("/services/{serviceName}/contexts/{contextName}/outbox/{id:guid}/requeue", async (
-            string serviceName,
-            string contextName,
-            Guid id,
-            IManagementClient client,
-            CancellationToken ct
-        ) =>
-        {
-            var res = await client.ExecuteAsync<RequeueOutboxRequest, RequeueResultDto>(
-                serviceName, contextName, "RequeueOutbox", new RequeueOutboxRequest(id), ct);
-            return Results.Ok(res);
-        }).RequireAuthorization(policies.RequeueMessages);
-
-        api.MapPost("/services/{serviceName}/contexts/{contextName}/outbox/bulk-requeue", async (
-            string serviceName,
-            string contextName,
-            IManagementClient client,
-            CancellationToken ct
-        ) =>
-        {
-            var res = await client.ExecuteAsync<BulkRequeueOutboxRequest, RequeueResultDto>(
-                serviceName, contextName, "BulkRequeueOutbox", new BulkRequeueOutboxRequest(), ct);
-            return Results.Ok(res);
-        }).RequireAuthorization(policies.BulkOperations);
-
-        api.MapDelete("/services/{serviceName}/contexts/{contextName}/outbox/{id:guid}", async (
-            string serviceName,
-            string contextName,
-            Guid id,
-            IManagementClient client,
-            CancellationToken ct
-        ) =>
-        {
-            var res = await client.ExecuteAsync<DeleteOutboxRequest, DeleteResultDto>(
-                serviceName, contextName, "DeleteOutbox", new DeleteOutboxRequest(id), ct);
-            return Results.Ok(res);
-        }).RequireAuthorization(policies.DeleteMessages);
-
-        api.MapDelete("/services/{serviceName}/contexts/{contextName}/outbox/bulk-delete", async (
-            string serviceName,
-            string contextName,
-            IManagementClient client,
-            CancellationToken ct
-        ) =>
-        {
-            var res = await client.ExecuteAsync<BulkDeleteOutboxRequest, DeleteResultDto>(
-                serviceName, contextName, "BulkDeleteOutbox", new BulkDeleteOutboxRequest(), ct);
-            return Results.Ok(res);
-        }).RequireAuthorization(policies.BulkOperations);
-
-        // Inbox
-        api.MapGet("/services/{serviceName}/contexts/{contextName}/inbox", async (
-            string serviceName,
-            string contextName,
-            string? status,
-            string? cursor,
-            int? limit,
-            IManagementClient client,
-            CancellationToken ct
-        ) =>
-        {
-            var req = new GetInboxMessagesRequest(status ?? "Poisoned", cursor, limit ?? 20);
-            var res = await client.ExecuteAsync<GetInboxMessagesRequest, CursorPagedResult<InboxItemDto>>(
-                serviceName, contextName, "GetInbox", req, ct);
-            return Results.Ok(res);
-        });
-
-        api.MapGet("/services/{serviceName}/contexts/{contextName}/inbox/{id:guid}", async (
-            string serviceName,
-            string contextName,
-            Guid id,
-            IManagementClient client,
-            CancellationToken ct
-        ) =>
-        {
-            var res = await client.ExecuteAsync<GetInboxDetailRequest, InboxDetailDto>(
-                serviceName, contextName, "GetInboxDetail", new GetInboxDetailRequest(id), ct);
-            return res != null ? Results.Ok(res) : Results.NotFound();
-        }).RequireAuthorization(policies.ViewPayloads);
-
-        api.MapPost("/services/{serviceName}/contexts/{contextName}/inbox/{id:guid}/requeue", async (
-            string serviceName,
-            string contextName,
-            Guid id,
-            IManagementClient client,
-            CancellationToken ct
-        ) =>
-        {
-            var res = await client.ExecuteAsync<RequeueInboxHandlerRequest, RequeueResultDto>(
-                serviceName, contextName, "RequeueInboxHandler", new RequeueInboxHandlerRequest(id), ct);
-            return Results.Ok(res);
-        }).RequireAuthorization(policies.RequeueMessages);
-
-        api.MapPost("/services/{serviceName}/contexts/{contextName}/inbox/message/{messageId}/requeue", async (
-            string serviceName,
-            string contextName,
-            string messageId,
-            IManagementClient client,
-            CancellationToken ct
-        ) =>
-        {
-            var res = await client.ExecuteAsync<RequeueInboxMessageRequest, RequeueResultDto>(
-                serviceName, contextName, "RequeueInboxMessage", new RequeueInboxMessageRequest(messageId), ct);
-            return Results.Ok(res);
-        }).RequireAuthorization(policies.RequeueMessages);
-
-        api.MapPost("/services/{serviceName}/contexts/{contextName}/inbox/bulk-requeue", async (
-            string serviceName,
-            string contextName,
-            IManagementClient client,
-            CancellationToken ct
-        ) =>
-        {
-            var res = await client.ExecuteAsync<BulkRequeueInboxRequest, RequeueResultDto>(
-                serviceName, contextName, "BulkRequeueInbox", new BulkRequeueInboxRequest(), ct);
-            return Results.Ok(res);
-        }).RequireAuthorization(policies.BulkOperations);
-
-        api.MapDelete("/services/{serviceName}/contexts/{contextName}/inbox/{id:guid}", async (
-            string serviceName,
-            string contextName,
-            Guid id,
-            IManagementClient client,
-            CancellationToken ct
-        ) =>
-        {
-            var res = await client.ExecuteAsync<DeleteInboxHandlerRequest, DeleteResultDto>(
-                serviceName, contextName, "DeleteInboxHandler", new DeleteInboxHandlerRequest(id), ct);
-            return Results.Ok(res);
-        }).RequireAuthorization(policies.DeleteMessages);
-
-        api.MapDelete("/services/{serviceName}/contexts/{contextName}/inbox/bulk-delete", async (
-            string serviceName,
-            string contextName,
-            IManagementClient client,
-            CancellationToken ct
-        ) =>
-        {
-            var res = await client.ExecuteAsync<BulkDeleteInboxRequest, DeleteResultDto>(
-                serviceName, contextName, "BulkDeleteInbox", new BulkDeleteInboxRequest(), ct);
-            return Results.Ok(res);
-        }).RequireAuthorization(policies.BulkOperations);
+        // The shared route tree, once per transport-and-service. Every operation the per-service
+        // REST API exposes appears here too, because both are generated from the same method.
+        ManagementApiRoutes.Map(
+            group.MapGroup("/api/transports/{transport}/services/{serviceName}"),
+            strategy,
+            policies
+        );
 
         return endpoints;
     }
 
-    private static IResult ServeIndexHtml() =>
-        ServeEmbeddedFile("index.html", "text/html; charset=utf-8");
-
-    private static async Task WriteSnapshotAsync(HttpContext context, IServiceCatalog catalog, CancellationToken cancellationToken)
+    private static void MapStaticAssets(RouteGroupBuilder group)
     {
-        var services = JsonSerializer.Serialize(catalog.GetAllServices(), JsonOptions);
-        await context.Response.WriteAsync($"event: snapshot\ndata: {services}\n\n", cancellationToken);
-        await context.Response.Body.FlushAsync(cancellationToken);
+        group.MapGet("/", ServeIndex);
+        group.MapGet("/index.html", ServeIndex);
+        group.MapGet("/css/{filename}", (string filename) => Serve($"css.{filename}", "text/css"));
+        group.MapGet(
+            "/js/{filename}",
+            (string filename) => Serve($"js.{filename}", "text/javascript")
+        );
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created", Justification = "Stream is transferred to IResult which disposes it upon HTTP response completion")]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning", Justification = "Fallback stream retrieval")]
-    private static IResult ServeEmbeddedFile(string relativePath, string contentType)
+    private static void MapDiscoveryApi(RouteGroupBuilder group)
     {
-        var resourceName = $"Ratatoskr.UI.wwwroot.{relativePath}";
-        var stream = UiAssembly.GetManifestResourceStream(resourceName);
-        if (stream is null)
-        {
-            // Fallback check in case embedded path separators differ
-            var matches = UiAssembly.GetManifestResourceNames();
-            var matched = matches.FirstOrDefault(m => m.EndsWith(relativePath, StringComparison.OrdinalIgnoreCase));
-            if (matched != null)
+        var api = group.MapGroup("/api");
+
+        // Every management response goes out through ManagementJson so the dashboard sees one JSON
+        // dialect: enums as names, nulls omitted, the same shapes the transports carry.
+        api.MapGet(
+            "/antiforgery",
+            (HttpContext http, IAntiforgery antiforgery) =>
             {
-                stream = UiAssembly.GetManifestResourceStream(matched);
+                // Cookie-authenticated callers need a token to mutate anything. Handing it out
+                // here, rather than embedding it in the page, keeps index.html cacheable and
+                // lets a long-lived tab refresh the token without a reload.
+                var tokens = antiforgery.GetAndStoreTokens(http);
+                return Results.Json(
+                    new AntiforgeryTokenResponse(
+                        tokens.HeaderName ?? "RequestVerificationToken",
+                        tokens.RequestToken
+                    ),
+                    ManagementJson.Options
+                );
             }
-        }
+        );
 
-        if (stream is null)
-        {
-            return Results.NotFound($"Static resource '{relativePath}' not found in assembly.");
-        }
+        api.MapGet(
+            "/transports",
+            (IManagementTransportRegistry transports) =>
+                Results.Json(transports.TransportNames, ManagementJson.Options)
+        );
 
-        return Results.Stream(stream, contentType);
+        api.MapGet(
+            "/services",
+            (ServiceRegistry registry) => Results.Json(registry.GetServices(), ManagementJson.Options)
+        );
+
+        api.MapGet(
+            "/transports/{transport}/services/{serviceName}",
+            (string transport, string serviceName, ServiceRegistry registry) =>
+                registry.GetService(transport, serviceName) is { } detail
+                    ? Results.Json(detail, ManagementJson.Options)
+                    : Results.NotFound()
+        );
+
+        api.MapGet(
+            "/events",
+            (HttpContext http, ServiceRegistry registry, TimeProvider timeProvider) =>
+                DashboardEventStream.WriteAsync(http, registry, timeProvider, http.RequestAborted)
+        );
     }
+
+    private static void MapAuditApi(RouteGroupBuilder group)
+    {
+        group
+            .MapGroup("/api")
+            .MapGet(
+                "/audit",
+                async (
+                    RatatoskrDashboardDbContext db,
+                    string? service,
+                    string? transport,
+                    int? limit,
+                    CancellationToken cancellationToken
+                ) =>
+                {
+                    var query = db.AuditEntries.AsNoTracking().AsQueryable();
+
+                    if (!string.IsNullOrWhiteSpace(transport))
+                    {
+                        query = query.Where(entry => entry.TransportName == transport);
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(service))
+                    {
+                        query = query.Where(entry => entry.ServiceName == service);
+                    }
+
+                    var entries = await query
+                        .OrderByDescending(entry => entry.StartedAt)
+                        .Take(Math.Clamp(limit ?? 100, 1, 500))
+                        .ToListAsync(cancellationToken);
+
+                    return Results.Json(entries, ManagementJson.Options);
+                }
+            );
+    }
+
+    private static IResult ServeIndex() => Serve("index.html", "text/html; charset=utf-8");
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "IDisposableAnalyzers.Correctness",
+        "IDISP001:Dispose created",
+        Justification = "Ownership of the stream passes to the IResult, which disposes it when the response completes."
+    )]
+    private static IResult Serve(string relativePath, string contentType)
+    {
+        // Only exact matches: a filename from the route must never be able to reach an arbitrary
+        // manifest resource, so there is deliberately no suffix-matching fallback here.
+        var stream = UiAssembly.GetManifestResourceStream($"Ratatoskr.UI.wwwroot.{relativePath}");
+        return stream is null
+            ? Results.NotFound()
+            : Results.Stream(stream, contentType);
+    }
+
+    private sealed record AntiforgeryTokenResponse(string HeaderName, string? RequestToken);
 }

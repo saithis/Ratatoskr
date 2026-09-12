@@ -1,9 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>Embedded web management dashboard for Ratatoskr CloudEventBus.</Description>
+    <Description>Embedded multi-transport management dashboard for Ratatoskr CloudEventBus.</Description>
     <PackageTags>cloudevents;eventbus;ui;dashboard;management;ratatoskr</PackageTags>
     <IsPackable>true</IsPackable>
-    <NoWarn>$(NoWarn);1591;CA1848;CA1873;MA0051;MA0007;MA0046;RCS1238;MA0003</NoWarn>
+    <!--
+      VSTHRD103 flags DbSet.Add and JsonSerializer.Serialize as "synchronously blocking" because
+      an *Async overload exists. Neither blocks: AddAsync only differs for value generators that
+      need a database round-trip, and the serializer overload is for streams.
+    -->
+    <NoWarn>$(NoWarn);1591;CA1848;CA1873;VSTHRD103</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -18,8 +23,15 @@
     <EmbeddedResource Include="wwwroot\**\*" />
   </ItemGroup>
 
+
   <ItemGroup>
-    <ProjectReference Include="..\Ratatoskr.Management.Abstractions\Ratatoskr.Management.Abstractions.csproj" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <!-- Design-time only: generating the shipped migrations needs a provider to model against. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Ratatoskr.Management\Ratatoskr.Management.csproj" />
   </ItemGroup>
 

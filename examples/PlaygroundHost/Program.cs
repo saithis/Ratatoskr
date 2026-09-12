@@ -13,6 +13,7 @@ using Ratatoskr;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.Management;
+using Ratatoskr.Management.EfCore;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.UI;
 using ServiceDefaults;
@@ -88,18 +89,20 @@ builder.Services.AddRatatoskr(bus =>
 
 PlaygroundMessageSenderDecoration.WrapAllMessageSenders(builder.Services);
 
-builder.Services.AddRatatoskrManagement(options =>
+// The playground hosts its own dashboard: the agent and the dashboard share a process and reach
+// each other through the in-process transport, with no broker involved in the control plane.
+builder.Services.AddRatatoskrManagementAgent(agent =>
 {
-    options.ServiceName = "playground-host";
-    options.InstanceId = $"{Environment.MachineName}-{Environment.ProcessId.ToString(CultureInfo.InvariantCulture)}";
-    options.HeartbeatInterval = TimeSpan.FromSeconds(5);
-    options.EnableHeartbeat = true;
+    agent.ServiceName = "playground-host";
+    agent.InstanceId =
+        $"{Environment.MachineName}-{Environment.ProcessId.ToString(CultureInfo.InvariantCulture)}";
+    agent.Configure(options => options.HeartbeatInterval = TimeSpan.FromSeconds(5));
+    agent.UseEfCore();
+    agent.AddInProcess();
 });
 
-builder.Services.AddRatatoskrUI(options =>
-{
-    options.ServiceOfflineThreshold = TimeSpan.FromSeconds(45);
-});
+builder.Services.AddRatatoskrManagementOperationCleanup<PublisherDbContext>();
+builder.Services.AddRatatoskrManagementOperationCleanup<ConsumerDbContext>();
 
 var publisherCs =
     builder.Configuration.GetConnectionString("publisherdb")
@@ -128,6 +131,18 @@ builder.Services.AddDbContext<ConsumerDbContext>(
 );
 
 builder.Services.AddDbContext<PlaygroundDbContext>(options => options.UseNpgsql(playgroundCs));
+
+builder.Services.AddRatatoskrDashboard(dashboard =>
+{
+    // AutoMigrate is fine here: one node, one process, local development. A real deployment
+    // applies the shipped migrations from its deployment step instead.
+    dashboard.UseStore(
+        db => db.UseNpgsql(playgroundCs),
+        store => store.AutoMigrate = true
+    );
+    dashboard.Configure(options => options.StaleAfter = TimeSpan.FromSeconds(45));
+    dashboard.AddInProcess();
+});
 
 builder.Services.Configure<PlaygroundOptions>(
     builder.Configuration.GetSection(PlaygroundOptions.SectionName)

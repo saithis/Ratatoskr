@@ -1,111 +1,243 @@
-// Ratatoskr Management Dashboard Client. All untrusted values are assigned with textContent.
-(() => {
-  const byId = (id) => document.getElementById(id);
-  const state = { services: [], selected: null, tab: "overview", outbox: { status: "Poisoned", cursors: [null] }, inbox: { status: "Poisoned", cursors: [null] } };
-  const basePath = location.pathname.replace(/\/$/, "");
-  const api = `${basePath}/api`;
-  const element = (tag, text, className) => { const value = document.createElement(tag); if (text !== undefined) value.textContent = text; if (className) value.className = className; return value; };
-  const clear = (node, ...children) => node.replaceChildren(...children);
-  const format = (value) => value ? new Date(value).toLocaleString() : "—";
-  const status = (value) => element("span", value, `card-status ${value}`);
-  const button = (text, className, listener) => { const value = element("button", text, className); value.type = "button"; value.addEventListener("click", listener); return value; };
-  const target = (kind) => `${api}/services/${encodeURIComponent(state.selected)}/contexts/${encodeURIComponent(byId(`${kind}-context-select`).value)}/${kind}`;
+// Entry point: wires the views to the state and the state to the server.
+//
+// Every listener is attached here or in the module that owns the element. There are no inline
+// handlers anywhere in the markup, which is what lets the Content-Security-Policy stay at
+// script-src 'self' with no unsafe-inline escape hatch.
 
-  async function request(url, options) {
-    const response = await fetch(url, options);
-    if (!response.ok) throw new Error(`Request failed (${response.status})`);
-    return response.status === 204 ? null : response.json();
-  }
+import * as api from "./api.js";
+import { renderAudit } from "./audit.js";
+import { applyMatching, beginMatching, closeConfirm } from "./bulk.js";
+import { byId, replaceChildren, show } from "./dom.js";
+import { closeDetail } from "./detail.js";
+import { describe, mutateSelected, renderMessages, updateSelectionButtons } from "./messages.js";
+import {
+  renderChannels,
+  renderOverview,
+  renderServiceGrid,
+  renderSidebar,
+} from "./navigation.js";
+import * as state from "./state.js";
+import { connect } from "./stream.js";
+import { toast } from "./toast.js";
 
-  async function refreshServices() {
-    try { state.services = await request(`${api}/services`); renderServices(); if (state.selected) await detail(); }
-    catch (error) { console.error("Could not load services", error); }
-  }
+let selectedDetail = null;
+let showingAudit = false;
 
-  function renderServices() {
-    byId("total-services-badge").textContent = String(state.services.length);
-    const list = byId("sidebar-service-list");
-    if (!state.services.length) return clear(list, element("li", "No services discovered yet…"));
-    clear(list, ...state.services.map((service) => {
-      const item = element("li", undefined, `service-nav-item ${state.selected === service.serviceName ? "active" : ""}`);
-      item.append(element("span", service.serviceName), status(service.status));
-      item.addEventListener("click", () => selectService(service.serviceName));
-      return item;
-    }));
-    const grid = byId("services-grid");
-    clear(grid, ...state.services.map((service) => {
-      const card = element("div", undefined, "service-card");
-      const header = element("div", undefined, "card-header"); header.append(element("span", service.serviceName, "card-title"), status(service.status)); card.append(header);
-      card.append(element("p", `${service.instanceCount} active replica(s) • Contexts: ${(service.dbContextNames || []).join(", ") || "None"}`));
-      const metrics = element("div", undefined, "card-metrics");
-      [["Poisoned Outbox", service.totalPoisonedOutbox], ["Pending Outbox", service.totalPendingOutbox], ["Poisoned Inbox", service.totalPoisonedInbox], ["Pending Inbox", service.totalPendingInbox]].forEach(([name, value]) => {
-        const box = element("div", undefined, "metric-box"); box.append(element("span", name, "metric-label"), element("span", String(value), `metric-val ${value > 0 && name.startsWith("Poisoned") ? "poisoned" : ""}`)); metrics.append(box);
-      });
-      card.append(metrics); card.addEventListener("click", () => selectService(service.serviceName)); return card;
-    }));
-  }
+async function main() {
+  await api.loadAntiforgeryToken();
+  wireChrome();
+  wireTabs();
+  wireFilters();
+  wireActions();
 
-  async function selectService(name) {
-    state.selected = name; byId("service-header").style.display = "block"; byId("view-all-services").style.display = "none";
-    const service = state.services.find((item) => item.serviceName === name); byId("selected-service-title").textContent = name; byId("selected-service-meta").textContent = service ? `${service.instanceCount} replicas` : "";
-    clear(byId("selected-service-status"), status(service?.status || "online")); renderServices(); await showTab(state.tab);
-  }
+  state.subscribe(render);
+  connect();
 
-  async function detail() {
-    if (!state.selected) return; const value = await request(`${api}/services/${encodeURIComponent(state.selected)}`); renderDetail(value); return value;
+  // The stream delivers a snapshot on connect, but a fetch makes the first paint immediate even
+  // if the stream is slow to establish through a proxy.
+  try {
+    state.setServices(await api.listServices());
+  } catch (error) {
+    toast(describe(error), "danger");
   }
-  function cells(row, values) { values.forEach((value) => row.append(element("td", String(value)))); return row; }
-  function renderDetail(value) {
-    clear(byId("replicas-tbody"), ...value.instances.map((item) => cells(element("tr"), [item.instanceId, item.machineName, item.environment || "Production", format(item.startedAt), format(item.lastHeartbeat), item.isActive ? "active" : "stale"])));
-    clear(byId("contexts-tbody"), ...value.dbContexts.map((item) => cells(element("tr"), [item.dbContextName, item.hasOutbox ? "✓" : "—", item.hasInbox ? "✓" : "—", item.pendingOutboxCount, item.poisonedOutboxCount, item.pendingInboxCount, item.poisonedInboxCount])));
-    clear(byId("channels-tbody"), ...value.channels.map((item) => cells(element("tr"), [item.logicalName, item.intent, (item.transportBindings || []).map((binding) => binding.providerKind).join(", "), (item.transportBindings || []).map((binding) => binding.displayName).join(", "), "", (item.messageTypes || []).join(", ")])));
-    ["outbox", "inbox"].forEach((kind) => { const select = byId(`${kind}-context-select`); const current = select.value; clear(select, ...value.dbContexts.map((context) => element("option", context.dbContextName))); select.value = current || value.dbContexts[0]?.dbContextName || ""; });
-  }
+}
 
-  async function messages(kind) {
-    if (!state.selected || !byId(`${kind}-context-select`).value) return;
-    const cursor = state[kind].cursors.at(-1); const cursorQuery = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
-    const result = await request(`${target(kind)}?status=${encodeURIComponent(state[kind].status)}&limit=20${cursorQuery}`); renderMessages(kind, result);
-  }
-  function renderMessages(kind, result) {
-    const body = byId(`${kind}-tbody`); const info = byId(`${kind}-page-info`); const page = state[kind].cursors.length;
-    info.textContent = result.items.length ? `Page ${page} · ${result.items.length} item(s)` : "No messages found.";
-    byId(`${kind}-prev-page`).disabled = page === 1; byId(`${kind}-next-page`).disabled = !result.nextCursor;
-    state[kind].nextCursor = result.nextCursor;
-    if (!result.items.length) return clear(body, cells(element("tr"), ["No messages found."]));
-    clear(body, ...result.items.map((item) => {
-      const row = element("tr"); const id = kind === "outbox" ? item.id : item.messageId; const error = kind === "outbox" ? item.error : item.lastError;
-      cells(row, [id, kind === "inbox" ? item.handlerKey : item.transportName, kind === "inbox" ? item.transportName : format(item.createdAt), kind === "inbox" ? format(item.createdAt) : item.errorCount, kind === "inbox" ? item.errorCount : (item.isPoisoned ? "Poisoned" : item.processedAt ? "Processed" : "Pending"), kind === "inbox" ? (item.isPoisoned ? "Poisoned" : item.completedAt ? "Completed" : "Pending") : (error || "—")]);
-      if (kind === "inbox") row.append(element("td", error || "—"));
-      const actions = element("td"); actions.append(button("Inspect", "btn btn-secondary btn-sm", () => inspect(kind, item.id)));
-      if (item.isPoisoned) actions.append(button("↺", "btn btn-primary btn-sm", () => mutate(kind, item.id, "requeue")));
-      actions.append(button("🗑", "btn btn-danger btn-sm", () => mutate(kind, item.id, "delete"))); row.append(actions); return row;
-    }));
+function wireChrome() {
+  byId("nav-all").addEventListener("click", () => {
+    showingAudit = false;
+    state.select(null, null);
+  });
+
+  byId("btn-audit").addEventListener("click", async () => {
+    showingAudit = true;
+    render(state.current());
+    await renderAudit();
+  });
+
+  byId("btn-refresh").addEventListener("click", () => refresh());
+}
+
+function wireTabs() {
+  for (const button of document.querySelectorAll(".tab-button")) {
+    button.addEventListener("click", () => {
+      showingAudit = false;
+      state.setTab(button.dataset.tab);
+    });
   }
 
-  async function mutate(kind, id, action) {
-    const deleting = action === "delete"; if (deleting && !confirm("This permanently deletes the selected message. Continue?")) return;
-    try { await request(`${target(kind)}/${id}${action === "requeue" ? "/requeue" : ""}`, { method: deleting ? "DELETE" : "POST" }); closeModal(); await messages(kind); }
-    catch (error) { console.error("Management mutation failed", error); }
+  byId("btn-close-modal").addEventListener("click", closeDetail);
+  byId("btn-close-confirm").addEventListener("click", closeConfirm);
+  byId("btn-confirm-cancel").addEventListener("click", closeConfirm);
+  byId("btn-confirm-apply").addEventListener("click", applyMatching);
+}
+
+function wireFilters() {
+  byId("context-select").addEventListener("change", (event) =>
+    state.setContext(event.target.value),
+  );
+
+  byId("btn-apply-filter").addEventListener("click", () =>
+    state.setFilter({
+      status: byId("status-select").value,
+      search: byId("search-input").value.trim(),
+      from: byId("from-input").value,
+      to: byId("to-input").value,
+    }),
+  );
+
+  byId("search-input").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      byId("btn-apply-filter").click();
+    }
+  });
+
+  byId("btn-next-page").addEventListener("click", () => {
+    const cursor = byId("btn-next-page").dataset.cursor;
+    if (cursor) {
+      state.pushCursor(cursor);
+    }
+  });
+
+  byId("btn-prev-page").addEventListener("click", () => state.popCursor());
+}
+
+function wireActions() {
+  byId("select-all").addEventListener("change", (event) => {
+    for (const checkbox of document.querySelectorAll("#messages-tbody input[type=checkbox]")) {
+      if (checkbox.checked !== event.target.checked) {
+        checkbox.checked = event.target.checked;
+        checkbox.dispatchEvent(new Event("change"));
+      }
+    }
+  });
+
+  byId("btn-requeue-selected").addEventListener("click", () => mutateSelected("requeue"));
+  byId("btn-delete-selected").addEventListener("click", () => mutateSelected("delete"));
+  byId("btn-requeue-matching").addEventListener("click", () => beginMatching("requeue"));
+  byId("btn-delete-matching").addEventListener("click", () => beginMatching("delete"));
+}
+
+function render(snapshot) {
+  renderSidebar(snapshot.services);
+  updateSelectionButtons();
+
+  const selection = snapshot.selection;
+  show(byId("view-audit"), showingAudit);
+  show(byId("service-header"), !showingAudit && selection !== null);
+  show(byId("view-services"), !showingAudit && selection === null);
+  show(byId("view-overview"), !showingAudit && selection !== null && snapshot.tab === "overview");
+  show(
+    byId("view-messages"),
+    !showingAudit && selection !== null && (snapshot.tab === "outbox" || snapshot.tab === "inbox"),
+  );
+  show(byId("view-channels"), !showingAudit && selection !== null && snapshot.tab === "channels");
+
+  if (showingAudit) {
+    return;
   }
-  async function bulk(kind, action) {
-    const phrase = action === "delete" ? "permanently delete" : "requeue";
-    if (!confirm(`This will ${phrase} all messages matching the current explicit poisoned filter. Continue?`)) return;
-    try { await request(`${target(kind)}/bulk-${action}`, { method: action === "delete" ? "DELETE" : "POST" }); await messages(kind); }
-    catch (error) { console.error("Bulk management mutation failed", error); }
+
+  if (selection === null) {
+    renderServiceGrid(snapshot.services);
+    selectedDetail = null;
+    return;
   }
-  async function inspect(kind, id) {
-    try { const item = await request(`${target(kind)}/${id}`); byId("modal-title").textContent = `${kind === "outbox" ? "Outbox Message" : "Inbox Handler"}: ${kind === "outbox" ? item.id : item.handlerKey}`;
-      const content = byId("modal-body"); const fields = [["Error", kind === "outbox" ? item.error : item.lastError], ["CloudEvents Metadata", JSON.stringify(item.properties, null, 2)], ["Payload", formatJson(item.content)]];
-      clear(content, ...fields.filter(([, value]) => value).map(([label, value]) => { const section = element("div"); section.append(element("strong", label), element("pre", value, "code-viewer")); return section; }));
-      const footer = byId("modal-footer"); clear(footer, ...(item.isPoisoned ? [button("↺ Requeue", "btn btn-primary", () => mutate(kind, item.id, "requeue"))] : []), button("🗑 Delete", "btn btn-danger", () => mutate(kind, item.id, "delete")), button("Close", "btn btn-secondary", closeModal)); byId("detail-modal").style.display = "flex";
-    } catch (error) { console.error("Could not load message detail", error); }
+
+  for (const button of document.querySelectorAll(".tab-button")) {
+    button.classList.toggle("active", button.dataset.tab === snapshot.tab);
   }
-  function formatJson(value) { try { return value ? JSON.stringify(JSON.parse(value), null, 2) : "—"; } catch { return value || "—"; } }
-  function closeModal() { byId("detail-modal").style.display = "none"; }
-  async function showTab(tab) { state.tab = tab; ["overview", "outbox", "inbox", "channels"].forEach((name) => byId(`view-${name}`).style.display = name === tab ? "block" : "none"); document.querySelectorAll(".tab-button").forEach((item) => item.classList.toggle("active", item.dataset.tab === tab)); if (tab === "outbox" || tab === "inbox") await messages(tab); else await detail(); }
-  function setupSse() { const source = new EventSource(`${api}/events`); source.onopen = () => { byId("sse-badge").classList.add("connected"); byId("sse-status-text").textContent = "Live SSE Stream"; }; source.addEventListener("snapshot", (event) => { try { state.services = JSON.parse(event.data); renderServices(); } catch (error) { console.error("Invalid service snapshot", error); } }); source.onerror = () => { byId("sse-badge").classList.remove("connected"); byId("sse-status-text").textContent = "Reconnecting…"; }; }
-  function resetPagination(kind) { state[kind].cursors = [null]; state[kind].nextCursor = null; }
-  function setup() { byId("btn-refresh").addEventListener("click", () => state.selected ? showTab(state.tab) : refreshServices()); byId("btn-close-modal").addEventListener("click", closeModal); document.querySelector('[data-nav="all"]').addEventListener("click", () => { state.selected = null; byId("service-header").style.display = "none"; byId("view-all-services").style.display = "block"; renderServices(); }); document.querySelectorAll(".tab-button").forEach((item) => item.addEventListener("click", () => showTab(item.dataset.tab))); ["outbox", "inbox"].forEach((kind) => { byId(`${kind}-context-select`).addEventListener("change", () => { resetPagination(kind); messages(kind); }); byId(`${kind}-prev-page`).addEventListener("click", () => { state[kind].cursors.pop(); messages(kind); }); byId(`${kind}-next-page`).addEventListener("click", () => { if (state[kind].nextCursor) { state[kind].cursors.push(state[kind].nextCursor); messages(kind); } }); byId(`btn-bulk-requeue-${kind}`).addEventListener("click", () => bulk(kind, "requeue")); byId(`btn-bulk-delete-${kind}`).addEventListener("click", () => bulk(kind, "delete")); document.querySelectorAll(`#${kind}-status-pills [data-status]`).forEach((item) => item.addEventListener("click", () => { state[kind].status = item.dataset.status; resetPagination(kind); messages(kind); })); }); }
-  setup(); setupSse(); refreshServices();
-})();
+
+  void renderSelected(snapshot);
+}
+
+async function renderSelected(snapshot) {
+  const { transport, service } = snapshot.selection;
+
+  byId("service-title").textContent = service;
+  byId("service-meta").textContent = `on control plane “${transport}”`;
+
+  if (
+    selectedDetail === null ||
+    selectedDetail.transportName !== transport ||
+    selectedDetail.serviceName !== service
+  ) {
+    try {
+      selectedDetail = await api.getService(transport, service);
+    } catch (error) {
+      toast(describe(error), "danger");
+      return;
+    }
+  }
+
+  renderStatus(selectedDetail);
+  renderContextOptions(selectedDetail, snapshot);
+
+  if (snapshot.tab === "overview") {
+    renderOverview(selectedDetail);
+  } else if (snapshot.tab === "channels") {
+    renderChannels(selectedDetail);
+  } else {
+    applyCapabilityGating(selectedDetail, snapshot.tab);
+    await renderMessages();
+  }
+}
+
+function renderStatus(detail) {
+  const badge = document.createElement("span");
+  badge.className = `badge ${detail.liveness === "Online" ? "badge-success" : "badge-warning"}`;
+  badge.textContent = detail.liveness === "Online" ? "online" : "stale";
+  replaceChildren(byId("service-status"), [badge]);
+}
+
+function renderContextOptions(detail, snapshot) {
+  const select = byId("context-select");
+  const relevant = detail.dbContexts.filter((context) =>
+    snapshot.tab === "inbox" ? context.hasInbox : context.hasOutbox,
+  );
+
+  const options = relevant.map((context) => {
+    const option = document.createElement("option");
+    option.value = context.name;
+    option.textContent = context.name;
+    return option;
+  });
+
+  replaceChildren(select, options);
+
+  if (relevant.length === 0) {
+    state.current().context = null;
+    return;
+  }
+
+  const chosen = relevant.some((context) => context.name === snapshot.context)
+    ? snapshot.context
+    : relevant[0].name;
+
+  select.value = chosen;
+  state.current().context = chosen;
+}
+
+function applyCapabilityGating(detail, tab) {
+  // A service that does not advertise a capability cannot serve it, so the buttons that would
+  // call it are disabled rather than offered and then failing.
+  const capabilities = new Set((detail.capabilities ?? []).map((capability) => capability.name));
+  const supported = capabilities.has(tab);
+  const bulk = capabilities.has("bulk");
+
+  for (const id of ["btn-requeue-selected", "btn-delete-selected"]) {
+    byId(id).disabled = byId(id).disabled || !supported;
+  }
+
+  byId("btn-requeue-matching").disabled = !supported || !bulk;
+  byId("btn-delete-matching").disabled = !supported || !bulk;
+}
+
+function refresh() {
+  selectedDetail = null;
+  if (showingAudit) {
+    void renderAudit();
+  } else {
+    render(state.current());
+  }
+}
+
+void main();

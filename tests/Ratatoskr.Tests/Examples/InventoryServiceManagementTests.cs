@@ -1,253 +1,288 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
-using System.Net.Http.Json;
 using AwesomeAssertions;
 using InventoryService;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Npgsql;
-using Ratatoskr;
+using Ratatoskr.Management;
 using Ratatoskr.Management.Contracts;
 using Ratatoskr.Management.RabbitMq;
-using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Tests.Fixtures;
 using Ratatoskr.UI;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.Examples;
 
+/// <summary>
+/// The real distributed shape: a dashboard in one process reaching the InventoryService example in
+/// another, over a broker, with nothing shared but the connection string.
+/// </summary>
 [ClassDataSource<RabbitMqContainerFixture, PostgresContainerFixture>(
     Shared = [SharedType.PerTestSession, SharedType.PerTestSession]
 )]
-[SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created", Justification = "Test lifecycle managed in DisposeAsync.")]
-[SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning", Justification = "One-time test assignment.")]
-[SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP004:Don't ignore created IDisposable", Justification = "Test response lifecycle.")]
-public sealed class InventoryServiceManagementTests : IAsyncDisposable
+[SuppressMessage(
+    "IDisposableAnalyzers.Correctness",
+    "IDISP001:Dispose created",
+    Justification = "Test lifecycle is managed in DisposeAsync."
+)]
+[SuppressMessage(
+    "IDisposableAnalyzers.Correctness",
+    "IDISP003:Dispose previous before re-assigning",
+    Justification = "One-time test assignment."
+)]
+[SuppressMessage(
+    "IDisposableAnalyzers.Correctness",
+    "IDISP004:Don't ignore created IDisposable",
+    Justification = "The HttpClient is owned by the WebApplicationFactory, which is disposed in DisposeAsync."
+)]
+public sealed class InventoryServiceManagementTests(
+    RabbitMqContainerFixture rabbit,
+    PostgresContainerFixture postgres
+) : IAsyncDisposable
 {
-    private readonly RabbitMqContainerFixture _rabbit;
-    private readonly PostgresContainerFixture _postgres;
+    private const string TransportName = "broker";
+
     private readonly string _testId = Guid.NewGuid().ToString("N");
 
     private WebApplicationFactory<InventoryServiceAppMarker>? _serviceFactory;
-    private ServiceProvider? _uiProvider;
-    private List<IHostedService> _uiHostedServices = [];
+    private ServiceProvider? _dashboard;
+    private List<IHostedService> _dashboardServices = [];
 
-    public InventoryServiceManagementTests(
-        RabbitMqContainerFixture rabbit,
-        PostgresContainerFixture postgres
-    )
+    [Test]
+    public async Task Dashboard_DiscoversTheServiceAndItsAsymmetricContexts()
     {
-        _rabbit = rabbit;
-        _postgres = postgres;
+        var context = await StartAsync();
+
+        var detail = await context.Client.WaitForServiceAsync(TransportName, context.ServiceName);
+
+        detail.ServiceName.Should().Be(context.ServiceName);
+        detail.Liveness.Should().Be(ServiceLivenessOnline);
+        detail.Instances.Should().NotBeEmpty();
+
+        var inventory = detail.DbContexts.Single(d => d.Name == "InventoryDbContext");
+        inventory.HasOutbox.Should().BeTrue();
+        inventory.HasInbox.Should().BeTrue();
+
+        // The audit context has an outbox but no inbox, which is exactly the asymmetry a
+        // capability-blind dashboard would render wrongly.
+        var audit = detail.DbContexts.Single(d => d.Name == "AuditDbContext");
+        audit.HasOutbox.Should().BeTrue();
+        audit.HasInbox.Should().BeFalse();
+
+        detail.Channels.Should().Contain(c => c.LogicalName == $"{context.QueuePrefix}.commands");
+        detail.Channels.Should().Contain(c => c.LogicalName == $"{context.QueuePrefix}.audit");
+
+        detail.Capabilities.Select(c => c.Name)
+            .Should()
+            .Contain([ManagementCapabilityNames.Outbox, ManagementCapabilityNames.Inbox]);
     }
 
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Disposed in DisposeAsync")]
-    private async Task<(HttpClient Client, IManagementClient UiClient, IServiceCatalog Catalog, string ServiceName, string QueuePrefix)> StartAsync()
+    [Test]
+    public async Task Dashboard_InspectsAndRequeuesAPoisonedHandlerOverTheBroker()
     {
-        var invDb = $"inv_{_testId}";
-        var audDb = $"aud_{_testId}";
-        var maint = MaintenanceConnectionString(_postgres.ConnectionString);
-        await CreateDatabaseAsync(maint, invDb);
-        await CreateDatabaseAsync(maint, audDb);
+        var context = await StartAsync();
+        await context.Client.WaitForServiceAsync(TransportName, context.ServiceName);
 
-        var invCs = new NpgsqlConnectionStringBuilder(_postgres.ConnectionString) { Database = invDb, }.ToString();
-        var audCs = new NpgsqlConnectionStringBuilder(_postgres.ConnectionString) { Database = audDb, }.ToString();
+        using var triggered = await context.Http.PostAsync(
+            "/inventory/reservations/simulate-failure",
+            content: null
+        );
+        triggered.StatusCode.Should().Be(HttpStatusCode.Accepted);
 
-        var serviceName = $"inv-{_testId}";
-        var uiPrefix = $"ui-{_testId}";
-        var queuePrefix = $"q_{_testId}";
+        var poisoned = await WaitForPoisonedHandlerAsync(context);
+        poisoned.HandlerKey.Should().Be("inventory.reserve-stock");
+        poisoned.LastError.Should().Contain("Simulated stock reservation failure");
 
-        // 1. Build and start UI client on the same broker
-        var uiServices = new ServiceCollection();
-        uiServices.AddLogging();
-        uiServices.AddRatatoskr(bus =>
+        var detail = await context.Client.ExecuteAsync<InboxDetail>(
+            TransportName,
+            context.ServiceName,
+            ManagementOperationNames.InboxGet,
+            new GetMessageRequest(poisoned.HandlerStatusId),
+            resource: "InventoryDbContext"
+        );
+        detail.HandlerStatusId.Should().Be(poisoned.HandlerStatusId);
+        detail.JsonPayload.Should().NotBeNull();
+
+        var requeued = await context.Client.ExecuteAsync<MutationResponse>(
+            TransportName,
+            context.ServiceName,
+            ManagementOperationNames.InboxRequeue,
+            new MutateByIdsRequest { Ids = [poisoned.HandlerStatusId] },
+            resource: "InventoryDbContext"
+        );
+        requeued.Succeeded.Should().BeEquivalentTo([poisoned.HandlerStatusId]);
+
+        var after = await context.Client.ExecuteAsync<MessageCountResponse>(
+            TransportName,
+            context.ServiceName,
+            ManagementOperationNames.InboxCount,
+            new CountMessagesRequest(),
+            resource: "InventoryDbContext"
+        );
+        after.Count.Should().Be(0);
+    }
+
+    [Test]
+    public async Task Dashboard_TargetingAnUnknownReplica_FailsFastRatherThanTimingOut()
+    {
+        var context = await StartAsync();
+        await context.Client.WaitForServiceAsync(TransportName, context.ServiceName);
+
+        var started = DateTime.UtcNow;
+        var response = await context.Client.SendAsync(
+            TransportName,
+            context.ServiceName,
+            ManagementOperationNames.ContextsList,
+            new ListContextsRequest(),
+            instanceId: "a-replica-that-never-existed",
+            timeout: TimeSpan.FromSeconds(30)
+        );
+
+        response.IsSuccess.Should().BeFalse();
+        response.Error!.Code.Should().Be(ManagementErrorCodes.TargetUnreachable);
+        (DateTime.UtcNow - started)
+            .Should()
+            .BeLessThan(
+                TimeSpan.FromSeconds(15),
+                "an unreachable instance must fail fast, not wait out the deadline"
+            );
+    }
+
+    private static Ratatoskr.Management.Registry.ServiceLiveness ServiceLivenessOnline =>
+        Ratatoskr.Management.Registry.ServiceLiveness.Online;
+
+    private async Task<InboxListItem> WaitForPoisonedHandlerAsync(TestContext context)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+        while (DateTime.UtcNow < deadline)
         {
-            bus.UseRabbitMq(o => o.ConnectionString = new Uri(_rabbit.ConnectionString));
-        });
-        uiServices.AddRatatoskrUI();
-        uiServices.AddRabbitMqManagement(o => o.ResourcePrefix = uiPrefix);
+            var page = await context.Client.ExecuteAsync<CursorPage<InboxListItem>>(
+                TransportName,
+                context.ServiceName,
+                ManagementOperationNames.InboxList,
+                new ListMessagesRequest { Limit = 10 },
+                resource: "InventoryDbContext"
+            );
 
-        _uiProvider = uiServices.BuildServiceProvider();
-        _uiHostedServices = _uiProvider.GetServices<IHostedService>().ToList();
-        foreach (var svc in _uiHostedServices)
-        {
-            await svc.StartAsync(CancellationToken.None);
+            if (page.Items.Count > 0)
+            {
+                return page.Items[0];
+            }
+
+            await Task.Delay(500);
         }
 
-        // 2. Start InventoryService WebApplicationFactory
+        throw new TimeoutException("No poisoned inbox handler appeared within the timeout.");
+    }
+
+    private sealed record TestContext(
+        HttpClient Http,
+        ManagementTestClient Client,
+        string ServiceName,
+        string QueuePrefix
+    );
+
+    [SuppressMessage(
+        "Reliability",
+        "CA2000:Dispose objects before losing scope",
+        Justification = "Disposed in DisposeAsync."
+    )]
+    private async Task<TestContext> StartAsync()
+    {
+        var inventoryDb = $"inv_{_testId}";
+        var auditDb = $"aud_{_testId}";
+        var dashboardDb = $"dash_{_testId}";
+        var maintenance = MaintenanceConnectionString(postgres.ConnectionString);
+        await CreateDatabaseAsync(maintenance, inventoryDb);
+        await CreateDatabaseAsync(maintenance, auditDb);
+        await CreateDatabaseAsync(maintenance, dashboardDb);
+
+        var serviceName = $"inv-{_testId}";
+        var servicePrefix = $"svc{_testId[..8]}";
+        var dashboardPrefix = $"dash{_testId[..8]}";
+        var queuePrefix = $"q_{_testId}";
+
+        var dashboardServices = new ServiceCollection();
+        dashboardServices.AddLogging();
+        dashboardServices.AddSingleton(TimeProvider.System);
+        dashboardServices.AddRatatoskrDashboard(dashboard =>
+        {
+            dashboard.UseStore(
+                db => db.UseNpgsql(ConnectionStringFor(dashboardDb)),
+                store => store.AutoMigrate = true
+            );
+            dashboard.Configure(options => options.StaleAfter = TimeSpan.FromSeconds(45));
+            dashboard.AddRabbitMq(
+                TransportName,
+                options =>
+                {
+                    options.ConnectionString = new Uri(rabbit.ConnectionString);
+                    options.ResourcePrefix = dashboardPrefix;
+                    options.ReplicaId = "r1";
+                    options.HeartbeatInterval = TimeSpan.FromSeconds(2);
+                }
+            );
+        });
+
+        _dashboard = dashboardServices.BuildServiceProvider(
+            new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }
+        );
+        _dashboardServices = _dashboard.GetServices<IHostedService>().ToList();
+        foreach (var hosted in _dashboardServices)
+        {
+            await hosted.StartAsync(CancellationToken.None);
+        }
+
         var factory = new WebApplicationFactory<InventoryServiceAppMarker>().WithWebHostBuilder(
             builder =>
             {
-                builder.UseSetting("ConnectionStrings:rabbitmq", _rabbit.ConnectionString);
-                builder.UseSetting("ConnectionStrings:inventorydb", invCs);
-                builder.UseSetting("ConnectionStrings:auditdb", audCs);
+                builder.UseSetting("ConnectionStrings:rabbitmq", rabbit.ConnectionString);
+                builder.UseSetting("ConnectionStrings:inventorydb", ConnectionStringFor(inventoryDb));
+                builder.UseSetting("ConnectionStrings:auditdb", ConnectionStringFor(auditDb));
                 builder.UseSetting("Ratatoskr:Management:ServiceName", serviceName);
-                builder.UseSetting("Ratatoskr:Management:ResourcePrefix", uiPrefix);
+                builder.UseSetting("Ratatoskr:Management:ResourcePrefix", servicePrefix);
+                builder.UseSetting(
+                    "Ratatoskr:Management:DiscoveryExchange",
+                    $"{dashboardPrefix}.mgmt.discovery.inbox"
+                );
                 builder.UseSetting("Inventory:QueuePrefix", queuePrefix);
                 builder.UseSetting("ASPNETCORE_ENVIRONMENT", "Development");
             }
         );
 
         _serviceFactory = factory;
-        _ = factory.Server; // ensure server startup
+        _ = factory.Server;
 
-        var uiClient = _uiProvider.GetRequiredService<IManagementClient>();
-        return (factory.CreateClient(), uiClient, _uiProvider.GetRequiredService<IServiceCatalog>(), serviceName, queuePrefix);
+        return new TestContext(
+            factory.CreateClient(),
+            new ManagementTestClient(_dashboard),
+            serviceName,
+            queuePrefix
+        );
     }
 
-    private static string MaintenanceConnectionString(string fixtureCs)
-    {
-        var b = new NpgsqlConnectionStringBuilder(fixtureCs) { Database = "postgres", };
-        return b.ToString();
-    }
+    private string ConnectionStringFor(string database) =>
+        new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { Database = database }.ToString();
 
-    private static async Task CreateDatabaseAsync(string maintenanceConnectionString, string databaseName)
+    private static string MaintenanceConnectionString(string fixtureConnectionString) =>
+        new NpgsqlConnectionStringBuilder(fixtureConnectionString) { Database = "postgres" }.ToString();
+
+    private static async Task CreateDatabaseAsync(string maintenance, string databaseName)
     {
-        await using var connection = new NpgsqlConnection(maintenanceConnectionString);
+        await using var connection = new NpgsqlConnection(maintenance);
         await connection.OpenAsync();
-        await using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"CREATE DATABASE \"{databaseName}\"";
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"CREATE DATABASE \"{databaseName}\"";
         try
         {
-            await cmd.ExecuteNonQueryAsync();
+            await command.ExecuteNonQueryAsync();
         }
         catch (PostgresException ex) when (ex.SqlState == "42P04")
         {
-            // already exists
+            // Already exists.
         }
-    }
-
-    [Test]
-    public async Task InventoryService_HeartbeatDiscoveredOverBroker_ShowsMultiDbContextWithAsymmetricInbox()
-    {
-        var (_, uiClient, catalog, serviceName, queuePrefix) = await StartAsync();
-
-        ServiceDetailDto? discovered = null;
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
-        while (DateTime.UtcNow < deadline)
-        {
-            discovered = catalog.GetService(serviceName);
-            if (discovered?.Status == "online")
-            {
-                break;
-            }
-
-            await Task.Delay(250);
-        }
-
-        discovered.Should().NotBeNull();
-        discovered!.ServiceName.Should().Be(serviceName);
-        discovered.Status.Should().Be("online");
-        discovered.Instances.Should().NotBeEmpty();
-
-        // Check DbContexts
-        var invDb = discovered.DbContexts.FirstOrDefault(d => d.DbContextName == "InventoryDbContext");
-        invDb.Should().NotBeNull();
-        invDb!.HasOutbox.Should().BeTrue();
-        invDb.HasInbox.Should().BeTrue();
-
-        // AuditDbContext has Outbox only
-        var audDb = discovered.DbContexts.FirstOrDefault(d => d.DbContextName == "AuditDbContext");
-        audDb.Should().NotBeNull();
-        audDb!.HasOutbox.Should().BeTrue();
-        audDb.HasInbox.Should().BeFalse();
-
-        // Check Channels
-        discovered.Channels.Should().NotBeEmpty();
-        discovered.Channels.Should().Contain(c => c.LogicalName == $"{queuePrefix}.commands");
-        discovered.Channels.Should().Contain(c => c.LogicalName == $"{queuePrefix}.audit");
-    }
-
-    [Test]
-    public async Task InventoryService_SimulateFailure_PoisonedInboxRowCanBeInspectedAndRequeuedOverBroker()
-    {
-        var (client, uiClient, catalog, serviceName, _) = await StartAsync();
-
-        // Ensure service has announced itself
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
-        while (DateTime.UtcNow < deadline)
-        {
-            if (catalog.GetService(serviceName)?.Status == "online")
-            {
-                break;
-            }
-
-            await Task.Delay(250);
-        }
-
-        // Trigger failing reservation
-        using var postResp = await client.PostAsync("/inventory/reservations/simulate-failure", content: null);
-        postResp.StatusCode.Should().Be(HttpStatusCode.Accepted);
-
-        // Wait for inbox message to exhaust retries and become poisoned
-        CursorPagedResult<InboxItemDto>? inboxResult = null;
-        var poisonDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(20);
-        while (DateTime.UtcNow < poisonDeadline)
-        {
-            try
-            {
-                inboxResult = await uiClient.ExecuteAsync<GetInboxMessagesRequest, CursorPagedResult<InboxItemDto>>(
-                    serviceName,
-                    "InventoryDbContext",
-                    "GetInbox",
-                    new GetInboxMessagesRequest(Status: "Poisoned", Limit: 10)
-                );
-
-                if (inboxResult is { Items.Count: > 0 })
-                {
-                    break;
-                }
-            }
-            catch
-            {
-                // broker queue may not have consumed yet
-            }
-
-            await Task.Delay(500);
-        }
-
-        inboxResult.Should().NotBeNull();
-        inboxResult!.Items.Should().NotBeEmpty();
-
-        var poisonedItem = inboxResult.Items[0];
-        poisonedItem.IsPoisoned.Should().BeTrue();
-        poisonedItem.HandlerKey.Should().Be("inventory.reserve-stock");
-        poisonedItem.LastError.Should().Contain("Simulated stock reservation failure");
-
-        // Inspect detail over broker RPC
-        var detailResult = await uiClient.ExecuteAsync<GetInboxDetailRequest, InboxDetailDto>(
-            serviceName,
-            "InventoryDbContext",
-            "GetInboxDetail",
-            new GetInboxDetailRequest(poisonedItem.Id)
-        );
-
-        detailResult.Should().NotBeNull();
-        detailResult!.Id.Should().Be(poisonedItem.Id);
-        detailResult.Content.Should().NotBeNull();
-
-        // Requeue handler over broker RPC
-        var requeueResult = await uiClient.ExecuteAsync<RequeueInboxHandlerRequest, RequeueResultDto>(
-            serviceName,
-            "InventoryDbContext",
-            "RequeueInboxHandler",
-            new RequeueInboxHandlerRequest(poisonedItem.Id)
-        );
-
-        requeueResult.Should().NotBeNull();
-        requeueResult!.RequeuedCount.Should().Be(1);
-
-        // Verify it is no longer poisoned
-        var inboxAfter = await uiClient.ExecuteAsync<GetInboxMessagesRequest, CursorPagedResult<InboxItemDto>>(
-            serviceName,
-            "InventoryDbContext",
-            "GetInbox",
-            new GetInboxMessagesRequest(Status: "Poisoned", Limit: 10)
-        );
-
-        inboxAfter.Should().NotBeNull();
-        inboxAfter!.Items.Should().BeEmpty();
     }
 
     public async ValueTask DisposeAsync()
@@ -258,15 +293,15 @@ public sealed class InventoryServiceManagementTests : IAsyncDisposable
             _serviceFactory = null;
         }
 
-        foreach (var svc in _uiHostedServices)
+        foreach (var hosted in _dashboardServices)
         {
-            await svc.StopAsync(CancellationToken.None);
+            await hosted.StopAsync(CancellationToken.None);
         }
 
-        if (_uiProvider is not null)
+        if (_dashboard is not null)
         {
-            await _uiProvider.DisposeAsync();
-            _uiProvider = null;
+            await _dashboard.DisposeAsync();
+            _dashboard = null;
         }
     }
 }

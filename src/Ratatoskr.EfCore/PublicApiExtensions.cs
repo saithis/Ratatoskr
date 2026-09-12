@@ -4,8 +4,6 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore.Internal;
-using Ratatoskr.EfCore.Management;
-using Ratatoskr.Management;
 
 namespace Ratatoskr.EfCore;
 
@@ -66,18 +64,13 @@ public static class PublicApiExtensions
             ));
             builder.Services.AddHostedService<EfCoreMetricsBackgroundService<TDbContext>>();
 
-            // Management API
+            // Published so packages layered on top (management, diagnostics) can enumerate what
+            // durability is configured without knowing the context types at compile time.
             builder.Services.AddSingleton<
-                IEfCoreManagementDbContextDescriptor,
-                EfCoreManagementDbContextDescriptor<TDbContext>
+                IEfCoreDurabilityDescriptor,
+                EfCoreDurabilityDescriptor<TDbContext>
             >();
-            builder.Services.TryAddScoped<EfCoreManagementDbContextLookup>();
-            builder.Services.TryAddEnumerable(
-                ServiceDescriptor.Singleton<
-                    IRatatoskrEndpointConfigurator,
-                    EfCoreEndpointConfigurator
-                >()
-            );
+            builder.Services.TryAddSingleton<EfCoreDurabilityRegistry>();
 
             return builder;
         }

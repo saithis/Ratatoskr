@@ -1,150 +1,183 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using AwesomeAssertions;
-using Microsoft.Extensions.DependencyInjection;
-using Ratatoskr.Management;
 using Ratatoskr.Management.Contracts;
+using Ratatoskr.Management.Registry;
 using Ratatoskr.Tests.Fixtures;
-using Ratatoskr.UI;
-using TUnit.Core;
+using Ratatoskr.UI.Store;
 
 namespace Ratatoskr.Tests.Integration.Management;
 
+/// <summary>
+/// The dashboard hosted in the same process as the service it manages, reached through the
+/// in-process transport.
+/// </summary>
 public class RatatoskrUiEndpointTests(
     RabbitMqContainerFixture rabbitMq,
     PostgresContainerFixture postgres
-) : ManagementTestBase(rabbitMq, postgres)
+) : DashboardTestBase(rabbitMq, postgres)
 {
-    private const string UiBasePath = "/ratatoskr";
+    // The dashboard answers in the control plane's own JSON dialect — enums as names — so
+    // tests read it back the same way rather than with web defaults that would reject them.
+    private static readonly JsonSerializerOptions WebJson = ManagementJson.Options;
 
     [Test]
-    public async Task StaticAssets_IndexHtmlAndCssAndJs_ServedSuccessfully()
+    public async Task StaticAssets_AreServedFromTheEmbeddedResources()
     {
-        await StartManagementTestAsync(services =>
-        {
-            services.AddRatatoskrManagement(o =>
-            {
-                o.ServiceName = "web-svc";
-                o.EnableHeartbeat = false;
-            });
-            services.AddRatatoskrUI();
-        });
+        await StartDashboardAsync();
 
-        // 1. Root HTML
-        using var indexResp = await HttpClient.GetAsync($"{UiBasePath}/");
-        indexResp.StatusCode.Should().Be(HttpStatusCode.OK);
-        indexResp.Content.Headers.ContentType?.MediaType.Should().Be("text/html");
-        var html = await indexResp.Content.ReadAsStringAsync();
-        html.Should().Contain("Ratatoskr Management");
-        html.Should().Contain("<div class=\"layout\">");
+        using var index = await HttpClient.GetAsync("/ratatoskr/");
+        index.StatusCode.Should().Be(HttpStatusCode.OK);
+        index.Content.Headers.ContentType!.MediaType.Should().Be("text/html");
 
-        // 2. CSS
-        using var cssResp = await HttpClient.GetAsync($"{UiBasePath}/css/dashboard.css");
-        cssResp.StatusCode.Should().Be(HttpStatusCode.OK);
-        cssResp.Content.Headers.ContentType?.MediaType.Should().Be("text/css");
+        // The CSP and nosniff headers are what keep a hostile payload rendered in the dashboard
+        // from becoming script execution.
+        index.Headers.GetValues("Content-Security-Policy").Should().NotBeEmpty();
+        index.Headers.GetValues("X-Content-Type-Options").Should().Contain("nosniff");
 
-        // 3. JS
-        using var jsResp = await HttpClient.GetAsync($"{UiBasePath}/js/app.js");
-        jsResp.StatusCode.Should().Be(HttpStatusCode.OK);
-        jsResp.Content.Headers.ContentType?.MediaType.Should().Contain("javascript");
+        using var css = await HttpClient.GetAsync("/ratatoskr/css/dashboard.css");
+        css.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var missing = await HttpClient.GetAsync("/ratatoskr/js/not-a-real-file.js");
+        missing.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Test]
-    public async Task Api_ServicesAndOutboxEndpoints_ReturnExpectedData()
+    public async Task Api_ListsTheTransportsAndTheServicesOnThem()
     {
-        await StartManagementTestAsync(services =>
-        {
-            services.AddRatatoskrManagement(o =>
-            {
-                o.ServiceName = "portal-service";
-                o.EnableHeartbeat = false;
-            });
-            services.AddRatatoskrUI();
-        });
+        await StartDashboardAsync();
+        await WaitForDiscoveryAsync();
 
-        var outboxId = await SeedPoisonedOutboxAsync("portal.user-registered");
+        using var transports = await HttpClient.GetAsync("/ratatoskr/api/transports");
+        (await transports.Content.ReadFromJsonAsync<string[]>(WebJson))
+            .Should()
+            .BeEquivalentTo([Transport]);
 
-        // 1. GET /ratatoskr/api/services
-        using var servicesResp = await HttpClient.GetAsync($"{UiBasePath}/api/services");
-        servicesResp.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var servicesJson = await servicesResp.Content.ReadFromJsonAsync<JsonElement>();
-        servicesJson.ValueKind.Should().Be(JsonValueKind.Array);
-        servicesJson.GetArrayLength().Should().BeGreaterThanOrEqualTo(1);
-
-        // 2. GET /ratatoskr/api/services/portal-service
-        using var detailResp = await HttpClient.GetAsync($"{UiBasePath}/api/services/portal-service");
-        detailResp.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var detailJson = await detailResp.Content.ReadFromJsonAsync<JsonElement>();
-        detailJson.GetProperty("serviceName").GetString().Should().Be("portal-service");
-        detailJson.GetProperty("dbContexts").GetArrayLength().Should().BeGreaterThanOrEqualTo(1);
-
-        // 3. GET /ratatoskr/api/services/portal-service/contexts/TestDbContext/outbox
-        using var outboxResp = await HttpClient.GetAsync(
-            $"{UiBasePath}/api/services/portal-service/contexts/TestDbContext/outbox?status=Poisoned"
-        );
-        outboxResp.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var outboxJson = await outboxResp.Content.ReadFromJsonAsync<JsonElement>();
-        var items = outboxJson.GetProperty("items");
-        items.GetArrayLength().Should().Be(1);
-        items[0].GetProperty("id").GetGuid().Should().Be(outboxId);
-        outboxJson.TryGetProperty("nextCursor", out var nextCursor).Should().BeTrue();
-        nextCursor.ValueKind.Should().Be(JsonValueKind.Null);
-
-        // 4. POST /ratatoskr/api/services/portal-service/contexts/TestDbContext/outbox/{id}/requeue
-        using var requeueResp = await HttpClient.PostAsync(
-            $"{UiBasePath}/api/services/portal-service/contexts/TestDbContext/outbox/{outboxId}/requeue",
-            content: null
-        );
-        requeueResp.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var requeueJson = await requeueResp.Content.ReadFromJsonAsync<RequeueResultDto>();
-        requeueJson.Should().NotBeNull();
-        requeueJson!.RequeuedCount.Should().Be(1);
+        using var services = await HttpClient.GetAsync("/ratatoskr/api/services");
+        var cards = await services.Content.ReadFromJsonAsync<ServiceCard[]>(WebJson);
+        cards.Should().ContainSingle();
+        cards![0].TransportName.Should().Be(Transport);
+        cards[0].ServiceName.Should().Be(ServiceName);
+        cards[0].ContextNames.Should().Contain("TestDbContext");
     }
 
     [Test]
-    public async Task ServerSentEvents_Endpoint_ConnectsAndStreamsSnapshot()
+    public async Task Api_DispatchesTheSharedOperationsThroughTheTransport()
     {
-        await StartManagementTestAsync(services =>
-        {
-            services.AddRatatoskrManagement(o =>
-            {
-                o.ServiceName = "sse-service";
-                o.EnableHeartbeat = false;
-            });
-            services.AddRatatoskrUI();
-        });
+        await StartDashboardAsync();
+        await WaitForDiscoveryAsync();
+        var id = await SeedPoisonedOutboxAsync();
 
-        // Ensure registry is populated after DB initialization
-        var handler = Services.GetRequiredService<Ratatoskr.Management.Agent.ManagementRequestHandler>();
-        var publisher = Services.GetRequiredService<IManagementEventPublisher>();
-        var hb = await handler.BuildHeartbeatAsync();
-        await publisher.PublishAsync(hb);
+        var url = $"{DashboardContextUrl}/outbox";
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"{UiBasePath}/api/events");
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
+        using var list = await HttpClient.GetAsync(url);
+        list.StatusCode.Should().Be(HttpStatusCode.OK);
+        var page = await list.Content.ReadFromJsonAsync<CursorPage<OutboxListItem>>(WebJson);
+        page!.Items.Should().ContainSingle(item => item.Id == id);
 
+        using var requeue = await HttpClient.PostAsJsonAsync(
+            $"{url}/requeue",
+            new MutateByIdsRequest { Ids = [id] }
+        );
+        requeue.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Test]
+    public async Task Api_ForAServiceThatWasNeverSeen_FailsFast()
+    {
+        await StartDashboardAsync();
+        await WaitForDiscoveryAsync();
+
+        using var response = await HttpClient.GetAsync(
+            $"/ratatoskr/api/transports/{Transport}/services/never-heard-of-it/contexts/TestDbContext/outbox"
+        );
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadGateway);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("code").GetString().Should().Be(ManagementErrorCodes.TargetUnreachable);
+    }
+
+    [Test]
+    public async Task Api_ForAnUnknownTransport_ReturnsNotFound()
+    {
+        await StartDashboardAsync();
+
+        using var response = await HttpClient.GetAsync(
+            $"/ratatoskr/api/transports/no-such-transport/services/{ServiceName}/contexts/TestDbContext/outbox"
+        );
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Test]
+    public async Task Mutations_LeaveAnAuditRecord()
+    {
+        await StartDashboardAsync();
+        await WaitForDiscoveryAsync();
+        var id = await SeedPoisonedOutboxAsync();
+
+        var url = $"{DashboardContextUrl}/outbox";
+        using var requeue = await HttpClient.PostAsJsonAsync(
+            $"{url}/requeue",
+            new MutateByIdsRequest { Ids = [id] }
+        );
+        requeue.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var audit = await HttpClient.GetAsync("/ratatoskr/api/audit");
+        audit.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var entries = await audit.Content.ReadFromJsonAsync<DashboardAuditEntry[]>(WebJson);
+        var entry = entries.Should().ContainSingle().Subject;
+        entry.Operation.Should().Be(ManagementOperationNames.OutboxRequeue);
+        entry.TransportName.Should().Be(Transport);
+        entry.ServiceName.Should().Be(ServiceName);
+        entry.Resource.Should().Be("TestDbContext");
+        entry.Actor.Should().Be("operator-1");
+        entry.Outcome.Should().Be(nameof(ManagementResultStatus.Ok));
+        entry.RequestJson.Should().Contain(id.ToString());
+        entry.CompletedAt.Should().BeOnOrAfter(entry.StartedAt);
+    }
+
+    [Test]
+    public async Task Reads_AreNotAudited()
+    {
+        // A row per list refresh would bury the mutations nobody could then find.
+        await StartDashboardAsync();
+        await WaitForDiscoveryAsync();
+
+        var url = $"{DashboardContextUrl}/outbox";
+        using var list = await HttpClient.GetAsync(url);
+        list.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var audit = await HttpClient.GetAsync("/ratatoskr/api/audit");
+        (await audit.Content.ReadFromJsonAsync<DashboardAuditEntry[]>(WebJson)).Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task EventStream_SendsAnImmediateSnapshot()
+    {
+        await StartDashboardAsync();
+        await WaitForDiscoveryAsync();
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/ratatoskr/api/events");
         using var response = await HttpClient.SendAsync(
             request,
-            completionOption: HttpCompletionOption.ResponseHeadersRead
+            HttpCompletionOption.ResponseHeadersRead
         );
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        response.Content.Headers.ContentType?.MediaType.Should().Be("text/event-stream");
 
-        // Read initial chunk containing snapshot event
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Content.Headers.ContentType!.MediaType.Should().Be("text/event-stream");
+
         await using var stream = await response.Content.ReadAsStreamAsync();
         using var reader = new StreamReader(stream);
 
-        var buffer = new char[512];
-        var readCount = await reader.ReadAsync(buffer.AsMemory(0, 512));
-        var initialChunk = new string(buffer, 0, readCount);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var eventLine = await reader.ReadLineAsync(timeout.Token);
+        var dataLine = await reader.ReadLineAsync(timeout.Token);
 
-        initialChunk.Should().Contain("event: snapshot");
-        initialChunk.Should().Contain("sse-service");
+        eventLine.Should().Be("event: services");
+        dataLine.Should().StartWith("data: [");
+        dataLine.Should().Contain(ServiceName);
     }
 }

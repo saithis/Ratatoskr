@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>Management agent and RPC control-plane for Ratatoskr CloudEventBus.</Description>
+    <Description>Transport-neutral management control plane for Ratatoskr CloudEventBus.</Description>
     <PackageTags>cloudevents;eventbus;management;ratatoskr</PackageTags>
     <IsPackable>true</IsPackable>
-    <NoWarn>$(NoWarn);1591;CA1848;CA1873;MA0051;MA0007;MA0046;RCS1238;MA0003;CA1502;MA0016;MA0042;RCS1261;RCS1163</NoWarn>
+    <NoWarn>$(NoWarn);1591;CA1848;CA1873</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,11 +16,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Ratatoskr\Ratatoskr.csproj" />
-    <ProjectReference Include="..\Ratatoskr.EfCore\Ratatoskr.EfCore.csproj" />
     <ProjectReference Include="..\Ratatoskr.Management.Abstractions\Ratatoskr.Management.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Ratatoskr.Management.EfCore" />
+    <InternalsVisibleTo Include="Ratatoskr.Management.RabbitMq" />
     <InternalsVisibleTo Include="Ratatoskr.UI" />
     <InternalsVisibleTo Include="Ratatoskr.Tests" />
   </ItemGroup>

@@ -1,61 +1,226 @@
 using System.Text.Json;
 using AwesomeAssertions;
 using Ratatoskr.Management.Contracts;
-using TUnit.Core;
 
 namespace Ratatoskr.Tests.Management;
 
+/// <summary>
+/// Pins the wire format. Everything asserted here crosses a broker between independently
+/// deployed processes, so a change that looks like a harmless rename is a breaking protocol
+/// change and has to be seen as one.
+/// </summary>
 public class ManagementProtocolSerializationTests
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly DateTimeOffset Started = new(2026, 9, 11, 11, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset Now = new(2026, 9, 11, 12, 0, 0, TimeSpan.Zero);
+    private static readonly Guid OperationId = Guid.Parse("11111111-2222-3333-4444-555555555555");
 
     [Test]
     public void RequestEnvelope_HasStableJsonSnapshot()
     {
         var request = new ManagementRequestEnvelope
         {
-            ProtocolVersion = new ProtocolVersion(1, 0), RequestId = "request-001", OperationId = "operation-001",
-            Target = new ManagementTarget("orders", "orders-1", "orders-db"), Operation = "outbox.requeue",
-            Deadline = new DateTimeOffset(2026, 9, 11, 12, 0, 0, TimeSpan.Zero),
+            ProtocolVersion = new ProtocolVersion(1, 0),
+            RequestId = "request-001",
+            OperationId = OperationId,
+            Target = new ManagementTarget("orders", "orders-1", "OrdersDbContext"),
+            Operation = ManagementOperationNames.OutboxRequeue,
+            Deadline = Now,
             Actor = new ManagementActor("operator-42", "Ada", "Bearer", "trace-001"),
-            Payload = new ManagementPayload("ratatoskr.management.outbox.requeue.v1", "{\"id\":\"message-001\"}"),
+            Payload = ManagementJson.ToElement(
+                new MutateByIdsRequest { Ids = [Guid.Parse("6f9619ff-8b86-d011-b42d-00cf4fc964ff")] }
+            ),
+            ReplyTo = "dashboard.mgmt.reply.inbox|r1",
         };
 
-        JsonSerializer.Serialize(request, JsonOptions).Should().Be("""
-            {"protocolVersion":{"major":1,"minor":0},"requestId":"request-001","operationId":"operation-001","target":{"logicalServiceName":"orders","instanceId":"orders-1","resourceId":"orders-db"},"operation":"outbox.requeue","deadline":"2026-09-11T12:00:00+00:00","actor":{"subject":"operator-42","displayName":"Ada","authenticationType":"Bearer","correlationId":"trace-001"},"payload":{"type":"ratatoskr.management.outbox.requeue.v1","json":"{\u0022id\u0022:\u0022message-001\u0022}","contentType":"application/json"}}
-            """);
+        Serialize(request)
+            .Should()
+            .Be(
+                """{"protocolVersion":{"major":1,"minor":0},"requestId":"request-001","operationId":"11111111-2222-3333-4444-555555555555","target":{"serviceName":"orders","instanceId":"orders-1","resource":"OrdersDbContext"},"operation":"outbox.requeue","deadline":"2026-09-11T12:00:00+00:00","actor":{"subject":"operator-42","displayName":"Ada","authenticationType":"Bearer","correlationId":"trace-001"},"payload":{"ids":["6f9619ff-8b86-d011-b42d-00cf4fc964ff"]},"replyTo":"dashboard.mgmt.reply.inbox|r1"}"""
+            );
     }
 
     [Test]
-    public void ServiceAnnouncementAndTopology_HaveStableJsonSnapshot()
+    public void RequestEnvelope_OmitsAbsentOptionalFields()
     {
-        var announcement = new ServiceInstanceAnnouncement
+        var request = new ManagementRequestEnvelope
         {
-            ProtocolVersion = new ProtocolVersion(1, 0), LogicalServiceName = "orders", InstanceId = "orders-1",
-            StartedAt = new DateTimeOffset(2026, 9, 11, 11, 0, 0, TimeSpan.Zero), AnnouncedAt = new DateTimeOffset(2026, 9, 11, 12, 0, 0, TimeSpan.Zero),
-            Capabilities = [new CapabilityDescriptor("inbox", new ProtocolVersion(1, 0))],
+            ProtocolVersion = new ProtocolVersion(1, 0),
+            RequestId = "request-002",
+            OperationId = OperationId,
+            Target = new ManagementTarget("orders"),
+            Operation = ManagementOperationNames.ServiceDescribe,
+            Deadline = Now,
         };
-        var topology = new ChannelTopology("orders.events", ChannelIntent.Publish, ["OrderCreated"],
-            [new TransportBinding("kafka", "orders-events", new SortedDictionary<string, string>(StringComparer.Ordinal) { ["topic"] = "orders-events" })]);
 
-        JsonSerializer.Serialize(new { announcement, topology }, JsonOptions).Should().Be("""
-            {"announcement":{"protocolVersion":{"major":1,"minor":0},"logicalServiceName":"orders","instanceId":"orders-1","startedAt":"2026-09-11T11:00:00+00:00","announcedAt":"2026-09-11T12:00:00+00:00","capabilities":[{"name":"inbox","version":{"major":1,"minor":0}}]},"topology":{"logicalName":"orders.events","intent":0,"messageTypes":["OrderCreated"],"transportBindings":[{"providerKind":"kafka","displayName":"orders-events","properties":{"topic":"orders-events"}}]}}
-            """);
+        Serialize(request)
+            .Should()
+            .Be(
+                """{"protocolVersion":{"major":1,"minor":0},"requestId":"request-002","operationId":"11111111-2222-3333-4444-555555555555","target":{"serviceName":"orders"},"operation":"service.describe","deadline":"2026-09-11T12:00:00+00:00"}"""
+            );
     }
 
     [Test]
-    public void UnsupportedOperation_UsesStableStructuredError()
+    public void ResponseEnvelope_SuccessHasStableJsonSnapshot()
     {
-        var request = CreateRequest();
-        var response = ManagementResponseEnvelope.Failed(request, new ManagementError(ManagementProtocol.UnsupportedOperation, "The operation is not supported."));
+        var response = ManagementResponseEnvelope.Ok(
+            Request(),
+            ManagementJson.ToElement(new MessageCountResponse(17))
+        );
 
-        response.Success.Should().BeFalse();
-        response.Error.Should().Be(new ManagementError(ManagementProtocol.UnsupportedOperation, "The operation is not supported."));
+        Serialize(response)
+            .Should()
+            .Be(
+                """{"protocolVersion":{"major":1,"minor":0},"requestId":"request-001","operationId":"11111111-2222-3333-4444-555555555555","status":"Ok","payload":{"count":17}}"""
+            );
     }
 
-    private static ManagementRequestEnvelope CreateRequest() => new()
+    [Test]
+    public void ResponseEnvelope_FailureCarriesTheStableCode()
     {
-        ProtocolVersion = ManagementProtocol.Current, RequestId = "request-001", OperationId = "operation-001",
-        Target = new ManagementTarget("orders"), Operation = "unknown", Deadline = DateTimeOffset.UtcNow,
-    };
+        var response = ManagementResponseEnvelope.Failed(
+            Request(),
+            ManagementResultStatus.Unsupported,
+            new ManagementError(
+                ManagementErrorCodes.UnsupportedOperation,
+                "The operation is not supported."
+            )
+        );
+
+        Serialize(response)
+            .Should()
+            .Be(
+                """{"protocolVersion":{"major":1,"minor":0},"requestId":"request-001","operationId":"11111111-2222-3333-4444-555555555555","status":"Unsupported","error":{"code":"unsupported_operation","detail":"The operation is not supported.","isRetryable":false}}"""
+            );
+    }
+
+    [Test]
+    public void ServiceAnnouncement_HasStableJsonSnapshot()
+    {
+        var announcement = new ServiceAnnouncement
+        {
+            ProtocolVersion = new ProtocolVersion(1, 0),
+            ServiceName = "orders",
+            InstanceId = "orders-1",
+            MachineName = "pod-7",
+            Environment = "Production",
+            StartedAt = Started,
+            AnnouncedAt = Now,
+            Capabilities =
+            [
+                new CapabilityDescriptor(
+                    ManagementCapabilityNames.Outbox,
+                    new ProtocolVersion(1, 0)
+                ),
+            ],
+            DbContexts =
+            [
+                new DbContextSummary
+                {
+                    Name = "OrdersDbContext",
+                    HasOutbox = true,
+                    HasInbox = false,
+                    PendingOutbox = 3,
+                    PoisonedOutbox = 1,
+                },
+            ],
+            Channels =
+            [
+                new ChannelTopology(
+                    "orders.events",
+                    ChannelIntent.Publish,
+                    ["OrderCreated"],
+                    [
+                        new TransportBinding(
+                            "rabbitmq",
+                            "orders-events",
+                            new SortedDictionary<string, string>(StringComparer.Ordinal)
+                            {
+                                ["exchange"] = "orders.events",
+                            }
+                        ),
+                    ]
+                ),
+            ],
+            Address = ManagementAddress.From(
+                new SortedDictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["exchange"] = "orders.mgmt.cmd.inbox",
+                    ["instanceKey"] = "inst.orders-1",
+                    ["serviceKey"] = "svc.orders",
+                }
+            ),
+        };
+
+        Serialize(announcement)
+            .Should()
+            .Be(
+                """{"protocolVersion":{"major":1,"minor":0},"serviceName":"orders","instanceId":"orders-1","machineName":"pod-7","environment":"Production","startedAt":"2026-09-11T11:00:00+00:00","announcedAt":"2026-09-11T12:00:00+00:00","capabilities":[{"name":"outbox","version":{"major":1,"minor":0}}],"dbContexts":[{"name":"OrdersDbContext","hasOutbox":true,"hasInbox":false,"pendingOutbox":3,"poisonedOutbox":1,"pendingInbox":0,"poisonedInbox":0}],"channels":[{"logicalName":"orders.events","intent":"Publish","messageTypes":["OrderCreated"],"transportBindings":[{"providerKind":"rabbitmq","displayName":"orders-events","properties":{"exchange":"orders.events"}}]}],"address":{"values":{"exchange":"orders.mgmt.cmd.inbox","instanceKey":"inst.orders-1","serviceKey":"svc.orders"}}}"""
+            );
+    }
+
+    [Test]
+    public void ServiceAnnouncement_RoundTripsThroughJson()
+    {
+        var announcement = new ServiceAnnouncement
+        {
+            ProtocolVersion = ManagementProtocol.Current,
+            ServiceName = "orders",
+            InstanceId = "orders-1",
+            MachineName = "pod-7",
+            StartedAt = Started,
+            AnnouncedAt = Now,
+            Address = ManagementAddress.From(
+                new Dictionary<string, string>(StringComparer.Ordinal) { ["exchange"] = "x" }
+            ),
+        };
+
+        var roundTripped = JsonSerializer.Deserialize<ServiceAnnouncement>(
+            Serialize(announcement),
+            ManagementJson.Options
+        );
+
+        roundTripped.Should().BeEquivalentTo(announcement);
+        roundTripped!.Address.Get("exchange").Should().Be("x");
+    }
+
+    [Test]
+    public void MessageFilter_SerialisesStatusAsAName()
+    {
+        // An ordinal would silently change meaning the day someone inserts a status in the
+        // middle of the enum, and a filter that changes meaning deletes the wrong rows.
+        var filter = new MessageFilter
+        {
+            Status = MessageStatusFilter.Pending,
+            From = Started,
+            Search = "order-42",
+        };
+
+        Serialize(filter)
+            .Should()
+            .Be("""{"status":"Pending","from":"2026-09-11T11:00:00+00:00","search":"order-42"}""");
+    }
+
+    [Test]
+    public void ProtocolVersion_AcceptsSameMajorAndLowerMinor()
+    {
+        new ProtocolVersion(1, 0).IsCompatibleWith(new ProtocolVersion(1, 2)).Should().BeTrue();
+        new ProtocolVersion(1, 2).IsCompatibleWith(new ProtocolVersion(1, 2)).Should().BeTrue();
+        new ProtocolVersion(1, 3).IsCompatibleWith(new ProtocolVersion(1, 2)).Should().BeFalse();
+        new ProtocolVersion(2, 0).IsCompatibleWith(new ProtocolVersion(1, 2)).Should().BeFalse();
+    }
+
+    private static string Serialize<T>(T value) =>
+        JsonSerializer.Serialize(value, ManagementJson.Options);
+
+    private static ManagementRequestEnvelope Request() =>
+        new()
+        {
+            ProtocolVersion = ManagementProtocol.Current,
+            RequestId = "request-001",
+            OperationId = OperationId,
+            Target = new ManagementTarget("orders"),
+            Operation = ManagementOperationNames.OutboxCount,
+            Deadline = Now,
+        };
 }

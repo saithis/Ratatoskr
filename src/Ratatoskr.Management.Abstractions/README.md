@@ -1,13 +1,37 @@
 # Ratatoskr.Management.Abstractions
 
-Dependency-free, versioned contracts for Ratatoskr management providers.
+Dependency-free, versioned contracts for the Ratatoskr management control plane. This package
+references nothing — not the Ratatoskr core, not a storage provider, not a broker client — so an
+agent, a dashboard and a transport can be written against it independently.
 
-Commands are delivered **at least once**. Mutating commands must use a stable `OperationId` and an idempotency guard appropriate to the resource. A caller that loses a response may retry with the same operation ID.
+## What is in here
 
-`ManagementTarget.LogicalServiceName` targets one eligible replica. Supplying `InstanceId` targets that replica only. `ResourceId` identifies the provider-neutral resource operated on by the command.
+- **Protocol** — `ManagementRequestEnvelope` / `ManagementResponseEnvelope`, `ProtocolVersion`,
+  `ManagementTarget`, `ManagementActor`, `ManagementResult` and the stable `ManagementErrorCodes`.
+- **Operations** — `IManagementOperation` plus the request and response shapes for every
+  operation named in `ManagementOperationNames`.
+- **Discovery** — `ServiceAnnouncement`, `CapabilityDescriptor`, `ChannelTopology`.
+- **Transport** — `IManagementTransport`, `IManagementDiscoverySource`,
+  `IManagementTransportRegistry`, `ManagementAddress`.
 
-Protocol compatibility is major-version based: a receiver accepts the same major version and a minor version no greater than its supported minor version. Unsupported protocol versions, operations, and capabilities use the stable error codes in `ManagementProtocol`.
+## Guarantees
 
-Providers implement `IManagementClient`, `IServiceCatalog`, command hosting, and discovery
-interfaces without exposing their broker topology. Shared list operations use opaque keyset
-cursors (`CursorPageRequest` / `CursorPagedResult<T>`), so callers do not rely on page offsets.
+**Delivery is at least once.** Every request carries a stable `OperationId` that does not change
+across retries or redeliveries. Mutating operations persist it alongside their changes, so a
+duplicate delivery replays the recorded result instead of mutating twice. A caller that loses a
+response retries with the same `OperationId`.
+
+**Failure is a value, not an exception.** Operations return `ManagementResult`, carrying a stable
+code from `ManagementErrorCodes`. The code survives the trip across a broker and into
+ProblemDetails; the human-readable detail does not, and must never be parsed.
+
+**Targeting.** `ManagementTarget.ServiceName` addresses the logical service, where replicas
+compete so exactly one handles the command. Adding `InstanceId` addresses one replica, and fails
+fast with `target_unreachable` when that replica is gone. `Resource` names the resource inside the
+service — for the EF Core operations, the DbContext short name.
+
+**Versioning.** A receiver serves the same major version and a minor version no greater than its
+own. Anything else is refused with `unsupported_protocol_version`. Minor versions are additive.
+
+**Paging.** Lists are keyset-paginated through opaque cursors and carry no total; a total is a
+second full scan, so callers that need one ask for it through the matching `*.count` operation.

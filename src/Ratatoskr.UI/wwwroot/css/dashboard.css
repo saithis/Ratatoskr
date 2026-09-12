@@ -25,6 +25,16 @@
   padding: 0;
 }
 
+/*
+  Visibility is controlled with the `hidden` attribute rather than inline styles, so that the
+  markup carries no style and the Content-Security-Policy needs no unsafe-inline. The browser's
+  own `[hidden] { display: none }` is a bare-element rule, though, so any class that sets
+  `display` — .modal-backdrop, .layout — would quietly win and show a hidden element anyway.
+*/
+[hidden] {
+  display: none !important;
+}
+
 body {
   font-family: var(--font-family);
   background-color: var(--bg-primary);
@@ -427,4 +437,243 @@ select.form-select {
   border-top: 1px solid var(--border-color);
   font-size: 0.8rem;
   color: var(--text-secondary);
+}
+
+/* ── Rebuilt views ────────────────────────────────────────────────────────── */
+
+h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+h4 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--text-secondary);
+}
+
+.muted {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.hint {
+  margin: 0.5rem 0 1rem;
+  max-width: 70ch;
+}
+
+.warning-text {
+  color: var(--warning);
+  font-size: 0.85rem;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+.section-spaced {
+  margin-top: 2rem;
+}
+
+.service-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#service-header {
+  margin-bottom: 1rem;
+}
+
+/* Services are grouped by the control plane they were seen on, because that is half of
+   their identity: the same name can appear under two transports during a migration. */
+.transport-group {
+  margin-bottom: 1rem;
+}
+
+.transport-name {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 0 0.5rem 0.25rem;
+}
+
+.sidebar-empty {
+  padding: 0.5rem;
+}
+
+.card-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.card-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.card-stat-label {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.card-stat-value {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.card-stat-value.alarming {
+  color: var(--danger);
+}
+
+.card-contexts {
+  margin-top: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border-color);
+  padding-top: 0.5rem;
+}
+
+.badge-warning {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.badge-danger {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.form-input {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 0.375rem;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+  font-family: inherit;
+}
+
+.filter-group label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.select-column {
+  width: 2rem;
+}
+
+.actions-column {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.actions-column .btn + .btn {
+  margin-left: 0.25rem;
+}
+
+/* An error message is the reason the operator opened this page, so it gets real space —
+   but not so much that it pushes the actions off-screen. */
+.error-cell {
+  max-width: 28rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pagination-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.detail-section {
+  margin-bottom: 1.25rem;
+}
+
+.detail-list {
+  display: grid;
+  grid-template-columns: minmax(8rem, max-content) 1fr;
+  gap: 0.25rem 1rem;
+  font-size: 0.82rem;
+}
+
+.detail-list dt {
+  color: var(--text-muted);
+}
+
+.detail-list dd {
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+.payload {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 0.375rem;
+  padding: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  max-height: 24rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.modal-narrow {
+  max-width: 32rem;
+}
+
+.confirm-count {
+  margin-top: 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+  max-width: 32rem;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 45%);
+  z-index: 50;
+}
+
+.toast-success {
+  background: var(--success-bg);
+  color: var(--success);
+  border: 1px solid var(--success);
+}
+
+.toast-warning {
+  background: var(--warning-bg);
+  color: var(--warning);
+  border: 1px solid var(--warning);
+}
+
+.toast-danger {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid var(--danger);
 }

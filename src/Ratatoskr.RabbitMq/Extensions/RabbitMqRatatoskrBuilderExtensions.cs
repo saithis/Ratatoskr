@@ -2,9 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Ratatoskr.AsyncApi.Generation;
 using Ratatoskr.Core;
-using Ratatoskr.Management;
 using Ratatoskr.RabbitMq.AsyncApi;
-using Ratatoskr.RabbitMq.Management;
 
 namespace Ratatoskr.RabbitMq.Extensions;
 
@@ -60,14 +58,6 @@ public static class RabbitMqRatatoskrBuilderExtensions
             ServiceDescriptor.Singleton<
                 IAsyncApiTransportBindingProvider,
                 RabbitMqAsyncApiBindingProvider
-            >()
-        );
-
-        // Management API
-        builder.Services.TryAddEnumerable(
-            ServiceDescriptor.Singleton<
-                IRatatoskrEndpointConfigurator,
-                RabbitMqEndpointConfigurator
             >()
         );
 
