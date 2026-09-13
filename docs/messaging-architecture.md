@@ -282,6 +282,7 @@ Ratatoskr is designed for multi-instance deployment:
 
 ---
 
+<a id="schema-evolution"></a>
 ## Message Schema Evolution
 
 Ratatoskr uses `System.Text.Json` for message serialization. By default:

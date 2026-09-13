@@ -24,32 +24,33 @@ The management architecture is governed by four design principles:
 
 ```mermaid
 flowchart TB
-    subgraph Browser["Operator Browser"]
-        UI["Ratatoskr UI Web Dashboard\n(Vanilla ES Modules + CSP + SSE)"]
+    subgraph Browser ["Operator Browser"]
+        UI["Ratatoskr UI Web Dashboard<br/>(Vanilla ES Modules + CSP + SSE)"]
     end
 
-    subgraph DashboardHost["Dashboard Host Service (Ratatoskr.UI)"]
+    subgraph DashboardHost ["Dashboard Host Service (Ratatoskr.UI)"]
         Routes["ManagementApiRoutes (REST Facade)"]
         AuditWriter["AuditingManagementDispatchStrategy"]
         Registry["ServiceRegistry (In-Memory Fleet Cache)"]
         EventStream["DashboardEventStream (SSE: /api/events)"]
-        DashDb[("RatatoskrDashboardDbContext\n(Snapshots & Audit Log)")]
-        DashStore["DashboardServiceStore\n(Snapshot Hydration & Write-Through)"]
+        DashDb[("RatatoskrDashboardDbContext<br/>(Snapshots & Audit Log)")]
+        DashStore["DashboardServiceStore<br/>(Snapshot Hydration & Write-Through)"]
         TransportReg["IManagementTransportRegistry"]
+        DiscoveryService["ManagementDiscoveryService<br/>(Aggregates Transport Feeds)"]
     end
 
-    subgraph Transports["Control Plane Transports"]
-        InProc["InProcessManagementTransport\n(Zero Broker / Monolith)"]
-        RmqTransport["RabbitMqManagementTransport\n(Dedicated AMQP Connection)"]
+    subgraph Transports ["Control Plane Transports"]
+        InProc["InProcessManagementTransport<br/>(Zero Broker / Monolith)"]
+        RmqTransport["RabbitMqManagementTransport<br/>& Discovery Source<br/>(Dedicated AMQP Connection)"]
     end
 
-    subgraph ManagedService["Managed Service (Orders, Inventory, etc.)"]
-        RmqAgent["RabbitMqManagementAgentService\n(Heartbeats + Command Queues)"]
-        Agent["ManagementAgent\n(Capability & Topology Assembler)"]
-        Dispatcher["ManagementDispatcher\n(Protocol / Deadline / Error Guard)"]
-        OpsLog["ManagementOperationLog\n(Idempotency & Replay Engine)"]
-        AppDb[("Application DbContext\n(Outbox, Inbox, OpLog Tables)")]
-        RmqOps["RabbitMqDlqOperations\n(Queue Stats, DLQ Requeue/Purge)"]
+    subgraph ManagedService ["Managed Service (Orders, Inventory, etc.)"]
+        RmqAgent["RabbitMqManagementAgentService<br/>(Heartbeats + Command Queues)"]
+        Agent["ManagementAgent<br/>(Capability & Topology Assembler)"]
+        Dispatcher["ManagementDispatcher<br/>(Protocol / Deadline / Error Guard)"]
+        OpsLog["ManagementOperationLog<br/>(Idempotency & Replay Engine)"]
+        AppDb[("Application DbContext<br/>(Outbox, Inbox, OpLog Tables)")]
+        RmqOps["RabbitMqDlqOperations<br/>(Queue Stats, DLQ Requeue/Purge)"]
     end
 
     UI -->|REST / Keyset Paging| Routes
@@ -64,10 +65,16 @@ flowchart TB
     TransportReg --> InProc
     TransportReg --> RmqTransport
 
-    RmqTransport -.->|AMQP Commands / Replies| RmqAgent
-    InProc -.-> Dispatcher
+    RmqTransport <==>|AMQP Commands / Replies| RmqAgent
+    InProc <==>|In-Memory Commands / Replies| Dispatcher
+
+    Agent -->|Heartbeat Announcement| RmqAgent
+    RmqAgent -.->|Heartbeats via AMQP Exchange| RmqTransport
+    RmqTransport -->|IManagementDiscoverySource| DiscoveryService
+    InProc -->|IManagementDiscoverySource| DiscoveryService
+    DiscoveryService -->|Publish| Registry
+
     RmqAgent --> Dispatcher
-    RmqAgent -.->|Heartbeat / Discovery| Registry
     Dispatcher --> Agent
     Dispatcher --> OpsLog
     Dispatcher --> RmqOps
@@ -136,14 +143,14 @@ Services actively announce themselves to the dashboard via periodic heartbeats.
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Agent as Managed Service (ManagementAgent)
-    participant Rmq as RabbitMQ Discovery Exchange (*.inbox)
-    participant Disc as Dashboard (ManagementDiscoveryService)
-    participant Reg as ServiceRegistry (Memory)
-    participant Store as DashboardServiceStore
-    participant Db as RatatoskrDashboardDbContext
-    participant SSE as DashboardEventStream
-    participant Browser as Browser Client
+    participant Agent as "Managed Service (ManagementAgent)"
+    participant Rmq as "RabbitMQ Discovery Exchange (*.inbox)"
+    participant Disc as "Dashboard (ManagementDiscoveryService)"
+    participant Reg as "ServiceRegistry (Memory)"
+    participant Store as "DashboardServiceStore"
+    participant Db as "RatatoskrDashboardDbContext"
+    participant SSE as "DashboardEventStream"
+    participant Browser as "Browser Client"
 
     Agent->>Agent: DescribeAsync() (collects backlogs, channels, capabilities)
     Agent->>Rmq: Publish heartbeat (Transient, Expiration=3x HeartbeatInterval)
@@ -175,18 +182,18 @@ Every management operation — whether coming from the direct per-service HTTP R
 
 ```mermaid
 flowchart TD
-    Req[Incoming ManagementRequestEnvelope] --> ProtocolCheck{Protocol Compatible?}
-    ProtocolCheck -- No --> RetProto[Return 400 UnsupportedProtocolVersion]
-    ProtocolCheck -- Yes --> DeadlineCheck{Deadline Remaining > 0?}
-    DeadlineCheck -- No --> RetDead[Return 504 DeadlineExceeded]
-    DeadlineCheck -- Yes --> ResolveOp[Resolve IManagementOperation from DI Scope]
-    ResolveOp --> Found{Found?}
-    Found -- No --> RetUnsup[Return 400 UnsupportedOperation]
-    Found -- Yes --> ParseBody[Deserialize Payload with ManagementJson]
-    ParseBody --> Exec[ExecuteAsync with Linked TokenSource\n(Cancellation + Remaining Deadline)]
-    Exec --> Success{Success?}
-    Success -- Yes --> RetOk[Return ManagementResponseEnvelope.Ok]
-    Success -- No / Catch --> RetFail[Return ManagementResponseEnvelope.Failed\n(Stable Error Code + Log details)]
+    Req["Incoming ManagementRequestEnvelope"] --> ProtocolCheck{"Protocol Compatible?"}
+    ProtocolCheck -->|"No"| RetProto["Return 400 UnsupportedProtocolVersion"]
+    ProtocolCheck -->|"Yes"| DeadlineCheck{"Deadline Remaining > 0?"}
+    DeadlineCheck -->|"No"| RetDead["Return 504 DeadlineExceeded"]
+    DeadlineCheck -->|"Yes"| ResolveOp["Resolve IManagementOperation from DI Scope"]
+    ResolveOp --> Found{"Found?"}
+    Found -->|"No"| RetUnsup["Return 400 UnsupportedOperation"]
+    Found -->|"Yes"| ParseBody["Deserialize Payload with ManagementJson"]
+    ParseBody --> Exec["ExecuteAsync with Linked TokenSource<br/>(Cancellation + Remaining Deadline)"]
+    Exec --> Success{"Success?"}
+    Success -->|"Yes"| RetOk["Return ManagementResponseEnvelope.Ok"]
+    Success -->|"No / Exception"| RetFail["Return ManagementResponseEnvelope.Failed<br/>(Stable Error Code + Log details)"]
 ```
 
 ### The Request Envelope Structure
@@ -222,9 +229,9 @@ Mutations (requeue, delete, bulk matching mutations) in distributed systems are 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Disp as Dispatcher / Operation
-    participant Log as ManagementOperationLog
-    participant Db as Application DbContext
+    participant Disp as "Dispatcher / Operation"
+    participant Log as "ManagementOperationLog"
+    participant Db as "Application DbContext"
 
     Disp->>Log: LookupAsync(db, operationId, filterFingerprint)
     alt Disposition == AlreadyCompleted
@@ -263,25 +270,25 @@ Ratatoskr exposes broker queue metrics and DLQ triage capabilities via `RabbitMq
 
 ```mermaid
 flowchart LR
-    subgraph RabbitMQ Broker
-        Exchange["Channel Exchange\n(amqp.exchange)"]
-        MainQ["Main Consumer Queue\n(orders.commands.queue)"]
-        DLQ["Dead Letter Queue\n(orders.commands.queue.dlq)"]
+    subgraph RmqBroker ["RabbitMQ Broker"]
+        Exchange["Channel Exchange<br/>(amqp.exchange)"]
+        MainQ["Main Consumer Queue<br/>(orders.commands.queue)"]
+        DLQ["Dead Letter Queue<br/>(orders.commands.queue.dlq)"]
     end
 
-    MainQ -->|Exhausted Retries / Rejected| DLQ
+    MainQ -->|"Exhausted Retries / Rejected"| DLQ
 
-    subgraph Management DLQ Operations
+    subgraph DlqOps ["Management DLQ Operations"]
         RequeueOp["DlqRequeueOperation"]
         PurgeOp["DlqPurgeOperation"]
     end
 
-    RequeueOp -.->|1. BasicGetAsync from DLQ| DLQ
-    RequeueOp -.->|2. Strip 'x-death' header & add 'x-requeued-from-dlq-at'| RequeueOp
-    RequeueOp -.->|3. BasicPublishAsync back to Exchange| Exchange
+    RequeueOp -.->|"1. BasicGetAsync from DLQ"| DLQ
+    RequeueOp -.->|"2. Strip 'x-death' header & add timestamp"| RequeueOp
+    RequeueOp -.->|"3. BasicPublishAsync back to Exchange"| Exchange
     Exchange --> MainQ
 
-    PurgeOp -.->|QueuePurgeAsync| DLQ
+    PurgeOp -.->|"QueuePurgeAsync"| DLQ
 ```
 
 - **Metrics**: Real-time message count in main queues and Dead Letter Queues across all registered channels.
@@ -301,7 +308,7 @@ The embedded web dashboard (`Ratatoskr.UI`) is served directly from embedded ass
 
 ```mermaid
 graph TD
-    subgraph UI Modules
+    subgraph UIModules ["UI Modules"]
         App["app.js (Entry & Event Wiring)"]
         State["state.js (Reactive Store & Target State)"]
         Api["api.js (REST Client & Antiforgery)"]
