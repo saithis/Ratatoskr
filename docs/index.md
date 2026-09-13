@@ -95,8 +95,8 @@ _layout: landing
       <p>Test utilities with W3C trace-isolated sessions and assertion helpers.</p>
     </div>
     <div class="package-item">
-      <code>Ratatoskr.Management</code>
-      <p>Microservice agent for metrics reporting and broker RPC control plane.</p>
+      <code>Ratatoskr.Management.RabbitMq</code>
+      <p>Microservice agent and RabbitMQ control plane transport provider.</p>
     </div>
     <div class="package-item">
       <code>Ratatoskr.UI</code>

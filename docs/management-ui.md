@@ -7,6 +7,9 @@ The architecture strictly decouples the management control plane from applicatio
 - It does **not** reference RabbitMQ or application message transports.
 - Transports (in-process or RabbitMQ) implement provider interfaces (`IManagementTransport`, `IManagementDiscoverySource`), enabling hybrid topologies, zero-broker local development, and distributed production control planes without modifying dashboard code or shared contracts.
 
+> [!TIP]
+> For an in-depth breakdown of the control plane protocol, service discovery, idempotency engine, DLQ operations, and web dashboard architecture, see [Management & Control Plane Architecture](management-architecture.md).
+
 ---
 
 ## Package Graph

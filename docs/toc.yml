@@ -5,6 +5,11 @@ items:
   items:
   - name: Architecture
     href: architecture.md
+    items:
+    - name: Messaging Pipeline
+      href: messaging-architecture.md
+    - name: Management Control Plane
+      href: management-architecture.md
   - name: Messages & Handlers
     href: messages-handlers.md
   - name: Channels & Routing
