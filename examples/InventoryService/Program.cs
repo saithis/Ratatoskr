@@ -150,8 +150,12 @@ app.MapDefaultEndpoints();
 
 await using (var scope = app.Services.CreateAsyncScope())
 {
-    await scope.ServiceProvider.GetRequiredService<InventoryDbContext>().Database.EnsureCreatedAsync();
-    await scope.ServiceProvider.GetRequiredService<AuditDbContext>().Database.EnsureCreatedAsync();
+    await InventoryService.Infrastructure.DatabaseMigrationHelper.MigrateAsync(
+        scope.ServiceProvider.GetRequiredService<InventoryDbContext>()
+    );
+    await InventoryService.Infrastructure.DatabaseMigrationHelper.MigrateAsync(
+        scope.ServiceProvider.GetRequiredService<AuditDbContext>()
+    );
 }
 
 app.MapPost(

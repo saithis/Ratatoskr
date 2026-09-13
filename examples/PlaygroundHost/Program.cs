@@ -266,12 +266,12 @@ try
 {
     await using (var scope = app.Services.CreateAsyncScope())
     {
-        await scope
-            .ServiceProvider.GetRequiredService<PublisherDbContext>()
-            .Database.EnsureCreatedAsync();
-        await scope
-            .ServiceProvider.GetRequiredService<ConsumerDbContext>()
-            .Database.EnsureCreatedAsync();
+        await DatabaseMigrationHelper.MigrateAsync(
+            scope.ServiceProvider.GetRequiredService<PublisherDbContext>()
+        );
+        await DatabaseMigrationHelper.MigrateAsync(
+            scope.ServiceProvider.GetRequiredService<ConsumerDbContext>()
+        );
         await scope
             .ServiceProvider.GetRequiredService<PlaygroundDbContext>()
             .Database.EnsureCreatedAsync();
