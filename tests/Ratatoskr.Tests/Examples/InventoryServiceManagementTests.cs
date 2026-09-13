@@ -153,7 +153,7 @@ public sealed class InventoryServiceManagementTests(
     private static Ratatoskr.Management.Registry.ServiceLiveness ServiceLivenessOnline =>
         Ratatoskr.Management.Registry.ServiceLiveness.Online;
 
-    private async Task<InboxListItem> WaitForPoisonedHandlerAsync(TestContext context)
+    private static async Task<InboxListItem> WaitForPoisonedHandlerAsync(TestContext context)
     {
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
         while (DateTime.UtcNow < deadline)

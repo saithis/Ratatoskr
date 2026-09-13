@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Options;
 
 namespace Ratatoskr.Management.RabbitMq;
@@ -111,7 +112,7 @@ internal sealed class RabbitMqManagementOptionsValidator
             failures.Add($"{transport} needs a ConnectionString.");
         }
 
-        if (options.ResourcePrefix is { Length: 0 } or " ")
+        if (options.ResourcePrefix is not null && string.IsNullOrWhiteSpace(options.ResourcePrefix))
         {
             failures.Add($"{transport} has a blank ResourcePrefix. Leave it unset to use the connection user name.");
         }
@@ -144,8 +145,8 @@ internal sealed class RabbitMqManagementOptionsValidator
         if (options.ConsumerConcurrency > options.PrefetchCount)
         {
             failures.Add(
-                $"{transport} has ConsumerConcurrency ({options.ConsumerConcurrency}) above PrefetchCount "
-                    + $"({options.PrefetchCount}); the extra workers would sit idle waiting for deliveries the broker will not send."
+                $"{transport} has ConsumerConcurrency ({options.ConsumerConcurrency.ToString(CultureInfo.InvariantCulture)}) above PrefetchCount "
+                    + $"({options.PrefetchCount.ToString(CultureInfo.InvariantCulture)}); the extra workers would sit idle waiting for deliveries the broker will not send."
             );
         }
 

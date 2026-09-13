@@ -16,11 +16,10 @@ public sealed class ManagementTestClient(IServiceProvider services)
 {
     private readonly IManagementTransportRegistry _transports =
         services.GetRequiredService<IManagementTransportRegistry>();
-    private readonly ServiceRegistry _registry = services.GetRequiredService<ServiceRegistry>();
     private readonly TimeProvider _time = services.GetRequiredService<TimeProvider>();
 
     /// <summary>The dashboard's view of what it has discovered.</summary>
-    public ServiceRegistry Registry => _registry;
+    public ServiceRegistry Registry { get; } = services.GetRequiredService<ServiceRegistry>();
 
     /// <summary>Waits until a service has announced itself on a transport, or fails the test.</summary>
     public async Task<ServiceDetail> WaitForServiceAsync(
@@ -32,7 +31,7 @@ public sealed class ManagementTestClient(IServiceProvider services)
         var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(30));
         while (DateTime.UtcNow < deadline)
         {
-            if (_registry.GetService(transportName, serviceName) is { } detail)
+            if (Registry.GetService(transportName, serviceName) is { } detail)
             {
                 return detail;
             }
@@ -42,7 +41,7 @@ public sealed class ManagementTestClient(IServiceProvider services)
 
         throw new TimeoutException(
             $"Service '{serviceName}' was not discovered on transport '{transportName}'. "
-                + $"Known services: {string.Join(", ", _registry.GetServices().Select(card => $"{card.TransportName}/{card.ServiceName}"))}."
+                + $"Known services: {string.Join(", ", Registry.GetServices().Select(card => $"{card.TransportName}/{card.ServiceName}"))}."
         );
     }
 
@@ -71,7 +70,7 @@ public sealed class ManagementTestClient(IServiceProvider services)
         };
 
         var address =
-            _registry.GetAddress(transportName, serviceName, instanceId)
+            Registry.GetAddress(transportName, serviceName, instanceId)
             ?? ManagementAddress.Empty;
 
         return await _transports.Get(transportName).SendAsync(address, envelope);

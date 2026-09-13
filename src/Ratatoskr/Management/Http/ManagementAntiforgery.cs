@@ -37,9 +37,11 @@ internal sealed class ManagementAntiforgeryFilter(
     ManagementAntiforgeryOptions options
 ) : IEndpointFilter
 {
-    // Resolved on demand rather than injected. This filter is registered by the management core,
-    // which also runs in hosts that have no HTTP surface at all — a dashboard driving a broker, or
-    // a test exercising a transport — and those have no authentication schemes to resolve.
+    /// <summary>
+    /// Resolved on demand rather than injected. This filter is registered by the management core,
+    /// which also runs in hosts that have no HTTP surface at all — a dashboard driving a broker, or
+    /// a test exercising a transport — and those have no authentication schemes to resolve.
+    /// </summary>
     private IAntiforgery Antiforgery => services.GetRequiredService<IAntiforgery>();
 
     private IAuthenticationSchemeProvider Schemes =>

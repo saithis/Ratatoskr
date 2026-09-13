@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Ratatoskr.EfCore.Internal;
@@ -76,64 +77,15 @@ internal abstract class MatchingMutationOperation(
         ArgumentNullException.ThrowIfNull(context);
         var request = context.RequestAs<MutateMatchingRequest>();
 
-        if (resolver.Resolve(context, Feature, out var db) is { } failure)
-        {
-            return failure;
-        }
-
-        if (MessageQueries.Validate(request.Filter, requireNonEmpty: true) is { } invalid)
+        if (ValidateExecution(context, request, out var db) is { } invalid)
         {
             return invalid;
         }
 
-        if (PoisonedOnly && request.Filter.Status is not MessageStatusFilter.Poisoned)
-        {
-            return ManagementResult.Invalid(
-                $"'{Name}' applies only to poisoned rows: requeueing anything else would reset the "
-                    + "error counters of rows the processor is still working on. Set status to 'poisoned'."
-            );
-        }
-
         var fingerprint = ManagementOperationLog.Serialize(request.Filter);
-        var lookup = await operationLog.LookupAsync(
-            db,
-            context.OperationId,
-            fingerprint,
-            cancellationToken
-        );
-
-        if (lookup.Disposition is ManagementOperationDisposition.AlreadyCompleted)
+        if (await EnsureOperationTrackedAsync(db, context, fingerprint, cancellationToken) is { } shortCircuit)
         {
-            return ManagementOperationLog.Replay<MatchingMutationResponse>(lookup.Record!);
-        }
-
-        if (lookup.Disposition is ManagementOperationDisposition.FilterMismatch)
-        {
-            return ManagementOperationLog.FilterMismatch(context.OperationId);
-        }
-
-        if (lookup.Record is null)
-        {
-            operationLog.StageInProgress(db, context, fingerprint);
-            try
-            {
-                await db.SaveChangesAsync(cancellationToken);
-            }
-            catch (DbUpdateException)
-            {
-                // Another delivery of the same command got there first; let it own the run.
-                db.ChangeTracker.Clear();
-                var winner = await operationLog.LookupAsync(
-                    db,
-                    context.OperationId,
-                    fingerprint,
-                    cancellationToken
-                );
-                if (winner.Disposition is ManagementOperationDisposition.AlreadyCompleted)
-                {
-                    return ManagementOperationLog.Replay<MatchingMutationResponse>(winner.Record!);
-                }
-            }
+            return shortCircuit;
         }
 
         var cap = Math.Min(
@@ -197,7 +149,7 @@ internal abstract class MatchingMutationOperation(
             {
                 db.ChangeTracker.Clear();
                 return ManagementResult.Conflict(
-                    $"A row changed while this batch was being applied. {processed} rows were committed before it; "
+                    $"A row changed while this batch was being applied. {processed.ToString(CultureInfo.InvariantCulture)} rows were committed before it; "
                         + "retry with the same operation id to continue."
                 );
             }
@@ -211,7 +163,109 @@ internal abstract class MatchingMutationOperation(
             db.ChangeTracker.Clear();
         }
 
-        var remaining = await CountAsync(db, request.Filter, cancellationToken);
+        var response = await CompleteOperationAsync(
+            db,
+            context,
+            request.Filter,
+            processed,
+            capped,
+            cancellationToken
+        );
+
+        return ManagementResult.Ok(response);
+    }
+
+    private ManagementResult? ValidateExecution(
+        ManagementOperationContext context,
+        MutateMatchingRequest request,
+        out DbContext db
+    )
+    {
+        if (resolver.Resolve(context, Feature, out var resolvedDb) is { } failure)
+        {
+            db = null!;
+            return failure;
+        }
+
+        db = resolvedDb;
+
+        if (MessageQueries.Validate(request.Filter, requireNonEmpty: true) is { } invalid)
+        {
+            return invalid;
+        }
+
+        if (PoisonedOnly && request.Filter.Status is not MessageStatusFilter.Poisoned)
+        {
+            return ManagementResult.Invalid(
+                $"'{Name}' applies only to poisoned rows: requeueing anything else would reset the "
+                    + "error counters of rows the processor is still working on. Set status to 'poisoned'."
+            );
+        }
+
+        return null;
+    }
+
+    private async Task<ManagementResult?> EnsureOperationTrackedAsync(
+        DbContext db,
+        ManagementOperationContext context,
+        string fingerprint,
+        CancellationToken cancellationToken
+    )
+    {
+        var lookup = await operationLog.LookupAsync(
+            db,
+            context.OperationId,
+            fingerprint,
+            cancellationToken
+        );
+
+        if (lookup.Disposition is ManagementOperationDisposition.AlreadyCompleted)
+        {
+            return ManagementOperationLog.Replay<MatchingMutationResponse>(lookup.Record!);
+        }
+
+        if (lookup.Disposition is ManagementOperationDisposition.FilterMismatch)
+        {
+            return ManagementOperationLog.FilterMismatch(context.OperationId);
+        }
+
+        if (lookup.Record is null)
+        {
+            operationLog.StageInProgress(db, context, fingerprint);
+            try
+            {
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException)
+            {
+                // Another delivery of the same command got there first; let it own the run.
+                db.ChangeTracker.Clear();
+                var winner = await operationLog.LookupAsync(
+                    db,
+                    context.OperationId,
+                    fingerprint,
+                    cancellationToken
+                );
+                if (winner.Disposition is ManagementOperationDisposition.AlreadyCompleted)
+                {
+                    return ManagementOperationLog.Replay<MatchingMutationResponse>(winner.Record!);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private async Task<MatchingMutationResponse> CompleteOperationAsync(
+        DbContext db,
+        ManagementOperationContext context,
+        MessageFilter filter,
+        long processed,
+        bool capped,
+        CancellationToken cancellationToken
+    )
+    {
+        var remaining = await CountAsync(db, filter, cancellationToken);
         var response = new MatchingMutationResponse(processed, remaining, capped || remaining > 0);
 
         var final = await TrackRecordAsync(db, context.OperationId, cancellationToken);
@@ -222,7 +276,7 @@ internal abstract class MatchingMutationOperation(
             await db.SaveChangesAsync(cancellationToken);
         }
 
-        return ManagementResult.Ok(response);
+        return response;
     }
 
     /// <summary>

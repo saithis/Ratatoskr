@@ -10,19 +10,19 @@ namespace Ratatoskr.Management.RabbitMq;
 internal enum CallerRejection
 {
     /// <summary>The caller is trusted.</summary>
-    None,
+    None = 0,
 
     /// <summary>No <c>user_id</c> was set, so there is no identity to trust.</summary>
-    MissingUserId,
+    MissingUserId = 1,
 
     /// <summary>The <c>user_id</c> is not on the allowlist.</summary>
-    UnknownCaller,
+    UnknownCaller = 2,
 
     /// <summary>A shared secret is configured but the command carried no signature.</summary>
-    MissingSignature,
+    MissingSignature = 3,
 
     /// <summary>The signature does not match the envelope.</summary>
-    InvalidSignature,
+    InvalidSignature = 4,
 }
 
 /// <summary>

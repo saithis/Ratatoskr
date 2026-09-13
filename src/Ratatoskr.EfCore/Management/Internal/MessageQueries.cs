@@ -4,9 +4,6 @@ using Ratatoskr.Management.Contracts;
 
 namespace Ratatoskr.Management.EfCore.Internal;
 
-/// <summary>One inbox handler row joined to the message it belongs to.</summary>
-internal sealed record InboxRow(InboxHandlerStatusEntity Status, InboxMessageEntity? Message);
-
 /// <summary>
 /// Turns a wire <see cref="MessageFilter"/> into a query, once, for both tables.
 /// </summary>

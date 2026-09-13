@@ -18,8 +18,10 @@ public class RatatoskrUiEndpointTests(
     PostgresContainerFixture postgres
 ) : DashboardTestBase(rabbitMq, postgres)
 {
-    // The dashboard answers in the control plane's own JSON dialect — enums as names — so
-    // tests read it back the same way rather than with web defaults that would reject them.
+    /// <summary>
+    /// The dashboard answers in the control plane's own JSON dialect — enums as names — so
+    /// tests read it back the same way rather than with web defaults that would reject them.
+    /// </summary>
     private static readonly JsonSerializerOptions WebJson = ManagementJson.Options;
 
     [Test]

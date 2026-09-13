@@ -91,7 +91,7 @@ public class ManagementSurfaceParityTests(
             .BeEquivalentTo(ManagementOperationNames.All);
     }
 
-    private IEnumerable<Probe> Probes()
+    private static IEnumerable<Probe> Probes()
     {
         const string context = "/contexts/TestDbContext";
         var missing = Guid.NewGuid();

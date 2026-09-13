@@ -182,6 +182,7 @@ public class InboxScopeAndIsolationTests(
             }
         }
 
-        public Task WaitForBothHandlersAsync(TimeSpan timeout) => _allDone.Task.WaitAsync(timeout);
+        public Task WaitForBothHandlersAsync(TimeSpan timeout) =>
+            _allDone.Task.WaitAsync(timeout, TimeProvider.System);
     }
 }

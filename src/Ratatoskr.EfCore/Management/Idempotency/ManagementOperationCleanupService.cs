@@ -34,6 +34,11 @@ internal sealed partial class ManagementOperationCleanupService<TDbContext>(
 {
     private const int BatchSize = 500;
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Roslynator",
+        "RCS1158:Static member in generic type should use a type parameter",
+        Justification = "LockName depends on typeof(TDbContext)."
+    )]
     internal static string LockName { get; } = $"ManagementOperationCleanup_{typeof(TDbContext).Name}";
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

@@ -149,6 +149,17 @@ public static class ManagementApiRoutes
                 )
         );
 
+        MapChannelRoutes(group, strategy, policies);
+
+        return group;
+    }
+
+    private static void MapChannelRoutes(
+        RouteGroupBuilder group,
+        IManagementDispatchStrategy strategy,
+        ManagementApiPolicies policies
+    )
+    {
         var channels = group.MapGroup("/channels/{channelName}");
 
         channels
@@ -190,8 +201,6 @@ public static class ManagementApiRoutes
             )
             .RequireAuthorization(policies.DeleteMessages)
             .AddEndpointFilter<ManagementAntiforgeryFilter>();
-
-        return group;
     }
 
     private static void MapMessageRoutes(

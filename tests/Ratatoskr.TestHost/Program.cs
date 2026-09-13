@@ -34,7 +34,7 @@ if (policiesRegistered)
     }
 
     // The store context is scoped, and the host validates scopes, so ask inside one.
-    using var probe = app.Services.CreateScope();
+    await using var probe = app.Services.CreateAsyncScope();
     if (probe.ServiceProvider.GetService<RatatoskrDashboardDbContext>() is not null)
     {
         app.MapRatatoskrUI(policies, "/ratatoskr");

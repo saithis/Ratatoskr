@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Runtime.InteropServices;
 
 namespace Ratatoskr.Management.Contracts;
 
@@ -12,6 +13,7 @@ namespace Ratatoskr.Management.Contracts;
 /// rows at a page boundary. Callers order by <c>(CreatedAt, Id)</c> and compare with
 /// <c>(CreatedAt, Id) &gt; (cursor.CreatedAt, cursor.Id)</c>.
 /// </remarks>
+[StructLayout(LayoutKind.Auto)]
 public readonly record struct ManagementCursor(DateTimeOffset CreatedAt, Guid Id)
 {
     /// <summary>Layout version, so a future change can be rejected rather than misread.</summary>

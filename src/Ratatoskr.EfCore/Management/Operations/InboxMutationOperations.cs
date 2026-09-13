@@ -75,7 +75,10 @@ internal sealed class DeleteInboxOperation(
             .ToListAsync(cancellationToken);
 
         var removedIds = entities.Select(entity => entity.Id).ToHashSet();
-        var touchedMessages = entities.Select(entity => entity.MessageId).Distinct().ToArray();
+        var touchedMessages = entities
+            .Select(entity => entity.MessageId)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
         db.Set<InboxHandlerStatusEntity>().RemoveRange(entities);
 
         if (touchedMessages.Length > 0)
@@ -90,7 +93,7 @@ internal sealed class DeleteInboxOperation(
 
             var orphaned = touchedMessages
                 .Where(messageId =>
-                    !survivorsByMessage.Any(row =>
+                    !survivorsByMessage.Exists(row =>
                         row.MessageId == messageId && !removedIds.Contains(row.Id)
                     )
                 )

@@ -1148,6 +1148,9 @@ dotnet_diagnostic.MA0108.severity = suggestion
 # MA0154: Use string.Equals instead of operator == (operator == is standard, clean, and idiomatic C#)
 dotnet_diagnostic.MA0154.severity = none
 
+# MA0176: Optimize guid creation (Guid.Parse in tests and declarations is idiomatic and readable)
+dotnet_diagnostic.MA0176.severity = none
+
 ####################################################################################################
 # Other Platform Diagnostics
 ####################################################################################################
@@ -1182,3 +1185,6 @@ dotnet_diagnostic.RCS1217.severity = none
 # Redundant argument with default value
 resharper_redundant_argument_default_value_highlighting = hint
 
+# EF Core Migrations are generated code
+[**/Migrations/**.cs]
+generated_code = true

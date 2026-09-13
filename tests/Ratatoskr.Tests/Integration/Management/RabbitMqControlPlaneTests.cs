@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using AwesomeAssertions;
@@ -118,7 +119,7 @@ public sealed class RabbitMqControlPlaneTests(RestrictedRabbitMqFixture broker)
                 Transport,
                 serviceName,
                 EchoManagementOperation.OperationName,
-                new EchoRequest { Message = $"command-{index}" }
+                new EchoRequest { Message = $"command-{index.ToString(CultureInfo.InvariantCulture)}" }
             );
         }
 

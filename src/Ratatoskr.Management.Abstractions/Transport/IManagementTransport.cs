@@ -62,6 +62,11 @@ public interface IManagementTransportRegistry
     IReadOnlyList<string> TransportNames { get; }
 
     /// <summary>Returns the named transport, or throws when it is not registered.</summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Naming",
+        "CA1716:Identifiers should not match keywords",
+        Justification = "Pairs with TryGet and matches idiomatic registry lookup naming."
+    )]
     IManagementTransport Get(string name);
 
     /// <summary>Returns the named transport, or <see langword="false"/> when it is not registered.</summary>

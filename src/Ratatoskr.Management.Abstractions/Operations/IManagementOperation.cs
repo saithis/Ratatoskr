@@ -76,6 +76,11 @@ public interface IManagementTopologyContributor
     IEnumerable<ChannelTopology> GetChannels() => [];
 
     /// <summary>The channels this contributor knows about, resolved asynchronously.</summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Meziantou.Analyzer",
+        "MA0042:Do not use blocking calls in async methods",
+        Justification = "Default interface implementation delegates to synchronous fallback."
+    )]
     Task<IReadOnlyList<ChannelTopology>> GetChannelsAsync(
         CancellationToken cancellationToken = default
     ) => Task.FromResult<IReadOnlyList<ChannelTopology>>([.. GetChannels()]);

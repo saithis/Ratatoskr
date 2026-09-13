@@ -23,11 +23,11 @@ public abstract class DashboardTestBase(
     protected const string Transport = "in-process";
 
     /// <summary>The dashboard facade's root for the co-hosted service.</summary>
-    protected string DashboardServiceUrl =>
+    protected const string DashboardServiceUrl =
         $"/ratatoskr/api/transports/{Transport}/services/{ServiceName}";
 
     /// <summary>The dashboard facade's root for the co-hosted service's seeded DbContext.</summary>
-    protected string DashboardContextUrl => $"{DashboardServiceUrl}/contexts/TestDbContext";
+    protected const string DashboardContextUrl = $"{DashboardServiceUrl}/contexts/TestDbContext";
 
     private string DashboardDatabase => $"dash_{TestId}";
 

@@ -10,10 +10,10 @@ public sealed record ServiceInstanceKey(string TransportName, string ServiceName
 public enum ServiceLiveness
 {
     /// <summary>Announced within the staleness window.</summary>
-    Online,
+    Online = 0,
 
     /// <summary>Last seen longer ago than the staleness window. Still shown, marked by age.</summary>
-    Stale,
+    Stale = 1,
 }
 
 /// <summary>One replica, as the dashboard renders it.</summary>

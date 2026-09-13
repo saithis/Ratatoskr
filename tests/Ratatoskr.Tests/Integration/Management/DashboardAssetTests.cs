@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Reflection;
@@ -79,7 +80,12 @@ public partial class DashboardAssetTests(
             .Should()
             .BeEmpty(
                 $"lines in {fileName} should stay readable; offenders: "
-                    + string.Join(", ", tooLong.Select(line => $"line {line.Number} ({line.Text.Length} chars)"))
+                    + string.Join(
+                        ", ",
+                        tooLong.Select(line =>
+                            $"line {line.Number.ToString(CultureInfo.InvariantCulture)} ({line.Text.Length.ToString(CultureInfo.InvariantCulture)} chars)"
+                        )
+                    )
             );
     }
 
@@ -90,8 +96,8 @@ public partial class DashboardAssetTests(
         // handler would not run anyway — it would just silently break the page.
         var html = await ReadAssetAsync("index.html");
 
-        InlineHandler().IsMatch(html).Should().BeFalse("no element may carry an inline event handler");
-        InlineScript().IsMatch(html).Should().BeFalse("no <script> element may carry inline code");
+        InlineHandler.IsMatch(html).Should().BeFalse("no element may carry an inline event handler");
+        InlineScript.IsMatch(html).Should().BeFalse("no <script> element may carry inline code");
         html.Should().Contain("""<script type="module" src="js/app.js"></script>""");
     }
 
@@ -180,9 +186,9 @@ public partial class DashboardAssetTests(
         return await reader.ReadToEndAsync();
     }
 
-    [GeneratedRegex("""<[^>]*\son[a-z]+\s*=""", RegexOptions.IgnoreCase)]
-    private static partial Regex InlineHandler();
+    [GeneratedRegex("""<[^>]*\son[a-z]+\s*=""", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex InlineHandler { get; }
 
-    [GeneratedRegex("""<script(?![^>]*\ssrc=)[^>]*>\s*\S""", RegexOptions.IgnoreCase)]
-    private static partial Regex InlineScript();
+    [GeneratedRegex("""<script(?![^>]*\ssrc=)[^>]*>\s*\S""", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex InlineScript { get; }
 }

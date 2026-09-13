@@ -161,26 +161,7 @@ internal sealed partial class RabbitMqManagementTransport(
         ArgumentNullException.ThrowIfNull(address);
         ArgumentNullException.ThrowIfNull(request);
 
-        if (!_ready)
-        {
-            try
-            {
-                using var startupCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
-                    cancellationToken,
-                    startupCts.Token
-                );
-                await _readyCompletion.Task.WaitAsync(linkedCts.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                // Startup deadline elapsed or caller cancelled.
-            }
-            catch (Exception ex)
-            {
-                logger.LogDebug(ex, "Transport '{Name}' startup failed while awaiting readiness.", Name);
-            }
-        }
+        await EnsureReadyAsync(cancellationToken);
 
         var channel = _publishChannel;
         if (!_ready || channel is not { IsOpen: true })
@@ -228,6 +209,76 @@ internal sealed partial class RabbitMqManagementTransport(
             );
         }
 
+        return await SendRequestCoreAsync(
+            channel,
+            exchange,
+            routingKey,
+            addressed,
+            body,
+            remaining,
+            cancellationToken
+        );
+    }
+
+    private async Task EnsureReadyAsync(CancellationToken cancellationToken)
+    {
+        if (_ready)
+        {
+            return;
+        }
+
+        try
+        {
+            using var startupCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken,
+                startupCts.Token
+            );
+            await _readyCompletion.Task.WaitAsync(linkedCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // Startup deadline elapsed or caller cancelled.
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Transport '{Name}' startup failed while awaiting readiness.", Name);
+        }
+    }
+
+    private BasicProperties CreateRequestProperties(
+        RabbitMqManagementOptions options,
+        ManagementRequestEnvelope addressed,
+        byte[] body,
+        TimeSpan remaining
+    )
+    {
+        return new BasicProperties
+        {
+            CorrelationId = addressed.RequestId,
+            MessageId = addressed.OperationId.ToString("N"),
+            ReplyTo = addressed.ReplyTo,
+            ContentType = "application/json",
+            DeliveryMode = DeliveryModes.Persistent,
+            // The broker drops the command once the caller has stopped waiting, so a target
+            // that comes back an hour later does not replay an hour of stale instructions.
+            Expiration = ((long)remaining.TotalMilliseconds).ToString(CultureInfo.InvariantCulture),
+            // Broker-validated, so the agent can authenticate this dashboard without a secret.
+            UserId = RabbitMqManagementAgentService.UserIdFor(options),
+            Headers = BuildHeaders(addressed, body),
+        };
+    }
+
+    private async Task<ManagementResponseEnvelope> SendRequestCoreAsync(
+        IChannel channel,
+        string exchange,
+        string routingKey,
+        ManagementRequestEnvelope addressed,
+        byte[] body,
+        TimeSpan remaining,
+        CancellationToken cancellationToken
+    )
+    {
         var completion = new TaskCompletionSource<ManagementResponseEnvelope>(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
@@ -235,7 +286,7 @@ internal sealed partial class RabbitMqManagementTransport(
         if (!_pending.TryAdd(addressed.RequestId, completion))
         {
             return Failure(
-                request,
+                addressed,
                 ManagementResultStatus.Conflict,
                 ManagementErrorCodes.InternalError,
                 "A request is already in flight under this correlation id."
@@ -244,20 +295,7 @@ internal sealed partial class RabbitMqManagementTransport(
 
         try
         {
-            var properties = new BasicProperties
-            {
-                CorrelationId = addressed.RequestId,
-                MessageId = addressed.OperationId.ToString("N"),
-                ReplyTo = addressed.ReplyTo,
-                ContentType = "application/json",
-                DeliveryMode = DeliveryModes.Persistent,
-                // The broker drops the command once the caller has stopped waiting, so a target
-                // that comes back an hour later does not replay an hour of stale instructions.
-                Expiration = ((long)remaining.TotalMilliseconds).ToString(CultureInfo.InvariantCulture),
-                // Broker-validated, so the agent can authenticate this dashboard without a secret.
-                UserId = RabbitMqManagementAgentService.UserIdFor(options),
-                Headers = BuildHeaders(addressed, body),
-            };
+            var properties = CreateRequestProperties(Options, addressed, body, remaining);
 
             try
             {
@@ -277,10 +315,10 @@ internal sealed partial class RabbitMqManagementTransport(
             catch (OperationInterruptedException ex) when (ex.ShutdownReason?.ReplyCode == 404)
             {
                 return Failure(
-                    request,
+                    addressed,
                     ManagementResultStatus.NotFound,
                     ManagementErrorCodes.TargetUnreachable,
-                    $"Exchange '{exchange}' does not exist; '{request.Target.ServiceName}' is not listening on transport '{Name}'."
+                    $"Exchange '{exchange}' does not exist; '{addressed.Target.ServiceName}' is not listening on transport '{Name}'."
                 );
             }
 
@@ -295,10 +333,10 @@ internal sealed partial class RabbitMqManagementTransport(
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             return Failure(
-                request,
+                addressed,
                 ManagementResultStatus.Invalid,
                 ManagementErrorCodes.DeadlineExceeded,
-                $"'{request.Target.ServiceName}' did not answer within the request deadline.",
+                $"'{addressed.Target.ServiceName}' did not answer within the request deadline.",
                 isRetryable: true
             );
         }

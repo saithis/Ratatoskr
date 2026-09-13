@@ -27,8 +27,6 @@ public sealed class ManagementAgent(
     TimeProvider timeProvider
 )
 {
-    private readonly DateTimeOffset _startedAt = timeProvider.GetUtcNow();
-
     /// <summary>The logical service name this process announces.</summary>
     public string ServiceName => options.Value.ServiceName;
 
@@ -36,7 +34,7 @@ public sealed class ManagementAgent(
     public string InstanceId => options.Value.InstanceId;
 
     /// <summary>When this replica started.</summary>
-    public DateTimeOffset StartedAt => _startedAt;
+    public DateTimeOffset StartedAt { get; } = timeProvider.GetUtcNow();
 
     /// <summary>
     /// Builds a fresh announcement. Backlog counts come from a live query, so an announcement is
@@ -82,7 +80,7 @@ public sealed class ManagementAgent(
             InstanceId = agent.InstanceId,
             MachineName = agent.MachineName,
             Environment = agent.EnvironmentName,
-            StartedAt = _startedAt,
+            StartedAt = StartedAt,
             AnnouncedAt = timeProvider.GetUtcNow(),
             Capabilities = capabilities,
             DbContexts = summaries.OrderBy(summary => summary.Name, StringComparer.Ordinal).ToArray(),

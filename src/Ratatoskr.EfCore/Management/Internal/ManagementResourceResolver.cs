@@ -9,8 +9,8 @@ namespace Ratatoskr.Management.EfCore.Internal;
 /// <summary>Which half of the durability model an operation needs.</summary>
 internal enum DurabilityFeature
 {
-    Outbox,
-    Inbox,
+    Outbox = 0,
+    Inbox = 1,
 }
 
 /// <summary>

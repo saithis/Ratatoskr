@@ -50,8 +50,11 @@ internal sealed class RabbitMqDlqRequeueOperation(
         var mainQueueName = request.QueueName ?? channelOpts.QueueName ?? channelReg.ChannelName;
         var dlqName = $"{mainQueueName}{channelOpts.Retry.DeadLetterSuffix}";
 
-        await using var channel = await connectionManager.CreateChannelAsync(false, cancellationToken);
-        var maxToRequeue = request.Limit.HasValue && request.Limit.Value > 0 ? request.Limit.Value : 500;
+        await using var channel = await connectionManager.CreateChannelAsync(
+            enablePublisherConfirms: false,
+            cancellationToken
+        );
+        var maxToRequeue = request.Limit > 0 ? request.Limit.Value : 500;
         var requeuedCount = 0;
 
         while (requeuedCount < maxToRequeue)
@@ -153,7 +156,10 @@ internal sealed class RabbitMqDlqPurgeOperation(
         var mainQueueName = request.QueueName ?? channelOpts.QueueName ?? channelReg.ChannelName;
         var dlqName = $"{mainQueueName}{channelOpts.Retry.DeadLetterSuffix}";
 
-        await using var channel = await connectionManager.CreateChannelAsync(false, cancellationToken);
+        await using var channel = await connectionManager.CreateChannelAsync(
+            enablePublisherConfirms: false,
+            cancellationToken
+        );
         uint purgedCount = 0;
         try
         {
@@ -183,7 +189,10 @@ internal sealed class RabbitMqQueueStatsOperation(
     )
     {
         var list = new List<ChannelQueueStats>();
-        await using var channel = await connectionManager.CreateChannelAsync(false, cancellationToken);
+        await using var channel = await connectionManager.CreateChannelAsync(
+            enablePublisherConfirms: false,
+            cancellationToken
+        );
 
         foreach (var reg in channelRegistry.GetConsumeChannels())
         {

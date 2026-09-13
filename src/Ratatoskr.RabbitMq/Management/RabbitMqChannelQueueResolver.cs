@@ -15,6 +15,12 @@ public sealed class RabbitMqChannelQueueResolver(
     RabbitMqConnectionManager connectionManager
 ) : IChannelQueueResolver
 {
+    /// <inheritdoc />
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Roslynator",
+        "RCS1075:Avoid empty catch clause that catches System.Exception",
+        Justification = "If the broker is unreachable or initializing, reporting 0 allows announcement to succeed."
+    )]
     public async Task<IReadOnlyList<QueueTopology>> ResolveQueuesAsync(
         string channelName,
         ChannelIntent intent,
@@ -51,7 +57,10 @@ public sealed class RabbitMqChannelQueueResolver(
 
         try
         {
-            await using var channel = await connectionManager.CreateChannelAsync(false, cancellationToken);
+            await using var channel = await connectionManager.CreateChannelAsync(
+                enablePublisherConfirms: false,
+                cancellationToken
+            );
             queueCount = await SafeMessageCountAsync(channel, queueName, cancellationToken);
             if (hasDlq && dlqName is not null)
             {

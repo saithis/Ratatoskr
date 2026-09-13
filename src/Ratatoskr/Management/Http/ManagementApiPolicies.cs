@@ -19,6 +19,11 @@ public sealed record ManagementApiPolicies(
 )
 {
     /// <summary>Guards every capability with the same policy.</summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Naming",
+        "CA1720:Identifier contains type name",
+        Justification = "'Single' refers to a single shared policy, not System.Single."
+    )]
     public static ManagementApiPolicies Single(string policyName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(policyName);

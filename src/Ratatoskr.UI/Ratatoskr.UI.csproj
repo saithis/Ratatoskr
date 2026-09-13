@@ -29,6 +29,7 @@
     <!-- Design-time only: generating the shipped migrations needs a provider to model against. -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" PrivateAssets="all" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>

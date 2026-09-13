@@ -8,6 +8,11 @@ namespace Ratatoskr.UI.Store;
 /// deliberately: it is the least capable provider we support, so a migration that it can express
 /// contains nothing provider-specific and applies just as well on PostgreSQL.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+    "Meziantou.Analyzer",
+    "MA0182:Type is not used",
+    Justification = "Instantiated reflectively by EF Core design-time tooling."
+)]
 internal sealed class RatatoskrDashboardDbContextFactory
     : IDesignTimeDbContextFactory<RatatoskrDashboardDbContext>
 {

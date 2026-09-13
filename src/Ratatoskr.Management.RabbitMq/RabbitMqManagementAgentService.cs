@@ -175,7 +175,7 @@ internal sealed partial class RabbitMqManagementAgentService(
     private async Task OnCommandAsync(object sender, BasicDeliverEventArgs delivery)
     {
         var channel = _commandChannel!;
-        await _concurrency!.WaitAsync();
+        await _concurrency!.WaitAsync(delivery.CancellationToken);
         try
         {
             var rejection = _authenticator!.Authenticate(delivery.BasicProperties, delivery.Body.Span);
@@ -189,7 +189,12 @@ internal sealed partial class RabbitMqManagementAgentService(
                 LogRejectedCaller(logger, transportName, rejection.ToString(), delivery.BasicProperties.UserId ?? "(none)");
 
                 await TryReplyAsync(delivery, UnauthenticatedResponse(delivery, rejection));
-                await channel.BasicNackAsync(delivery.DeliveryTag, multiple: false, requeue: false);
+                await channel.BasicNackAsync(
+                    delivery.DeliveryTag,
+                    multiple: false,
+                    requeue: false,
+                    cancellationToken: delivery.CancellationToken
+                );
                 return;
             }
 
@@ -212,24 +217,38 @@ internal sealed partial class RabbitMqManagementAgentService(
                 // Nack without requeue: a message that cannot be parsed will not parse on the
                 // second attempt either, and requeueing it poisons the consumer loop forever.
                 MalformedCommands.Add(1, new KeyValuePair<string, object?>("transport", transportName));
-                await channel.BasicNackAsync(delivery.DeliveryTag, multiple: false, requeue: false);
+                await channel.BasicNackAsync(
+                    delivery.DeliveryTag,
+                    multiple: false,
+                    requeue: false,
+                    cancellationToken: delivery.CancellationToken
+                );
                 return;
             }
 
-            var response = await dispatcher.DispatchAsync(request, CancellationToken.None);
+            var response = await dispatcher.DispatchAsync(request, delivery.CancellationToken);
             await TryReplyAsync(delivery, response);
 
             // Acked only after the reply has been confirmed. A crash in between replays safely:
             // the mutation's operation id is already committed, so the redelivery returns the
             // recorded result rather than mutating again.
-            await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false);
+            await channel.BasicAckAsync(
+                delivery.DeliveryTag,
+                multiple: false,
+                cancellationToken: delivery.CancellationToken
+            );
         }
         catch (Exception ex)
         {
             LogCommandFailed(logger, transportName, ex);
             try
             {
-                await channel.BasicNackAsync(delivery.DeliveryTag, multiple: false, requeue: false);
+                await channel.BasicNackAsync(
+                    delivery.DeliveryTag,
+                    multiple: false,
+                    requeue: false,
+                    cancellationToken: delivery.CancellationToken
+                );
             }
             catch (Exception nackFailure)
             {
@@ -291,7 +310,8 @@ internal sealed partial class RabbitMqManagementAgentService(
                 routingKey,
                 mandatory: false,
                 basicProperties: properties,
-                body: body
+                body: body,
+                cancellationToken: delivery.CancellationToken
             );
         }
         catch (OperationInterruptedException ex) when (ex.ShutdownReason?.ReplyCode == 404)
@@ -300,12 +320,12 @@ internal sealed partial class RabbitMqManagementAgentService(
             // will time out, which is the correct outcome; the only thing to repair here is the
             // channel, which the 404 closed.
             LogReplyTargetMissing(logger, transportName, exchange);
-            await ReopenReplyChannelAsync();
+            await ReopenReplyChannelAsync(delivery.CancellationToken);
         }
         catch (Exception ex)
         {
             LogReplyFailed(logger, transportName, exchange, ex);
-            await ReopenReplyChannelAsync();
+            await ReopenReplyChannelAsync(delivery.CancellationToken);
         }
     }
 
@@ -337,7 +357,7 @@ internal sealed partial class RabbitMqManagementAgentService(
         return true;
     }
 
-    private async Task ReopenReplyChannelAsync()
+    private async Task ReopenReplyChannelAsync(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -346,7 +366,10 @@ internal sealed partial class RabbitMqManagementAgentService(
                 await _replyChannel.DisposeAsync();
             }
 
-            _replyChannel = await connection.CreateChannelAsync(publisherConfirms: true);
+            _replyChannel = await connection.CreateChannelAsync(
+                publisherConfirms: true,
+                cancellationToken: cancellationToken
+            );
         }
         catch (Exception ex)
         {

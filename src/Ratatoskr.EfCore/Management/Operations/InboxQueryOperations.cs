@@ -211,7 +211,17 @@ internal sealed class GetInboxOperation(
                 status.RequeuedCount,
                 string.IsNullOrEmpty(status.LastError) ? null : status.LastError,
                 properties is null
-                    ? new MessagePropertiesView(null, null, null, null, null, null, null, null, null)
+                    ? new MessagePropertiesView(
+                        Id: null,
+                        Type: null,
+                        Source: null,
+                        Subject: null,
+                        DataSchema: null,
+                        ContentType: null,
+                        Time: null,
+                        ScheduledAt: null,
+                        TraceParent: null
+                    )
                     : ManagementPayloadDecoder.ToView(properties),
                 json,
                 base64,

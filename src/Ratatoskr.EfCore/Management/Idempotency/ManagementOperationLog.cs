@@ -9,16 +9,16 @@ namespace Ratatoskr.Management.EfCore.Idempotency;
 internal enum ManagementOperationDisposition
 {
     /// <summary>Never seen. Run it.</summary>
-    New,
+    New = 0,
 
     /// <summary>Seen and finished. Replay the recorded result rather than mutating again.</summary>
-    AlreadyCompleted,
+    AlreadyCompleted = 1,
 
     /// <summary>Seen, started, not finished. Continue accumulating into the same record.</summary>
-    Resumable,
+    Resumable = 2,
 
     /// <summary>Seen with a different filter. Refuse.</summary>
-    FilterMismatch,
+    FilterMismatch = 3,
 }
 
 /// <summary>The log's answer about one operation id.</summary>
@@ -34,6 +34,11 @@ internal sealed record ManagementOperationLookup(
 internal sealed class ManagementOperationLog(TimeProvider timeProvider)
 {
     /// <summary>Looks up what is already known about <paramref name="operationId"/>.</summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Performance",
+        "CA1822:Mark members as static",
+        Justification = "Kept as instance method to align with the rest of ManagementOperationLog."
+    )]
     public async Task<ManagementOperationLookup> LookupAsync(
         DbContext db,
         Guid operationId,

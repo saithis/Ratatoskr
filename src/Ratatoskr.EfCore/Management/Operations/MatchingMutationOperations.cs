@@ -192,7 +192,10 @@ internal sealed class DeleteMatchingInboxOperation(
         }
 
         var removedIds = batch.Select(status => status.Id).ToHashSet();
-        var touchedMessages = batch.Select(status => status.MessageId).Distinct().ToArray();
+        var touchedMessages = batch
+            .Select(status => status.MessageId)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
         db.Set<InboxHandlerStatusEntity>().RemoveRange(batch);
 
         // A message whose last handler row goes with this batch has to go too: leaving it behind
@@ -206,7 +209,7 @@ internal sealed class DeleteMatchingInboxOperation(
 
         var orphaned = touchedMessages
             .Where(messageId =>
-                !survivors.Any(row => row.MessageId == messageId && !removedIds.Contains(row.Id))
+                !survivors.Exists(row => row.MessageId == messageId && !removedIds.Contains(row.Id))
             )
             .ToArray();
 

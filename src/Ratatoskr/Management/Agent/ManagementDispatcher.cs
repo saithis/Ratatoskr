@@ -118,6 +118,17 @@ internal sealed partial class ManagementDispatcher(
             );
         }
 
+        return await ExecuteOperationAsync(operation, request, payload, remaining, cancellationToken);
+    }
+
+    private async Task<ManagementResponseEnvelope> ExecuteOperationAsync(
+        IManagementOperation operation,
+        ManagementRequestEnvelope request,
+        object payload,
+        TimeSpan remaining,
+        CancellationToken cancellationToken
+    )
+    {
         var context = new ManagementOperationContext
         {
             Operation = request.Operation,

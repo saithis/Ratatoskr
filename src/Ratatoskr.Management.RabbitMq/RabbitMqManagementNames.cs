@@ -75,7 +75,7 @@ internal sealed class RabbitMqManagementNames(string prefix)
         foreach (var character in value)
         {
             builder.Append(
-                char.IsAsciiLetterOrDigit(character) || character is '-' || character is '_'
+                char.IsAsciiLetterOrDigit(character) || character is '-' or '_'
                     ? character
                     : '-'
             );

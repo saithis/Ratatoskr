@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using Ratatoskr.Management.Contracts;
 using Ratatoskr.Management.Registry;
@@ -149,7 +150,10 @@ public abstract class ManagementTransportConformanceTests
         await using var host = await StartAsync();
         await host.Client.WaitForServiceAsync(TransportName, host.ServiceName);
 
-        var messages = Enumerable.Range(0, 16).Select(index => $"message-{index}").ToArray();
+        var messages = Enumerable
+            .Range(0, 16)
+            .Select(index => $"message-{index.ToString(CultureInfo.InvariantCulture)}")
+            .ToArray();
 
         var responses = await Task.WhenAll(messages.Select(message => EchoAsync(host, message)));
 
