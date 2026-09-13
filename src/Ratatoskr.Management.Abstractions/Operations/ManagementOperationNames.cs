@@ -60,6 +60,15 @@ public static class ManagementOperationNames
     /// <summary>Deletes every inbox handler row matching a filter, in bounded batches.</summary>
     public const string InboxDeleteMatching = "inbox.deleteMatching";
 
+    /// <summary>Queue and DLQ statistics across channels.</summary>
+    public const string QueueStats = "queues.stats";
+
+    /// <summary>Requeues dead-lettered messages from a DLQ back to their main queue.</summary>
+    public const string DlqRequeue = "dlq.requeue";
+
+    /// <summary>Purges messages from a dead-letter queue.</summary>
+    public const string DlqPurge = "dlq.purge";
+
     /// <summary>Every operation name, for conformance assertions and registry validation.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -81,5 +90,8 @@ public static class ManagementOperationNames
         InboxRequeueMessage,
         InboxRequeueMatching,
         InboxDeleteMatching,
+        QueueStats,
+        DlqRequeue,
+        DlqPurge,
     ];
 }

@@ -39,7 +39,10 @@ public abstract class DashboardTestBase(
         }.ToString();
 
     /// <summary>Starts the agent, the dashboard and its store in one host.</summary>
-    protected async Task StartDashboardAsync(Action<IServiceCollection>? configure = null)
+    protected async Task StartDashboardAsync(
+        Action<IServiceCollection>? configure = null,
+        Action<RatatoskrBuilder>? configureBus = null
+    )
     {
         await CreateDashboardDatabaseAsync();
 
@@ -56,7 +59,7 @@ public abstract class DashboardTestBase(
             });
 
             configure?.Invoke(services);
-        });
+        }, configureBus);
     }
 
     /// <summary>Waits until the co-hosted service has announced itself to the dashboard.</summary>

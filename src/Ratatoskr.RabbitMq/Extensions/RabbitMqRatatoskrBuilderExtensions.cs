@@ -2,7 +2,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Ratatoskr.AsyncApi.Generation;
 using Ratatoskr.Core;
+using Ratatoskr.Management.Contracts;
 using Ratatoskr.RabbitMq.AsyncApi;
+using Ratatoskr.RabbitMq.Management;
 
 namespace Ratatoskr.RabbitMq.Extensions;
 
@@ -59,6 +61,23 @@ public static class RabbitMqRatatoskrBuilderExtensions
                 IAsyncApiTransportBindingProvider,
                 RabbitMqAsyncApiBindingProvider
             >()
+        );
+
+        // Management topology and DLQ operations
+        builder.Services.TryAddEnumerable(
+            ServiceDescriptor.Scoped<IChannelQueueResolver, RabbitMqChannelQueueResolver>()
+        );
+        builder.Services.TryAddEnumerable(
+            ServiceDescriptor.Scoped<IManagementCapabilityContributor, RabbitMqCapabilityContributor>()
+        );
+        builder.Services.TryAddEnumerable(
+            ServiceDescriptor.Scoped<IManagementOperation, RabbitMqDlqRequeueOperation>()
+        );
+        builder.Services.TryAddEnumerable(
+            ServiceDescriptor.Scoped<IManagementOperation, RabbitMqDlqPurgeOperation>()
+        );
+        builder.Services.TryAddEnumerable(
+            ServiceDescriptor.Scoped<IManagementOperation, RabbitMqQueueStatsOperation>()
         );
 
         return builder;

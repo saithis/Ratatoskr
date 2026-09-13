@@ -2,7 +2,10 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using AwesomeAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.Management.Contracts;
+using Ratatoskr.Management.Http;
+using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Management;
@@ -25,7 +28,21 @@ public class ManagementSurfaceParityTests(
     [Test]
     public async Task EveryOperation_AnswersOnBothSurfaces()
     {
-        await StartDashboardAsync();
+        await StartDashboardAsync(
+            configure: services =>
+            {
+                services.AddSingleton<TestEventHandler>();
+            },
+            configureBus: bus =>
+            {
+                bus.UseRabbitMq(c => c.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddCommandConsumeChannel(
+                    "test.consume",
+                    c => c.WithRabbitMq(r => r.WithDirectExchange().WithQueueName("test.consume.queue"))
+                          .Consumes<TestEvent>(m => m.WithHandler<TestEventHandler>())
+                );
+            }
+        );
         await WaitForDiscoveryAsync();
 
         foreach (var probe in Probes())
@@ -152,6 +169,24 @@ public class ManagementSurfaceParityTests(
             ManagementOperationNames.InboxRequeueMessage,
             HttpMethod.Post,
             $"{context}/inbox/messages/{{seeded-message}}/requeue"
+        );
+
+        yield return new Probe(
+            ManagementOperationNames.QueueStats,
+            HttpMethod.Get,
+            "/queues"
+        );
+        yield return new Probe(
+            ManagementOperationNames.DlqRequeue,
+            HttpMethod.Post,
+            "/channels/test.consume/dlq/requeue",
+            () => new DlqRequeueBody()
+        );
+        yield return new Probe(
+            ManagementOperationNames.DlqPurge,
+            HttpMethod.Post,
+            "/channels/test.consume/dlq/purge",
+            () => new DlqPurgeBody()
         );
     }
 

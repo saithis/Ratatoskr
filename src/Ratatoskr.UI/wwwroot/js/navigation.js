@@ -194,21 +194,78 @@ export function renderOverview(detail) {
 }
 
 /** Renders the channel topology for one service. */
-export function renderChannels(detail) {
-  const rows = detail.channels.map((channel) =>
-    el("tr", {
-      children: [
-        cell(channel.logicalName),
-        cell(channel.intent),
-        cell(channel.transportBindings.map((binding) => binding.displayName).join(", ") || "—"),
-        cell(channel.messageTypes.join(", ") || "—"),
-      ],
-    }),
-  );
+export function renderChannels(detail, onRequeueDlq, onPurgeDlq) {
+  const rows = [];
+  for (const channel of detail.channels) {
+    if (channel.queues && channel.queues.length > 0) {
+      for (const q of channel.queues) {
+        const hasDlq = Boolean(q.deadLetterQueueName);
+        const dlqCount = q.deadLetterCount ?? 0;
+
+        const actionButtons = [];
+        if (hasDlq && dlqCount > 0) {
+          const requeueBtn = el("button", {
+            className: "btn btn-primary btn-sm",
+            text: "↺ Requeue",
+          });
+          requeueBtn.addEventListener("click", () => onRequeueDlq?.(channel, q));
+          actionButtons.push(requeueBtn);
+
+          const purgeBtn = el("button", {
+            className: "btn btn-danger btn-sm",
+            text: "🗑 Purge",
+          });
+          purgeBtn.addEventListener("click", () => onPurgeDlq?.(channel, q));
+          actionButtons.push(purgeBtn);
+        }
+
+        rows.push(
+          el("tr", {
+            children: [
+              cell(channel.logicalName),
+              cell(channel.intent),
+              cell(q.queueName),
+              cell(q.messageCount),
+              cell(q.deadLetterQueueName ?? "—"),
+              el("td", {
+                children: [
+                  el("span", {
+                    className: `badge ${dlqCount > 0 ? "badge-danger" : "badge-secondary"}`,
+                    text: String(dlqCount),
+                  }),
+                ],
+              }),
+              el("td", {
+                className: "actions-column",
+                children:
+                  actionButtons.length > 0
+                    ? actionButtons
+                    : [el("span", { className: "muted", text: "—" })],
+              }),
+            ],
+          }),
+        );
+      }
+    } else {
+      rows.push(
+        el("tr", {
+          children: [
+            cell(channel.logicalName),
+            cell(channel.intent),
+            cell("—"),
+            cell("—"),
+            cell("—"),
+            cell("—"),
+            cell("—"),
+          ],
+        }),
+      );
+    }
+  }
 
   replaceChildren(
     byId("channels-tbody"),
-    rows.length > 0 ? rows : [emptyRow(4, "This service reports no channels.")],
+    rows.length > 0 ? rows : [emptyRow(7, "This service reports no channels.")],
   );
 }
 

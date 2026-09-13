@@ -137,6 +137,60 @@ public static class ManagementApiRoutes
             .RequireAuthorization(policies.RequeueMessages)
             .AddEndpointFilter<ManagementAntiforgeryFilter>();
 
+        group.MapGet(
+            "/queues",
+            (HttpContext http, CancellationToken cancellationToken) =>
+                RunAsync(
+                    http,
+                    strategy,
+                    ManagementOperationNames.QueueStats,
+                    new QueueStatsRequest(),
+                    cancellationToken
+                )
+        );
+
+        var channels = group.MapGroup("/channels/{channelName}");
+
+        channels
+            .MapPost(
+                "/dlq/requeue",
+                (
+                    HttpContext http,
+                    string channelName,
+                    [FromBody] DlqRequeueBody? body,
+                    CancellationToken cancellationToken
+                ) =>
+                    RunAsync(
+                        http,
+                        strategy,
+                        ManagementOperationNames.DlqRequeue,
+                        new DlqRequeueRequest(channelName, body?.QueueName, body?.Limit),
+                        cancellationToken
+                    )
+            )
+            .RequireAuthorization(policies.RequeueMessages)
+            .AddEndpointFilter<ManagementAntiforgeryFilter>();
+
+        channels
+            .MapPost(
+                "/dlq/purge",
+                (
+                    HttpContext http,
+                    string channelName,
+                    [FromBody] DlqPurgeBody? body,
+                    CancellationToken cancellationToken
+                ) =>
+                    RunAsync(
+                        http,
+                        strategy,
+                        ManagementOperationNames.DlqPurge,
+                        new DlqPurgeRequest(channelName, body?.QueueName),
+                        cancellationToken
+                    )
+            )
+            .RequireAuthorization(policies.DeleteMessages)
+            .AddEndpointFilter<ManagementAntiforgeryFilter>();
+
         return group;
     }
 
@@ -294,3 +348,10 @@ public sealed record MessageFilterQuery
             Search = Search,
         };
 }
+
+/// <summary>Body for DLQ requeue requests.</summary>
+public sealed record DlqRequeueBody(string? QueueName = null, int? Limit = null);
+
+/// <summary>Body for DLQ purge requests.</summary>
+public sealed record DlqPurgeBody(string? QueueName = null);
+

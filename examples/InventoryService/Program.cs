@@ -8,7 +8,6 @@ using Microsoft.EntityFrameworkCore;
 using Ratatoskr;
 using Ratatoskr.EfCore;
 using Ratatoskr.Management;
-using Ratatoskr.Management.EfCore;
 using Ratatoskr.Management.RabbitMq;
 using Ratatoskr.RabbitMq.Extensions;
 using ServiceDefaults;
@@ -83,48 +82,44 @@ builder.Services.AddRatatoskr(bus =>
             .Consumes<StockAudited>(m => m.WithHandler<StockAuditedHandler>("inventory.stock-audited"))
             .UseInbox<InventoryDbContext>()
     );
-});
 
-// This service is managed from a dashboard running in another process, reached over RabbitMQ.
-builder.Services.AddRatatoskrManagementAgent(agent =>
-{
-    agent.ServiceName =
-        builder.Configuration["Ratatoskr:Management:ServiceName"] ?? "inventory-service";
-    agent.InstanceId =
-        $"{Environment.MachineName}-{Environment.ProcessId.ToString(CultureInfo.InvariantCulture)}";
-    agent.Configure(options => options.HeartbeatInterval = TimeSpan.FromSeconds(5));
-    agent.UseEfCore();
-
-    agent.AddRabbitMq("broker", options =>
+    // This service is managed from a dashboard running in another process, reached over RabbitMQ.
+    bus.UseManagement(agent =>
     {
-        options.ConnectionString = new Uri(rabbitMqConnectionString);
-        options.ResourcePrefix = builder.Configuration["Ratatoskr:Management:ResourcePrefix"];
-        options.HeartbeatInterval = TimeSpan.FromSeconds(5);
+        agent.ServiceName =
+            builder.Configuration["Ratatoskr:Management:ServiceName"] ?? "inventory-service";
+        agent.InstanceId =
+            $"{Environment.MachineName}-{Environment.ProcessId.ToString(CultureInfo.InvariantCulture)}";
+        agent.Configure(options => options.HeartbeatInterval = TimeSpan.FromSeconds(5));
 
-        // Where this service announces itself. A publisher cannot declare an exchange it does not
-        // own, so the dashboard's discovery exchange has to be configured rather than discovered.
-        options.DiscoveryExchange =
-            builder.Configuration["Ratatoskr:Management:DiscoveryExchange"]
-            ?? "dashboard.mgmt.discovery.inbox";
+        agent.AddRabbitMq("broker", options =>
+        {
+            options.ConnectionString = new Uri(rabbitMqConnectionString);
+            options.ResourcePrefix = builder.Configuration["Ratatoskr:Management:ResourcePrefix"];
+            options.HeartbeatInterval = TimeSpan.FromSeconds(5);
 
-        // Every identity in the vhost may publish to a '*.inbox' exchange, so the agent — not the
-        // broker — decides whose commands it will act on. This example runs on a development
-        // broker where everything authenticates as one user, hence the shared secret rather than
-        // a user_id allowlist.
-        var secret = builder.Configuration["Ratatoskr:Management:SharedSecret"];
-        if (!string.IsNullOrWhiteSpace(secret))
-        {
-            options.SharedSecret = secret;
-        }
-        else
-        {
-            options.AllowUnauthenticatedCallers = true;
-        }
+            // Where this service announces itself. A publisher cannot declare an exchange it does not
+            // own, so the dashboard's discovery exchange has to be configured rather than discovered.
+            options.DiscoveryExchange =
+                builder.Configuration["Ratatoskr:Management:DiscoveryExchange"]
+                ?? "dashboard.mgmt.discovery.inbox";
+
+            // Every identity in the vhost may publish to a '*.inbox' exchange, so the agent — not the
+            // broker — decides whose commands it will act on. This example runs on a development
+            // broker where everything authenticates as one user, hence the shared secret rather than
+            // a user_id allowlist.
+            var secret = builder.Configuration["Ratatoskr:Management:SharedSecret"];
+            if (!string.IsNullOrWhiteSpace(secret))
+            {
+                options.SharedSecret = secret;
+            }
+            else
+            {
+                options.AllowUnauthenticatedCallers = true;
+            }
+        });
     });
 });
-
-builder.Services.AddRatatoskrManagementOperationCleanup<InventoryDbContext>();
-builder.Services.AddRatatoskrManagementOperationCleanup<AuditDbContext>();
 
 var inventoryCs =
     builder.Configuration.GetConnectionString("inventorydb")

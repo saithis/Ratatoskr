@@ -63,9 +63,13 @@ public sealed class ManagementAgent(
             .OrderBy(capability => capability.Name, StringComparer.Ordinal)
             .ToArray();
 
-        var channels = scope
-            .ServiceProvider.GetServices<IManagementTopologyContributor>()
-            .SelectMany(contributor => contributor.GetChannels())
+        var channelsList = new List<ChannelTopology>();
+        foreach (var contributor in scope.ServiceProvider.GetServices<IManagementTopologyContributor>())
+        {
+            channelsList.AddRange(await contributor.GetChannelsAsync(cancellationToken));
+        }
+
+        var channels = channelsList
             .OrderBy(channel => channel.LogicalName, StringComparer.Ordinal)
             .ThenBy(channel => channel.Intent)
             .ToArray();

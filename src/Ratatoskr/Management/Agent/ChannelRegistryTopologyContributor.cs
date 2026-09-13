@@ -42,4 +42,53 @@ internal sealed class ChannelRegistryTopologyContributor(IServiceProvider servic
             );
         }
     }
+
+    public async Task<IReadOnlyList<ChannelTopology>> GetChannelsAsync(
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (services.GetService<ChannelRegistry>() is not { } channels)
+        {
+            return [];
+        }
+
+        var resolvers = services.GetServices<IChannelQueueResolver>().ToArray();
+        var result = new List<ChannelTopology>();
+
+        foreach (var channel in channels.GetPublishChannels().Concat(channels.GetConsumeChannels()))
+        {
+            var intent = channel.Intent is ChannelType.EventPublish or ChannelType.CommandPublish
+                ? ChannelIntent.Publish
+                : ChannelIntent.Consume;
+            var messageTypes = channel.Messages.Select(message => message.MessageTypeName).ToArray();
+
+            var queues = new List<QueueTopology>();
+            foreach (var resolver in resolvers)
+            {
+                var resolved = await resolver.ResolveQueuesAsync(
+                    channel.ChannelName,
+                    intent,
+                    messageTypes,
+                    cancellationToken
+                );
+                queues.AddRange(resolved);
+            }
+
+            result.Add(new ChannelTopology(
+                channel.ChannelName,
+                intent,
+                messageTypes,
+                [
+                    .. channel.Transports.Select(transport => new TransportBinding(
+                        transport,
+                        transport,
+                        new Dictionary<string, string>(StringComparer.Ordinal)
+                    )),
+                ],
+                queues
+            ));
+        }
+
+        return result;
+    }
 }

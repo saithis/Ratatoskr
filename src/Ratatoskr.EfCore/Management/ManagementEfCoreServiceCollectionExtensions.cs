@@ -10,7 +10,7 @@ using Ratatoskr.Management.EfCore.Idempotency;
 using Ratatoskr.Management.EfCore.Internal;
 using Ratatoskr.Management.EfCore.Operations;
 
-namespace Ratatoskr.Management.EfCore;
+namespace Ratatoskr.Management;
 
 /// <summary>Registers the EF Core inbox and outbox management operations.</summary>
 public static class ManagementEfCoreServiceCollectionExtensions
@@ -82,7 +82,9 @@ public static class ManagementEfCoreServiceCollectionExtensions
         where TDbContext : DbContext, IOutboxDbContext, IInboxDbContext
     {
         ArgumentNullException.ThrowIfNull(services);
-        services.AddSingleton<IHostedService, ManagementOperationCleanupService<TDbContext>>();
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IHostedService, ManagementOperationCleanupService<TDbContext>>()
+        );
         return services;
     }
 }

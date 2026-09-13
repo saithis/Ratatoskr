@@ -1,21 +1,27 @@
 # Management HTTP API Reference
 
-In addition to the web dashboard, any service hosting `Ratatoskr.Management.EfCore` can expose a direct, public REST API for inspection and operations. This allows command-line tools, external monitoring systems, deployment scripts, or custom administration tools to interact with Ratatoskr directly without going through the web UI or RabbitMQ broker.
+In addition to the web dashboard, any service running Ratatoskr can expose a direct, public REST API for inspection and operations. This allows command-line tools, external monitoring systems, deployment scripts, or custom administration tools to interact with Ratatoskr directly without going through the web UI or RabbitMQ broker.
 
 ---
 
 ## Endpoint Registration
 
-Install `Ratatoskr.Management.EfCore` in the service and map the endpoints:
+Enable the management agent using `bus.UseManagement(...)` within `AddRatatoskr` and map the endpoints in ASP.NET Core:
 
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
 
-// Register agent and EF Core operations
-builder.Services.AddRatatoskrManagementAgent(agent =>
+builder.Services.AddRatatoskr(bus =>
 {
-    agent.ServiceName = "orders-service";
-    agent.InstanceId = Environment.MachineName;
+    bus.UseRabbitMq(c => c.ConnectionString = new Uri("amqp://guest:guest@localhost:5672/"));
+    bus.AddEfCoreDurability<OrdersDbContext>(d => d.UseInbox().UseOutbox());
+
+    // Register agent
+    bus.UseManagement(agent =>
+    {
+        agent.ServiceName = "orders-service";
+        agent.InstanceId = Environment.MachineName;
+    });
 });
 
 // Configure authorization policies
@@ -281,6 +287,82 @@ Performs bounded bulk retry of inbox handler statuses.
 Performs bounded bulk deletion of inbox handler statuses.
 
 **Policy**: `Bulk`
+
+---
+
+## Queue & Dead Letter Queue (DLQ) Endpoints
+
+### `GET /ratatoskr/api/v1/queues`
+Returns queue statistics and dead letter queue depths for all registered channels.
+
+**Policy**: `Metadata`
+
+**Example Response**:
+```json
+{
+  "channels": [
+    {
+      "channelName": "orders.commands",
+      "queues": [
+        {
+          "queueName": "orders.commands.queue",
+          "messageCount": 12,
+          "deadLetterQueueName": "orders.commands.queue.dlq",
+          "deadLetterCount": 4
+        }
+      ]
+    }
+  ]
+}
+```
+
+### `POST /ratatoskr/api/v1/channels/{channelName}/dlq/requeue`
+Requeues messages from a channel's Dead Letter Queue back to the main queue via the channel exchange.
+
+**Policy**: `Requeue`
+
+**Request Body (Optional)**:
+```json
+{
+  "queueName": "orders.commands.queue",
+  "limit": 100
+}
+```
+- `limit` (integer, optional): Maximum number of messages to requeue. When omitted or `null`, requeues all messages in the DLQ.
+- `queueName` (string, optional): Specific queue name when multiple queues exist on the channel.
+
+**Example Response**:
+```json
+{
+  "channelName": "orders.commands",
+  "queueName": "orders.commands.queue",
+  "deadLetterQueueName": "orders.commands.queue.dlq",
+  "requeuedCount": 100,
+  "remainingCount": 15
+}
+```
+
+### `POST /ratatoskr/api/v1/channels/{channelName}/dlq/purge`
+Purges all messages from a channel's Dead Letter Queue.
+
+**Policy**: `Delete`
+
+**Request Body (Optional)**:
+```json
+{
+  "queueName": "orders.commands.queue"
+}
+```
+
+**Example Response**:
+```json
+{
+  "channelName": "orders.commands",
+  "queueName": "orders.commands.queue",
+  "deadLetterQueueName": "orders.commands.queue.dlq",
+  "purgedCount": 115
+}
+```
 
 ---
 

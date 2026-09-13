@@ -155,7 +155,7 @@ public class ManagementProtocolSerializationTests
         Serialize(announcement)
             .Should()
             .Be(
-                """{"protocolVersion":{"major":1,"minor":0},"serviceName":"orders","instanceId":"orders-1","machineName":"pod-7","environment":"Production","startedAt":"2026-09-11T11:00:00+00:00","announcedAt":"2026-09-11T12:00:00+00:00","capabilities":[{"name":"outbox","version":{"major":1,"minor":0}}],"dbContexts":[{"name":"OrdersDbContext","hasOutbox":true,"hasInbox":false,"pendingOutbox":3,"poisonedOutbox":1,"pendingInbox":0,"poisonedInbox":0}],"channels":[{"logicalName":"orders.events","intent":"Publish","messageTypes":["OrderCreated"],"transportBindings":[{"providerKind":"rabbitmq","displayName":"orders-events","properties":{"exchange":"orders.events"}}]}],"address":{"values":{"exchange":"orders.mgmt.cmd.inbox","instanceKey":"inst.orders-1","serviceKey":"svc.orders"}}}"""
+                """{"protocolVersion":{"major":1,"minor":0},"serviceName":"orders","instanceId":"orders-1","machineName":"pod-7","environment":"Production","startedAt":"2026-09-11T11:00:00+00:00","announcedAt":"2026-09-11T12:00:00+00:00","capabilities":[{"name":"outbox","version":{"major":1,"minor":0}}],"dbContexts":[{"name":"OrdersDbContext","hasOutbox":true,"hasInbox":false,"pendingOutbox":3,"poisonedOutbox":1,"pendingInbox":0,"poisonedInbox":0}],"channels":[{"logicalName":"orders.events","intent":"Publish","messageTypes":["OrderCreated"],"transportBindings":[{"providerKind":"rabbitmq","displayName":"orders-events","properties":{"exchange":"orders.events"}}],"queues":[]}],"address":{"values":{"exchange":"orders.mgmt.cmd.inbox","instanceKey":"inst.orders-1","serviceKey":"svc.orders"}}}"""
             );
     }
 

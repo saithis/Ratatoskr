@@ -13,7 +13,7 @@ using Ratatoskr;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.Management;
-using Ratatoskr.Management.EfCore;
+using Ratatoskr.Management.RabbitMq;
 using Ratatoskr.RabbitMq.Extensions;
 using Ratatoskr.UI;
 using ServiceDefaults;
@@ -85,24 +85,20 @@ builder.Services.AddRatatoskr(bus =>
     });
 
     PlaygroundScenarioManifest.RegisterScenarioTopologies(bus);
+
+    // The playground hosts its own dashboard: the agent and the dashboard share a process and reach
+    // each other through the in-process transport, with no broker involved in the control plane.
+    bus.UseManagement(agent =>
+    {
+        agent.ServiceName = "playground-host";
+        agent.InstanceId =
+            $"{Environment.MachineName}-{Environment.ProcessId.ToString(CultureInfo.InvariantCulture)}";
+        agent.Configure(options => options.HeartbeatInterval = TimeSpan.FromSeconds(5));
+        agent.AddInProcess();
+    });
 });
 
 PlaygroundMessageSenderDecoration.WrapAllMessageSenders(builder.Services);
-
-// The playground hosts its own dashboard: the agent and the dashboard share a process and reach
-// each other through the in-process transport, with no broker involved in the control plane.
-builder.Services.AddRatatoskrManagementAgent(agent =>
-{
-    agent.ServiceName = "playground-host";
-    agent.InstanceId =
-        $"{Environment.MachineName}-{Environment.ProcessId.ToString(CultureInfo.InvariantCulture)}";
-    agent.Configure(options => options.HeartbeatInterval = TimeSpan.FromSeconds(5));
-    agent.UseEfCore();
-    agent.AddInProcess();
-});
-
-builder.Services.AddRatatoskrManagementOperationCleanup<PublisherDbContext>();
-builder.Services.AddRatatoskrManagementOperationCleanup<ConsumerDbContext>();
 
 var publisherCs =
     builder.Configuration.GetConnectionString("publisherdb")
@@ -142,6 +138,16 @@ builder.Services.AddRatatoskrDashboard(dashboard =>
     );
     dashboard.Configure(options => options.StaleAfter = TimeSpan.FromSeconds(45));
     dashboard.AddInProcess();
+    dashboard.AddRabbitMq(
+        "broker",
+        options =>
+        {
+            options.ConnectionString = new Uri(rabbitMqConnectionString);
+            options.ResourcePrefix =
+                builder.Configuration["Ratatoskr:Management:ResourcePrefix"] ?? "dashboard";
+            options.HeartbeatInterval = TimeSpan.FromSeconds(2);
+        }
+    );
 });
 
 builder.Services.Configure<PlaygroundOptions>(

@@ -198,7 +198,8 @@ services.AddRatatoskrTesting();
 ## Management Agent (`Ratatoskr.Management`)
 
 ```csharp
-services.AddRatatoskrManagementAgent(agent =>
+// Fluent registration inside AddRatatoskr:
+bus.UseManagement(agent =>
 {
     agent.ServiceName = "orders-service";
     agent.InstanceId = Environment.MachineName;

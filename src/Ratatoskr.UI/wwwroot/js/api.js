@@ -129,6 +129,28 @@ export const requeueInboxMessage = (target, messageId) =>
     { method: "POST" },
   );
 
+/** Requeues dead-lettered messages for a channel. */
+export const requeueDlq = (target, channelName, queueName, limit) =>
+  request(
+    `/api/transports/${encode(target.transport)}/services/${encode(target.service)}` +
+      `/channels/${encode(channelName)}/dlq/requeue`,
+    {
+      method: "POST",
+      body: { queueName, limit },
+    },
+  );
+
+/** Purges a dead-letter queue for a channel. */
+export const purgeDlq = (target, channelName, queueName) =>
+  request(
+    `/api/transports/${encode(target.transport)}/services/${encode(target.service)}` +
+      `/channels/${encode(channelName)}/dlq/purge`,
+    {
+      method: "POST",
+      body: { queueName },
+    },
+  );
+
 /** Opens the server-sent event stream of registry changes. */
 export const openEventStream = () => new EventSource(`${basePath}/api/events`);
 

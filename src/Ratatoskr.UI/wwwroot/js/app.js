@@ -174,10 +174,48 @@ async function renderSelected(snapshot) {
   if (snapshot.tab === "overview") {
     renderOverview(selectedDetail);
   } else if (snapshot.tab === "channels") {
-    renderChannels(selectedDetail);
+    renderChannels(selectedDetail, handleRequeueDlq, handlePurgeDlq);
   } else {
     applyCapabilityGating(selectedDetail, snapshot.tab);
     await renderMessages();
+  }
+}
+
+async function handleRequeueDlq(channel, queue) {
+  const answer = prompt(
+    `Requeue dead-lettered messages from ${queue.deadLetterQueueName} back to ${queue.queueName}?\n` +
+      `Enter count to requeue (or leave blank to requeue up to 500):`,
+    "100",
+  );
+  if (answer === null) {
+    return;
+  }
+  const parsed = parseInt(answer.trim(), 10);
+  const limit = Number.isNaN(parsed) || parsed <= 0 ? null : parsed;
+  try {
+    const target = state.current().selection;
+    const result = await api.requeueDlq(target, channel.logicalName, queue.queueName, limit);
+    toast(`Requeued ${result.requeuedCount} message(s). ${result.remainingCount} remaining.`, "success");
+    refresh();
+  } catch (error) {
+    toast(describe(error), "danger");
+  }
+}
+
+async function handlePurgeDlq(channel, queue) {
+  const msg =
+    `Are you sure you want to PURGE all messages from ${queue.deadLetterQueueName}? ` +
+    "This cannot be undone.";
+  if (!confirm(msg)) {
+    return;
+  }
+  try {
+    const target = state.current().selection;
+    const result = await api.purgeDlq(target, channel.logicalName, queue.queueName);
+    toast(`Purged ${result.purgedCount} message(s) from ${queue.deadLetterQueueName}.`, "success");
+    refresh();
+  } catch (error) {
+    toast(describe(error), "danger");
   }
 }
 

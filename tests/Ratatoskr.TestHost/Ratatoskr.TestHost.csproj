@@ -1,8 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <ItemGroup>
     <ProjectReference Include="..\..\src\Ratatoskr\Ratatoskr.csproj" />
-    <ProjectReference Include="..\..\src\Ratatoskr.Management\Ratatoskr.Management.csproj" />
-    <ProjectReference Include="..\..\src\Ratatoskr.Management.EfCore\Ratatoskr.Management.EfCore.csproj" />
+    <ProjectReference Include="..\..\src\Ratatoskr.EfCore\Ratatoskr.EfCore.csproj" />
     <ProjectReference Include="..\..\src\Ratatoskr.UI\Ratatoskr.UI.csproj" />
   </ItemGroup>
 

@@ -73,5 +73,10 @@ public interface IManagementCapabilityContributor
 public interface IManagementTopologyContributor
 {
     /// <summary>The channels this contributor knows about.</summary>
-    IEnumerable<ChannelTopology> GetChannels();
+    IEnumerable<ChannelTopology> GetChannels() => [];
+
+    /// <summary>The channels this contributor knows about, resolved asynchronously.</summary>
+    Task<IReadOnlyList<ChannelTopology>> GetChannelsAsync(
+        CancellationToken cancellationToken = default
+    ) => Task.FromResult<IReadOnlyList<ChannelTopology>>([.. GetChannels()]);
 }

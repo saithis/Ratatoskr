@@ -9,7 +9,6 @@ using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.Management;
-using Ratatoskr.Management.EfCore;
 using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Management;
@@ -41,7 +40,10 @@ public abstract class ManagementTestBase(
 
     protected HttpClient HttpClient { get; private set; } = null!;
 
-    protected async Task StartManagementTestAsync(Action<IServiceCollection>? configure = null)
+    protected async Task StartManagementTestAsync(
+        Action<IServiceCollection>? configure = null,
+        Action<RatatoskrBuilder>? configureBus = null
+    )
     {
         await StartTestAsync(services =>
         {
@@ -59,6 +61,7 @@ public abstract class ManagementTestBase(
             services.AddRatatoskr(bus =>
             {
                 bus.AddEfCoreDurability<TestDbContext>(d => d.UseInbox().UseOutbox());
+                configureBus?.Invoke(bus);
             });
 
             services.AddDbContext<TestDbContext>(

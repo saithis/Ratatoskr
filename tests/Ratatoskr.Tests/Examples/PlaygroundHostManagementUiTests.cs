@@ -226,6 +226,21 @@ public sealed class PlaygroundHostManagementUiTests : IAsyncDisposable
         (await viaDashboard.Content.ReadAsStringAsync()).Should().Contain("PublisherDbContext");
     }
 
+    [Test]
+    public async Task ManagementUI_Transports_IncludesBothInProcessAndBroker()
+    {
+        var factory = await GetOrCreateFactoryAsync();
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/ratatoskr/api/transports");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var transports = await response.Content.ReadFromJsonAsync<List<string>>();
+        transports.Should().NotBeNull();
+        transports.Should().Contain("in-process");
+        transports.Should().Contain("broker");
+    }
+
     public async ValueTask DisposeAsync()
     {
         // Keep shared factory until test session tear-down

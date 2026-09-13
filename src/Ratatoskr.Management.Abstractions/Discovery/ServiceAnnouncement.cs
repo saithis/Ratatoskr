@@ -96,6 +96,9 @@ public static class ManagementCapabilityNames
 
     /// <summary>The service persists operation ids, so a duplicate delivery mutates once.</summary>
     public const string Idempotency = "idempotency";
+
+    /// <summary>The service exposes Dead Letter Queue statistics and requeueing.</summary>
+    public const string Dlq = "dlq";
 }
 
 /// <summary>Whether a channel is published to or consumed from.</summary>
@@ -115,10 +118,23 @@ public sealed record TransportBinding(
     IReadOnlyDictionary<string, string> Properties
 );
 
+/// <summary>Information about a physical queue associated with a channel.</summary>
+public sealed record QueueTopology(
+    string QueueName,
+    long MessageCount,
+    string? DeadLetterQueueName = null,
+    long DeadLetterCount = 0
+);
+
 /// <summary>One logical channel and the message types that travel on it.</summary>
 public sealed record ChannelTopology(
     string LogicalName,
     ChannelIntent Intent,
     IReadOnlyList<string> MessageTypes,
-    IReadOnlyList<TransportBinding> TransportBindings
-);
+    IReadOnlyList<TransportBinding> TransportBindings,
+    IReadOnlyList<QueueTopology>? Queues = null
+)
+{
+    /// <summary>Physical queues and DLQs associated with this channel.</summary>
+    public IReadOnlyList<QueueTopology> Queues { get; init; } = Queues ?? [];
+}

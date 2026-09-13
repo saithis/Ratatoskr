@@ -124,6 +124,15 @@ public sealed record ListContextsRequest;
 /// <summary>Asks for one DbContext's health gauges.</summary>
 public sealed record ContextHealthRequest;
 
+/// <summary>Requests requeueing dead-lettered messages for a channel/queue.</summary>
+public sealed record DlqRequeueRequest(string ChannelName, string? QueueName = null, int? Limit = null);
+
+/// <summary>Requests purging dead-lettered messages for a channel/queue.</summary>
+public sealed record DlqPurgeRequest(string ChannelName, string? QueueName = null);
+
+/// <summary>Requests current queue statistics across all channels.</summary>
+public sealed record QueueStatsRequest;
+
 /// <summary>Server-side paging and mutation bounds, shared by every caller.</summary>
 public static class ManagementPaging
 {

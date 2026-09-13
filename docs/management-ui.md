@@ -11,13 +11,20 @@ The architecture strictly decouples the management control plane from applicatio
 
 ## Package Graph
 
+Management capabilities are structured into 3 focused packages alongside core library integrations:
+
 | Package | Purpose | Dependencies |
 |---|---|---|
-| `Ratatoskr.Management.Abstractions` | Versioned protocol envelopes, stable error codes, cursor contracts, capability/topology models, and transport interfaces (`IManagementTransport`, `IManagementDiscoverySource`, `IManagementOperation`). | None (pure contracts) |
-| `Ratatoskr.Management` | Core control-plane runtime: operation registry, dispatcher, agent host, in-process transport, and shared route descriptors. | `Ratatoskr.Management.Abstractions` |
-| `Ratatoskr.Management.EfCore` | Inbox/outbox operations (listing, detail, retry, delete, count, preview), EF Core schema integration for operation tracking, and per-service REST endpoint mappings (`MapRatatoskrManagementApi`). | `Ratatoskr.Management`, `Ratatoskr.EfCore` |
-| `Ratatoskr.Management.RabbitMq` | RabbitMQ control-plane provider: dedicated connection, least-privilege AMQP topology (`*.inbox` exchanges, durable service queues, exclusive instance and reply queues), caller authentication (`user_id` and HMAC). | `Ratatoskr.Management.Abstractions`, `RabbitMQ.Client` |
-| `Ratatoskr.UI` | Web dashboard: vanilla modular ES frontend, dashboard database store (`RatatoskrDashboardDbContext`), audit logging and retention, SSE service events, and antiforgery. | `Ratatoskr.Management` |
+| `Ratatoskr.Management.Abstractions` | Versioned protocol envelopes, stable error codes, cursor contracts, capability/topology models, and transport interfaces (`IManagementTransport`, `IManagementDiscoverySource`, `IManagementOperation`, `IChannelQueueResolver`). | None (pure contracts) |
+| `Ratatoskr.Management.RabbitMq` | RabbitMQ control-plane transport provider: dedicated connection, least-privilege AMQP topology (`*.inbox` exchanges, durable service queues, exclusive instance and reply queues), caller authentication (`user_id` and HMAC). | `Ratatoskr.Management.Abstractions`, `RabbitMQ.Client` |
+| `Ratatoskr.UI` | Web dashboard: vanilla modular ES frontend, dashboard database store (`RatatoskrDashboardDbContext`), audit logging and retention, SSE service events, and antiforgery. | `Ratatoskr`, `Ratatoskr.Management.Abstractions` |
+
+### Consolidated Runtime Capabilities
+
+Rather than requiring separate management packages per feature:
+- **Core Agent & In-Process Control Plane**: Built into `Ratatoskr` core. Register via `bus.UseManagement(agent => ...)` inside `AddRatatoskr`.
+- **EF Core Operations**: Built into `Ratatoskr.EfCore`. Inbox/outbox queries, mutations, idempotency log, and retention workers are automatically registered by `bus.AddEfCoreDurability<TContext>()`.
+- **RabbitMQ Queue Metrics & DLQ Operations**: Built into `Ratatoskr.RabbitMq`. Main queue depth, dead letter queue inspection, batch requeueing, and queue purging are automatically registered by `bus.UseRabbitMq()`.
 
 ---
 
@@ -263,6 +270,22 @@ Bulk operations are preview-first and bounded to prevent accidental database loc
    - The caller reviews the count and preview sample before confirming execution.
 3. **Execution Caps**: Operations are processed in batches (default `100`, max `MaxBatchSize`) up to a hard ceiling (`MaxTotalOperations`, default `10,000`). If more items match, the operation returns `{ processed: 10000, remaining: 2450, capped: true }`.
 4. **Idempotency**: All mutations accept an `X-Ratatoskr-Operation-Id` header (or envelope `OperationId`). Retrying a request with the same ID returns the original result without re-executing.
+
+---
+
+## Channels & Dead Letter Queue (DLQ) Management
+
+The **Channels** tab in the dashboard surfaces physical queues, message depths, and Dead Letter Queue (DLQ) metrics for all registered publish and consume channels:
+
+- **Queue Depth**: Real-time message count in the main consumer queue.
+- **Dead Letter Queue (DLQ)**: Name and message depth of the associated dead-letter queue (e.g. `{queue}.dlq`).
+- **Batch Requeueing**:
+  - Operators can choose to requeue a specific batch of messages (e.g., first 100) or all messages currently in the DLQ.
+  - Requeued messages are published back to the channel's exchange with their original routing key (CloudEvent `type`).
+  - The AMQP `x-death` header is stripped to clear poison tracking, and an `x-requeued-from-dlq-at` timestamp header is attached for observability.
+- **Purge DLQ**:
+  - Operators can purge all messages from a dead-letter queue after a confirmation prompt.
+  - Useful during incident response when poisoned messages have been diagnosed, recorded, or abandoned.
 
 ---
 

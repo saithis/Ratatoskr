@@ -21,7 +21,11 @@
     <InternalsVisibleTo Include="Ratatoskr.RabbitMq" />
     <InternalsVisibleTo Include="Ratatoskr.EfCore" />
     <InternalsVisibleTo Include="Ratatoskr.Management" />
+    <InternalsVisibleTo Include="Ratatoskr.Management.RabbitMq" />
     <InternalsVisibleTo Include="Ratatoskr.UI" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Ratatoskr.Management.Abstractions\Ratatoskr.Management.Abstractions.csproj" />
   </ItemGroup>
   <Target
     Name="Husky"

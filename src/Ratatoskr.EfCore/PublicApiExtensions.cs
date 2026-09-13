@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore.Internal;
+using Ratatoskr.Management;
 
 namespace Ratatoskr.EfCore;
 
@@ -71,6 +72,10 @@ public static class PublicApiExtensions
                 EfCoreDurabilityDescriptor<TDbContext>
             >();
             builder.Services.TryAddSingleton<EfCoreDurabilityRegistry>();
+
+            // Automatically wire management operations and cleanup for this DbContext
+            builder.Services.AddRatatoskrManagementEfCore();
+            builder.Services.AddRatatoskrManagementOperationCleanup<TDbContext>();
 
             return builder;
         }

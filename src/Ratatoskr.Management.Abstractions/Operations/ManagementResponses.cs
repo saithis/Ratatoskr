@@ -134,3 +134,22 @@ public sealed record MutationResponse(
 /// an operator whether to run the same filter again rather than leaving them guessing.
 /// </summary>
 public sealed record MatchingMutationResponse(long Processed, long Remaining, bool Capped);
+
+/// <summary>The outcome of a DLQ requeue operation.</summary>
+public sealed record DlqRequeueResponse(string QueueName, int RequeuedCount, long RemainingCount);
+
+/// <summary>The outcome of a DLQ purge operation.</summary>
+public sealed record DlqPurgeResponse(string QueueName, uint PurgedCount);
+
+/// <summary>Queue statistics for a channel.</summary>
+public sealed record ChannelQueueStats(
+    string ChannelName,
+    string QueueName,
+    long MessageCount,
+    string? DeadLetterQueueName,
+    long DeadLetterCount
+);
+
+/// <summary>Collection of queue statistics across channels.</summary>
+public sealed record QueueStatsResponse(IReadOnlyList<ChannelQueueStats> Queues);
+
