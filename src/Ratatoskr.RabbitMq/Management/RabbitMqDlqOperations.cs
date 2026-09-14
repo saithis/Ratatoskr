@@ -38,13 +38,13 @@ internal sealed class RabbitMqDlqRequeueOperation(
 
         if (channelReg is null)
         {
-            return ManagementResult.NotFound("channel_not_found", $"Channel '{request.ChannelName}' not found.");
+            return ManagementResult.NotFound($"Channel '{request.ChannelName}' not found.", "channel_not_found");
         }
 
         var channelOpts = channelReg.GetRabbitMqChannelOptions();
         if (channelOpts is null)
         {
-            return ManagementResult.Invalid("not_rabbitmq_channel", $"Channel '{request.ChannelName}' is not a RabbitMQ channel.");
+            return ManagementResult.Invalid($"Channel '{request.ChannelName}' is not a RabbitMQ channel.", "not_rabbitmq_channel");
         }
 
         var mainQueueName = request.QueueName ?? channelOpts.QueueName ?? channelReg.ChannelName;
@@ -59,7 +59,20 @@ internal sealed class RabbitMqDlqRequeueOperation(
 
         while (requeuedCount < maxToRequeue)
         {
-            var getResult = await channel.BasicGetAsync(dlqName, autoAck: false, cancellationToken);
+            BasicGetResult? getResult;
+            try
+            {
+                getResult = await channel.BasicGetAsync(dlqName, autoAck: false, cancellationToken);
+            }
+            catch (OperationInterruptedException ex)
+            {
+                if (requeuedCount == 0)
+                {
+                    return ManagementResult.NotFound($"Dead letter queue '{dlqName}' was not found: {ex.Message}", "dlq_not_found");
+                }
+                break;
+            }
+
             if (getResult is null)
             {
                 break;
@@ -92,21 +105,13 @@ internal sealed class RabbitMqDlqRequeueOperation(
                     body: getResult.Body,
                     cancellationToken: cancellationToken
                 );
+                await channel.BasicAckAsync(getResult.DeliveryTag, multiple: false, cancellationToken);
+                requeuedCount++;
             }
-            catch
+            catch (OperationInterruptedException)
             {
-                await channel.BasicPublishAsync(
-                    exchange: "",
-                    routingKey: mainQueueName,
-                    mandatory: false,
-                    basicProperties: props,
-                    body: getResult.Body,
-                    cancellationToken: cancellationToken
-                );
+                break;
             }
-
-            await channel.BasicAckAsync(getResult.DeliveryTag, multiple: false, cancellationToken);
-            requeuedCount++;
         }
 
         long remaining = 0;
@@ -144,13 +149,13 @@ internal sealed class RabbitMqDlqPurgeOperation(
 
         if (channelReg is null)
         {
-            return ManagementResult.NotFound("channel_not_found", $"Channel '{request.ChannelName}' not found.");
+            return ManagementResult.NotFound($"Channel '{request.ChannelName}' not found.", "channel_not_found");
         }
 
         var channelOpts = channelReg.GetRabbitMqChannelOptions();
         if (channelOpts is null)
         {
-            return ManagementResult.Invalid("not_rabbitmq_channel", $"Channel '{request.ChannelName}' is not a RabbitMQ channel.");
+            return ManagementResult.Invalid($"Channel '{request.ChannelName}' is not a RabbitMQ channel.", "not_rabbitmq_channel");
         }
 
         var mainQueueName = request.QueueName ?? channelOpts.QueueName ?? channelReg.ChannelName;
@@ -167,7 +172,7 @@ internal sealed class RabbitMqDlqPurgeOperation(
         }
         catch (OperationInterruptedException ex)
         {
-            return ManagementResult.NotFound("dlq_not_found", $"Dead letter queue '{dlqName}' was not found: {ex.Message}");
+            return ManagementResult.NotFound($"Dead letter queue '{dlqName}' was not found: {ex.Message}", "dlq_not_found");
         }
 
         return ManagementResult.Ok(new DlqPurgeResponse(dlqName, purgedCount));

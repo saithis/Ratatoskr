@@ -41,6 +41,7 @@ internal sealed partial class AuditingManagementDispatchStrategy(
         ManagementOperationNames.InboxList,
         ManagementOperationNames.InboxGet,
         ManagementOperationNames.InboxCount,
+        ManagementOperationNames.QueueStats,
     };
 
     public async Task<ManagementResponseEnvelope> ExecuteAsync(
@@ -184,6 +185,15 @@ internal sealed partial class DashboardAuditCleanupService(
             LogPruned(logger, removed);
         }
 
+        var snapshotCutoff = timeProvider.GetUtcNow() - options.Value.SnapshotRetention;
+        var prunedSnapshots = await db
+            .ServiceSnapshots.Where(entry => entry.LastSeenAt < snapshotCutoff)
+            .ExecuteDeleteAsync(cancellationToken);
+        if (prunedSnapshots > 0)
+        {
+            LogSnapshotsPruned(logger, prunedSnapshots);
+        }
+
         return removed;
     }
 
@@ -192,4 +202,7 @@ internal sealed partial class DashboardAuditCleanupService(
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Audit retention failed.")]
     private static partial void LogCleanupFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Pruned {Count} stale service snapshots.")]
+    private static partial void LogSnapshotsPruned(ILogger logger, int count);
 }

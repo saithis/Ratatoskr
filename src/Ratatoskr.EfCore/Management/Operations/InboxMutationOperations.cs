@@ -208,6 +208,26 @@ internal sealed class RequeueInboxMessageOperation(
                 "One or more handlers were modified concurrently, so nothing was applied. Retry with the same operation id."
             );
         }
+        catch (DbUpdateException)
+        {
+            // Two deliveries of the same command can race; the loser fails on the operation-id
+            // primary key. That is the mechanism working, not an error, so read back what the
+            // winner recorded and answer with it.
+            db.ChangeTracker.Clear();
+            var winner = await operationLog.LookupAsync(
+                db,
+                context.OperationId,
+                fingerprint,
+                cancellationToken
+            );
+
+            if (winner.Disposition is ManagementOperationDisposition.AlreadyCompleted)
+            {
+                return ManagementOperationLog.Replay<MutationResponse>(winner.Record!);
+            }
+
+            throw;
+        }
 
         return ManagementResult.Ok(response);
     }

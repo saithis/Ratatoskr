@@ -28,6 +28,9 @@ internal sealed class RabbitMqManagementConnection(string transportName, RabbitM
     /// <summary>Raised when the connection drops, so callers can fail pending work deterministically.</summary>
     public event EventHandler? ConnectionLost;
 
+    /// <summary>Raised when connection recovery succeeds, so callers can re-declare exclusive topology.</summary>
+    public event EventHandler? ConnectionRestored;
+
     /// <summary>Opens a channel, optionally with publisher confirms.</summary>
     /// <remarks>
     /// Callers own one channel each. Publishing to a receiver-owned exchange that does not exist
@@ -93,6 +96,7 @@ internal sealed class RabbitMqManagementConnection(string transportName, RabbitM
 
             var created = await factory.CreateConnectionAsync(cancellationToken);
             created.ConnectionShutdownAsync += OnShutdownAsync;
+            created.RecoverySucceededAsync += OnRecoverySucceededAsync;
             _connection = created;
             return created;
         }
@@ -118,11 +122,18 @@ internal sealed class RabbitMqManagementConnection(string transportName, RabbitM
         return Task.CompletedTask;
     }
 
+    private Task OnRecoverySucceededAsync(object sender, AsyncEventArgs args)
+    {
+        ConnectionRestored?.Invoke(this, EventArgs.Empty);
+        return Task.CompletedTask;
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_connection is not null)
         {
             _connection.ConnectionShutdownAsync -= OnShutdownAsync;
+            _connection.RecoverySucceededAsync -= OnRecoverySucceededAsync;
             await _connection.DisposeAsync();
             _connection = null;
         }

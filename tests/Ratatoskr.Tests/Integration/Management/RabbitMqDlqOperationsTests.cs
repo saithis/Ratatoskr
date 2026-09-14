@@ -184,4 +184,117 @@ public class RabbitMqDlqOperationsTests(
         var dlqCount = await channel.MessageCountAsync(DlqName);
         dlqCount.Should().Be(0);
     }
+
+    [Test]
+    public async Task DlqRequeue_UnknownChannel_ReturnsChannelNotFound()
+    {
+        await StartDlqTestHostAsync();
+
+        await InScopeAsync(async ctx =>
+        {
+            var operations = ctx.ServiceProvider.GetServices<IManagementOperation>();
+            var requeueOp = operations.FirstOrDefault(o => o.Name == ManagementOperationNames.DlqRequeue);
+            requeueOp.Should().NotBeNull();
+
+            var req = new DlqRequeueRequest("nonexistent.channel", QueueName, Limit: 1);
+            var opCtx = new ManagementOperationContext
+            {
+                Operation = ManagementOperationNames.DlqRequeue,
+                Request = req,
+                OperationId = Guid.NewGuid(),
+                Deadline = DateTimeOffset.UtcNow.AddMinutes(1),
+            };
+            var res = await requeueOp!.ExecuteAsync(opCtx, default);
+
+            res.Status.Should().Be(ManagementResultStatus.NotFound);
+            res.Error.Should().NotBeNull();
+            res.Error!.Code.Should().Be("channel_not_found");
+            res.Error.Detail.Should().Contain("nonexistent.channel");
+        });
+    }
+
+    [Test]
+    public async Task DlqPurge_UnknownChannel_ReturnsChannelNotFound()
+    {
+        await StartDlqTestHostAsync();
+
+        await InScopeAsync(async ctx =>
+        {
+            var operations = ctx.ServiceProvider.GetServices<IManagementOperation>();
+            var purgeOp = operations.FirstOrDefault(o => o.Name == ManagementOperationNames.DlqPurge);
+            purgeOp.Should().NotBeNull();
+
+            var req = new DlqPurgeRequest("nonexistent.channel", QueueName);
+            var opCtx = new ManagementOperationContext
+            {
+                Operation = ManagementOperationNames.DlqPurge,
+                Request = req,
+                OperationId = Guid.NewGuid(),
+                Deadline = DateTimeOffset.UtcNow.AddMinutes(1),
+            };
+            var res = await purgeOp!.ExecuteAsync(opCtx, default);
+
+            res.Status.Should().Be(ManagementResultStatus.NotFound);
+            res.Error.Should().NotBeNull();
+            res.Error!.Code.Should().Be("channel_not_found");
+            res.Error.Detail.Should().Contain("nonexistent.channel");
+        });
+    }
+
+    [Test]
+    public async Task DlqRequeue_NonexistentDlq_ReturnsDlqNotFound()
+    {
+        await StartDlqTestHostAsync();
+
+        await InScopeAsync(async ctx =>
+        {
+            var operations = ctx.ServiceProvider.GetServices<IManagementOperation>();
+            var requeueOp = operations.FirstOrDefault(o => o.Name == ManagementOperationNames.DlqRequeue);
+            requeueOp.Should().NotBeNull();
+
+            var req = new DlqRequeueRequest(ChannelName, "nonexistent.queue", Limit: 1);
+            var opCtx = new ManagementOperationContext
+            {
+                Operation = ManagementOperationNames.DlqRequeue,
+                Request = req,
+                OperationId = Guid.NewGuid(),
+                Deadline = DateTimeOffset.UtcNow.AddMinutes(1),
+            };
+            var res = await requeueOp!.ExecuteAsync(opCtx, default);
+
+            res.Status.Should().Be(ManagementResultStatus.NotFound);
+            res.Error.Should().NotBeNull();
+            res.Error!.Code.Should().Be("dlq_not_found");
+            res.Error.Detail.Should().Contain("nonexistent.queue.dlq");
+        });
+    }
+
+    [Test]
+    public async Task DlqPurge_NonexistentDlq_ReturnsDlqNotFound()
+    {
+        await StartDlqTestHostAsync();
+
+        await InScopeAsync(async ctx =>
+        {
+            var operations = ctx.ServiceProvider.GetServices<IManagementOperation>();
+            var purgeOp = operations.FirstOrDefault(o => o.Name == ManagementOperationNames.DlqPurge);
+            purgeOp.Should().NotBeNull();
+
+            var req = new DlqPurgeRequest(ChannelName, "nonexistent.queue");
+            var opCtx = new ManagementOperationContext
+            {
+                Operation = ManagementOperationNames.DlqPurge,
+                Request = req,
+                OperationId = Guid.NewGuid(),
+                Deadline = DateTimeOffset.UtcNow.AddMinutes(1),
+            };
+            var res = await purgeOp!.ExecuteAsync(opCtx, default);
+
+            res.Status.Should().Be(ManagementResultStatus.NotFound);
+            res.Error.Should().NotBeNull();
+            res.Error!.Code.Should().Be("dlq_not_found");
+            res.Error.Detail.Should().Contain("nonexistent.queue.dlq");
+        });
+    }
 }
+

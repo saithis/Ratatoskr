@@ -79,6 +79,14 @@ internal sealed partial class RabbitMqManagementDiscoverySource(
             cancellationToken: cancellationToken
         );
 
+        channel.ChannelShutdownAsync += (_, args) =>
+        {
+            announcements.Writer.TryComplete(
+                new InvalidOperationException($"Discovery channel shut down ({args.ReplyCode}: {args.ReplyText}).")
+            );
+            return Task.CompletedTask;
+        };
+
         var consumer = new AsyncEventingBasicConsumer(channel);
         consumer.ReceivedAsync += (_, delivery) =>
         {

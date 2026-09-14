@@ -30,7 +30,7 @@ internal sealed partial class ManagementOperationCleanupService<TDbContext>(
     TimeProvider timeProvider,
     ILogger<ManagementOperationCleanupService<TDbContext>> logger
 ) : BackgroundService
-    where TDbContext : DbContext, IOutboxDbContext, IInboxDbContext
+    where TDbContext : DbContext
 {
     private const int BatchSize = 500;
 
@@ -84,18 +84,21 @@ internal sealed partial class ManagementOperationCleanupService<TDbContext>(
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<TDbContext>();
 
-        var cutoff = timeProvider.GetUtcNow() - options.Value.OperationLogRetention;
+        var completedCutoff = timeProvider.GetUtcNow() - options.Value.OperationLogRetention;
+        var abandonedCutoff = timeProvider.GetUtcNow() - options.Value.OperationLogRetention;
         var removed = 0;
 
         while (!cancellationToken.IsCancellationRequested)
         {
             var batch = await db.Set<ManagementOperationEntity>()
                 .Where(x =>
-                    x.State == ManagementOperationState.Completed
-                    && x.CompletedAt != null
-                    && x.CompletedAt < cutoff
+                    (x.State == ManagementOperationState.Completed
+                        && x.CompletedAt != null
+                        && x.CompletedAt < completedCutoff)
+                    || (x.State == ManagementOperationState.InProgress
+                        && x.CreatedAt < abandonedCutoff)
                 )
-                .OrderBy(x => x.CompletedAt)
+                .OrderBy(x => x.CreatedAt)
                 .Take(BatchSize)
                 .ExecuteDeleteAsync(cancellationToken);
 

@@ -216,10 +216,15 @@ public sealed class ServiceRegistry(TimeProvider timeProvider, TimeSpan staleAft
     {
         var online = instances.Where(instance => IsOnline(instance, now)).ToArray();
 
-        // Counts are instance-local, so a service's backlog is the sum over its live replicas.
-        // When every replica has gone quiet the last known numbers are shown rather than zero,
-        // because zero would read as "the backlog drained" when it means "nobody is reporting".
+        // DbContext counts are shared database queries, so multiple live replicas report on the same
+        // underlying tables. To avoid multiplying the backlog by the replica count, take the latest
+        // report for each distinct DbContext name.
         var counted = online.Length > 0 ? online : instances;
+        var newestContexts = counted
+            .SelectMany(instance => instance.DbContexts.Select(ctx => (instance.AnnouncedAt, Context: ctx)))
+            .GroupBy(x => x.Context.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.MaxBy(x => x.AnnouncedAt).Context)
+            .ToArray();
 
         return new ServiceCard(
             transportName,
@@ -227,16 +232,14 @@ public sealed class ServiceRegistry(TimeProvider timeProvider, TimeSpan staleAft
             online.Length > 0 ? ServiceLiveness.Online : ServiceLiveness.Stale,
             instances.Count,
             online.Length,
-            counted.Sum(instance => instance.DbContexts.Sum(context => context.PendingOutbox)),
-            counted.Sum(instance => instance.DbContexts.Sum(context => context.PoisonedOutbox)),
-            counted.Sum(instance => instance.DbContexts.Sum(context => context.PendingInbox)),
-            counted.Sum(instance => instance.DbContexts.Sum(context => context.PoisonedInbox)),
+            newestContexts.Sum(context => context.PendingOutbox),
+            newestContexts.Sum(context => context.PoisonedOutbox),
+            newestContexts.Sum(context => context.PendingInbox),
+            newestContexts.Sum(context => context.PoisonedInbox),
             instances.Max(instance => instance.AnnouncedAt),
             [
-                .. counted
-                    .SelectMany(instance => instance.DbContexts)
+                .. newestContexts
                     .Select(context => context.Name)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
                     .Order(StringComparer.OrdinalIgnoreCase),
             ],
             Newest(instances).Capabilities

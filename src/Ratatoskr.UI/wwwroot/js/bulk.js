@@ -23,7 +23,7 @@ export async function beginMatching(action) {
 
   const area = state.current().tab;
   const filter = state.serverFilter();
-  pending = { action, area, target, filter };
+  pending = { action, area, target, filter, operationId: crypto.randomUUID() };
 
   byId("confirm-title").textContent =
     action === "requeue" ? "Requeue everything matching" : "Delete everything matching";
@@ -71,6 +71,7 @@ export async function applyMatching() {
       pending.area,
       pending.action,
       pending.filter,
+      pending.operationId,
     );
 
     const message = result.capped

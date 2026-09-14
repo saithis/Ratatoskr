@@ -22,6 +22,9 @@ public sealed class ManagementDashboardOptions
 
     /// <summary>How often the audit retention worker runs.</summary>
     public TimeSpan AuditCleanupInterval { get; set; } = TimeSpan.FromHours(6);
+
+    /// <summary>How long persisted service instance snapshots are kept before being pruned.</summary>
+    public TimeSpan SnapshotRetention { get; set; } = TimeSpan.FromDays(7);
 }
 
 /// <summary>

@@ -65,28 +65,37 @@ internal sealed partial class RabbitMqManagementAgentService(
         _authenticator = new RabbitMqCallerAuthenticator(options);
         _concurrency = new SemaphoreSlim(options.ConsumerConcurrency, options.ConsumerConcurrency);
 
-        // ConsumerConcurrency is what it says: the client offloads deliveries to the pool up to
-        // this many at a time, so several commands really do run in parallel.
-        _commandChannel = await connection.CreateChannelAsync(
-            publisherConfirms: false,
-            consumerDispatchConcurrency: (ushort)options.ConsumerConcurrency,
-            cancellationToken: stoppingToken
-        );
-        _replyChannel = await connection.CreateChannelAsync(
-            publisherConfirms: true,
-            cancellationToken: stoppingToken
-        );
+        connection.ConnectionRestored += OnConnectionRestored;
 
-        await DeclareAsync(_commandChannel, stoppingToken);
+        try
+        {
+            // ConsumerConcurrency is what it says: the client offloads deliveries to the pool up to
+            // this many at a time, so several commands really do run in parallel.
+            _commandChannel = await connection.CreateChannelAsync(
+                publisherConfirms: false,
+                consumerDispatchConcurrency: (ushort)options.ConsumerConcurrency,
+                cancellationToken: stoppingToken
+            );
+            _replyChannel = await connection.CreateChannelAsync(
+                publisherConfirms: true,
+                cancellationToken: stoppingToken
+            );
 
-        // Heartbeats own the channel they can afford to lose. Publishing into a discovery exchange
-        // the dashboard has not declared yet is a 404 that closes the channel, and that is a
-        // routine boot-ordering state, not a failure of this agent.
-        var heartbeats = PublishHeartbeatsAsync(stoppingToken);
+            await DeclareAsync(_commandChannel, stoppingToken);
 
-        await Task.Delay(Timeout.Infinite, stoppingToken)
-            .ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
-        await heartbeats.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            // Heartbeats own the channel they can afford to lose. Publishing into a discovery exchange
+            // the dashboard has not declared yet is a 404 that closes the channel, and that is a
+            // routine boot-ordering state, not a failure of this agent.
+            var heartbeats = PublishHeartbeatsAsync(stoppingToken);
+
+            await Task.Delay(Timeout.Infinite, stoppingToken)
+                .ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            await heartbeats.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        }
+        finally
+        {
+            connection.ConnectionRestored -= OnConnectionRestored;
+        }
     }
 
     private async Task DeclareAsync(IChannel channel, CancellationToken cancellationToken)
@@ -355,6 +364,35 @@ internal sealed partial class RabbitMqManagementAgentService(
         exchange = replyTo[..separator];
         routingKey = replyTo[(separator + 1)..];
         return true;
+    }
+
+    private void OnConnectionRestored(object? sender, EventArgs args) => _ = OnConnectionRestoredAsync();
+
+    private async Task OnConnectionRestoredAsync()
+    {
+        try
+        {
+            var options = Options;
+            if (_commandChannel is not null)
+            {
+                await _commandChannel.DisposeAsync().AsTask()
+                    .ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                _commandChannel = null;
+            }
+
+            _commandChannel = await connection.CreateChannelAsync(
+                publisherConfirms: false,
+                consumerDispatchConcurrency: (ushort)options.ConsumerConcurrency,
+                cancellationToken: CancellationToken.None
+            );
+
+            await DeclareAsync(_commandChannel, CancellationToken.None);
+            await ReopenReplyChannelAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Management agent on '{Transport}' failed to restore command topology after reconnect.", transportName);
+        }
     }
 
     private async Task ReopenReplyChannelAsync(CancellationToken cancellationToken = default)

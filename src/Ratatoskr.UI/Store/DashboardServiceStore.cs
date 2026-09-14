@@ -3,7 +3,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Ratatoskr.Management.Contracts;
+using Ratatoskr.Management.Http;
 using Ratatoskr.Management.Registry;
 
 namespace Ratatoskr.UI.Store;
@@ -24,6 +26,7 @@ namespace Ratatoskr.UI.Store;
 internal sealed partial class DashboardServiceStore(
     IServiceScopeFactory scopeFactory,
     ServiceRegistry registry,
+    IOptions<ManagementDashboardOptions> options,
     TimeProvider timeProvider,
     ILogger<DashboardServiceStore> logger
 ) : IHostedService, IDisposable
@@ -34,6 +37,11 @@ internal sealed partial class DashboardServiceStore(
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<RatatoskrDashboardDbContext>();
+
+        var cutoff = timeProvider.GetUtcNow() - options.Value.SnapshotRetention;
+        await db.ServiceSnapshots
+            .Where(snapshot => snapshot.LastSeenAt < cutoff)
+            .ExecuteDeleteAsync(cancellationToken);
 
         var stored = await db.ServiceSnapshots.AsNoTracking().ToListAsync(cancellationToken);
         foreach (var snapshot in stored)

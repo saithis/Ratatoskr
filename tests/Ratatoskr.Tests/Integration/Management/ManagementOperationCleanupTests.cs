@@ -67,6 +67,33 @@ public class ManagementOperationCleanupTests(
     }
 
     [Test]
+    public async Task Cleanup_PrunesAbandonedInProgressOperationOlderThanRetention()
+    {
+        await StartOutboxOnlyServiceAsync();
+
+        var abandoned = await SeedOperationAsync(
+            ManagementOperationState.InProgress,
+            completedAt: null,
+            createdAt: FakeTime.GetUtcNow().AddDays(-8)
+        );
+        var recentInterrupted = await SeedOperationAsync(
+            ManagementOperationState.InProgress,
+            completedAt: null,
+            createdAt: FakeTime.GetUtcNow().AddHours(-1)
+        );
+
+        var removed = await CleanupAsync();
+
+        removed.Should().Be(1);
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<OutboxOnlyDbContext>();
+            (await db.Set<ManagementOperationEntity>().FindAsync(abandoned)).Should().BeNull();
+            (await db.Set<ManagementOperationEntity>().FindAsync(recentInterrupted)).Should().NotBeNull();
+        });
+    }
+
+    [Test]
     public async Task Cleanup_SkipsWhenAnotherReplicaHoldsTheLock()
     {
         // Every replica runs the worker against a shared table; without the lock they would all
@@ -119,7 +146,8 @@ public class ManagementOperationCleanupTests(
 
     private async Task<Guid> SeedOperationAsync(
         ManagementOperationState state,
-        DateTimeOffset? completedAt
+        DateTimeOffset? completedAt,
+        DateTimeOffset? createdAt = null
     )
     {
         var id = Guid.NewGuid();
@@ -131,7 +159,7 @@ public class ManagementOperationCleanupTests(
                     new ManagementOperationEntity
                     {
                         OperationId = id,
-                        CreatedAt = FakeTime.GetUtcNow(),
+                        CreatedAt = createdAt ?? FakeTime.GetUtcNow(),
                         CompletedAt = completedAt,
                         Operation = ManagementOperationNames.OutboxRequeue,
                         State = state,
@@ -141,9 +169,18 @@ public class ManagementOperationCleanupTests(
         });
         return id;
     }
+
+    [Test]
+    public void Cleanup_CanBeRegisteredForContextWithoutInboxInterface()
+    {
+        var services = new ServiceCollection();
+        services.AddRatatoskrManagementOperationCleanup<PlainOutboxDbContext>();
+        services.Any(d => d.ImplementationType == typeof(ManagementOperationCleanupService<PlainOutboxDbContext>))
+            .Should().BeTrue("AddRatatoskrManagementOperationCleanup no longer requires IInboxDbContext");
+    }
 }
 
-/// <summary>A DbContext with an outbox and no inbox — the shape the cleanup worker must not miss.</summary>
+/// <summary>A DbContext configured via AddEfCoreDurability.</summary>
 public class OutboxOnlyDbContext(DbContextOptions<OutboxOnlyDbContext> options)
     : DbContext(options),
         IOutboxDbContext,
@@ -157,4 +194,12 @@ public class OutboxOnlyDbContext(DbContextOptions<OutboxOnlyDbContext> options)
         base.OnModelCreating(modelBuilder);
         modelBuilder.AddRatatoskrEfCoreModel(Database);
     }
+}
+
+/// <summary>A pure outbox DbContext without IInboxDbContext to verify generic constraint relaxation.</summary>
+public class PlainOutboxDbContext(DbContextOptions<PlainOutboxDbContext> options)
+    : DbContext(options),
+        IOutboxDbContext
+{
+    public OutboxStagingCollection OutboxMessages { get; } = new();
 }

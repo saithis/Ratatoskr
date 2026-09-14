@@ -35,6 +35,7 @@ internal sealed partial class RabbitMqManagementTransport(
     private readonly TaskCompletionSource _readyCompletion =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+    private readonly SemaphoreSlim _publishChannelGate = new(1, 1);
     private IChannel? _publishChannel;
     private IChannel? _replyChannel;
     private RabbitMqManagementNames? _names;
@@ -56,6 +57,7 @@ internal sealed partial class RabbitMqManagementTransport(
         _names = RabbitMqManagementNames.Create(options);
         _authenticator = new RabbitMqCallerAuthenticator(options);
         connection.ConnectionLost += OnConnectionLost;
+        connection.ConnectionRestored += OnConnectionRestored;
 
         try
         {
@@ -92,6 +94,7 @@ internal sealed partial class RabbitMqManagementTransport(
             _ready = false;
             _readyCompletion.TrySetCanceled(stoppingToken);
             connection.ConnectionLost -= OnConnectionLost;
+            connection.ConnectionRestored -= OnConnectionRestored;
             FailPending(ManagementErrorCodes.TransportUnavailable, "The management transport stopped.");
         }
     }
@@ -163,7 +166,7 @@ internal sealed partial class RabbitMqManagementTransport(
 
         await EnsureReadyAsync(cancellationToken);
 
-        var channel = _publishChannel;
+        var channel = await EnsurePublishChannelAsync(cancellationToken);
         if (!_ready || channel is not { IsOpen: true })
         {
             return Failure(
@@ -218,6 +221,47 @@ internal sealed partial class RabbitMqManagementTransport(
             remaining,
             cancellationToken
         );
+    }
+
+    private async Task<IChannel?> EnsurePublishChannelAsync(CancellationToken cancellationToken)
+    {
+        if (_publishChannel is { IsOpen: true } open)
+        {
+            return open;
+        }
+
+        await _publishChannelGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (_publishChannel is { IsOpen: true } openAgain)
+            {
+                return openAgain;
+            }
+
+            if (_publishChannel is not null)
+            {
+                _publishChannel.BasicReturnAsync -= OnReturnedAsync;
+                await _publishChannel.DisposeAsync().AsTask()
+                    .ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                _publishChannel = null;
+            }
+
+            _publishChannel = await connection.CreateChannelAsync(
+                publisherConfirms: true,
+                cancellationToken: cancellationToken
+            );
+            _publishChannel.BasicReturnAsync += OnReturnedAsync;
+            return _publishChannel;
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Failed to create management publish channel on '{Name}'.", Name);
+            return null;
+        }
+        finally
+        {
+            _publishChannelGate.Release();
+        }
     }
 
     private async Task EnsureReadyAsync(CancellationToken cancellationToken)
@@ -314,6 +358,11 @@ internal sealed partial class RabbitMqManagementTransport(
             }
             catch (OperationInterruptedException ex) when (ex.ShutdownReason?.ReplyCode == 404)
             {
+                if (ReferenceEquals(_publishChannel, channel))
+                {
+                    _publishChannel = null;
+                }
+
                 return Failure(
                     addressed,
                     ManagementResultStatus.NotFound,
@@ -451,6 +500,38 @@ internal sealed partial class RabbitMqManagementTransport(
         );
     }
 
+    private void OnConnectionRestored(object? sender, EventArgs args) => _ = OnConnectionRestoredAsync();
+
+    private async Task OnConnectionRestoredAsync()
+    {
+        try
+        {
+            var options = Options;
+            if (_replyChannel is not null)
+            {
+                await _replyChannel.DisposeAsync().AsTask()
+                    .ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                _replyChannel = null;
+            }
+
+            _replyChannel = await connection.CreateChannelAsync(
+                publisherConfirms: false,
+                consumerDispatchConcurrency: options.PrefetchCount,
+                cancellationToken: CancellationToken.None
+            );
+
+            await DeclareAsync(_replyChannel, options, CancellationToken.None);
+            await EnsurePublishChannelAsync(CancellationToken.None);
+
+            _ready = true;
+            _readyCompletion.TrySetResult();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Management transport '{Name}' failed to restore reply topology after reconnect.", Name);
+        }
+    }
+
     private void FailPending(string code, string detail)
     {
         foreach (var (correlation, pending) in _pending)
@@ -492,6 +573,12 @@ internal sealed partial class RabbitMqManagementTransport(
                 .ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             _replyChannel = null;
         }
+    }
+
+    public override void Dispose()
+    {
+        _publishChannelGate.Dispose();
+        base.Dispose();
     }
 
     [LoggerMessage(

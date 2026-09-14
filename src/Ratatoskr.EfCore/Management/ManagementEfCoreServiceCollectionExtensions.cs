@@ -79,7 +79,7 @@ public static class ManagementEfCoreServiceCollectionExtensions
     public static IServiceCollection AddRatatoskrManagementOperationCleanup<TDbContext>(
         this IServiceCollection services
     )
-        where TDbContext : DbContext, IOutboxDbContext, IInboxDbContext
+        where TDbContext : DbContext
     {
         ArgumentNullException.ThrowIfNull(services);
         services.TryAddEnumerable(

@@ -35,13 +35,18 @@ export async function loadAntiforgeryToken() {
   }
 }
 
-async function request(path, { method = "GET", body } = {}) {
+async function request(path, { method = "GET", body, operationId } = {}) {
   const headers = { Accept: "application/json" };
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
   }
   if (antiforgery?.headerName && antiforgery?.requestToken) {
     headers[antiforgery.headerName] = antiforgery.requestToken;
+  }
+  if (operationId) {
+    headers["X-Ratatoskr-Operation-Id"] = operationId;
+  } else if (method === "POST" || method === "PUT" || method === "DELETE") {
+    headers["X-Ratatoskr-Operation-Id"] = crypto.randomUUID();
   }
 
   const response = await fetch(`${basePath}${path}`, {
@@ -108,46 +113,49 @@ export const getMessage = (target, area, id) =>
   request(`${serviceRoot(target.transport, target.service, target.context)}/${area}/${encode(id)}`);
 
 /** Requeues or deletes an explicit list of ids. */
-export const mutateByIds = (target, area, action, ids) =>
+export const mutateByIds = (target, area, action, ids, operationId) =>
   request(`${serviceRoot(target.transport, target.service, target.context)}/${area}/${action}`, {
     method: "POST",
     body: { ids },
+    operationId,
   });
 
 /** Requeues or deletes everything a filter matches, in bounded server-side batches. */
-export const mutateMatching = (target, area, action, filter) =>
+export const mutateMatching = (target, area, action, filter, operationId) =>
   request(
     `${serviceRoot(target.transport, target.service, target.context)}/${area}/${action}-matching`,
-    { method: "POST", body: { filter } },
+    { method: "POST", body: { filter }, operationId },
   );
 
 /** Requeues every poisoned handler of one inbox message. */
-export const requeueInboxMessage = (target, messageId) =>
+export const requeueInboxMessage = (target, messageId, operationId) =>
   request(
     `${serviceRoot(target.transport, target.service, target.context)}` +
       `/inbox/messages/${encode(messageId)}/requeue`,
-    { method: "POST" },
+    { method: "POST", operationId },
   );
 
 /** Requeues dead-lettered messages for a channel. */
-export const requeueDlq = (target, channelName, queueName, limit) =>
+export const requeueDlq = (target, channelName, queueName, limit, operationId) =>
   request(
     `/api/transports/${encode(target.transport)}/services/${encode(target.service)}` +
       `/channels/${encode(channelName)}/dlq/requeue`,
     {
       method: "POST",
       body: { queueName, limit },
+      operationId,
     },
   );
 
 /** Purges a dead-letter queue for a channel. */
-export const purgeDlq = (target, channelName, queueName) =>
+export const purgeDlq = (target, channelName, queueName, operationId) =>
   request(
     `/api/transports/${encode(target.transport)}/services/${encode(target.service)}` +
       `/channels/${encode(channelName)}/dlq/purge`,
     {
       method: "POST",
       body: { queueName },
+      operationId,
     },
   );
 

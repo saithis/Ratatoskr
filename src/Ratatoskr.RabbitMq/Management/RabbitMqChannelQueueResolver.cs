@@ -13,8 +13,11 @@ namespace Ratatoskr.RabbitMq.Management;
 public sealed class RabbitMqChannelQueueResolver(
     ChannelRegistry channelRegistry,
     RabbitMqConnectionManager connectionManager
-) : IChannelQueueResolver
+) : IChannelQueueResolver, IAsyncDisposable, IDisposable
 {
+    private readonly SemaphoreSlim _gate = new(1, 1);
+    private IChannel? _channel;
+
     /// <inheritdoc />
     [System.Diagnostics.CodeAnalysis.SuppressMessage(
         "Roslynator",
@@ -57,14 +60,33 @@ public sealed class RabbitMqChannelQueueResolver(
 
         try
         {
-            await using var channel = await connectionManager.CreateChannelAsync(
-                enablePublisherConfirms: false,
-                cancellationToken
-            );
-            queueCount = await SafeMessageCountAsync(channel, queueName, cancellationToken);
-            if (hasDlq && dlqName is not null)
+            await _gate.WaitAsync(cancellationToken);
+            try
             {
-                dlqCount = await SafeMessageCountAsync(channel, dlqName, cancellationToken);
+                if (_channel is not { IsOpen: true })
+                {
+                    if (_channel is not null)
+                    {
+                        await _channel.DisposeAsync().AsTask()
+                            .ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                        _channel = null;
+                    }
+
+                    _channel = await connectionManager.CreateChannelAsync(
+                        enablePublisherConfirms: false,
+                        cancellationToken
+                    );
+                }
+
+                queueCount = await SafeMessageCountAsync(_channel, queueName, cancellationToken);
+                if (hasDlq && dlqName is not null)
+                {
+                    dlqCount = await SafeMessageCountAsync(_channel, dlqName, cancellationToken);
+                }
+            }
+            finally
+            {
+                _gate.Release();
             }
         }
         catch (Exception)
@@ -89,5 +111,30 @@ public sealed class RabbitMqChannelQueueResolver(
         {
             return 0;
         }
+    }
+
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        if (_channel is not null)
+        {
+            await _channel.DisposeAsync().AsTask()
+                .ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            _channel = null;
+        }
+
+        _gate.Dispose();
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (_channel is not null)
+        {
+            _channel.Dispose();
+            _channel = null;
+        }
+
+        _gate.Dispose();
     }
 }
