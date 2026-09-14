@@ -6,6 +6,21 @@ namespace Ratatoskr.Tests.RabbitMq;
 public class RabbitMqChannelOptionsTests
 {
     [Test]
+    public void WithTransientQueue_DeclaresDurableAutoDeleteQueue()
+    {
+        var options = new RabbitMqChannelOptions();
+
+        var result = options.WithTransientQueue();
+
+        // RabbitMQ 4.1+ refuses non-durable, non-exclusive queues outright
+        // (541 INTERNAL_ERROR, transient_nonexcl_queues removed), so the throwaway
+        // lifetime has to come from auto-delete rather than from non-durability.
+        result.QueueDurable.Should().BeTrue();
+        result.QueueExclusive.Should().BeFalse();
+        result.QueueAutoDelete.Should().BeTrue();
+    }
+
+    [Test]
     public void WithExchangeDurable_SetsValue()
     {
         var options = new RabbitMqChannelOptions();

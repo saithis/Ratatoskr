@@ -227,7 +227,7 @@ public class RabbitMqConsumerShutdownTests(
         await Task.Delay(50);
         handler.Release();
 
-        await stopTask.WaitAsync(TimeSpan.FromSeconds(60));
+        await stopTask.WaitAsync(TimeSpan.FromSeconds(60), TestTime);
 
         (await GetMessageCountAsync(QueueName))
             .Should()

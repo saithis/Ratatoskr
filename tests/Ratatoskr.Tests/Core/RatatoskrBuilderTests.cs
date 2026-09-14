@@ -230,6 +230,29 @@ public class RatatoskrBuilderTests
             .WithMessage("*Register it as its concrete type*");
     }
 
+    [Test]
+    public void UseManagement_RegistersManagementAgent()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+        var builder = new RatatoskrBuilder(services);
+
+        // Act
+        builder.UseManagement(agent =>
+        {
+            agent.ServiceName = "orders-svc";
+            agent.InstanceId = "inst-42";
+        });
+        using var provider = services.BuildServiceProvider();
+
+        // Assert
+        var options = provider.GetService<Microsoft.Extensions.Options.IOptions<global::Ratatoskr.Management.Agent.ManagementAgentOptions>>();
+        options.Should().NotBeNull();
+        options!.Value.ServiceName.Should().Be("orders-svc");
+        options.Value.InstanceId.Should().Be("inst-42");
+    }
+
     [RatatoskrMessage(
         "event.with.schema",
         DataSchema = "https://schemas.example.com/event-with-schema/v1.json"

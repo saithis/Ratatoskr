@@ -3,6 +3,13 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!--
+      VSTHRD103 flags DbSet.Add because an AddAsync overload exists; it does not block.
+      IDISP017 wants `using` on HttpResponseMessage values a test keeps across statements.
+      IDISP001/IDISP007/CA2000: test hosts hand ownership of providers and factories to a
+      teardown object that a test disposes; the analyzers cannot follow that transfer.
+    -->
+    <NoWarn>$(NoWarn);VSTHRD103;IDISP017;IDISP001;IDISP007;CA2000</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,11 +32,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\examples\InventoryService\InventoryService.csproj" />
     <ProjectReference Include="..\..\examples\PlaygroundHost\PlaygroundHost.csproj" />
     <ProjectReference Include="..\..\src\Ratatoskr\Ratatoskr.csproj" />
     <ProjectReference Include="..\..\src\Ratatoskr.EfCore\Ratatoskr.EfCore.csproj" />
+    <ProjectReference Include="..\..\src\Ratatoskr.Management.Abstractions\Ratatoskr.Management.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\Ratatoskr.Management.RabbitMq\Ratatoskr.Management.RabbitMq.csproj" />
     <ProjectReference Include="..\..\src\Ratatoskr.RabbitMq\Ratatoskr.RabbitMq.csproj" />
     <ProjectReference Include="..\..\src\Ratatoskr.Testing\Ratatoskr.Testing.csproj" />
+    <ProjectReference Include="..\..\src\Ratatoskr.UI\Ratatoskr.UI.csproj" />
     <ProjectReference Include="..\Ratatoskr.TestHost\Ratatoskr.TestHost.csproj" />
   </ItemGroup>
 </Project>

@@ -1,346 +1,178 @@
-# Architecture
+# Architecture Overview
 
-This page explains how messages flow through Ratatoskr — from publishing through transport to handler invocation. Understanding this pipeline helps you make informed decisions about transport choice, durability configuration, and error handling.
-
-## Package Overview
-
-Ratatoskr is split into four packages. The core library provides the abstractions and message routing pipeline. Transport and durability packages plug into the core via well-defined interfaces.
+Ratatoskr is an event-driven messaging framework for .NET designed around a **dual-plane architecture**: a high-throughput **Application Messaging Plane** for asynchronous event and command processing, and an isolated, transport-neutral **Management Control Plane** for fleet observability, queue triage, and operational control.
 
 ```mermaid
-graph LR
-    subgraph Core ["Ratatoskr (Core)"]
-        IRatatoskr["IRatatoskr"]
-        IMessageSender["IMessageSender"]
-        IMessageHandler["IMessageHandler&lt;T&gt;"]
-        IRouteInterceptor["IMessageRouteInterceptor"]
-        MessageRouter["MessageRouter"]
-        MessageDispatcher["MessageDispatcher"]
-        HandlerInvoker["HandlerInvoker"]
-        ChannelRegistry["ChannelRegistry"]
+flowchart TB
+    subgraph ControlPlane ["Management Control Plane"]
+        UI["Ratatoskr.UI (Dashboard & SSE)"]
+        MgmtAbstractions["Ratatoskr.Management.Abstractions (Protocol & Envelopes)"]
+        MgmtRmq["Ratatoskr.Management.RabbitMq (Dedicated AMQP Transport)"]
+        InProc["InProcessManagementTransport (Zero-Broker Local)"]
     end
 
-    subgraph EfCore ["Ratatoskr.EfCore"]
-        EfCoreSender["EfCoreMessageSender"]
-        OutboxProcessor["OutboxProcessor"]
-        InboxProcessor["InboxProcessor"]
-        InboxAcceptor["InboxAcceptor"]
-        InboxInterceptor["InboxRouteInterceptor"]
-        OutboxInterceptor["OutboxTriggerInterceptor"]
+    subgraph MessagingPlane ["Application Messaging Plane"]
+        Core["Ratatoskr (Core Pipeline & Local Agent)"]
+        EfCore["Ratatoskr.EfCore (Outbox, Inbox & OpLog)"]
+        Rmq["Ratatoskr.RabbitMq (AMQP Messaging & DLQ Ops)"]
     end
 
-    subgraph RabbitMq ["Ratatoskr.RabbitMq"]
-        RmqSender["RabbitMqMessageSender"]
-        RmqConsumer["RabbitMqConsumer"]
-        TopologyManager["RabbitMqTopologyManager"]
-    end
-
-    IRatatoskr -->|"byte[], MessageProperties"| IMessageSender
-    IMessageSender -.->|"implements"| EfCoreSender
-    IMessageSender -.->|"implements"| RmqSender
-    EfCoreSender -->|"byte[], MessageProperties"| InboxAcceptor
-    RmqConsumer -->|"byte[], MessageProperties"| MessageRouter
-    MessageRouter -->|"byte[], MessageProperties"| IRouteInterceptor
-    IRouteInterceptor -.->|"implements"| InboxInterceptor
-    InboxInterceptor -->|"byte[], MessageProperties"| InboxAcceptor
-    MessageRouter -->|"byte[], MessageProperties"| MessageDispatcher
-    MessageDispatcher -->|"object, MessageProperties"| HandlerInvoker
-    InboxProcessor -->|"object, MessageProperties"| HandlerInvoker
-    OutboxProcessor -->|"byte[], MessageProperties"| IMessageSender
-    HandlerInvoker -->|"TMessage, MessageProperties"| IMessageHandler
+    UI --> MgmtAbstractions
+    UI --> Core
+    MgmtRmq --> MgmtAbstractions
+    Core --> MgmtAbstractions
+    EfCore --> Core
+    EfCore --> MgmtAbstractions
+    Rmq --> Core
+    Rmq --> MgmtAbstractions
 ```
 
-## End-to-End Flow
+---
 
-The following diagram shows the complete message lifecycle. The sections below detail each step.
+## The Dual-Plane Architecture
+
+| Dimension | Application Messaging Plane | Management Control Plane |
+|---|---|---|
+| **Primary Goal** | High-throughput, durable asynchronous message publishing, routing, and consumption. | Fleet inspection, health monitoring, poisoned message triage, and DLQ remediation. |
+| **Traffic Characteristics** | Continuous streaming, high volume, transactional database commits. | Ad-hoc RPC commands, heartbeats, low-latency REST and Server-Sent Events (SSE). |
+| **Fault Isolation** | Runs over primary application brokers and DbContext instances. | Dedicated broker connections and channels. Continues operating even if application queues are stalled. |
+| **Core Abstractions** | `IRatatoskr`, `IMessageSender`, `IMessageHandler<T>`, `InboxProcessor`, `OutboxProcessor`. | `ManagementAgent`, `IManagementDispatcher`, `IManagementTransport`, `ServiceRegistry`. |
+| **Deep Dive** | [Messaging Pipeline Architecture](messaging-architecture.md) | [Management & Control Plane Architecture](management-architecture.md) |
+
+---
+
+## Package Graph & Responsibilities
+
+Ratatoskr is split into 6 focused packages, allowing applications to deploy only the capabilities they require:
 
 ```mermaid
-flowchart TD
-    subgraph Publish ["Publishing"]
-        App["Application"]
-        Direct["IRatatoskr.PublishDirectAsync<br/>Enrich, serialize, send to matching transports"]
-        Outbox["DbContext.OutboxMessages.Add<br/>+ SaveChangesAsync"]
-
-        App -->|"TMessage"| Direct
-        App -->|"OutboxMessage"| Outbox
+graph TD
+    subgraph CoreLib ["Core Runtime"]
+        Core["Ratatoskr<br/><i>Core routing, serializers, dispatch pipeline & local agent</i>"]
+        MgmtAbs["Ratatoskr.Management.Abstractions<br/><i>Contracts, envelopes, error codes, transport interfaces</i>"]
     end
 
-    subgraph OutboxPipeline ["Outbox Pipeline"]
-        Interceptor["OutboxTriggerInterceptor<br/>Enrich, serialize, persist in same DB transaction<br/>(+ inbox entries for same-DbContext)"]
-        OutboxDB[("Database<br/>OutboxMessageEntity")]
-        OutboxProc["OutboxProcessor<br/>Background service, distributed lock"]
-
-        Outbox --> Interceptor
-        Interceptor -->|"OutboxMessageEntity<br/>(cross-DbContext only)"| OutboxDB
-        Interceptor -->|"InboxMessageEntity<br/>(same-DbContext)"| InboxDB
-        OutboxDB -->|"OutboxMessageEntity"| OutboxProc
+    subgraph Durability ["Durability & Storage"]
+        EfCore["Ratatoskr.EfCore<br/><i>Transactional Outbox, Inbox, idempotency log</i>"]
     end
 
-    subgraph Transport ["Transport Layer"]
-        SenderInterface["IMessageSender<br/>Routes by TransportName"]
-        EfCoreSend["EfCoreMessageSender<br/>Direct inbox write"]
-        RmqSend["RabbitMqMessageSender<br/>AMQP publish"]
-
-        Direct -->|"byte[], MessageProperties"| SenderInterface
-        OutboxProc -->|"byte[], MessageProperties"| SenderInterface
-        SenderInterface -.->|"byte[], MessageProperties"| EfCoreSend
-        SenderInterface -.->|"byte[], MessageProperties"| RmqSend
+    subgraph Transports ["Message Transports"]
+        Rmq["Ratatoskr.RabbitMq<br/><i>AMQP publisher, consumer, DLQ operations</i>"]
     end
 
-    subgraph Consume ["Consumption (external transports)"]
-        RmqQueue[/"RabbitMQ Queue"/]
-        RmqConsumer["RabbitMqConsumer<br/>BackgroundService"]
-
-        RmqSend -->|"BasicProperties, byte[]"| RmqQueue
-        RmqQueue -->|"BasicDeliverEventArgs"| RmqConsumer
+    subgraph ControlPlanePackages ["Distributed Management"]
+        MgmtRmq["Ratatoskr.Management.RabbitMq<br/><i>Isolated AMQP control transport & caller authentication</i>"]
+        UI["Ratatoskr.UI<br/><i>Embedded web dashboard, REST facade, audit persistence</i>"]
     end
 
-    subgraph Dispatch ["Message Dispatch (external transports)"]
-        Router["MessageRouter<br/>Call IMessageRouteInterceptor,<br/>then dispatch"]
-        Dispatcher["MessageDispatcher<br/>Resolve type, deserialize,<br/>invoke fire-and-forget handlers"]
-
-        RmqConsumer -->|"byte[], MessageProperties"| Router
-        Router -->|"byte[], MessageProperties"| Dispatcher
-    end
-
-    subgraph Inbox ["Inbox Processing"]
-        InboxAccept["InboxAcceptor<br/>Persist message + handler<br/>statuses to DB"]
-        InboxDB[("Database<br/>InboxMessageEntity<br/>InboxHandlerStatusEntity")]
-        InboxProc["InboxProcessor<br/>Background service, distributed lock"]
-
-        EfCoreSend -->|"byte[], MessageProperties"| InboxAccept
-        Router -->|"byte[], MessageProperties"| InboxAccept
-        InboxAccept -->|"InboxMessageEntity"| InboxDB
-        InboxDB -->|"InboxHandlerStatusEntity"| InboxProc
-    end
-
-    Invoker["HandlerInvoker<br/>Resolve handler in DI scope,<br/>invoke via compiled delegate"]
-    Handler["IMessageHandler‹T›"]
-    Dispatcher -->|"object, MessageProperties"| Invoker
-    InboxProc -->|"object, MessageProperties"| Invoker
-    Invoker -->|"TMessage, MessageProperties"| Handler
+    Core --> MgmtAbs
+    EfCore --> Core
+    EfCore --> MgmtAbs
+    Rmq --> Core
+    Rmq --> MgmtAbs
+    MgmtRmq --> MgmtAbs
+    UI --> Core
+    UI --> MgmtAbs
 ```
 
-## Publishing
+### 1. `Ratatoskr.Management.Abstractions`
+The zero-dependency contract layer:
+- Versioned RPC envelopes (`ManagementRequestEnvelope`, `ManagementResponseEnvelope`).
+- Service discovery and topology models (`ServiceAnnouncement`, `ChannelTopology`, `QueueTopology`).
+- Stable protocol error codes (`ManagementErrorCodes`) and wire JSON serialization (`ManagementJson`).
+- Transport interfaces (`IManagementTransport`, `IManagementDiscoverySource`, `IManagementOperation`).
 
-There are two ways to publish messages: directly via <xref:Ratatoskr.IRatatoskr>, or transactionally via the EF Core outbox.
+### 2. `Ratatoskr` (Core)
+The foundational runtime library:
+- Message routing pipeline (`MessageRouter`, `MessageDispatcher`, `HandlerInvoker`).
+- Channel topology registry (`ChannelRegistry`).
+- CloudEvents enrichment, metadata mapping, and serialization resolvers.
+- The built-in `ManagementAgent`, local `ManagementDispatcher`, in-memory `ServiceRegistry`, and shared REST route generators (`ManagementApiRoutes`).
+- Zero-broker `InProcessManagementTransport` for local monoliths and automated tests.
 
-### Direct Publishing
+### 3. `Ratatoskr.EfCore`
+Database durability for EF Core:
+- **Application Durability**: Interceptor-based Transactional Outbox (`OutboxTriggerInterceptor`, `OutboxProcessor`), deduplicating Inbox (`InboxAcceptor`, `InboxProcessor`), and distributed locks.
+- **Control Plane Operations**: Inbox and Outbox inspection, keyset pagination, and the atomic `ManagementOperationLog` idempotency engine.
 
-```mermaid
-sequenceDiagram
-    participant App as Application
-    participant R as IRatatoskr
-    participant E as MessagePropertiesEnricher
-    participant SR as IMessageSerializerResolver
-    participant S as IMessageSerializer
-    participant Sender as IMessageSender[]
+### 4. `Ratatoskr.RabbitMq`
+AMQP messaging transport:
+- High-throughput message publisher and concurrent consumer background services.
+- Dynamic topology provisioning (exchanges, durable queues, bindings).
+- Control plane operations for inspecting queue depths, Dead Letter Queue (DLQ) batch requeueing, and DLQ purging (`RabbitMqDlqOperations`).
 
-    App->>R: PublishDirectAsync<TMessage>(message)
-    R->>E: Enrich(props)
-    Note over E: Add ID, timestamp, trace context,<br/>resolve target transports
-    R->>SR: GetSerializer(typeof(TMessage))
-    SR-->>R: IMessageSerializer
-    R->>S: Serialize(message) → byte[]
-    loop For each matching transport
-        R->>Sender: SendAsync(bytes, props)
-    end
-```
+### 5. `Ratatoskr.Management.RabbitMq`
+Distributed AMQP control plane provider:
+- Dedicated broker connection independent of application messaging traffic.
+- Least-privilege AMQP topology (`*.inbox` exchanges, durable service queues, exclusive instance and reply queues).
+- Caller authentication via broker-validated `user_id` and optional HMAC SHA-256 signatures.
 
-The application calls `IRatatoskr.PublishDirectAsync<T>()`. Ratatoskr enriches the message properties (CloudEvents ID, timestamp, W3C trace context), resolves the serializer for the message type, serializes the message, then sends it to all `IMessageSender` implementations matching the configured transports.
+### 6. `Ratatoskr.UI`
+Embedded web dashboard and management host:
+- REST API facade and Server-Sent Events (SSE) stream (`/api/events`).
+- Embedded vanilla ES module frontend (zero npm, zero build step, strict CSP, stored-XSS immune).
+- Persistent snapshot hydration (`DashboardServiceStore`) and long-term audit trail storage (`RatatoskrDashboardDbContext`).
 
-### Transactional Publishing (Outbox)
+---
 
-```mermaid
-sequenceDiagram
-    participant App as Application
-    participant Db as DbContext
-    participant Int as OutboxTriggerInterceptor
-    participant DB as Database
-    participant OP as OutboxProcessor
-    participant Sender as EfCoreMessageSender
-    participant IA as InboxAcceptor
+## Architectural Guarantees
 
-    App->>Db: OutboxMessages.Add(message)
-    App->>Db: SaveChangesAsync()
-    activate Int
-    Int->>Int: Enrich, serialize
-    alt Same-DbContext inbox
-        Int->>DB: Save business data + inbox entries (same transaction)
-    else Cross-DbContext inbox
-        Int->>DB: Save business data + outbox entry (same transaction)
-        OP->>DB: Query pending outbox messages
-        OP->>Sender: SendAsync(content, props)
-        Sender->>IA: AcceptAsync → write to target inbox DB
-    end
-    deactivate Int
-```
+### At-Least-Once Delivery
+Both the messaging plane and the control plane operate under **at-least-once delivery** semantics:
+- The **Outbox** guarantees that staged application messages will eventually be published, even across crashes and database restarts.
+- The **Inbox** guarantees that each registered message handler executes at least once per message, tracking retries independently.
+- The **Control Plane** uses persistent operation IDs (`ManagementOperationLog`) so retrying a management mutation returns the cached result without repeating the mutation.
 
-Messages are added to `OutboxMessages` and persisted in the same database transaction as your business data. The `OutboxTriggerInterceptor` hooks into EF Core's `SaveChangesAsync`:
+### Separation of Transport vs. Durability
+Ratatoskr strictly distinguishes between **moving** messages and **persisting** messages:
+- **Transport** (`Ratatoskr.RabbitMq`, `Ratatoskr.EfCore`) carries serialized payloads across network or in-memory boundaries.
+- **Durability** (`Ratatoskr.EfCore`) persists messages in a database to survive service outages and process crashes.
 
-- **Same-DbContext:** Inbox entries are created directly in the same transaction. No outbox row is needed — the inbox processor picks them up immediately.
-- **Cross-DbContext:** An `OutboxMessageEntity` is created. The `OutboxProcessor` background service dispatches it to the target inbox.
+You can combine RabbitMQ transport with EF Core durability (Outbox + Inbox), or run direct transport-only publishing without database staging.
 
-See [Outbox](outbox.md) for complete configuration and error handling details.
+### Multi-Instance Concurrency & Isolation
+Ratatoskr is designed from the ground up for containerized, scaled-out microservices:
+- **Distributed Locks**: Background processors (`OutboxProcessor`, `InboxProcessor`) acquire named distributed locks (via Medallion.Threading) to prevent contention.
+- **Optimistic Concurrency**: Entity `Version` columns prevent concurrent workers from processing the same row simultaneously.
+- **Targeting Modes**: Management requests can target a logical service (competing across live replicas) or a specific named container instance (routing directly to an exclusive per-replica queue).
 
-## Consuming
+---
 
-### RabbitMQ Transport
+## Architecture Deep Dives
 
-```mermaid
-sequenceDiagram
-    participant Q as RabbitMQ Queue
-    participant C as RabbitMqConsumer
-    participant M as EnvelopeMapper
-    participant R as MessageRouter
-    participant D as MessageDispatcher
-    participant H as IMessageHandler
+To learn more about the internal mechanics of each plane, explore the detailed architectural guides:
 
-    Q->>C: Message delivered
-    C->>M: MapIncoming(amqpProps, body)
-    M-->>C: MessageProperties + body
-    C->>R: RouteAsync(body, props)
-    Note over R: Accept inbox handlers (if configured),<br/>then dispatch
-    R->>D: DispatchAsync(body, props)
-    D->>H: HandleAsync (non-inbox handlers only)
-    R-->>C: DispatchResult
-    alt Success
-        C->>Q: BasicAckAsync
-    else Error
-        C->>C: RabbitMqRetryHandler
-        alt Recoverable & retries remaining
-            C->>Q: Nack / requeue with delay
-        else Permanent or max retries
-            C->>Q: Route to Dead Letter Queue
-        end
-    end
-```
+<div class="row">
+  <div class="col-md-6">
+    <div class="card mb-4">
+      <div class="card-body">
+        <h4 class="card-title">📨 <a href="messaging-architecture.md">Messaging Pipeline Architecture</a></h4>
+        <p class="card-text">
+          Explore the complete lifecycle of application messages: direct publishing, transactional outbox triggers, RabbitMQ consumers, message routing, per-handler inbox execution, delivery guarantees, and concurrency controls.
+        </p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card mb-4">
+      <div class="card-body">
+        <h4 class="card-title">🐿️ <a href="management-architecture.md">Management &amp; Control Plane Architecture</a></h4>
+        <p class="card-text">
+          Deep dive into the management subsystem: 4-tier identity hierarchy, monotonic service discovery, RPC wire protocol, atomic idempotency engine, bounded bulk operations, DLQ triage, and the zero-npm web dashboard.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
 
-On startup, `RabbitMqTopologyManager` provisions exchanges, queues, and bindings. The `RabbitMqConsumer` background service subscribes to configured queues. When a message arrives, the CloudEvents AMQP mapper extracts `MessageProperties` from AMQP headers, then passes them to the `MessageRouter`.
+---
 
-The router calls `IMessageRouteInterceptor` (if registered) to handle inbox acceptance, then delegates to `MessageDispatcher` for fire-and-forget handler invocation.
+## Related Documentation
 
-### EF Core Transport
-
-The EF Core transport has no in-memory channel or consumer loop. Messages flow through `EfCoreMessageSender` → `InboxAcceptor` → database → `InboxProcessor` → handler. See [EF Core Transport](efcore-transport.md) for details.
-
-### Message Dispatch
-
-```mermaid
-flowchart TD
-    D[MessageDispatcher.DispatchAsync] --> Resolve[Resolve message CLR type<br/>from ChannelRegistry]
-    Resolve --> Deserialize[Deserialize body to message object]
-    Deserialize --> FindHandlers[Find all fire-and-forget<br/>IMessageHandler&lt;T&gt; registrations]
-    FindHandlers --> InvokeAll[Invoke handlers<br/>via HandlerInvoker]
-    InvokeAll --> ReturnResult[Return DispatchResult]
-```
-
-The `MessageDispatcher` resolves the message type from the `ChannelRegistry`, deserializes it, then invokes each fire-and-forget handler via `HandlerInvoker`. Inbox-managed handlers are not part of this pipeline — they are persisted by `InboxAcceptor` and delivered later by `InboxProcessor`.
-
-## Inbox Processing
-
-```mermaid
-sequenceDiagram
-    participant IP as InboxProcessor
-    participant DB as Database
-    participant DI as DI Container
-    participant H as IMessageHandler
-
-    loop Polling / triggered
-        IP->>DB: Acquire distributed lock
-        IP->>DB: Query pending InboxHandlerStatusEntity<br/>(not completed, not poisoned, due for retry)
-        IP->>DB: Mark as processing (Version++)
-        loop For each handler status
-            IP->>DB: Load InboxMessageEntity
-            IP->>DI: Resolve handler by key
-            IP->>H: HandleAsync(message, props)
-            alt Success
-                IP->>DB: MarkAsCompleted (CompletedAt = now)
-            else Failure
-                IP->>DB: MarkAsFailed (ErrorCount++, NextAttemptAt = backoff)
-                Note over DB: If ErrorCount >= MaxRetries → IsPoisoned = true
-            end
-            IP->>DB: SaveChangesAsync (per handler)
-        end
-    end
-```
-
-The `InboxProcessor` runs as a background service with a distributed lock. It queries pending handler statuses, claims them via optimistic concurrency, and invokes each handler through `HandlerInvoker`. Progress is saved per handler — a failure in one handler does not affect others.
-
-See [Inbox](inbox.md) for complete setup, configuration, and retry behavior.
-
-## Delivery Guarantees
-
-Ratatoskr provides **at-least-once delivery**:
-
-- The outbox guarantees that staged messages will eventually be sent, even across application restarts
-- The inbox guarantees that each handler will be invoked at least once per message
-- Messages may be delivered more than once in crash scenarios (outbox retry, inbox stuck message recovery)
-- **No ordering guarantees** across retries — messages may be reprocessed in a different order than they were originally received
-
-> [!IMPORTANT]
-> Handlers must be **idempotent**. The inbox deduplicates deliveries per (message ID, handler) pair to minimize duplicate processing, but if a handler succeeds and the process crashes before the completion status is persisted, the handler will be re-invoked. Design handlers to produce the same result when called twice with the same message.
-
-## Key Distinction: Transport vs. Durability
-
-Ratatoskr separates two concerns that are often conflated:
-
-| Concept | What It Does | Package |
-|---------|-------------|---------|
-| **Transport** | Moves messages between services (RabbitMQ, EF Core) | `Ratatoskr.RabbitMq`, `Ratatoskr.EfCore` |
-| **Durability** | Persists messages for reliable delivery (Outbox, Inbox) | `Ratatoskr.EfCore` |
-
-You can use RabbitMQ transport **with** EF Core durability (outbox + inbox), or you can use the EF Core transport without an outbox. These are independent configuration choices.
-
-## Concurrency and Distribution
-
-Ratatoskr is designed for multi-instance deployment:
-
-- **Distributed locks** via [Medallion.Threading](https://github.com/madelson/DistributedLock) — both `OutboxProcessor` and `InboxProcessor` acquire a named lock before processing. Only one instance processes at a time.
-- **Optimistic concurrency** — `Version` columns on outbox and inbox entities prevent two workers from processing the same record simultaneously.
-- **Idempotent persistence** — The inbox uses unique constraints for deduplication. Concurrent inserts resolve safely via constraint violations.
-- **Multi-DbContext isolation** — Each `DbContext` type gets its own processor, lock, and configuration. Different channels can use different databases for bounded context isolation.
-
-## Message Schema Evolution
-
-Ratatoskr uses `System.Text.Json` for message serialization. By default:
-
-- New fields added to a message type deserialize as `default` for in-flight messages that don't contain them
-- Removed fields are silently ignored during deserialization of old messages
-- Renamed fields appear as new fields (old data is lost)
-
-**Recommendations:**
-
-- Only add fields (additive changes). Never rename or remove fields that may exist in in-flight outbox/inbox messages.
-- For breaking changes, introduce a new message type and migrate consumers before producers.
-
-## Ordering Guarantees
-
-Ratatoskr provides **at-least-once delivery** but does **not** guarantee strict message ordering across instances.
-
-### Why ordering is not preserved
-
-- Outbox and inbox processors poll the database in batches (`Take(BatchSize)`) and process asynchronously
-- Multiple worker instances grab overlapping batches in parallel, which can reorder messages across instances
-- Within a single processor instance, messages are processed in a deterministic order within each batch (`CreatedAt` for the outbox, `MessageId` for the inbox), but concurrent batches from different instances have no ordering coordination
-
-### When ordering matters
-
-If your business logic requires that `OrderUpdated` always follows `OrderCreated` for the same order:
-
-1. **Sequence numbers** — Include a monotonically increasing sequence number in your message payload. Consumers reject or reorder out-of-sequence messages.
-2. **Partition keys** — Route related messages to the same queue/partition using RabbitMQ routing keys. A single consumer on that queue preserves ordering.
-3. **Sagas / process managers** — Use a saga pattern to track expected message sequences and compensate when messages arrive out of order.
-4. **Single-instance processing** — For low-throughput scenarios, run a single processor instance per message type to preserve ordering within that type.
-
-### What Ratatoskr does guarantee
-
-- Messages are eventually delivered at least once (assuming the processor is running and the database is available)
-- Within a single batch on a single processor instance, messages are processed in a deterministic order (`CreatedAt` for the outbox, `MessageId` for the inbox)
-- Deduplication via the inbox pattern prevents duplicate processing for the same (MessageId, HandlerKey) pair in the common case; delivery is still at-least-once because a crash between handler completion and status update can trigger a re-run
-
-## What's Next
-
-- [Messages & Handlers](messages-handlers.md) — Message types, handler patterns, and serialization
-- [Channels & Routing](channels-routing.md) — Channel-first design and ownership rules
-- [Outbox](outbox.md) — Transactional outbox pattern in depth
-- [Inbox](inbox.md) — Per-handler durability and deduplication
+- [Getting Started](getting-started.md) — Quick start tutorial for building your first Ratatoskr service
+- [Messages & Handlers](messages-handlers.md) — Designing message contracts and implementing handlers
+- [Channels & Routing](channels-routing.md) — Logical channels, topic routing, and transport bindings
+- [Transactional Outbox](outbox.md) — Complete outbox configuration and retry patterns
+- [Deduplicating Inbox](inbox.md) — Per-handler durability and poison message management
+- [Management UI and Control Plane](management-ui.md) — Operational setup and dashboard configuration guide
+- [Management HTTP API Reference](management-api.md) — REST API endpoint reference

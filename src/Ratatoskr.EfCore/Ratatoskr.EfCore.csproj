@@ -3,6 +3,7 @@
     <Description>Entity Framework Core integration for Ratatoskr CloudEventBus.</Description>
     <PackageTags>cloudevents;eventbus;efcore;entityframework</PackageTags>
     <IsPackable>true</IsPackable>
+    <NoWarn>$(NoWarn);IDISP001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -29,5 +30,6 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Ratatoskr.Tests" />
+    <InternalsVisibleTo Include="Ratatoskr.Management.EfCore" />
   </ItemGroup>
 </Project>

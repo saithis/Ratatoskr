@@ -1,4 +1,5 @@
 // Local development example only. See examples/README.md.
+using System.Globalization;
 using Medallion.Threading;
 using Medallion.Threading.FileSystem;
 using Microsoft.AspNetCore.Mvc;
@@ -12,7 +13,9 @@ using Ratatoskr;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore;
 using Ratatoskr.Management;
+using Ratatoskr.Management.RabbitMq;
 using Ratatoskr.RabbitMq.Extensions;
+using Ratatoskr.UI;
 using ServiceDefaults;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -82,6 +85,17 @@ builder.Services.AddRatatoskr(bus =>
     });
 
     PlaygroundScenarioManifest.RegisterScenarioTopologies(bus);
+
+    // The playground hosts its own dashboard: the agent and the dashboard share a process and reach
+    // each other through the in-process transport, with no broker involved in the control plane.
+    bus.UseManagement(agent =>
+    {
+        agent.ServiceName = "playground-host";
+        agent.InstanceId =
+            $"{Environment.MachineName}-{Environment.ProcessId.ToString(CultureInfo.InvariantCulture)}";
+        agent.Configure(options => options.HeartbeatInterval = TimeSpan.FromSeconds(5));
+        agent.AddInProcess();
+    });
 });
 
 PlaygroundMessageSenderDecoration.WrapAllMessageSenders(builder.Services);
@@ -113,6 +127,28 @@ builder.Services.AddDbContext<ConsumerDbContext>(
 );
 
 builder.Services.AddDbContext<PlaygroundDbContext>(options => options.UseNpgsql(playgroundCs));
+
+builder.Services.AddRatatoskrDashboard(dashboard =>
+{
+    // AutoMigrate is fine here: one node, one process, local development. A real deployment
+    // applies the shipped migrations from its deployment step instead.
+    dashboard.UseStore(
+        db => db.UseNpgsql(playgroundCs),
+        store => store.AutoMigrate = true
+    );
+    dashboard.Configure(options => options.StaleAfter = TimeSpan.FromSeconds(45));
+    dashboard.AddInProcess();
+    dashboard.AddRabbitMq(
+        "broker",
+        options =>
+        {
+            options.ConnectionString = new Uri(rabbitMqConnectionString);
+            options.ResourcePrefix =
+                builder.Configuration["Ratatoskr:Management:ResourcePrefix"] ?? "dashboard";
+            options.HeartbeatInterval = TimeSpan.FromSeconds(2);
+        }
+    );
+});
 
 builder.Services.Configure<PlaygroundOptions>(
     builder.Configuration.GetSection(PlaygroundOptions.SectionName)
@@ -223,18 +259,19 @@ app.MapGet(
     .RequireCors("LocalDashboard");
 
 app.MapRatatoskrManagementApi("DevOnlyNoAuth");
+app.MapRatatoskrUI("DevOnlyNoAuth", "/ratatoskr");
 
 await PlaygroundEnsureCreatedGate.Semaphore.WaitAsync();
 try
 {
     await using (var scope = app.Services.CreateAsyncScope())
     {
-        await scope
-            .ServiceProvider.GetRequiredService<PublisherDbContext>()
-            .Database.EnsureCreatedAsync();
-        await scope
-            .ServiceProvider.GetRequiredService<ConsumerDbContext>()
-            .Database.EnsureCreatedAsync();
+        await DatabaseMigrationHelper.MigrateAsync(
+            scope.ServiceProvider.GetRequiredService<PublisherDbContext>()
+        );
+        await DatabaseMigrationHelper.MigrateAsync(
+            scope.ServiceProvider.GetRequiredService<ConsumerDbContext>()
+        );
         await scope
             .ServiceProvider.GetRequiredService<PlaygroundDbContext>()
             .Database.EnsureCreatedAsync();

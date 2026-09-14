@@ -5,7 +5,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.EfCore.Internal;
-using Ratatoskr.EfCore.Management.Endpoints.Inbox;
+using Ratatoskr.Management.Contracts;
 using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Integration.Management;
@@ -15,32 +15,85 @@ public class InboxManagementTests(
     PostgresContainerFixture postgres
 ) : ManagementTestBase(rabbitMq, postgres)
 {
-    private const string BaseUrl = "/ratatoskr/api/v1/efcore/contexts/TestDbContext/inbox";
+    private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
 
     [Test]
-    public async Task InboxManagement_PoisonedList_ReturnsPaginatedResults()
+    public async Task Inbox_List_ReturnsPoisonedHandlersWithTheirMessageType()
+    {
+        await StartManagementTestAsync();
+        await SeedPoisonedInboxAsync("order.placed");
+        await SeedPoisonedInboxAsync("payment.captured");
+
+        var page = await GetPageAsync(InboxUrl);
+
+        page.Items.Should().HaveCount(2);
+        page.Items.Should()
+            .AllSatisfy(item =>
+            {
+                item.IsPoisoned.Should().BeTrue();
+                item.TransportName.Should().Be("efcore");
+            });
+        page.Items.Select(item => item.MessageType)
+            .Should()
+            .BeEquivalentTo(["order.placed", "payment.captured"]);
+    }
+
+    [Test]
+    public async Task Inbox_Count_ReturnsTheFilteredTotal()
     {
         await StartManagementTestAsync();
         await SeedPoisonedInboxAsync();
         await SeedPoisonedInboxAsync();
 
-        using var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned");
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var response = await HttpClient.GetAsync($"{InboxUrl}/count");
 
-        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        body.GetProperty("totalCount").GetInt64().Should().BeGreaterThanOrEqualTo(2);
-        body.GetProperty("items").GetArrayLength().Should().BeGreaterThanOrEqualTo(2);
+        (await response.Content.ReadFromJsonAsync<MessageCountResponse>())!.Count.Should().Be(2);
     }
 
     [Test]
-    public async Task InboxManagement_RequeueHandler_ClearsIsPoisonedAndResetsCounters()
+    public async Task Inbox_List_SearchNarrowsByMessageType()
+    {
+        await StartManagementTestAsync();
+        await SeedPoisonedInboxAsync("order.placed");
+        await SeedPoisonedInboxAsync("payment.captured");
+
+        var page = await GetPageAsync($"{InboxUrl}?search=order.placed");
+
+        page.Items.Should().ContainSingle();
+        page.Items[0].MessageType.Should().Be("order.placed");
+    }
+
+    [Test]
+    public async Task Inbox_Get_ReturnsThePayloadAndSiblingHandlers()
+    {
+        await StartManagementTestAsync();
+        var (messageId, handlerStatusId) = await SeedPoisonedInboxAsync("detail.event");
+        var siblingId = await SeedAdditionalPoisonedHandlerAsync(messageId, "handler-b");
+
+        using var response = await HttpClient.GetAsync($"{InboxUrl}/{handlerStatusId}");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var detail = await response.Content.ReadFromJsonAsync<InboxDetail>(WebJson);
+        detail!.HandlerStatusId.Should().Be(handlerStatusId);
+        detail.MessageId.Should().Be(messageId);
+        detail.MessageType.Should().Be("detail.event");
+        detail.HandlerKey.Should().Be("handler-a");
+        detail.JsonPayload.Should().Contain("inbox-payload");
+
+        // Knowing which sibling handlers also failed is what tells an operator whether to requeue
+        // one handler or the whole message.
+        detail.OtherHandlers.Should().ContainSingle(other => other.HandlerStatusId == siblingId);
+    }
+
+    [Test]
+    public async Task Inbox_Requeue_ClearsPoisonAndResetsCounters()
     {
         await StartManagementTestAsync();
         var (_, handlerStatusId) = await SeedPoisonedInboxAsync();
 
-        using var response = await HttpClient.PostAsync(
-            $"{BaseUrl}/poisoned/{handlerStatusId}/requeue",
-            content: null
+        using var response = await HttpClient.PostAsJsonAsync(
+            $"{InboxUrl}/requeue",
+            new MutateByIdsRequest { Ids = [handlerStatusId] }
         );
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -51,28 +104,19 @@ public class InboxManagementTests(
             updated!.IsPoisoned.Should().BeFalse();
             updated.ErrorCount.Should().Be(0);
             updated.ProcessingStartedAt.Should().BeNull();
+            updated.RequeuedCount.Should().Be(1);
         });
     }
 
     [Test]
-    public async Task InboxManagement_RequeueAllHandlersForMessage_RequeuesOnlyPoisoned()
+    public async Task Inbox_RequeueMessage_TouchesOnlyThePoisonedHandlers()
     {
         await StartManagementTestAsync();
         var (messageId, _) = await SeedPoisonedInboxAsync();
-
-        // Add a completed handler for the same message
-        await InScopeAsync(async ctx =>
-        {
-            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
-            var completed = InboxHandlerStatusEntity.Create(messageId, "handler-b", time);
-            completed.MarkAsCompleted(time);
-            await db.Set<InboxHandlerStatusEntity>().AddAsync(completed);
-            await db.SaveChangesAsync();
-        });
+        await SeedCompletedHandlerAsync(messageId, "handler-b");
 
         using var response = await HttpClient.PostAsync(
-            $"{BaseUrl}/messages/{messageId}/requeue",
+            $"{InboxUrl}/messages/{messageId}/requeue",
             content: null
         );
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -80,10 +124,12 @@ public class InboxManagementTests(
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var poisoned = await db.Set<InboxHandlerStatusEntity>()
+            var stillPoisoned = await db.Set<InboxHandlerStatusEntity>()
                 .CountAsync(x => x.MessageId == messageId && x.IsPoisoned);
-            poisoned.Should().Be(0);
-            // Completed handler should not be touched
+            stillPoisoned.Should().Be(0);
+
+            // A handler that already succeeded must not be re-run: the operator asked to retry a
+            // failure, not to deliver the message twice.
             var completed = await db.Set<InboxHandlerStatusEntity>()
                 .CountAsync(x => x.MessageId == messageId && x.CompletedAt != null);
             completed.Should().Be(1);
@@ -91,199 +137,113 @@ public class InboxManagementTests(
     }
 
     [Test]
-    public async Task InboxManagement_GetHandlersForMessage_ReturnsAllStatuses()
-    {
-        await StartManagementTestAsync();
-        var (messageId, _) = await SeedPoisonedInboxAsync();
-
-        // Add a second completed handler
-        await InScopeAsync(async ctx =>
-        {
-            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
-            var second = InboxHandlerStatusEntity.Create(messageId, "handler-b", time);
-            second.MarkAsCompleted(time);
-            await db.Set<InboxHandlerStatusEntity>().AddAsync(second);
-            await db.SaveChangesAsync();
-        });
-
-        using var response = await HttpClient.GetAsync($"{BaseUrl}/messages/{messageId}/handlers");
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        body.GetProperty("handlers").GetArrayLength().Should().Be(2);
-        body.GetProperty("messageId").GetString().Should().Be(messageId);
-    }
-
-    [Test]
-    public async Task InboxManagement_DeleteHandlerStatus_DeletesOrphanedParentMessage()
+    public async Task Inbox_RequeueMessage_ReturnsNotFoundWhenNothingIsPoisoned()
     {
         await StartManagementTestAsync();
         var (messageId, handlerStatusId) = await SeedPoisonedInboxAsync();
 
-        // Delete the only handler status
-        using var response = await HttpClient.DeleteAsync($"{BaseUrl}/poisoned/{handlerStatusId}");
+        await HttpClient.PostAsJsonAsync(
+            $"{InboxUrl}/requeue",
+            new MutateByIdsRequest { Ids = [handlerStatusId] }
+        );
+
+        using var response = await HttpClient.PostAsync(
+            $"{InboxUrl}/messages/{messageId}/requeue",
+            content: null
+        );
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Test]
+    public async Task Inbox_Delete_RemovesTheMessageOnceItsLastHandlerIsGone()
+    {
+        // Leaving the parent behind keeps the deduplication anchor alive, so a redelivery of that
+        // message would be discarded as a duplicate and never reach a handler again.
+        await StartManagementTestAsync();
+        var (messageId, handlerStatusId) = await SeedPoisonedInboxAsync();
+
+        using var response = await HttpClient.PostAsJsonAsync(
+            $"{InboxUrl}/delete",
+            new MutateByIdsRequest { Ids = [handlerStatusId] }
+        );
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var handlerGone = await db.Set<InboxHandlerStatusEntity>().FindAsync(handlerStatusId);
-            handlerGone.Should().BeNull();
-
-            // Parent message should also be gone (orphan cleanup)
-            var msgGone = await db.Set<InboxMessageEntity>().FindAsync(messageId);
-            msgGone.Should().BeNull();
+            (await db.Set<InboxHandlerStatusEntity>().FindAsync(handlerStatusId)).Should().BeNull();
+            (await db.Set<InboxMessageEntity>().FindAsync(messageId)).Should().BeNull();
         });
     }
 
     [Test]
-    public async Task InboxManagement_DeleteHandlerStatus_DoesNotDeleteParentWhenOtherHandlersExist()
+    public async Task Inbox_Delete_KeepsTheMessageWhileOtherHandlersReferenceIt()
     {
         await StartManagementTestAsync();
         var (messageId, handlerStatusId) = await SeedPoisonedInboxAsync();
+        var survivorId = await SeedCompletedHandlerAsync(messageId, "handler-b");
 
-        // Add a second handler (completed)
+        using var response = await HttpClient.PostAsJsonAsync(
+            $"{InboxUrl}/delete",
+            new MutateByIdsRequest { Ids = [handlerStatusId] }
+        );
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            (await db.Set<InboxHandlerStatusEntity>().FindAsync(survivorId)).Should().NotBeNull();
+            (await db.Set<InboxMessageEntity>().FindAsync(messageId)).Should().NotBeNull();
+        });
+    }
+
+    [Test]
+    public async Task Inbox_DeleteMatching_RemovesOrphanedMessagesToo()
+    {
+        await StartManagementTestAsync();
+        var (firstMessage, _) = await SeedPoisonedInboxAsync();
+        var (secondMessage, _) = await SeedPoisonedInboxAsync();
+
+        using var response = await HttpClient.PostAsJsonAsync(
+            $"{InboxUrl}/delete-matching",
+            new MutateMatchingRequest { Filter = new MessageFilter { Status = MessageStatusFilter.Poisoned } }
+        );
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadFromJsonAsync<MatchingMutationResponse>(WebJson);
+        result!.Processed.Should().Be(2);
+        result.Remaining.Should().Be(0);
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            (await db.Set<InboxHandlerStatusEntity>().CountAsync()).Should().Be(0);
+            (await db.Set<InboxMessageEntity>().FindAsync(firstMessage)).Should().BeNull();
+            (await db.Set<InboxMessageEntity>().FindAsync(secondMessage)).Should().BeNull();
+        });
+    }
+
+    private async Task<Guid> SeedCompletedHandlerAsync(string messageId, string handlerKey)
+    {
+        var id = Guid.Empty;
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
-            var second = InboxHandlerStatusEntity.Create(messageId, "handler-b", time);
-            second.MarkAsCompleted(time);
-            await db.Set<InboxHandlerStatusEntity>().AddAsync(second);
+            var handler = InboxHandlerStatusEntity.Create(messageId, handlerKey, time);
+            handler.MarkAsCompleted(time);
+            db.Set<InboxHandlerStatusEntity>().Add(handler);
             await db.SaveChangesAsync();
+            id = handler.Id;
         });
-
-        using var response = await HttpClient.DeleteAsync($"{BaseUrl}/poisoned/{handlerStatusId}");
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        await InScopeAsync(async ctx =>
-        {
-            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            // Parent message should remain (still has handler-b)
-            var msgStillExists = await db.Set<InboxMessageEntity>().FindAsync(messageId);
-            msgStillExists.Should().NotBeNull();
-        });
+        return id;
     }
 
-    [Test]
-    public async Task InboxManagement_BulkDelete_All_DeletesOrphanedParentMessages()
+    private async Task<CursorPage<InboxListItem>> GetPageAsync(string url)
     {
-        await StartManagementTestAsync();
-        var (messageId1, _) = await SeedPoisonedInboxAsync();
-        var (messageId2, _) = await SeedPoisonedInboxAsync();
-
-        using var response = await HttpClient.DeleteAsync($"{BaseUrl}/poisoned/all");
+        using var response = await HttpClient.GetAsync(url);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        await InScopeAsync(async ctx =>
-        {
-            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-
-            // All handler statuses should be gone
-            var handlerCount = await db.Set<InboxHandlerStatusEntity>().CountAsync();
-            handlerCount.Should().Be(0);
-
-            // Orphaned parent messages should also be deleted
-            var msg1 = await db.Set<InboxMessageEntity>().FindAsync(messageId1);
-            msg1.Should().BeNull();
-
-            var msg2 = await db.Set<InboxMessageEntity>().FindAsync(messageId2);
-            msg2.Should().BeNull();
-        });
-    }
-
-    [Test]
-    public async Task InboxManagement_BulkDelete_SpecificIds_DeletesOrphanedParentMessages()
-    {
-        await StartManagementTestAsync();
-        var (messageId, handlerStatusId) = await SeedPoisonedInboxAsync();
-
-        using var req = new HttpRequestMessage(HttpMethod.Delete, $"{BaseUrl}/poisoned")
-        {
-            Content = JsonContent.Create(
-                new BulkDeleteInboxEndpoint.BulkDeleteInboxRequest([handlerStatusId])
-            ),
-        };
-        using var response = await HttpClient.SendAsync(req);
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        await InScopeAsync(async ctx =>
-        {
-            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-
-            // Handler status should be gone
-            var handler = await db.Set<InboxHandlerStatusEntity>().FindAsync(handlerStatusId);
-            handler.Should().BeNull();
-
-            // Orphaned parent message should also be deleted
-            var msg = await db.Set<InboxMessageEntity>().FindAsync(messageId);
-            msg.Should().BeNull();
-        });
-    }
-
-    [Test]
-    public async Task InboxManagement_BulkDelete_SpecificIds_PreservesParentWithRemainingHandlers()
-    {
-        await StartManagementTestAsync();
-        var (messageId, poisonedHandlerStatusId) = await SeedPoisonedInboxAsync();
-
-        // Add a second (completed) handler for the same message
-        var secondHandlerId = Guid.Empty;
-        await InScopeAsync(async ctx =>
-        {
-            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
-            var second = InboxHandlerStatusEntity.Create(messageId, "handler-b", time);
-            second.MarkAsCompleted(time);
-            await db.Set<InboxHandlerStatusEntity>().AddAsync(second);
-            await db.SaveChangesAsync();
-            secondHandlerId = second.Id;
-        });
-
-        // Delete only the poisoned handler
-        using var req = new HttpRequestMessage(HttpMethod.Delete, $"{BaseUrl}/poisoned")
-        {
-            Content = JsonContent.Create(
-                new BulkDeleteInboxEndpoint.BulkDeleteInboxRequest([poisonedHandlerStatusId])
-            ),
-        };
-        await HttpClient.SendAsync(req);
-
-        await InScopeAsync(async ctx =>
-        {
-            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-
-            // The completed handler should still exist
-            var remaining = await db.Set<InboxHandlerStatusEntity>().FindAsync(secondHandlerId);
-            remaining.Should().NotBeNull();
-
-            // Parent message must still exist
-            var msg = await db.Set<InboxMessageEntity>().FindAsync(messageId);
-            msg.Should().NotBeNull();
-        });
-    }
-
-    [Test]
-    public async Task InboxManagement_PoisonedList_SearchFilter_ExcludesNonMatchingMessages()
-    {
-        await StartManagementTestAsync();
-        await SeedPoisonedInboxAsync("order.placed");
-        await SeedPoisonedInboxAsync("payment.captured");
-
-        using var response = await HttpClient.GetAsync($"{BaseUrl}/poisoned?search=order.placed");
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        var items = body.GetProperty("items").ToElementList();
-        items.Should().NotBeEmpty();
-        items
-            .Should()
-            .AllSatisfy(item =>
-                item.GetProperty("messageType").GetString().Should().Be("order.placed")
-            );
-
-        // TotalCount must reflect the filtered result
-        body.GetProperty("totalCount").GetInt64().Should().Be(items.Count);
+        return (await response.Content.ReadFromJsonAsync<CursorPage<InboxListItem>>(WebJson))!;
     }
 }

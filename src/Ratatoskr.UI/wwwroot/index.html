@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ratatoskr Management Dashboard</title>
+  <link rel="stylesheet" href="css/dashboard.css" />
+</head>
+<body>
+  <header class="navbar">
+    <div class="nav-brand">
+      <span class="brand-icon">🐿️</span>
+      <span>Ratatoskr Management</span>
+    </div>
+    <div class="nav-controls">
+      <span id="stream-badge" class="badge-stream">
+        <span class="stream-dot"></span>
+        <span id="stream-status">Connecting…</span>
+      </span>
+      <button id="btn-audit" class="btn btn-secondary btn-sm">Audit log</button>
+      <button id="btn-refresh" class="btn btn-secondary btn-sm">↻ Refresh</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div>
+        <div class="sidebar-heading">Navigation</div>
+        <ul class="service-nav-list">
+          <li id="nav-all" class="service-nav-item active">
+            <span>🌐 All services</span>
+            <span id="service-count" class="badge badge-transport">0</span>
+          </li>
+        </ul>
+      </div>
+
+      <div>
+        <div class="sidebar-heading">Control planes</div>
+        <!--
+          Services are grouped by transport, because identity here is
+          (transport, service, instance): the same service name can appear under two control
+          planes at once, which is exactly what a migration between brokers looks like.
+        -->
+        <div id="sidebar-transports"></div>
+      </div>
+    </aside>
+
+    <main class="content">
+      <div id="service-header" hidden>
+        <div class="service-header-row">
+          <div>
+            <h1 id="service-title">Service</h1>
+            <p id="service-meta" class="muted"></p>
+          </div>
+          <div id="service-status"></div>
+        </div>
+
+        <nav class="tabs">
+          <button class="tab-button active" data-tab="overview">Replicas &amp; contexts</button>
+          <button class="tab-button" data-tab="outbox">Outbox</button>
+          <button class="tab-button" data-tab="inbox">Inbox</button>
+          <button class="tab-button" data-tab="channels">Channels</button>
+        </nav>
+      </div>
+
+      <section id="view-services">
+        <h2>Connected Services</h2>
+        <div id="services-grid" class="services-grid"></div>
+        <p id="services-empty" class="muted" hidden>
+          No service has announced itself yet. An agent announces on its heartbeat interval, so a
+          service that has just started may take a few seconds to appear.
+        </p>
+      </section>
+
+      <section id="view-overview" hidden>
+        <h3>Replicas</h3>
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Instance</th>
+                <th>Host</th>
+                <th>Environment</th>
+                <th>Started</th>
+                <th>Last seen</th>
+                <th>Liveness</th>
+              </tr>
+            </thead>
+            <tbody id="replicas-tbody"></tbody>
+          </table>
+        </div>
+
+        <h3 class="section-spaced">Database contexts</h3>
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Context</th>
+                <th>Outbox</th>
+                <th>Inbox</th>
+                <th>Pending outbox</th>
+                <th>Poisoned outbox</th>
+                <th>Pending inbox</th>
+                <th>Poisoned inbox</th>
+              </tr>
+            </thead>
+            <tbody id="contexts-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="view-messages" hidden>
+        <div class="toolbar">
+          <div class="filter-group">
+            <label for="context-select">Context</label>
+            <select id="context-select" class="form-select"></select>
+
+            <label for="status-select">Status</label>
+            <select id="status-select" class="form-select">
+              <option value="Poisoned" selected>Poisoned</option>
+              <option value="Pending">Pending</option>
+              <option value="Completed">Completed</option>
+              <option value="All">All</option>
+            </select>
+
+            <label for="search-input">Search</label>
+            <input id="search-input" class="form-input" type="search"
+                   placeholder="substring of CloudEvents properties" />
+
+            <label for="from-input">From</label>
+            <input id="from-input" class="form-input" type="datetime-local" />
+
+            <label for="to-input">To</label>
+            <input id="to-input" class="form-input" type="datetime-local" />
+
+            <button id="btn-apply-filter" class="btn btn-secondary btn-sm">Apply</button>
+          </div>
+
+          <div class="action-group">
+            <button id="btn-requeue-selected" class="btn btn-primary btn-sm" disabled>
+              ↺ Requeue selected
+            </button>
+            <button id="btn-delete-selected" class="btn btn-danger btn-sm" disabled>
+              🗑 Delete selected
+            </button>
+            <button id="btn-requeue-matching" class="btn btn-primary btn-sm">
+              ↺ Requeue everything matching…
+            </button>
+            <button id="btn-delete-matching" class="btn btn-danger btn-sm">
+              🗑 Delete everything matching…
+            </button>
+          </div>
+        </div>
+
+        <p id="search-hint" class="muted hint">
+          Search is a substring match over serialized CloudEvents properties — a <code>LIKE</code>
+          with a leading wildcard, not a full-text index. Pair it with a status or a date window,
+          or the server will refuse it.
+        </p>
+
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th class="select-column"><input id="select-all" type="checkbox" /></th>
+                <th id="col-id">Id</th>
+                <th>Type</th>
+                <th id="col-extra">Transport</th>
+                <th>Created</th>
+                <th>Errors</th>
+                <th>Requeued</th>
+                <th>Last error</th>
+                <th class="actions-column">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="messages-tbody"></tbody>
+          </table>
+          <div class="pagination">
+            <span id="page-info" class="muted"></span>
+            <div class="pagination-buttons">
+              <button id="btn-prev-page" class="btn btn-secondary btn-sm" disabled>Previous</button>
+              <button id="btn-next-page" class="btn btn-secondary btn-sm" disabled>Next</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-channels" hidden>
+        <h3>Configured channels</h3>
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Channel</th>
+                <th>Intent</th>
+                <th>Queue</th>
+                <th>Depth</th>
+                <th>Dead letter queue</th>
+                <th>DLQ depth</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="channels-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="view-audit" hidden>
+        <h2>Audit log</h2>
+        <p class="muted hint">
+          Every mutation the dashboard issued, with who asked and what came back. Entries are
+          pruned once they pass the configured retention.
+        </p>
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Actor</th>
+                <th>Transport</th>
+                <th>Service</th>
+                <th>Context</th>
+                <th>Operation</th>
+                <th>Request</th>
+                <th>Outcome</th>
+              </tr>
+            </thead>
+            <tbody id="audit-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="detail-modal" class="modal-backdrop" hidden>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modal-title">Message detail</h3>
+        <button id="btn-close-modal" class="btn btn-secondary btn-sm">✕</button>
+      </div>
+      <div id="modal-body" class="modal-body"></div>
+      <div id="modal-footer" class="modal-footer"></div>
+    </div>
+  </div>
+
+  <!--
+    A destructive filter-driven action is never one click. The operator picks a filter, sees the
+    count the server would actually touch, and only then confirms — and afterwards is told what
+    is left, so a capped run does not read as a finished one.
+  -->
+  <div id="confirm-modal" class="modal-backdrop" hidden>
+    <div class="modal-content modal-narrow">
+      <div class="modal-header">
+        <h3 id="confirm-title">Confirm</h3>
+        <button id="btn-close-confirm" class="btn btn-secondary btn-sm">✕</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-summary"></p>
+        <dl id="confirm-filter" class="detail-list"></dl>
+        <p id="confirm-count" class="confirm-count"></p>
+        <p id="confirm-result" class="muted" hidden></p>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-confirm-cancel" class="btn btn-secondary btn-sm">Cancel</button>
+        <button id="btn-confirm-apply" class="btn btn-danger btn-sm" disabled>Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

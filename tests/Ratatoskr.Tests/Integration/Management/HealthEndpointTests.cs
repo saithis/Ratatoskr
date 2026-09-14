@@ -23,22 +23,22 @@ public class HealthEndpointTests(
         await RefreshMetricsAsync();
 
         using var response = await HttpClient.GetAsync(
-            "/ratatoskr/api/v1/efcore/contexts/TestDbContext/health"
+            $"{ContextUrl}/health"
         );
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        body.GetProperty("dbContextName").GetString().Should().Be("TestDbContext");
-        body.GetProperty("poisonedOutboxCount")
+        body.GetProperty("name").GetString().Should().Be("TestDbContext");
+        body.GetProperty("poisonedOutbox")
             .GetInt64()
             .Should()
             .Be(1, "the seeded outbox entity is poisoned and the metrics scrape has just run");
-        body.GetProperty("poisonedInboxCount")
+        body.GetProperty("poisonedInbox")
             .GetInt64()
             .Should()
             .Be(1, "the seeded inbox handler is poisoned and the metrics scrape has just run");
-        body.GetProperty("pendingOutboxCount").GetInt64().Should().Be(0);
-        body.GetProperty("pendingInboxCount").GetInt64().Should().Be(0);
+        body.GetProperty("pendingOutbox").GetInt64().Should().Be(0);
+        body.GetProperty("pendingInbox").GetInt64().Should().Be(0);
     }
 
     [Test]
@@ -47,7 +47,7 @@ public class HealthEndpointTests(
         await StartManagementTestAsync();
 
         using var response = await HttpClient.GetAsync(
-            "/ratatoskr/api/v1/efcore/contexts/TestDbContext/health"
+            $"{ContextUrl}/health"
         );
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -74,7 +74,7 @@ public class HealthEndpointTests(
     {
         await StartManagementTestAsync();
 
-        using var response = await HttpClient.GetAsync("/ratatoskr/api/v1/efcore/contexts");
+        using var response = await HttpClient.GetAsync("/ratatoskr/api/v1/contexts");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -93,7 +93,7 @@ public class HealthEndpointTests(
         await StartManagementTestAsync();
 
         using var response = await HttpClient.GetAsync(
-            "/ratatoskr/api/v1/efcore/contexts/NonExistentContext/health"
+            "/ratatoskr/api/v1/contexts/NonExistentContext/health"
         );
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }

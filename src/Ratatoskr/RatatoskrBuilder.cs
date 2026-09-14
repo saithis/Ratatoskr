@@ -4,6 +4,7 @@ using Ratatoskr.AsyncApi.Config;
 using Ratatoskr.CloudEvents;
 using Ratatoskr.Config;
 using Ratatoskr.Core;
+using Ratatoskr.Management;
 
 namespace Ratatoskr;
 
@@ -165,6 +166,15 @@ public sealed class RatatoskrBuilder
     {
         ArgumentNullException.ThrowIfNull(configure);
         configure(JsonSerializerOptions);
+        return this;
+    }
+
+    /// <summary>
+    /// Enables the Ratatoskr management agent for this service.
+    /// </summary>
+    public RatatoskrBuilder UseManagement(Action<Management.ManagementAgentBuilder>? configure = null)
+    {
+        Services.AddRatatoskrManagementAgent(builder => configure?.Invoke(builder));
         return this;
     }
 

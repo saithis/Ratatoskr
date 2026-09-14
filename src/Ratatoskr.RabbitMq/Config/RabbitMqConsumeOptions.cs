@@ -102,7 +102,7 @@ public class RabbitMqConsumeOptions(RabbitMqChannelOptions inner)
     }
 
     /// <summary>
-    /// Configures a transient queue (non-durable, not exclusive, auto-deleted when empty).
+    /// Configures a throwaway queue: auto-deleted once the last consumer disconnects.
     /// Suitable for temporary or test queues.
     /// </summary>
     public RabbitMqConsumeOptions WithTransientQueue()

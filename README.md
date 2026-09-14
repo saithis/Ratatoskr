@@ -22,9 +22,12 @@ See [examples/README.md](examples/README.md) for the full demo guide.
 
 ## Project Structure
 
-- `src/Ratatoskr` - Core library
-- `src/Ratatoskr.EfCore` - Entity Framework Core outbox/inbox implementation
-- `src/Ratatoskr.RabbitMq` - RabbitMQ transport
+- `src/Ratatoskr` - Core library (channels, serialization, CloudEvents, management agent runtime, and in-process control plane)
+- `src/Ratatoskr.EfCore` - Entity Framework Core outbox/inbox durability and management operations
+- `src/Ratatoskr.RabbitMq` - RabbitMQ application transport and DLQ management operations
+- `src/Ratatoskr.Management.Abstractions` - Management protocol contracts and transport abstractions
+- `src/Ratatoskr.Management.RabbitMq` - RabbitMQ management transport provider for distributed control planes
+- `src/Ratatoskr.UI` - Embedded management web dashboard
 - `examples/` - Playground (`PlaygroundHost` + AppHost)
 - `examples/AppHost` - .NET Aspire orchestration
 - `tests/Ratatoskr.Tests` - Integration and unit tests

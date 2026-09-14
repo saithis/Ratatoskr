@@ -12,6 +12,7 @@
     <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="DistributedLock.FileSystem" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="RabbitMQ.Client" />
   </ItemGroup>
@@ -19,7 +20,9 @@
   <ItemGroup>
     <ProjectReference Include="..\ServiceDefaults\ServiceDefaults.csproj" />
     <ProjectReference Include="..\..\src\Ratatoskr.EfCore\Ratatoskr.EfCore.csproj" />
+    <ProjectReference Include="..\..\src\Ratatoskr.Management.RabbitMq\Ratatoskr.Management.RabbitMq.csproj" />
     <ProjectReference Include="..\..\src\Ratatoskr.RabbitMq\Ratatoskr.RabbitMq.csproj" />
+    <ProjectReference Include="..\..\src\Ratatoskr.UI\Ratatoskr.UI.csproj" />
     <ProjectReference Include="..\..\src\Ratatoskr\Ratatoskr.csproj" />
   </ItemGroup>
 </Project>

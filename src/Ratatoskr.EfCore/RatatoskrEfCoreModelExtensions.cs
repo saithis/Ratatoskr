@@ -28,5 +28,6 @@ public static class RatatoskrEfCoreModelExtensions
 
         RatatoskrEntityModelConfiguration.ConfigureOutboxEntities(modelBuilder, database);
         RatatoskrEntityModelConfiguration.ConfigureInboxEntities(modelBuilder, database);
+        RatatoskrEntityModelConfiguration.ConfigureManagementEntities(modelBuilder);
     }
 }

@@ -194,12 +194,19 @@ public class RabbitMqChannelOptions
     }
 
     /// <summary>
-    /// Configures a transient queue (non-durable, not exclusive, auto-deleted when empty).
+    /// Configures a throwaway queue: auto-deleted once the last consumer disconnects.
     /// Suitable for temporary or test queues.
     /// </summary>
+    /// <remarks>
+    /// The queue is declared <em>durable</em> even though its lifetime is tied to its consumers.
+    /// RabbitMQ 4.1 removed the <c>transient_nonexcl_queues</c> feature, so a non-durable,
+    /// non-exclusive queue is refused outright with <c>541 INTERNAL_ERROR</c>. Durability buys
+    /// nothing here — the queue disappears with its last consumer either way — so the auto-delete
+    /// lifetime is what actually carries the intent.
+    /// </remarks>
     public RabbitMqChannelOptions WithTransientQueue()
     {
-        QueueDurable = false;
+        QueueDurable = true;
         QueueExclusive = false;
         QueueAutoDelete = true;
         return this;

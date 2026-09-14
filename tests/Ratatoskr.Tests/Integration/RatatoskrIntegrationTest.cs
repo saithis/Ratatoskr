@@ -4,6 +4,7 @@ using Medallion.Threading.FileSystem;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Time.Testing;
 using RabbitMQ.Client;
 using Ratatoskr.RabbitMq;
 using Ratatoskr.TestHost;
@@ -111,10 +112,31 @@ public abstract class RatatoskrIntegrationTest(
         await db.Database.EnsureCreatedAsync();
     }
 
+    /// <summary>
+    /// The clock the host runs on. Defaults to the real clock; override
+    /// <see cref="CreateTimeProvider"/> to return a <see cref="FakeTimeProvider"/> when a test
+    /// needs to advance past heartbeat, staleness or retention windows without real waits.
+    /// </summary>
+    protected TimeProvider TestTime => _timeProvider ??= CreateTimeProvider();
+
+    private TimeProvider? _timeProvider;
+
+    /// <summary>Creates the clock registered in the host. Called once per test.</summary>
+    protected virtual TimeProvider CreateTimeProvider() => TimeProvider.System;
+
+    /// <summary>
+    /// The controllable clock, for tests that opted into one via <see cref="CreateTimeProvider"/>.
+    /// </summary>
+    protected FakeTimeProvider FakeTime =>
+        TestTime as FakeTimeProvider
+        ?? throw new InvalidOperationException(
+            "This test runs on the real clock. Override CreateTimeProvider() to return a FakeTimeProvider."
+        );
+
     protected virtual void ConfigureServices(IServiceCollection services)
     {
         services.AddLogging();
-        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton(TestTime);
 
         var lockFileDirectory = new DirectoryInfo(
             Path.Combine(Environment.CurrentDirectory, TestId)
@@ -295,9 +317,11 @@ public abstract class RatatoskrIntegrationTest(
         await using var connection = await factory.CreateConnectionAsync();
         await using var channel = await connection.CreateChannelAsync();
 
+        // Durable, not transient: RabbitMQ 4.1 removed transient non-exclusive queues, and
+        // auto-delete is what actually gives this probe queue a bounded lifetime.
         await channel.QueueDeclareAsync(
             queue: queueName,
-            durable: false,
+            durable: true,
             exclusive: false,
             autoDelete: true
         );

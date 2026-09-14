@@ -17,7 +17,7 @@ public sealed class RabbitMqContainerFixture : IAsyncInitializer, IAsyncDisposab
 
     public async Task InitializeAsync()
     {
-        _container = new RabbitMqBuilder("rabbitmq:4.0-alpine").Build();
+        _container = new RabbitMqBuilder("rabbitmq:4.3-alpine").Build();
 
         await _container.StartAsync();
     }

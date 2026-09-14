@@ -50,6 +50,10 @@ services.AddHealthChecks()
 
 ## Handling Poisoned Messages
 
+> [!TIP]
+> **Use the Ratatoskr Management Dashboard**  
+> Instead of running raw SQL queries, you can inspect CloudEvents metadata, view failure stack traces, and execute single or bulk retries directly from the web dashboard. See [Management & UI Dashboard](management-ui.md).
+
 ### Investigation
 
 Poisoned messages have exhausted their retry budget and remain in the database for manual investigation.
@@ -240,7 +244,22 @@ WHERE "Id" IN (
 DELETE TOP (10000) FROM [OutboxMessages]
 WHERE [ProcessedAt] IS NOT NULL
   AND [ProcessedAt] < DATEADD(DAY, -7, GETUTCDATE());
-```
+### Management Control Plane Retention
+
+#### Operation Idempotency Log Cleanup (`ManagementOperationCleanupService<TDbContext>`)
+
+Services running `Ratatoskr.Management.EfCore` persist management mutations (`POST /outbox/requeue`, `POST /inbox/delete`, etc.) into `ManagementOperationEntity` tables within the application database to ensure idempotency.
+
+The background worker `ManagementOperationCleanupService<TDbContext>` periodically prunes completed operation logs whose retention window has expired. It runs automatically in all managed service processes, including outbox-only and inbox-only configurations.
+
+#### Dashboard Audit Retention (`AuditRetentionWorker`)
+
+The central `Ratatoskr.UI` dashboard logs operator actions (actor, operation ID, target, filter, outcome, and timestamp) in `RatatoskrDashboardDbContext`.
+
+The `AuditRetentionWorker` runs periodically as a background hosted service to prune old audit entries:
+- **Default Retention**: 90 days (`options.AuditRetention = TimeSpan.FromDays(90)`).
+- **Batching**: Deletes are executed in bounded batches (`options.AuditPruneBatchSize = 1000`) to prevent transaction log saturation.
+- **Interval**: Runs every hour (`options.AuditPruneInterval = TimeSpan.FromHours(1)`).
 
 ## Distributed Lock Provider
 
@@ -372,7 +391,7 @@ Review the generated migration to understand schema changes before applying to p
 Before deploying a new version that changes handler configuration:
 
 - [ ] **Handler keys stable** — If renaming a handler key, use legacy keys to drain in-flight messages. See [Inbox: Handler Key Renaming](inbox.md#handler-key-renaming-legacy-keys).
-- [ ] **Message types backward-compatible** — Only additive field changes. No renames or removals. See [Architecture: Schema Evolution](architecture.md#schema-evolution).
+- [ ] **Message types backward-compatible** — Only additive field changes. No renames or removals. See [Messaging Pipeline: Schema Evolution](messaging-architecture.md#message-schema-evolution).
 - [ ] **EF Core migrations applied** — Run `dotnet ef migrations add` and `dotnet ef database update` before deploying the new application version.
 - [ ] **Monitoring in place** — Verify `ratatoskr.outbox.poison.count` and `ratatoskr.inbox.poison.count` counters are being collected. A spike after deployment indicates a compatibility issue.
 
