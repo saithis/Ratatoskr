@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Ratatoskr.Config;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore.Internal;
 using Ratatoskr.EfCore.Management;
@@ -17,77 +18,11 @@ public static class PublicApiExtensions
     extension(RatatoskrBuilder builder)
     {
         /// <summary>
-        /// Registers EF Core durability (both inbox and outbox) for the given DbContext.
-        /// By default, sets this DbContext as the default context for transactional publishing and inbox handling.
-        /// </summary>
-        public RatatoskrBuilder AddDbContext<TDbContext>(
-            Action<RatatoskrDbContextOptions<TDbContext>>? configure = null,
-            bool isDefault = true
-        )
-            where TDbContext : DbContext, IRatatoskrDbContext
-        {
-            if (isDefault || builder.DefaultDbContextType == null)
-            {
-                builder.DefaultDbContextType = typeof(TDbContext);
-                builder.Services.TryAddScoped<IRatatoskrDbContext>(sp => sp.GetRequiredService<TDbContext>());
-            }
-
-            // Idempotency: skip if already registered for this DbContext type
-            if (builder.Services.Any(d => d.ServiceType == typeof(DurabilityMarker<TDbContext>)))
-            {
-                return builder;
-            }
-
-            builder.Services.AddSingleton<DurabilityMarker<TDbContext>>();
-            builder.Services.TryAddSingleton<EfCoreMetricsState>();
-            builder.Services.TryAddSingleton<EfCoreBacklogGauges>();
-
-            var options = new RatatoskrDbContextOptions<TDbContext>();
-            configure?.Invoke(options);
-
-            var inboxBuilder = new InboxBuilder<TDbContext> { Options = options.Inbox };
-            if (!options.RegisterBackgroundServices)
-            {
-                inboxBuilder.WithoutBackgroundProcessing();
-            }
-            RegisterInboxServices(builder, inboxBuilder);
-
-            var outboxBuilder = new OutboxBuilder<TDbContext> { Options = options.Outbox };
-            if (!options.RegisterBackgroundServices)
-            {
-                outboxBuilder.WithoutBackgroundProcessing();
-            }
-            RegisterOutboxServices(builder, outboxBuilder);
-
-            builder.Services.AddSingleton(_ => new EfCoreMetricsSettings<TDbContext>(
-                options.MetricsPollingInterval,
-                options.MetricsQueryTimeout
-            ));
-            if (options.RegisterBackgroundServices)
-            {
-                builder.Services.AddHostedService<EfCoreMetricsBackgroundService<TDbContext>>();
-            }
-
-            // Management API
-            builder.Services.AddSingleton<
-                IEfCoreManagementDbContextDescriptor,
-                EfCoreManagementDbContextDescriptor<TDbContext>
-            >();
-            builder.Services.TryAddScoped<EfCoreManagementDbContextLookup>();
-            builder.Services.TryAddEnumerable(
-                ServiceDescriptor.Singleton<
-                    IRatatoskrEndpointConfigurator,
-                    EfCoreEndpointConfigurator
-                >()
-            );
-
-            return builder;
-        }
-
-        /// <summary>
         /// Registers EF Core durability (inbox and/or outbox) for the given DbContext.
         /// Call <c>UseInbox()</c> and/or <c>UseOutbox()</c> on the builder to enable each pattern.
-        /// Per-DbContext services are registered once (idempotent).
+        /// The first DbContext registered becomes the default, unless another one is marked with
+        /// <c>AsDefault()</c> or set by <c>AddRatatoskr&lt;TDbContext&gt;()</c>.
+        /// Throws if durability is already registered for this DbContext.
         /// </summary>
         public RatatoskrBuilder AddEfCoreDurability<TDbContext>(
             Action<DurabilityBuilder<TDbContext>> configure
@@ -96,23 +31,13 @@ public static class PublicApiExtensions
         {
             ArgumentNullException.ThrowIfNull(configure);
 
-            if (builder.DefaultDbContextType == null)
-            {
-                builder.DefaultDbContextType = typeof(TDbContext);
-                builder.Services.TryAddScoped<IRatatoskrDbContext>(sp => sp.GetRequiredService<TDbContext>());
-            }
-
-            // Idempotency: skip if already registered for this DbContext type
-            if (builder.Services.Any(d => d.ServiceType == typeof(DurabilityMarker<TDbContext>)))
+            if (IsDurabilityRegistered<TDbContext>(builder.Services))
             {
                 throw new InvalidOperationException(
-                    $"AddEfCoreDurability<{typeof(TDbContext).Name}>() was called more than once. Merge UseInbox()/UseOutbox() into a single registration."
+                    $"AddEfCoreDurability<{typeof(TDbContext).Name}>() was called more than once. "
+                        + "Configure UseInbox()/UseOutbox() in a single call."
                 );
             }
-
-            builder.Services.AddSingleton<DurabilityMarker<TDbContext>>();
-            builder.Services.TryAddSingleton<EfCoreMetricsState>();
-            builder.Services.TryAddSingleton<EfCoreBacklogGauges>();
 
             var durabilityBuilder = new DurabilityBuilder<TDbContext>();
             configure(durabilityBuilder);
@@ -124,6 +49,18 @@ public static class PublicApiExtensions
                 );
             }
 
+            SelectDefaultDbContext<TDbContext>(builder, durabilityBuilder.IsDefault);
+
+            if (!durabilityBuilder.RegisterBackgroundServices)
+            {
+                durabilityBuilder.InboxBuilder?.WithoutBackgroundProcessing();
+                durabilityBuilder.OutboxBuilder?.WithoutBackgroundProcessing();
+            }
+
+            var services = builder.Services;
+            RegisterSharedServicesOnce(builder);
+            services.AddSingleton<DurabilityMarker<TDbContext>>();
+
             if (durabilityBuilder.InboxBuilder != null)
             {
                 RegisterInboxServices(builder, durabilityBuilder.InboxBuilder);
@@ -134,26 +71,100 @@ public static class PublicApiExtensions
                 RegisterOutboxServices(builder, durabilityBuilder.OutboxBuilder);
             }
 
-            builder.Services.AddSingleton(_ => new EfCoreMetricsSettings<TDbContext>(
+            services.AddSingleton(_ => new EfCoreMetricsSettings<TDbContext>(
                 durabilityBuilder.MetricsPollingInterval,
                 durabilityBuilder.MetricsQueryTimeout
             ));
-            builder.Services.AddHostedService<EfCoreMetricsBackgroundService<TDbContext>>();
+            if (durabilityBuilder.RegisterBackgroundServices)
+            {
+                services.AddHostedService<EfCoreMetricsBackgroundService<TDbContext>>();
+            }
 
-            // Management API
-            builder.Services.AddSingleton<
+            services.AddSingleton<
                 IEfCoreManagementDbContextDescriptor,
                 EfCoreManagementDbContextDescriptor<TDbContext>
             >();
-            builder.Services.TryAddScoped<EfCoreManagementDbContextLookup>();
-            builder.Services.TryAddEnumerable(
+
+            return builder;
+        }
+
+        /// <summary>
+        /// Registers the services, validators and deferred actions that are shared by all
+        /// DbContexts, once per <see cref="RatatoskrBuilder"/>.
+        /// </summary>
+        private static void RegisterSharedServicesOnce(RatatoskrBuilder ratatoskrBuilder)
+        {
+            var services = ratatoskrBuilder.Services;
+            if (services.Any(d => d.ServiceType == typeof(EfCoreSharedServicesMarker)))
+            {
+                return;
+            }
+
+            services.AddSingleton<EfCoreSharedServicesMarker>();
+            services.TryAddSingleton<EfCoreMetricsState>();
+            services.TryAddSingleton<EfCoreBacklogGauges>();
+
+            // EF Core transport sender, needed for inbox-only and outbox-only setups alike
+            services.TryAddEnumerable(
+                ServiceDescriptor.Singleton<IMessageSender, EfCoreMessageSender>()
+            );
+
+            // Management API
+            services.TryAddScoped<EfCoreManagementDbContextLookup>();
+            services.TryAddEnumerable(
                 ServiceDescriptor.Singleton<
                     IRatatoskrEndpointConfigurator,
                     EfCoreEndpointConfigurator
                 >()
             );
 
-            return builder;
+            ratatoskrBuilder.AddValidator(EfCoreConfigurationValidator.Validate);
+            ratatoskrBuilder.AddDeferredServiceAction(deferredServices =>
+                ApplyDefaultDbContext(ratatoskrBuilder, deferredServices)
+            );
+        }
+
+        /// <summary>
+        /// Wires up the default DbContext once all configuration has run, so the result does not
+        /// depend on registration order: <see cref="IRatatoskrDbContext"/> resolves to it, and consume
+        /// channels with inbox-managed (keyed) handlers that neither configure an inbox nor opt out
+        /// of it use its inbox.
+        /// </summary>
+        private static void ApplyDefaultDbContext(
+            RatatoskrBuilder ratatoskrBuilder,
+            IServiceCollection services
+        )
+        {
+            if (ratatoskrBuilder.DefaultDbContextType is not { } defaultDbContextType)
+            {
+                return;
+            }
+
+            services.TryAddScoped<IRatatoskrDbContext>(sp =>
+                (IRatatoskrDbContext)sp.GetRequiredService(defaultDbContextType)
+            );
+
+            foreach (var channel in ratatoskrBuilder.ChannelRegistry.GetConsumeChannels())
+            {
+                if (
+                    channel.GetExtension<ChannelInboxConfig>() != null
+                    || channel.GetExtension<ConsumeChannelInboxRequirementOptOut>() != null
+                )
+                {
+                    continue;
+                }
+
+                var hasInboxHandlers = channel
+                    .Messages.Select(m => m.GetExtension<MessageHandlerRegistrations>())
+                    .Where(r => r != null)
+                    .SelectMany(r => r!.Handlers)
+                    .Any(h => h.IsInbox);
+
+                if (hasInboxHandlers)
+                {
+                    channel.SetExtension(new ChannelInboxConfig(defaultDbContextType));
+                }
+            }
         }
 
         private static void RegisterInboxServices<TDbContext>(
@@ -216,11 +227,6 @@ public static class PublicApiExtensions
                 );
             }
 
-            // EF Core transport services (registered once, idempotent)
-            ratatoskrBuilder.Services.TryAddEnumerable(
-                ServiceDescriptor.Singleton<IMessageSender, EfCoreMessageSender>()
-            );
-
             ratatoskrBuilder.AddHandlerValidator(
                 (channelRegistry, handlerRegistry) =>
                     InboxConfigurationValidator.Validate(
@@ -229,7 +235,6 @@ public static class PublicApiExtensions
                         policyAggregator
                     )
             );
-            ratatoskrBuilder.AddValidator(EfCoreConfigurationValidator.Validate);
         }
 
         private static ConsumeChannelInboxPolicyAggregator GetOrAddConsumeChannelInboxPolicyAggregator(
@@ -270,11 +275,6 @@ public static class PublicApiExtensions
             ratatoskrBuilder.Services.AddSingleton(
                 new OutboxOptionsHolder<TDbContext>(outboxBuilder.Options)
             );
-
-            // EF Core transport services (registered once, idempotent — needed for outbox-only setups too)
-            ratatoskrBuilder.Services.TryAddEnumerable(
-                ServiceDescriptor.Singleton<IMessageSender, EfCoreMessageSender>()
-            );
             ratatoskrBuilder.Services.AddSingleton<OutboxTriggerInterceptor<TDbContext>>();
             ratatoskrBuilder.Services.AddTransient<OutboxMessageProcessor<TDbContext>>();
             ratatoskrBuilder.Services.AddSingleton<OutboxProcessor<TDbContext>>();
@@ -291,9 +291,44 @@ public static class PublicApiExtensions
                     >();
                 }
             }
-
-            ratatoskrBuilder.AddValidator(EfCoreConfigurationValidator.Validate);
         }
+    }
+
+    internal static bool IsDurabilityRegistered<TDbContext>(IServiceCollection services)
+        where TDbContext : DbContext, IRatatoskrDbContext =>
+        services.Any(d => d.ServiceType == typeof(DurabilityMarker<TDbContext>));
+
+    /// <summary>
+    /// Records <typeparamref name="TDbContext"/> as the default DbContext. An explicit choice
+    /// (<c>AsDefault()</c> or <c>AddRatatoskr&lt;TDbContext&gt;()</c>) overrides the implicit
+    /// first-registered default; two different explicit choices fail fast.
+    /// </summary>
+    internal static void SelectDefaultDbContext<TDbContext>(
+        RatatoskrBuilder ratatoskrBuilder,
+        bool explicitly
+    )
+        where TDbContext : DbContext, IRatatoskrDbContext
+    {
+        if (!explicitly)
+        {
+            ratatoskrBuilder.DefaultDbContextType ??= typeof(TDbContext);
+            return;
+        }
+
+        if (
+            ratatoskrBuilder.IsDefaultDbContextExplicit
+            && ratatoskrBuilder.DefaultDbContextType != typeof(TDbContext)
+        )
+        {
+            throw new InvalidOperationException(
+                $"Cannot make {typeof(TDbContext).Name} the default DbContext: "
+                    + $"{ratatoskrBuilder.DefaultDbContextType!.Name} is already the default "
+                    + "(set by AddRatatoskr<TDbContext>() or AsDefault()). Only one DbContext can be the default."
+            );
+        }
+
+        ratatoskrBuilder.DefaultDbContextType = typeof(TDbContext);
+        ratatoskrBuilder.IsDefaultDbContextExplicit = true;
     }
 
     /// <summary>

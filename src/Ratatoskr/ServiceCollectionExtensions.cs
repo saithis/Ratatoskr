@@ -15,7 +15,9 @@ public static class ServiceCollectionExtensions
 {
     /// <summary>
     /// Registers all Ratatoskr core services, sets <typeparamref name="TDbContext"/> as the default durability context,
-    /// and applies the provided channel/transport configuration.
+    /// and applies the provided channel/transport configuration. Inbox and outbox are enabled for
+    /// <typeparamref name="TDbContext"/> with default options unless <paramref name="configure"/> calls
+    /// <c>AddEfCoreDurability&lt;TDbContext&gt;()</c> itself.
     /// </summary>
     public static IServiceCollection AddRatatoskr<TDbContext>(
         this IServiceCollection services,
@@ -25,8 +27,14 @@ public static class ServiceCollectionExtensions
     {
         return services.AddRatatoskr(builder =>
         {
-            builder.AddDbContext<TDbContext>();
+            PublicApiExtensions.SelectDefaultDbContext<TDbContext>(builder, explicitly: true);
             configure?.Invoke(builder);
+
+            // Default inbox and outbox, unless configure customized durability for TDbContext itself
+            if (!PublicApiExtensions.IsDurabilityRegistered<TDbContext>(builder.Services))
+            {
+                builder.AddEfCoreDurability<TDbContext>(d => d.UseInbox().UseOutbox());
+            }
         });
     }
 

@@ -13,6 +13,8 @@ public class DurabilityBuilder<TDbContext>
 
     internal TimeSpan MetricsPollingInterval { get; private set; } = TimeSpan.FromSeconds(30);
     internal TimeSpan MetricsQueryTimeout { get; private set; } = TimeSpan.FromSeconds(5);
+    internal bool IsDefault { get; private set; }
+    internal bool RegisterBackgroundServices { get; private set; } = true;
 
     internal DurabilityBuilder() { }
 
@@ -34,6 +36,27 @@ public class DurabilityBuilder<TDbContext>
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(timeout, TimeSpan.Zero);
         MetricsQueryTimeout = timeout;
+        return this;
+    }
+
+    /// <summary>
+    /// Makes this DbContext the default, used by <c>IRatatoskr.PublishAsync</c> without a DbContext type
+    /// argument and by consume channels with keyed handlers that do not name a DbContext.
+    /// Without this, the first registered DbContext is the default. Only one DbContext may be marked as default.
+    /// </summary>
+    public DurabilityBuilder<TDbContext> AsDefault()
+    {
+        IsDefault = true;
+        return this;
+    }
+
+    /// <summary>
+    /// Disables all background services for this DbContext: inbox and outbox processing, cleanup
+    /// and backlog metrics refresh (useful in integration test setups).
+    /// </summary>
+    public DurabilityBuilder<TDbContext> WithoutBackgroundProcessing()
+    {
+        RegisterBackgroundServices = false;
         return this;
     }
 
@@ -79,3 +102,8 @@ public class DurabilityBuilder<TDbContext>
 /// </summary>
 // ReSharper disable once UnusedTypeParameter
 internal sealed class DurabilityMarker<TDbContext>;
+
+/// <summary>
+/// Sentinel type marking that the EF Core services shared by all DbContexts are registered.
+/// </summary>
+internal sealed class EfCoreSharedServicesMarker;

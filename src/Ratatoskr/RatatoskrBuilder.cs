@@ -21,6 +21,9 @@ public sealed class RatatoskrBuilder
     /// <summary>The default DbContext type configured for durability, if any.</summary>
     public Type? DefaultDbContextType { get; internal set; }
 
+    /// <summary>True when <see cref="DefaultDbContextType"/> was chosen explicitly rather than by registration order.</summary>
+    internal bool IsDefaultDbContextExplicit { get; set; }
+
     private readonly List<Action<ChannelRegistry>> _validators = new();
     private readonly List<Action<ChannelRegistry, ChannelHandlerRegistry>> _handlerValidators =
         new();
@@ -51,29 +54,6 @@ public sealed class RatatoskrBuilder
 
     internal void ExecuteDeferredActions()
     {
-        // Automatically assign default DbContext to consume channels with inbox handlers that didn't specify one
-        if (DefaultDbContextType != null)
-        {
-            foreach (var channel in ChannelRegistry.GetConsumeChannels())
-            {
-                if (channel.Intent is ChannelType.EventConsume or ChannelType.CommandConsume
-                    && channel.GetExtension<Ratatoskr.EfCore.ChannelInboxConfig>() == null
-                    && channel.GetExtension<Ratatoskr.EfCore.ConsumeChannelInboxRequirementOptOut>() == null)
-                {
-                    var hasInboxHandlers = channel.Messages
-                        .Select(m => m.GetExtension<MessageHandlerRegistrations>())
-                        .Where(r => r != null)
-                        .SelectMany(r => r!.Handlers)
-                        .Any(h => h.IsInbox);
-
-                    if (hasInboxHandlers)
-                    {
-                        channel.SetExtension(new Ratatoskr.EfCore.ChannelInboxConfig(DefaultDbContextType));
-                    }
-                }
-            }
-        }
-
         foreach (var action in _deferredServiceActions)
         {
             action(Services);

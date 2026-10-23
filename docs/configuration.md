@@ -105,12 +105,27 @@ bus.AddEfCoreDurability<OrderDbContext>(d =>
 });
 ```
 
+Call `AddEfCoreDurability<TDbContext>` once per DbContext; a second call for the same DbContext throws at startup. The default DbContext is used for `IRatatoskr.PublishAsync` and for consume channels with keyed handlers that do not call `UseInbox<TDbContext>()` or `WithoutInbox()`. It is the first DbContext passed to `AddEfCoreDurability`, unless one is marked with `AsDefault()` or set by `AddRatatoskr<TDbContext>()`. Marking two different DbContexts as default throws at startup. The default is resolved after all configuration has run, so registration order does not matter for `AsDefault()`.
+
+`AddRatatoskr<TDbContext>()` enables inbox and outbox for `TDbContext` with default options. To customize them, call `AddEfCoreDurability<TDbContext>` inside its configure callback; that registration then replaces the defaults:
+
+```csharp
+builder.Services.AddRatatoskr<OrderDbContext>(bus =>
+{
+    bus.AddEfCoreDurability<OrderDbContext>(d => d
+        .UseOutbox(outbox => outbox.WithBatchSize(500))
+        .UseInbox());
+});
+```
+
 ### Durability builder (shared)
 
 | Option | Default | Description | Details |
 |--------|---------|-------------|---------|
 | `WithMetricsPollingInterval(TimeSpan)` | `30s` | How often backlog gauge counts are refreshed from the database | [Observability](observability.md) |
 | `WithMetricsQueryTimeout(TimeSpan)` | `5s` | Per-`COUNT` query cancellation timeout for those refreshes | [Observability](observability.md) |
+| `AsDefault()` | first registered | Makes this DbContext the default | — |
+| `WithoutBackgroundProcessing()` | enabled | Disables inbox/outbox processing, cleanup and metrics refresh for this DbContext | [Testing](testing.md) |
 
 ### Outbox Options
 
