@@ -138,7 +138,7 @@ public sealed class InboxRetryThenSuccessScenario : IPlaygroundScenario
             try
             {
                 var orderGuid = Guid.Parse(message.OrderId);
-                context.OutboxMessages.Add(
+                context.Outbox.Add(
                     new OrderFulfilled(message.OrderId, message.ScenarioRunId),
                     new MessageProperties { Id = PlaygroundMessageIds.OrderFulfilled(orderGuid) }
                 );

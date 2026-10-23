@@ -4,17 +4,15 @@ using Ratatoskr.EfCore;
 namespace Ratatoskr.Tests.Fixtures;
 
 /// <summary>
-/// Test DbContext that implements IOutboxDbContext and IInboxDbContext for integration tests.
+/// Test DbContext that implements IRatatoskrDbContext for integration tests.
 /// </summary>
 public class TestDbContext(DbContextOptions<TestDbContext> options)
     : DbContext(options),
-        IRatatoskrDbContext,
-        IOutboxDbContext,
-        IInboxDbContext
+        IRatatoskrDbContext
 {
     public DbSet<TestEntity> TestEntities { get; set; }
 
-    public OutboxStagingCollection OutboxMessages { get; } = new();
+    public OutboxStagingCollection Outbox { get; } = new();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -27,6 +25,6 @@ public class TestDbContext(DbContextOptions<TestDbContext> options)
             entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
         });
 
-        modelBuilder.AddRatatoskrEfCoreModel(Database);
+        modelBuilder.AddRatatoskr(Database);
     }
 }

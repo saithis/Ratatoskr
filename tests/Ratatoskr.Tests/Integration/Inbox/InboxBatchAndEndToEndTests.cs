@@ -309,7 +309,7 @@ public class InboxBatchAndEndToEndTests(
                 (sp, opts) =>
                 {
                     opts.UseNpgsql(PostgresConnectionString);
-                    opts.RegisterOutbox<TestDbContext>(sp);
+                    opts.UseRatatoskr<TestDbContext>(sp);
                 }
             );
         });
@@ -320,7 +320,7 @@ public class InboxBatchAndEndToEndTests(
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            db.OutboxMessages.Add(new TestEvent { Id = "outbox-inbox-1", Data = "end-to-end" });
+            db.Outbox.Add(new TestEvent { Id = "outbox-inbox-1", Data = "end-to-end" });
             await db.SaveChangesAsync();
         });
 

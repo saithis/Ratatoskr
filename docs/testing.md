@@ -197,7 +197,7 @@ await using var session = Services.CreateTrackingSession();
 await InScopeAsync(async ctx =>
 {
     var dbContext = ctx.ServiceProvider.GetRequiredService<OrderDbContext>();
-    dbContext.OutboxMessages.Add(new OrderPlaced(Guid.NewGuid(), "test@example.com", 99.99m));
+    dbContext.Outbox.Add(new OrderPlaced(Guid.NewGuid(), "test@example.com", 99.99m));
     await dbContext.SaveChangesAsync();
 });
 

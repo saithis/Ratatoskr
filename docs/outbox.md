@@ -30,7 +30,7 @@ Your `DbContext` must implement `IRatatoskrDbContext` and register Ratatoskr's E
 public class OrderDbContext(DbContextOptions<OrderDbContext> options)
     : DbContext(options), IRatatoskrDbContext
 {
-    public OutboxStagingCollection OutboxMessages { get; } = new();
+    public OutboxStagingCollection Outbox { get; } = new();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -55,7 +55,7 @@ The `UseRatatoskr<TDbContext>(sp)` call adds an EF Core `SaveChanges` intercepto
 
 ## Usage
 
-Stage messages using `await bus.PublishAsync(message)` or `db.OutboxMessages.Add(message)` and call `SaveChangesAsync()`. The message is persisted in the same transaction as your business data:
+Stage messages using `await bus.PublishAsync(message)` or `db.Outbox.Add(message)` and call `SaveChangesAsync()`. The message is persisted in the same transaction as your business data:
 
 ```csharp
 app.MapPost("/orders", async (OrderPlaced order, IRatatoskr bus, OrderDbContext db) =>
@@ -78,13 +78,13 @@ Ratatoskr supports deferred message delivery without external dependencies like 
 
 ```csharp
 // Schedule message for a specific timestamp
-db.OutboxMessages.Add(
+db.Outbox.Add(
     new OrderPaymentReminder(orderId),
     options => options.DeliverAt(DateTimeOffset.UtcNow.AddHours(24))
 );
 
 // Or schedule using a relative delay
-db.OutboxMessages.Add(
+db.Outbox.Add(
     new FollowUpNotification(userId),
     options => options.DeliverAfter(TimeSpan.FromMinutes(30))
 );

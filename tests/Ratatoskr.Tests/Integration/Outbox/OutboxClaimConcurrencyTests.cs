@@ -54,7 +54,7 @@ public class OutboxClaimConcurrencyTests(
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                     options.AddInterceptors(sp.GetRequiredService<ClaimConflictInterceptor>());
                 }
             );
@@ -67,7 +67,7 @@ public class OutboxClaimConcurrencyTests(
         await InScopeAsync(async ctx =>
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            dbContext.OutboxMessages.Add(new TestEvent { Data = "claim-spin-msg" });
+            dbContext.Outbox.Add(new TestEvent { Data = "claim-spin-msg" });
             await dbContext.SaveChangesAsync(); // staging save (Added entity, not a claim)
         });
 

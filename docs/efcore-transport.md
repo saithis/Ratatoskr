@@ -53,7 +53,7 @@ When the outbox and inbox use the same `DbContext`, Ratatoskr optimizes by writi
 
 ```csharp
 // Business data + message in one transaction
-db.OutboxMessages.Add(new OrderPlaced(orderId, email, total));
+db.Outbox.Add(new OrderPlaced(orderId, email, total));
 await db.SaveChangesAsync();
 // → Inbox entries created in the same transaction
 // → InboxProcessor delivers to handlers

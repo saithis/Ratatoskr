@@ -58,7 +58,7 @@ flowchart TD
     subgraph Publish ["Publishing"]
         App["Application"]
         Direct["IRatatoskr.PublishDirectAsync<br/>Enrich, serialize, send to matching transports"]
-        Outbox["DbContext.OutboxMessages.Add<br/>+ SaveChangesAsync"]
+        Outbox["DbContext.Outbox.Add<br/>+ SaveChangesAsync"]
 
         App -->|"TMessage"| Direct
         App -->|"OutboxMessage"| Outbox
@@ -160,7 +160,7 @@ sequenceDiagram
     participant Sender as EfCoreMessageSender
     participant IA as InboxAcceptor
 
-    App->>Db: OutboxMessages.Add(message)
+    App->>Db: Outbox.Add(message)
     App->>Db: SaveChangesAsync()
     activate Int
     Int->>Int: Enrich, serialize
@@ -175,7 +175,7 @@ sequenceDiagram
     deactivate Int
 ```
 
-Messages are added to `OutboxMessages` and persisted in the same database transaction as your business data. The `OutboxTriggerInterceptor` hooks into EF Core's `SaveChangesAsync`:
+Messages are added to `Outbox` and persisted in the same database transaction as your business data. The `OutboxTriggerInterceptor` hooks into EF Core's `SaveChangesAsync`:
 
 - **Same-DbContext:** Inbox entries are created directly in the same transaction. No outbox row is needed — the inbox processor picks them up immediately.
 - **Cross-DbContext:** An `OutboxMessageEntity` is created. The `OutboxProcessor` background service dispatches it to the target inbox.

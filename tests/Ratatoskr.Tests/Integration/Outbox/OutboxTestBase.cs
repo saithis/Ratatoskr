@@ -36,7 +36,7 @@ public abstract class OutboxTestBase(
     protected static async Task<int> ProcessOutboxAsync<TDbContext>(
         IServiceProvider serviceProvider
     )
-        where TDbContext : DbContext, IOutboxDbContext
+        where TDbContext : DbContext, IRatatoskrDbContext
     {
         var totalProcessed = 0;
         while (true)

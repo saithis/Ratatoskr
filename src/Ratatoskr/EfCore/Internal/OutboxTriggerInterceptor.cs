@@ -58,7 +58,7 @@ internal partial class OutboxTriggerInterceptor<TDbContext>(
         flags.OutboxEntitiesStaged = false;
         flags.InboxEntitiesStaged = false;
 
-        var stagedItems = outboxDbContext.OutboxMessages.StagedItems;
+        var stagedItems = outboxDbContext.Outbox.StagedItems;
         if (stagedItems.Count == 0)
         {
             return result;
@@ -284,7 +284,7 @@ internal partial class OutboxTriggerInterceptor<TDbContext>(
         // Commit: clear staged items now that the transaction succeeded
         if (eventData.Context is IRatatoskrDbContext outboxDbContext)
         {
-            outboxDbContext.OutboxMessages.ClearStaged();
+            outboxDbContext.Outbox.ClearStaged();
         }
 
         if (eventData.EntitiesSavedCount == 0)

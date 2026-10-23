@@ -6,11 +6,9 @@ namespace Docs.Data;
 #region OrderDbContext
 public class OrderDbContext(DbContextOptions<OrderDbContext> options)
     : DbContext(options),
-        IRatatoskrDbContext,
-        IOutboxDbContext,
-        IInboxDbContext
+        IRatatoskrDbContext
 {
-    public OutboxStagingCollection OutboxMessages { get; } = new();
+    public OutboxStagingCollection Outbox { get; } = new();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

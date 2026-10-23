@@ -121,7 +121,7 @@ public sealed class BusinessRejectionScenario : IPlaygroundScenario
         )
         {
             var orderGuid = Guid.Parse(message.OrderId);
-            context.OutboxMessages.Add(
+            context.Outbox.Add(
                 new OrderFailed(
                     message.OrderId,
                     message.ScenarioRunId,

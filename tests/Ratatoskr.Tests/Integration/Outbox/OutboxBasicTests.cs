@@ -35,7 +35,7 @@ public class OutboxBasicTests(RabbitMqContainerFixture rabbitMq, PostgresContain
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                 }
             );
         });
@@ -52,7 +52,7 @@ public class OutboxBasicTests(RabbitMqContainerFixture rabbitMq, PostgresContain
                 new TestEntity { Name = "Outbox Test", CreatedAt = DateTimeOffset.UtcNow }
             );
 
-            dbContext.OutboxMessages.Add(
+            dbContext.Outbox.Add(
                 new TestEvent { Id = "outbox-1", Data = "committed" },
                 new MessageProperties().SetRoutingKey(DefaultRoutingKey)
             );
@@ -96,7 +96,7 @@ public class OutboxBasicTests(RabbitMqContainerFixture rabbitMq, PostgresContain
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                 }
             );
         });
@@ -110,7 +110,7 @@ public class OutboxBasicTests(RabbitMqContainerFixture rabbitMq, PostgresContain
 
             var props = new MessageProperties().SetRoutingKey(QueueName);
             props.Transports.Add(RabbitMqConstants.TransportName);
-            dbContext.OutboxMessages.Add(
+            dbContext.Outbox.Add(
                 new TestEvent { Id = "e2e-1", Data = "outbox->consumer" },
                 props
             );
@@ -149,7 +149,7 @@ public class OutboxBasicTests(RabbitMqContainerFixture rabbitMq, PostgresContain
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                 }
             );
         });
@@ -164,7 +164,7 @@ public class OutboxBasicTests(RabbitMqContainerFixture rabbitMq, PostgresContain
             var entity = new TestEntity { Name = "Test Entity", CreatedAt = DateTimeOffset.UtcNow };
             await dbContext.TestEntities.AddAsync(entity);
 
-            dbContext.OutboxMessages.Add(new TestEvent { Data = "event for entity" });
+            dbContext.Outbox.Add(new TestEvent { Data = "event for entity" });
 
             await dbContext.SaveChangesAsync();
         });
@@ -203,7 +203,7 @@ public class OutboxBasicTests(RabbitMqContainerFixture rabbitMq, PostgresContain
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                 }
             );
         });
@@ -218,7 +218,7 @@ public class OutboxBasicTests(RabbitMqContainerFixture rabbitMq, PostgresContain
                 var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
                 await using var transaction = await dbContext.Database.BeginTransactionAsync();
 
-                dbContext.OutboxMessages.Add(new TestEvent { Data = "should not be saved" });
+                dbContext.Outbox.Add(new TestEvent { Data = "should not be saved" });
 
                 // The interceptor will run here and add the OutboxMessageEntity to the DbContext.
                 await dbContext.SaveChangesAsync();

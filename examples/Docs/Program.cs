@@ -114,7 +114,7 @@ builder.Services.AddDbContext<OrderDbContext>(
     (sp, options) =>
     {
         options.UseNpgsql(ordersConnectionString);
-        options.RegisterOutbox<OrderDbContext>(sp);
+        options.UseRatatoskr<OrderDbContext>(sp);
     }
 );
 #endregion

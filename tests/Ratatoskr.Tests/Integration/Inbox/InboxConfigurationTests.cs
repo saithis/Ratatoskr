@@ -361,7 +361,7 @@ public class InboxConfigurationTests(
                 (sp, opts) =>
                 {
                     opts.UseNpgsql(PostgresConnectionString);
-                    opts.RegisterOutbox<TestDbContext>(sp);
+                    opts.UseRatatoskr<TestDbContext>(sp);
                 }
             );
         });
@@ -372,7 +372,7 @@ public class InboxConfigurationTests(
             InScopeAsync(async ctx =>
             {
                 var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-                db.OutboxMessages.Add(
+                db.Outbox.Add(
                     new TestEvent { Id = "business-toolong-1" },
                     new MessageProperties { Id = tooLongId }
                 );

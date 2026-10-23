@@ -369,14 +369,14 @@ public class MultiDbContextTests(
                 (sp, opts) =>
                 {
                     opts.UseNpgsql(PostgresConnectionString);
-                    opts.RegisterOutbox<TestDbContext>(sp);
+                    opts.UseRatatoskr<TestDbContext>(sp);
                 }
             );
             services.AddDbContext<SecondTestDbContext>(
                 (sp, opts) =>
                 {
                     opts.UseNpgsql(SecondPostgresConnectionString);
-                    opts.RegisterOutbox<SecondTestDbContext>(sp);
+                    opts.UseRatatoskr<SecondTestDbContext>(sp);
                 }
             );
         });
@@ -387,14 +387,14 @@ public class MultiDbContextTests(
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            db.OutboxMessages.Add(new TestEvent { Id = "ctx1-outbox-1", Data = "from-ctx1" });
+            db.Outbox.Add(new TestEvent { Id = "ctx1-outbox-1", Data = "from-ctx1" });
             await db.SaveChangesAsync();
         });
 
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<SecondTestDbContext>();
-            db.OutboxMessages.Add(new TestEvent { Id = "ctx2-outbox-1", Data = "from-ctx2" });
+            db.Outbox.Add(new TestEvent { Id = "ctx2-outbox-1", Data = "from-ctx2" });
             await db.SaveChangesAsync();
         });
 
@@ -484,7 +484,7 @@ public class MultiDbContextTests(
                 (sp, opts) =>
                 {
                     opts.UseNpgsql(PostgresConnectionString);
-                    opts.RegisterOutbox<TestDbContext>(sp);
+                    opts.UseRatatoskr<TestDbContext>(sp);
                 }
             );
             services.AddDbContext<SecondTestDbContext>(
@@ -499,7 +499,7 @@ public class MultiDbContextTests(
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             await db.TestEntities.AddAsync(new TestEntity { Name = "Business Data" });
-            db.OutboxMessages.Add(new TestEvent { Id = "e2e-multi-1", Data = "outbox-to-inbox" });
+            db.Outbox.Add(new TestEvent { Id = "e2e-multi-1", Data = "outbox-to-inbox" });
             await db.SaveChangesAsync();
         });
 
@@ -663,7 +663,7 @@ public class MultiDbContextTests(
         int expectedCount,
         TimeSpan? timeout = null
     )
-        where TDbContext : DbContext, IInboxDbContext
+        where TDbContext : DbContext, IRatatoskrDbContext
     {
         await WaitForConditionAsync(
             async () =>
@@ -679,7 +679,7 @@ public class MultiDbContextTests(
     }
 
     private static async Task<int> ProcessInboxAsync<TDbContext>(IServiceProvider serviceProvider)
-        where TDbContext : DbContext, IInboxDbContext
+        where TDbContext : DbContext, IRatatoskrDbContext
     {
         var total = 0;
         while (true)
@@ -702,7 +702,7 @@ public class MultiDbContextTests(
     }
 
     private static async Task<int> ProcessOutboxAsync<TDbContext>(IServiceProvider serviceProvider)
-        where TDbContext : DbContext, IOutboxDbContext
+        where TDbContext : DbContext, IRatatoskrDbContext
     {
         var total = 0;
         while (true)

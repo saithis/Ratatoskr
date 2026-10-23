@@ -40,7 +40,7 @@ public class OpenTelemetryMetricsTests(
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var initialTraceParent =
                 $"00-{ActivityTraceId.CreateRandom().ToHexString()}-{ActivitySpanId.CreateRandom().ToHexString()}-01";
-            dbContext.OutboxMessages.Add(
+            dbContext.Outbox.Add(
                 new TestEvent { Id = eventId, Data = "trace-me-metrics" },
                 new MessageProperties
                 {

@@ -53,7 +53,7 @@ public static class IScenarioExtensions
         ArgumentNullException.ThrowIfNull(scenario);
         var props = new MessageProperties { Id = cloudEventsMessageId };
         PlaygroundCorrelation.AttachToMessageProperties(props, scenarioRunId);
-        db.OutboxMessages.Add(message, props);
+        db.Outbox.Add(message, props);
     }
 
     public static async Task<Guid> StageOrderWithCommandAsync<TCommand>(

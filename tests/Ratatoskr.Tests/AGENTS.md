@@ -119,7 +119,7 @@ public class MyTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture
             services.AddDbContext<TestDbContext>((sp, options) =>
             {
                 options.UseNpgsql(PostgresConnectionString);
-                options.RegisterOutbox<TestDbContext>(sp);
+                options.UseRatatoskr<TestDbContext>(sp);
             });
         });
 
@@ -150,7 +150,7 @@ services.AddSingleton(Options.Create(new OutboxOptions()));
 services.AddDbContext<TestDbContext>((sp, options) =>
 {
     options.UseNpgsql(PostgresConnectionString);
-    options.RegisterOutbox<TestDbContext>(sp);
+    options.UseRatatoskr<TestDbContext>(sp);
 });
 ```
 
@@ -211,7 +211,7 @@ public class ExampleTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
             services.AddDbContext<TestDbContext>((sp, options) =>
             {
                 options.UseNpgsql(PostgresConnectionString);
-                options.RegisterOutbox<TestDbContext>(sp);
+                options.UseRatatoskr<TestDbContext>(sp);
             });
         });
 
@@ -228,7 +228,7 @@ public class ExampleTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
         await InScopeAsync(async ctx =>
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            dbContext.OutboxMessages.Add(new TestEvent { Data = "hello" });
+            dbContext.Outbox.Add(new TestEvent { Data = "hello" });
             await dbContext.SaveChangesAsync();
         });
 
