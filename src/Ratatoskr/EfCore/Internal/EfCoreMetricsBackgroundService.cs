@@ -12,7 +12,7 @@ internal partial class EfCoreMetricsBackgroundService<TDbContext>(
     EfCoreMetricsSettings<TDbContext> settings,
     ILogger<EfCoreMetricsBackgroundService<TDbContext>> logger
 ) : BackgroundService
-    where TDbContext : DbContext, IInboxDbContext, IOutboxDbContext
+    where TDbContext : DbContext, IRatatoskrDbContext
 {
     private readonly string _contextName = typeof(TDbContext).FullName ?? typeof(TDbContext).Name;
 

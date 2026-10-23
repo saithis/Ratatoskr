@@ -21,7 +21,7 @@ public static class HealthCheckExtensions
         IEnumerable<string>? tags = default,
         TimeSpan? unhealthyThreshold = null
     )
-        where TDbContext : DbContext, IOutboxDbContext
+        where TDbContext : DbContext, IRatatoskrDbContext
     {
         ArgumentNullException.ThrowIfNull(builder);
         var checkName = name ?? $"ratatoskr-outbox-{typeof(TDbContext).Name}";
@@ -52,7 +52,7 @@ public static class HealthCheckExtensions
         IEnumerable<string>? tags = default,
         TimeSpan? unhealthyThreshold = null
     )
-        where TDbContext : DbContext, IInboxDbContext
+        where TDbContext : DbContext, IRatatoskrDbContext
     {
         ArgumentNullException.ThrowIfNull(builder);
         var checkName = name ?? $"ratatoskr-inbox-{typeof(TDbContext).Name}";

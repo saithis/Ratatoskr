@@ -19,7 +19,7 @@ internal partial class InboxAcceptor<TDbContext>(
     IEnumerable<IMessageActivityObserver> observers,
     ILogger<InboxAcceptor<TDbContext>> logger
 ) : IEfCoreInboxAcceptor
-    where TDbContext : DbContext, IInboxDbContext
+    where TDbContext : DbContext, IRatatoskrDbContext
 {
     private readonly IMessageActivityObserver[] _observers = [.. observers];
 

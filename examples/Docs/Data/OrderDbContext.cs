@@ -6,6 +6,7 @@ namespace Docs.Data;
 #region OrderDbContext
 public class OrderDbContext(DbContextOptions<OrderDbContext> options)
     : DbContext(options),
+        IRatatoskrDbContext,
         IOutboxDbContext,
         IInboxDbContext
 {
@@ -13,7 +14,7 @@ public class OrderDbContext(DbContextOptions<OrderDbContext> options)
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.AddRatatoskrEfCoreModel(Database);
+        modelBuilder.AddRatatoskr(Database);
     }
 }
 #endregion

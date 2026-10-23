@@ -18,7 +18,7 @@ internal class OutboxMessageProcessor<TDbContext>(
     IEnumerable<IMessageActivityObserver> observers,
     ILogger<OutboxMessageProcessor<TDbContext>> logger
 )
-    where TDbContext : DbContext, IOutboxDbContext
+    where TDbContext : DbContext, IRatatoskrDbContext
 {
     private readonly OutboxOptions _options = optionsHolder.Options;
     private readonly Dictionary<string, IMessageSender> _senderMap = senders.ToDictionary(

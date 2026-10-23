@@ -20,15 +20,15 @@ Use the inbox when:
 
 [!code-csharp[](../examples/Docs/Program.cs#ConfigureDurability)]
 
-### 2. Implement DbContext Interfaces
+### 2. Implement IRatatoskrDbContext
 
-Your `DbContext` must implement `IInboxDbContext` (and `IOutboxDbContext` if using the outbox):
+Your `DbContext` implements `IRatatoskrDbContext`:
 
 [!code-csharp[](../examples/Docs/Data/OrderDbContext.cs#OrderDbContext)]
 
 ### 3. Register Handlers with Stable Keys
 
-Handlers on inbox channels must have a stable key:
+Handlers on inbox channels must have a stable key. When using `AddRatatoskr<TDbContext>`, consume channels with keyed handlers use the default inbox automatically:
 
 ```csharp
 bus.AddEventConsumeChannel("orders.events", c => c
@@ -36,8 +36,7 @@ bus.AddEventConsumeChannel("orders.events", c => c
         .WithQueueName("orders.events.subscriptions")
         .WithRetry(maxRetries: 3, delay: TimeSpan.FromSeconds(30)))
     .Consumes<OrderPlaced>(m => m
-        .WithHandler<OrderPlacedHandler>("order-handler"))
-    .UseInbox<OrderDbContext>());
+        .WithHandler<OrderPlacedHandler>("order-handler")));
 ```
 
 The handler key (`"order-handler"`) is persisted in the database. It must be stable across deployments — renaming without a transition causes in-flight messages to be poisoned.

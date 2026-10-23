@@ -100,7 +100,7 @@ builder.Services.AddDbContext<PublisherDbContext>(
     (sp, options) =>
     {
         options.UseNpgsql(publisherCs);
-        options.RegisterOutbox<PublisherDbContext>(sp);
+        options.UseRatatoskr<PublisherDbContext>(sp);
     }
 );
 
@@ -108,7 +108,7 @@ builder.Services.AddDbContext<ConsumerDbContext>(
     (sp, options) =>
     {
         options.UseNpgsql(consumerCs);
-        options.RegisterOutbox<ConsumerDbContext>(sp);
+        options.UseRatatoskr<ConsumerDbContext>(sp);
     }
 );
 

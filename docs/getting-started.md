@@ -40,7 +40,6 @@ docker compose up -d
 dotnet new web -n OrderService
 cd OrderService
 dotnet add package Ratatoskr
-dotnet add package Ratatoskr.EfCore
 dotnet add package Ratatoskr.RabbitMq
 dotnet add package Npgsql.EntityFrameworkCore.PostgreSQL
 dotnet add package DistributedLock.FileSystem
@@ -81,20 +80,20 @@ public class OrderPlacedHandler(ILogger<OrderPlacedHandler> logger)
 
 ## 5. Set Up the DbContext
 
-Create a `Data/OrderDbContext.cs` file. The DbContext implements `IOutboxDbContext` to support the transactional outbox:
+Create a `Data/OrderDbContext.cs` file. The DbContext implements `IRatatoskrDbContext` to support outbox and inbox durability:
 
 ```csharp
 using Microsoft.EntityFrameworkCore;
 using Ratatoskr.EfCore;
 
 public class OrderDbContext(DbContextOptions<OrderDbContext> options)
-    : DbContext(options), IOutboxDbContext
+    : DbContext(options), IRatatoskrDbContext
 {
     public OutboxStagingCollection OutboxMessages { get; } = new();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.AddRatatoskrEfCoreModel(Database);
+        modelBuilder.AddRatatoskr(Database);
     }
 }
 ```
@@ -136,18 +135,13 @@ builder.Services.AddSingleton<IDistributedLockProvider>(
 
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 
-builder.Services.AddRatatoskr(bus =>
+// Single registration configuring Ratatoskr and its default DbContext durability
+builder.Services.AddRatatoskr<OrderDbContext>(bus =>
 {
     // Configure RabbitMQ transport
     bus.UseRabbitMq(c =>
     {
         c.ConnectionString = new Uri(builder.Configuration.GetConnectionString("RabbitMq")!);
-    });
-
-    // Configure transactional outbox
-    bus.AddEfCoreDurability<OrderDbContext>(d =>
-    {
-        d.UseOutbox();
     });
 
     // Publish channel — we own this exchange
@@ -164,11 +158,11 @@ builder.Services.AddRatatoskr(bus =>
             .WithHandler<OrderPlacedHandler>()));
 });
 
-// Configure EF Core with PostgreSQL
+// Configure EF Core with PostgreSQL and Ratatoskr interceptor
 builder.Services.AddDbContext<OrderDbContext>((sp, options) =>
 {
     options.UseNpgsql(builder.Configuration.GetConnectionString("OrdersDb"));
-    options.RegisterOutbox<OrderDbContext>(sp);
+    options.UseRatatoskr<OrderDbContext>(sp);
 });
 
 var app = builder.Build();
@@ -180,11 +174,11 @@ using (var scope = app.Services.CreateScope())
     await db.Database.EnsureCreatedAsync();
 }
 
-// Endpoint that publishes via the outbox
-app.MapPost("/orders", async (OrderDbContext db) =>
+// Endpoint that publishes via the outbox directly using IRatatoskr
+app.MapPost("/orders", async (IRatatoskr bus, OrderDbContext db) =>
 {
     var order = new OrderPlaced(Guid.NewGuid(), "customer@example.com", 99.99m);
-    db.OutboxMessages.Add(order);
+    await bus.PublishAsync(order);
     await db.SaveChangesAsync();
     return TypedResults.Ok(order);
 });
@@ -224,43 +218,35 @@ If you don't need a message broker, you can use the EF Core transport. This deli
 Replace the transport and channel configuration:
 
 ```csharp
-builder.Services.AddRatatoskr(bus =>
+builder.Services.AddRatatoskr<OrderDbContext>(bus =>
 {
-    bus.AddEfCoreDurability<OrderDbContext>(d =>
-    {
-        d.UseOutbox();
-        d.UseInbox();
-    });
-
     bus.AddEventPublishChannel("orders.events", c => c
         .WithEfCore()
         .Produces<OrderPlaced>());
 
     bus.AddEventConsumeChannel("orders.events", c => c
         .Consumes<OrderPlaced>(m => m
-            .WithHandler<OrderPlacedHandler>("order-handler"))
-        .UseInbox<OrderDbContext>());
+            .WithHandler<OrderPlacedHandler>("order-handler")));
 });
 ```
 
-The `OrderDbContext` also needs `IInboxDbContext`:
+The `OrderDbContext` implements `IRatatoskrDbContext`:
 
 ```csharp
 public class OrderDbContext(DbContextOptions<OrderDbContext> options)
-    : DbContext(options), IOutboxDbContext, IInboxDbContext
+    : DbContext(options), IRatatoskrDbContext
 {
     public OutboxStagingCollection OutboxMessages { get; } = new();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.AddRatatoskrEfCoreModel(Database);
+        modelBuilder.AddRatatoskr(Database);
     }
 }
 ```
 
 > [!NOTE]
-> The EF Core transport requires `UseInbox()` on all consume channels and a handler key on every handler. See [EF Core Transport](efcore-transport.md) for details.
-> If you use RabbitMQ and still want to enforce the same rule, configure `WithConsumeChannelInboxRequirement(ConsumeChannelInboxRequirement.Fail)` in [Inbox](inbox.md).
+> Consume channels with handler keys automatically use the default registered `DbContext` for inbox processing. See [EF Core Transport](efcore-transport.md) for details.
 
 ## EF Core Migrations
 

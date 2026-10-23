@@ -8,10 +8,15 @@ namespace Ratatoskr.EfCore;
 public class OutboxBuilder<TDbContext>
     where TDbContext : DbContext
 {
-    internal OutboxOptions Options { get; } = new();
+    internal OutboxOptions Options { get; set; } = new();
     internal bool RegisterBackgroundService { get; private set; } = true;
 
     internal OutboxBuilder() { }
+
+    internal OutboxBuilder(OutboxOptions options)
+    {
+        Options = options;
+    }
 
     /// <summary>
     /// Sets the polling interval for checking the database for unsent messages.

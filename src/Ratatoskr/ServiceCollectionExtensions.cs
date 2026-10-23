@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Ratatoskr.AsyncApi.Generation;
 using Ratatoskr.AsyncApi.Model;
 using Ratatoskr.Core;
+using Ratatoskr.EfCore;
 using Ratatoskr.Serializers.Json;
 
 namespace Ratatoskr;
@@ -12,6 +13,23 @@ namespace Ratatoskr;
 /// </summary>
 public static class ServiceCollectionExtensions
 {
+    /// <summary>
+    /// Registers all Ratatoskr core services, sets <typeparamref name="TDbContext"/> as the default durability context,
+    /// and applies the provided channel/transport configuration.
+    /// </summary>
+    public static IServiceCollection AddRatatoskr<TDbContext>(
+        this IServiceCollection services,
+        Action<RatatoskrBuilder>? configure = null
+    )
+        where TDbContext : Microsoft.EntityFrameworkCore.DbContext, IRatatoskrDbContext
+    {
+        return services.AddRatatoskr(builder =>
+        {
+            builder.AddDbContext<TDbContext>();
+            configure?.Invoke(builder);
+        });
+    }
+
     /// <summary>Registers all Ratatoskr core services and applies the provided channel/transport configuration.</summary>
     public static IServiceCollection AddRatatoskr(
         this IServiceCollection services,
@@ -59,7 +77,7 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IMessageSerializerResolver, MessageSerializerResolver>();
 
         services.TryAddSingleton<HandlerInvoker>();
-        _ = services.AddSingleton<IRatatoskr, RatatoskrClient>();
+        _ = services.AddTransient<IRatatoskr, RatatoskrClient>();
 
         // AsyncAPI document generation
         _ = services.AddSingleton(builder.AsyncApiOptions);

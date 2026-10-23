@@ -22,9 +22,9 @@ See [examples/README.md](examples/README.md) for the full demo guide.
 
 ## Project Structure
 
-- `src/Ratatoskr` - Core library
-- `src/Ratatoskr.EfCore` - Entity Framework Core outbox/inbox implementation
+- `src/Ratatoskr` - Core library with integrated Entity Framework Core outbox & inbox durability
 - `src/Ratatoskr.RabbitMq` - RabbitMQ transport
+- `src/Ratatoskr.Testing` - Testing utilities
 - `examples/` - Playground (`PlaygroundHost` + AppHost)
 - `examples/AppHost` - .NET Aspire orchestration
 - `tests/Ratatoskr.Tests` - Integration and unit tests

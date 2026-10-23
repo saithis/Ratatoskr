@@ -154,9 +154,9 @@ app.MapPost(
 #region PublishOutboxExample
 app.MapPost(
     "/orders",
-    async (OrderPlaced order, OrderDbContext db) =>
+    async (OrderPlaced order, IRatatoskr bus, OrderDbContext db) =>
     {
-        db.OutboxMessages.Add(order);
+        await bus.PublishAsync(order);
         await db.SaveChangesAsync();
         return TypedResults.Ok(order);
     }

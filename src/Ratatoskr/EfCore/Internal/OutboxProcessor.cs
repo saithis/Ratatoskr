@@ -12,7 +12,7 @@ internal partial class OutboxProcessor<TDbContext>(
     OutboxOptionsHolder<TDbContext> optionsHolder,
     ILogger<OutboxProcessor<TDbContext>> logger
 ) : PollingBackgroundService(distributedLockProvider, timeProvider, logger)
-    where TDbContext : DbContext, IOutboxDbContext
+    where TDbContext : DbContext, IRatatoskrDbContext
 {
     private readonly OutboxOptions _options = optionsHolder.Options;
 

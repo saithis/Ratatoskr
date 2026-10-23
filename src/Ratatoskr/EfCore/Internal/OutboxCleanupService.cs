@@ -15,7 +15,7 @@ internal partial class OutboxCleanupService<TDbContext>(
     TimeProvider timeProvider,
     ILogger<OutboxCleanupService<TDbContext>> logger
 ) : BackgroundService
-    where TDbContext : DbContext, IOutboxDbContext
+    where TDbContext : DbContext, IRatatoskrDbContext
 {
     private readonly OutboxOptions _options = optionsHolder.Options;
 

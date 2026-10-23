@@ -19,7 +19,7 @@ graph LR
         ChannelRegistry["ChannelRegistry"]
     end
 
-    subgraph EfCore ["Ratatoskr.EfCore"]
+    subgraph EfCore ["Ratatoskr (EF Core)"]
         EfCoreSender["EfCoreMessageSender"]
         OutboxProcessor["OutboxProcessor"]
         InboxProcessor["InboxProcessor"]
@@ -286,8 +286,8 @@ Ratatoskr separates two concerns that are often conflated:
 
 | Concept | What It Does | Package |
 |---------|-------------|---------|
-| **Transport** | Moves messages between services (RabbitMQ, EF Core) | `Ratatoskr.RabbitMq`, `Ratatoskr.EfCore` |
-| **Durability** | Persists messages for reliable delivery (Outbox, Inbox) | `Ratatoskr.EfCore` |
+| **Transport** | Moves messages between services (RabbitMQ, EF Core) | `Ratatoskr.RabbitMq`, `Ratatoskr` |
+| **Durability** | Persists messages for reliable delivery (Outbox, Inbox) | `Ratatoskr` |
 
 You can use RabbitMQ transport **with** EF Core durability (outbox + inbox), or you can use the EF Core transport without an outbox. These are independent configuration choices.
 

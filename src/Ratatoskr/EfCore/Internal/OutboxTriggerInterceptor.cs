@@ -19,7 +19,7 @@ internal partial class OutboxTriggerInterceptor<TDbContext>(
     ILogger<OutboxTriggerInterceptor<TDbContext>> logger,
     IProcessorTrigger? inboxProcessorTrigger = null
 ) : SaveChangesInterceptor
-    where TDbContext : DbContext, IOutboxDbContext
+    where TDbContext : DbContext, IRatatoskrDbContext
 {
     private readonly OutboxOptions _options = optionsHolder.Options;
     private readonly IMessageActivityObserver[] _observers = [.. observers];
@@ -49,9 +49,9 @@ internal partial class OutboxTriggerInterceptor<TDbContext>(
             return result;
         }
 
-        if (context is not IOutboxDbContext outboxDbContext)
+        if (context is not IRatatoskrDbContext outboxDbContext)
         {
-            throw new InvalidOperationException("Expected IOutboxDbContext");
+            throw new InvalidOperationException("Expected IRatatoskrDbContext");
         }
 
         var flags = _perContextFlags.GetOrCreateValue(context);
@@ -113,7 +113,7 @@ internal partial class OutboxTriggerInterceptor<TDbContext>(
         var skipEfCoreOutbox = false;
         if (
             enrichedProperties.Transports.Contains(EfCoreTransportConstants.TransportName)
-            && context is IInboxDbContext
+            && context is IRatatoskrDbContext
             && enrichedProperties.Type != null
         )
         {
@@ -282,7 +282,7 @@ internal partial class OutboxTriggerInterceptor<TDbContext>(
     )
     {
         // Commit: clear staged items now that the transaction succeeded
-        if (eventData.Context is IOutboxDbContext outboxDbContext)
+        if (eventData.Context is IRatatoskrDbContext outboxDbContext)
         {
             outboxDbContext.OutboxMessages.ClearStaged();
         }

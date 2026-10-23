@@ -15,7 +15,7 @@ internal partial class InboxCleanupService<TDbContext>(
     TimeProvider timeProvider,
     ILogger<InboxCleanupService<TDbContext>> logger
 ) : BackgroundService
-    where TDbContext : DbContext, IInboxDbContext
+    where TDbContext : DbContext, IRatatoskrDbContext
 {
     private readonly InboxOptions _options = optionsHolder.Options;
 

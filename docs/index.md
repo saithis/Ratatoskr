@@ -80,11 +80,7 @@ _layout: landing
   <div class="package-grid">
     <div class="package-item">
       <code>Ratatoskr</code>
-      <p>Core abstractions, message routing, CloudEvents support, and serialization.</p>
-    </div>
-    <div class="package-item">
-      <code>Ratatoskr.EfCore</code>
-      <p>Outbox and Inbox durability patterns with EF Core transport.</p>
+      <p>Core abstractions, message routing, CloudEvents support, and integrated EF Core Outbox/Inbox durability.</p>
     </div>
     <div class="package-item">
       <code>Ratatoskr.RabbitMq</code>
