@@ -6,7 +6,7 @@ namespace Ratatoskr.EfCore;
 /// Builder for configuring EF Core durability (inbox and/or outbox) for a specific DbContext type.
 /// </summary>
 public class DurabilityBuilder<TDbContext>
-    where TDbContext : DbContext, IInboxDbContext, IOutboxDbContext
+    where TDbContext : DbContext, IRatatoskrDbContext
 {
     internal InboxBuilder<TDbContext>? InboxBuilder { get; private set; }
     internal OutboxBuilder<TDbContext>? OutboxBuilder { get; private set; }

@@ -22,36 +22,49 @@ builder.Services.AddRatatoskr(bus =>
 });
 ```
 
-### 2. Implement `IOutboxDbContext`
+### 2. Implement `IRatatoskrDbContext`
 
-Your `DbContext` must implement `IOutboxDbContext` and register Ratatoskr's EF model (inbox and outbox mappings) in `OnModelCreating`:
+Your `DbContext` must implement `IRatatoskrDbContext` and register Ratatoskr's EF model (inbox and outbox mappings) in `OnModelCreating`:
 
 ```csharp
 public class OrderDbContext(DbContextOptions<OrderDbContext> options)
-    : DbContext(options), IOutboxDbContext
+    : DbContext(options), IRatatoskrDbContext
 {
     public OutboxStagingCollection OutboxMessages { get; } = new();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.AddRatatoskrEfCoreModel(Database);
+        modelBuilder.AddRatatoskr(Database);
     }
 }
 ```
 
-### 3. Register the Outbox Interceptor
+### 3. Register the Interceptor
 
-In your `DbContext` configuration, register the outbox interceptor:
+In your `DbContext` configuration, register the Ratatoskr interceptor:
 
-[!code-csharp[](../examples/Docs/Program.cs#ConfigureDbContext)]
+```csharp
+builder.Services.AddDbContext<OrderDbContext>((sp, options) =>
+{
+    options.UseNpgsql(connectionString);
+    options.UseRatatoskr<OrderDbContext>(sp);
+});
+```
 
-The `RegisterOutbox<TDbContext>(sp)` call adds an EF Core `SaveChanges` interceptor that processes staged messages during `SaveChangesAsync()`.
+The `UseRatatoskr<TDbContext>(sp)` call adds an EF Core `SaveChanges` interceptor that processes staged messages during `SaveChangesAsync()` and triggers background processors after transaction commit.
 
 ## Usage
 
-Stage messages using `OutboxMessages.Add()` and call `SaveChangesAsync()`. The message is persisted in the same transaction as your business data:
+Stage messages using `await bus.PublishAsync(message)` or `db.OutboxMessages.Add(message)` and call `SaveChangesAsync()`. The message is persisted in the same transaction as your business data:
 
-[!code-csharp[](../examples/Docs/Program.cs#PublishOutboxExample)]
+```csharp
+app.MapPost("/orders", async (OrderPlaced order, IRatatoskr bus, OrderDbContext db) =>
+{
+    await bus.PublishAsync(order);
+    await db.SaveChangesAsync();
+    return TypedResults.Ok(order);
+});
+```
 
 The `OutboxTriggerInterceptor` hooks into `SaveChangesAsync` to:
 

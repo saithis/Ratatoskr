@@ -12,7 +12,7 @@ internal partial class InboxProcessor<TDbContext>(
     InboxOptionsHolder<TDbContext> optionsHolder,
     ILogger<InboxProcessor<TDbContext>> logger
 ) : PollingBackgroundService(distributedLockProvider, timeProvider, logger), IProcessorTrigger
-    where TDbContext : DbContext, IInboxDbContext
+    where TDbContext : DbContext, IRatatoskrDbContext
 {
     private readonly InboxOptions _options = optionsHolder.Options;
 

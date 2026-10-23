@@ -20,7 +20,7 @@ internal class InboxMessageProcessor<TDbContext>(
     IMessageSerializerResolver serializerResolver,
     ILogger<InboxMessageProcessor<TDbContext>> logger
 )
-    where TDbContext : DbContext, IInboxDbContext
+    where TDbContext : DbContext, IRatatoskrDbContext
 {
     private readonly InboxOptions _options = optionsHolder.Options;
 

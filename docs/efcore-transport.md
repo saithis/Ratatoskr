@@ -19,28 +19,21 @@ The EF Core transport delivers messages via the database instead of a message br
 The EF Core transport requires inbox configuration because messages are delivered by writing directly to inbox tables:
 
 ```csharp
-builder.Services.AddRatatoskr(bus =>
+builder.Services.AddRatatoskr<OrderDbContext>(bus =>
 {
-    bus.AddEfCoreDurability<OrderDbContext>(d =>
-    {
-        d.UseOutbox();
-        d.UseInbox();
-    });
-
     // Publish channel with EF Core transport
     bus.AddEventPublishChannel("orders.events", c => c
         .WithEfCore()
         .Produces<OrderPlaced>());
 
-    // Consume channel with inbox
+    // Consume channel (automatically uses default DbContext inbox)
     bus.AddEventConsumeChannel("orders.events", c => c
         .Consumes<OrderPlaced>(m => m
-            .WithHandler<OrderPlacedHandler>("order-handler"))
-        .UseInbox<OrderDbContext>());
+            .WithHandler<OrderPlacedHandler>("order-handler")));
 });
 ```
 
-The DbContext must implement both `IOutboxDbContext` and `IInboxDbContext`:
+The DbContext implements `IRatatoskrDbContext`:
 
 [!code-csharp[](../examples/Docs/Data/OrderDbContext.cs#OrderDbContext)]
 

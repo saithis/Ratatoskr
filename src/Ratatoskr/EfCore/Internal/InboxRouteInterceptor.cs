@@ -9,7 +9,7 @@ namespace Ratatoskr.EfCore.Internal;
 /// </summary>
 internal class InboxRouteInterceptor<TDbContext>(InboxAcceptor<TDbContext> inboxAcceptor)
     : IMessageRouteInterceptor
-    where TDbContext : DbContext, IInboxDbContext
+    where TDbContext : DbContext, IRatatoskrDbContext
 {
     public async Task<RouteInterceptResult> BeforeDispatchAsync(
         byte[] body,

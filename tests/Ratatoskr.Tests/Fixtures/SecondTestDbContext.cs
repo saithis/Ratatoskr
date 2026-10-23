@@ -9,6 +9,7 @@ namespace Ratatoskr.Tests.Fixtures;
 /// </summary>
 public class SecondTestDbContext(DbContextOptions<SecondTestDbContext> options)
     : DbContext(options),
+        IRatatoskrDbContext,
         IOutboxDbContext,
         IInboxDbContext
 {

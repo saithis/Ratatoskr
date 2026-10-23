@@ -47,7 +47,7 @@ internal static class ManagementDbContextResolver
             return error;
         }
 
-        if (!dbContext.GetType().IsAssignableTo(typeof(IOutboxDbContext)))
+        if (!dbContext.GetType().IsAssignableTo(typeof(IRatatoskrDbContext)))
         {
             dbContext = null!;
             return ManagementResults.NotFound(
@@ -68,7 +68,7 @@ internal static class ManagementDbContextResolver
             return error;
         }
 
-        if (!dbContext.GetType().IsAssignableTo(typeof(IInboxDbContext)))
+        if (!dbContext.GetType().IsAssignableTo(typeof(IRatatoskrDbContext)))
         {
             dbContext = null!;
             return ManagementResults.NotFound(

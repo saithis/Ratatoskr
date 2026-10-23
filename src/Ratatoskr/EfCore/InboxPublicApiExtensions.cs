@@ -21,12 +21,43 @@ public static class InboxPublicApiExtensions
     }
 
     /// <summary>
+    /// Explicitly marks this consume channel as fire-and-forget without an inbox.
+    /// </summary>
+    public static ConsumeChannelBuilder WithoutInbox(this ConsumeChannelBuilder builder) =>
+        builder.AllowConsumeWithoutInbox();
+
+    /// <summary>
+    /// Enables the inbox pattern on this consume channel using the default registered DbContext.
+    /// </summary>
+    public static ConsumeChannelBuilder UseInbox(this ConsumeChannelBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        var defaultType = builder.RatatoskrBuilder.DefaultDbContextType;
+        if (defaultType != null)
+        {
+            builder.Channel.SetExtension(new ChannelInboxConfig(defaultType));
+        }
+        else
+        {
+            builder.RatatoskrBuilder.AddDeferredServiceAction(_ =>
+            {
+                var dt = builder.RatatoskrBuilder.DefaultDbContextType
+                    ?? throw new InvalidOperationException(
+                        $"Channel '{builder.Channel.ChannelName}' uses UseInbox() but no default DbContext has been registered."
+                    );
+                builder.Channel.SetExtension(new ChannelInboxConfig(dt));
+            });
+        }
+        return builder;
+    }
+
+    /// <summary>
     /// Enables the inbox pattern on this consume channel.
     /// All handlers registered with a stable key on this channel will be inbox-managed.
     /// Requires <c>AddEfCoreDurability&lt;TDbContext&gt;(d =&gt; d.UseInbox())</c> to be called on the bus builder.
     /// </summary>
     public static ConsumeChannelBuilder UseInbox<TDbContext>(this ConsumeChannelBuilder builder)
-        where TDbContext : DbContext, IInboxDbContext
+        where TDbContext : DbContext, IRatatoskrDbContext
     {
         ArgumentNullException.ThrowIfNull(builder);
         builder.Channel.SetExtension(new ChannelInboxConfig(typeof(TDbContext)));

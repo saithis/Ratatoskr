@@ -1,12 +1,16 @@
 using System.Collections.Frozen;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Ratatoskr.Core;
+using Ratatoskr.EfCore;
 
 namespace Ratatoskr;
 
 internal sealed partial class RatatoskrClient(
+    IServiceProvider serviceProvider,
     IMessageSerializerResolver serializerResolver,
     IEnumerable<IMessageSender> senders,
     IMessagePropertiesEnricher enricher,
@@ -18,6 +22,114 @@ internal sealed partial class RatatoskrClient(
     private readonly FrozenDictionary<string, IMessageSender> _senderMap =
         senders.ToFrozenDictionary(x => x.TransportName);
     private readonly IMessageActivityObserver[] _observers = [.. observers];
+
+    /// <inheritdoc/>
+    /// <inheritdoc/>
+    public Task PublishAsync<TMessage>(
+        TMessage message,
+        CancellationToken cancellationToken = default
+    )
+        where TMessage : notnull
+    {
+        var dbContext = serviceProvider.GetService<IRatatoskrDbContext>();
+        if (dbContext == null)
+        {
+            throw new InvalidOperationException(
+                "Cannot stage message in outbox: No IRatatoskrDbContext is registered in the current scope. " +
+                "Configure a default DbContext via services.AddRatatoskr<TDbContext>() or use PublishDirectAsync for direct publishing."
+            );
+        }
+
+        dbContext.OutboxMessages.Add(message);
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public Task PublishAsync<TMessage>(
+        TMessage message,
+        Action<PublishOptions> configure,
+        CancellationToken cancellationToken = default
+    )
+        where TMessage : notnull
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        var dbContext = serviceProvider.GetService<IRatatoskrDbContext>();
+        if (dbContext == null)
+        {
+            throw new InvalidOperationException(
+                "Cannot stage message in outbox: No IRatatoskrDbContext is registered in the current scope. " +
+                "Configure a default DbContext via services.AddRatatoskr<TDbContext>() or use PublishDirectAsync for direct publishing."
+            );
+        }
+
+        dbContext.OutboxMessages.Add(message, configure);
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public Task PublishAsync<TMessage>(
+        TMessage message,
+        MessageProperties props,
+        CancellationToken cancellationToken = default
+    )
+        where TMessage : notnull
+    {
+        ArgumentNullException.ThrowIfNull(props);
+        var dbContext = serviceProvider.GetService<IRatatoskrDbContext>();
+        if (dbContext == null)
+        {
+            throw new InvalidOperationException(
+                "Cannot stage message in outbox: No IRatatoskrDbContext is registered in the current scope. " +
+                "Configure a default DbContext via services.AddRatatoskr<TDbContext>() or use PublishDirectAsync for direct publishing."
+            );
+        }
+
+        dbContext.OutboxMessages.Add(message, props);
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public Task PublishAsync<TDbContext, TMessage>(
+        TMessage message,
+        CancellationToken cancellationToken = default
+    )
+        where TDbContext : DbContext, IRatatoskrDbContext
+        where TMessage : notnull
+    {
+        var dbContext = serviceProvider.GetRequiredService<TDbContext>();
+        dbContext.OutboxMessages.Add(message);
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public Task PublishAsync<TDbContext, TMessage>(
+        TMessage message,
+        Action<PublishOptions> configure,
+        CancellationToken cancellationToken = default
+    )
+        where TDbContext : DbContext, IRatatoskrDbContext
+        where TMessage : notnull
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        var dbContext = serviceProvider.GetRequiredService<TDbContext>();
+        dbContext.OutboxMessages.Add(message, configure);
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public Task PublishAsync<TDbContext, TMessage>(
+        TMessage message,
+        MessageProperties props,
+        CancellationToken cancellationToken = default
+    )
+        where TDbContext : DbContext, IRatatoskrDbContext
+        where TMessage : notnull
+    {
+        ArgumentNullException.ThrowIfNull(props);
+        var dbContext = serviceProvider.GetRequiredService<TDbContext>();
+        dbContext.OutboxMessages.Add(message, props);
+        return Task.CompletedTask;
+    }
 
     /// <inheritdoc/>
     public Task PublishDirectAsync<TMessage>(

@@ -6,6 +6,7 @@ namespace PlaygroundHost.Persistence;
 
 public class PublisherDbContext(DbContextOptions<PublisherDbContext> options)
     : DbContext(options),
+        IRatatoskrDbContext,
         IOutboxDbContext,
         IInboxDbContext
 {
@@ -15,7 +16,7 @@ public class PublisherDbContext(DbContextOptions<PublisherDbContext> options)
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-        modelBuilder.AddRatatoskrEfCoreModel(Database);
+        modelBuilder.AddRatatoskr(Database);
         modelBuilder.Entity<Order>(e =>
         {
             e.Property(o => o.PublishOrigin).HasMaxLength(32).HasDefaultValue("outbox");

@@ -9,10 +9,15 @@ namespace Ratatoskr.EfCore;
 public class InboxBuilder<TDbContext>
     where TDbContext : DbContext
 {
-    internal InboxOptions Options { get; } = new();
+    internal InboxOptions Options { get; set; } = new();
     internal bool RegisterBackgroundService { get; private set; } = true;
 
     internal InboxBuilder() { }
+
+    internal InboxBuilder(InboxOptions options)
+    {
+        Options = options;
+    }
 
     /// <summary>
     /// Requires consume channels to use inbox according to the selected policy.

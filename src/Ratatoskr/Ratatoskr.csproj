@@ -11,6 +11,9 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="DistributedLock.Core" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="MinVer">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -19,7 +22,6 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Ratatoskr.Tests" />
     <InternalsVisibleTo Include="Ratatoskr.RabbitMq" />
-    <InternalsVisibleTo Include="Ratatoskr.EfCore" />
   </ItemGroup>
   <Target
     Name="Husky"

@@ -7,7 +7,7 @@ namespace Ratatoskr.EfCore.Management;
 internal sealed class EfCoreManagementDbContextDescriptor<TDbContext>(
     IServiceProvider serviceProvider
 ) : IEfCoreManagementDbContextDescriptor
-    where TDbContext : DbContext, IOutboxDbContext, IInboxDbContext
+    where TDbContext : DbContext, IRatatoskrDbContext
 {
     private readonly OutboxProcessor<TDbContext>? _outboxProcessor = serviceProvider.GetService<
         OutboxProcessor<TDbContext>
@@ -19,8 +19,8 @@ internal sealed class EfCoreManagementDbContextDescriptor<TDbContext>(
     public Type DbContextType { get; } = typeof(TDbContext);
     public string DbContextName => DbContextType.Name;
     public string DbContextFullName => DbContextType.FullName ?? DbContextType.Name;
-    public bool HasOutbox => DbContextType.IsAssignableTo(typeof(IOutboxDbContext));
-    public bool HasInbox => DbContextType.IsAssignableTo(typeof(IInboxDbContext));
+    public bool HasOutbox => _outboxProcessor != null;
+    public bool HasInbox => _inboxProcessor != null;
     public DateTimeOffset? LastOutboxProcessingAt => _outboxProcessor?.LastSuccessfulProcessingAt;
     public DateTimeOffset? LastInboxProcessingAt => _inboxProcessor?.LastSuccessfulProcessingAt;
 
