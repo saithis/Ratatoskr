@@ -40,7 +40,7 @@ internal sealed partial class RatatoskrClient(
             );
         }
 
-        dbContext.OutboxMessages.Add(message);
+        dbContext.Outbox.Add(message);
         return Task.CompletedTask;
     }
 
@@ -62,7 +62,7 @@ internal sealed partial class RatatoskrClient(
             );
         }
 
-        dbContext.OutboxMessages.Add(message, configure);
+        dbContext.Outbox.Add(message, configure);
         return Task.CompletedTask;
     }
 
@@ -84,7 +84,7 @@ internal sealed partial class RatatoskrClient(
             );
         }
 
-        dbContext.OutboxMessages.Add(message, props);
+        dbContext.Outbox.Add(message, props);
         return Task.CompletedTask;
     }
 
@@ -97,7 +97,7 @@ internal sealed partial class RatatoskrClient(
         where TMessage : notnull
     {
         var dbContext = serviceProvider.GetRequiredService<TDbContext>();
-        dbContext.OutboxMessages.Add(message);
+        dbContext.Outbox.Add(message);
         return Task.CompletedTask;
     }
 
@@ -112,7 +112,7 @@ internal sealed partial class RatatoskrClient(
     {
         ArgumentNullException.ThrowIfNull(configure);
         var dbContext = serviceProvider.GetRequiredService<TDbContext>();
-        dbContext.OutboxMessages.Add(message, configure);
+        dbContext.Outbox.Add(message, configure);
         return Task.CompletedTask;
     }
 
@@ -127,7 +127,7 @@ internal sealed partial class RatatoskrClient(
     {
         ArgumentNullException.ThrowIfNull(props);
         var dbContext = serviceProvider.GetRequiredService<TDbContext>();
-        dbContext.OutboxMessages.Add(message, props);
+        dbContext.Outbox.Add(message, props);
         return Task.CompletedTask;
     }
 

@@ -312,14 +312,4 @@ public static class PublicApiExtensions
         >();
         return builder.AddInterceptors(interceptor);
     }
-
-    /// <summary>
-    /// Registers the DbContext interceptor that is responsible for converting the messages to ef core entities for saving and triggering the outbox processor afterward for faster dispatch to the broker.
-    /// </summary>
-    public static DbContextOptionsBuilder RegisterOutbox<TDbContext>(
-        this DbContextOptionsBuilder builder,
-        IServiceProvider serviceProvider
-    )
-        where TDbContext : DbContext, IRatatoskrDbContext =>
-        builder.UseRatatoskr<TDbContext>(serviceProvider);
 }

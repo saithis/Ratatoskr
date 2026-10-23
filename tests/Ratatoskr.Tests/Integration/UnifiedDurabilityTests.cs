@@ -60,7 +60,7 @@ public class UnifiedDurabilityTests(RabbitMqContainerFixture rabbitMq, PostgresC
             );
 
             // Message is only staged before SaveChangesAsync
-            var stagedCount = dbContext.OutboxMessages.Count;
+            var stagedCount = dbContext.Outbox.Count;
             stagedCount.Should().Be(1);
 
             await dbContext.SaveChangesAsync();

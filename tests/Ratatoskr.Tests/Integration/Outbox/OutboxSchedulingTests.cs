@@ -43,7 +43,7 @@ public class OutboxSchedulingTests(
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                 }
             );
         });
@@ -56,7 +56,7 @@ public class OutboxSchedulingTests(
         await InScopeAsync(async ctx =>
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            dbContext.OutboxMessages.Add(
+            dbContext.Outbox.Add(
                 new TestEvent { Id = "sched-1", Data = "delayed" },
                 options => options.DeliverAt(deliverAt)
             );
@@ -133,7 +133,7 @@ public class OutboxSchedulingTests(
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                 }
             );
         });
@@ -146,7 +146,7 @@ public class OutboxSchedulingTests(
         await InScopeAsync(async ctx =>
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            dbContext.OutboxMessages.Add(
+            dbContext.Outbox.Add(
                 new TestEvent { Id = "sched-2", Data = "deliver-after" },
                 options => options.DeliverAfter(delay, timeProvider)
             );

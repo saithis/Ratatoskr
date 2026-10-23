@@ -9,13 +9,11 @@ namespace Ratatoskr.Tests.Fixtures;
 /// </summary>
 public class SecondTestDbContext(DbContextOptions<SecondTestDbContext> options)
     : DbContext(options),
-        IRatatoskrDbContext,
-        IOutboxDbContext,
-        IInboxDbContext
+        IRatatoskrDbContext
 {
     public DbSet<TestEntity> TestEntities { get; set; }
 
-    public OutboxStagingCollection OutboxMessages { get; } = new();
+    public OutboxStagingCollection Outbox { get; } = new();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -27,6 +25,6 @@ public class SecondTestDbContext(DbContextOptions<SecondTestDbContext> options)
             entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
         });
 
-        modelBuilder.AddRatatoskrEfCoreModel(Database);
+        modelBuilder.AddRatatoskr(Database);
     }
 }

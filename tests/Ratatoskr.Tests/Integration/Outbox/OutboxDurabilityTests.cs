@@ -41,7 +41,7 @@ public class OutboxDurabilityTests(
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                 }
             );
         });
@@ -53,14 +53,14 @@ public class OutboxDurabilityTests(
         var task1 = InScopeAsync(async ctx =>
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            dbContext.OutboxMessages.Add(new TestEvent { Data = "scope-1-msg" });
+            dbContext.Outbox.Add(new TestEvent { Data = "scope-1-msg" });
             await dbContext.SaveChangesAsync();
         });
 
         var task2 = InScopeAsync(async ctx =>
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            dbContext.OutboxMessages.Add(new TestEvent { Data = "scope-2-msg" });
+            dbContext.Outbox.Add(new TestEvent { Data = "scope-2-msg" });
             await dbContext.SaveChangesAsync();
         });
 
@@ -118,7 +118,7 @@ public class OutboxDurabilityTests(
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                 }
             );
             services.RemoveAll<IMessageSender>();
@@ -131,8 +131,8 @@ public class OutboxDurabilityTests(
         await InScopeAsync(async ctx =>
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            dbContext.OutboxMessages.Add(new TestEvent { Data = "msg-1" });
-            dbContext.OutboxMessages.Add(new TestEvent { Data = "msg-2" });
+            dbContext.Outbox.Add(new TestEvent { Data = "msg-1" });
+            dbContext.Outbox.Add(new TestEvent { Data = "msg-2" });
             await dbContext.SaveChangesAsync();
         });
 
@@ -192,7 +192,7 @@ public class OutboxDurabilityTests(
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                 }
             );
             services.RemoveAll<IMessageSender>();
@@ -205,7 +205,7 @@ public class OutboxDurabilityTests(
         await InScopeAsync(async ctx =>
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            dbContext.OutboxMessages.Add(new TestEvent { Data = "slow-msg" });
+            dbContext.Outbox.Add(new TestEvent { Data = "slow-msg" });
             await dbContext.SaveChangesAsync();
         });
 
@@ -258,7 +258,7 @@ public class OutboxDurabilityTests(
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                 }
             );
         });
@@ -269,7 +269,7 @@ public class OutboxDurabilityTests(
         await InScopeAsync(async ctx =>
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            dbContext.OutboxMessages.Add(new TestEvent { Data = "stuck-msg" });
+            dbContext.Outbox.Add(new TestEvent { Data = "stuck-msg" });
             await dbContext.SaveChangesAsync();
         });
 
@@ -355,7 +355,7 @@ public class OutboxDurabilityTests(
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                 }
             );
             services.RemoveAll<IMessageSender>();
@@ -372,7 +372,7 @@ public class OutboxDurabilityTests(
         await InScopeAsync(async ctx =>
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            dbContext.OutboxMessages.Add(new TestEvent { Data = "cancel-msg" });
+            dbContext.Outbox.Add(new TestEvent { Data = "cancel-msg" });
             await dbContext.SaveChangesAsync();
         });
 
@@ -433,7 +433,7 @@ public class OutboxDurabilityTests(
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                 }
             );
         });
@@ -444,7 +444,7 @@ public class OutboxDurabilityTests(
         await InScopeAsync(async ctx =>
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            dbContext.OutboxMessages.Add(new TestEvent { Data = "corrupt-msg" });
+            dbContext.Outbox.Add(new TestEvent { Data = "corrupt-msg" });
             await dbContext.SaveChangesAsync();
 
             var tableName = dbContext
@@ -504,7 +504,7 @@ public class OutboxDurabilityTests(
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                 }
             );
             // Remove all senders so no sender exists for the staged message's transport
@@ -517,7 +517,7 @@ public class OutboxDurabilityTests(
         await InScopeAsync(async ctx =>
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            dbContext.OutboxMessages.Add(new TestEvent { Data = "no-sender-msg" });
+            dbContext.Outbox.Add(new TestEvent { Data = "no-sender-msg" });
             await dbContext.SaveChangesAsync();
         });
 
@@ -568,7 +568,7 @@ public class OutboxDurabilityTests(
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                     options.AddInterceptors(
                         sp.GetRequiredService<FailOnceSaveChangesInterceptor>()
                     );
@@ -581,7 +581,7 @@ public class OutboxDurabilityTests(
         await InScopeAsync(async ctx =>
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            dbContext.OutboxMessages.Add(new TestEvent { Data = "retry-msg" });
+            dbContext.Outbox.Add(new TestEvent { Data = "retry-msg" });
 
             // First attempt fails (interceptor throws before the DB commit)
             Func<Task> firstAttempt = () => dbContext.SaveChangesAsync();
@@ -589,7 +589,7 @@ public class OutboxDurabilityTests(
 
             // Staged items must survive the failure so the retry can succeed
             dbContext
-                .OutboxMessages.Count.Should()
+                .Outbox.Count.Should()
                 .Be(1, "staged items must be preserved after SaveChanges failure");
 
             // Retry succeeds — the interceptor re-processes the staged items
@@ -634,7 +634,7 @@ public class OutboxDurabilityTests(
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                 }
             );
         });
@@ -647,7 +647,7 @@ public class OutboxDurabilityTests(
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var props = new MessageProperties().SetRoutingKey(DefaultRoutingKey);
             props.Transports.Add(RabbitMqConstants.TransportName);
-            dbContext.OutboxMessages.Add(
+            dbContext.Outbox.Add(
                 new TestEvent { Id = "oversized", Data = new string('x', 500) },
                 props
             );
@@ -686,7 +686,7 @@ public class OutboxDurabilityTests(
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                 }
             );
         });
@@ -699,7 +699,7 @@ public class OutboxDurabilityTests(
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var props = new MessageProperties().SetRoutingKey(DefaultRoutingKey);
             props.Transports.Add(RabbitMqConstants.TransportName);
-            dbContext.OutboxMessages.Add(
+            dbContext.Outbox.Add(
                 new TestEvent { Id = "concurrent-claim", Data = "x" },
                 props
             );
@@ -755,7 +755,7 @@ public class OutboxDurabilityTests(
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                 }
             );
         });
@@ -769,7 +769,7 @@ public class OutboxDurabilityTests(
             object message = new TestEvent { Id = "non-generic-add", Data = "via-object" };
             var props = new MessageProperties().SetRoutingKey(DefaultRoutingKey);
             props.Transports.Add(RabbitMqConstants.TransportName);
-            dbContext.OutboxMessages.Add(message, props);
+            dbContext.Outbox.Add(message, props);
             await dbContext.SaveChangesAsync();
         });
 
@@ -817,7 +817,7 @@ public class OutboxDurabilityTests(
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                     options.AddInterceptors(sp.GetRequiredService<ThrowOnNthSaveInterceptor>());
                 }
             );
@@ -828,7 +828,7 @@ public class OutboxDurabilityTests(
         await InScopeAsync(async ctx =>
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            dbContext.OutboxMessages.Add(new TestEvent { Data = "conflict-other-entity-msg" });
+            dbContext.Outbox.Add(new TestEvent { Data = "conflict-other-entity-msg" });
             await dbContext.SaveChangesAsync(); // save call #1
         });
 

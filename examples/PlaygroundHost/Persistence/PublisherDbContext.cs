@@ -6,12 +6,10 @@ namespace PlaygroundHost.Persistence;
 
 public class PublisherDbContext(DbContextOptions<PublisherDbContext> options)
     : DbContext(options),
-        IRatatoskrDbContext,
-        IOutboxDbContext,
-        IInboxDbContext
+        IRatatoskrDbContext
 {
     public DbSet<Order> Orders { get; set; } = null!;
-    public OutboxStagingCollection OutboxMessages { get; } = new();
+    public OutboxStagingCollection Outbox { get; } = new();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -43,7 +43,7 @@ public sealed class OversizedPayloadRollsBackScenario : IPlaygroundScenario
             "outbox"
         );
 
-        context.PublisherDb.OutboxMessages.Add(
+        context.PublisherDb.Outbox.Add(
             new OrderPlaced(order.Id.ToString("D"), context.ScenarioRunId, new string('x', 50_000)),
             this.CreateMessageProperties(context, PlaygroundMessageIds.OrderPlaced(order.Id))
         );

@@ -168,7 +168,7 @@ public class MessageTrackingBasicTests(
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                 }
             );
             services.AddRatatoskrTesting();
@@ -184,7 +184,7 @@ public class MessageTrackingBasicTests(
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var props = new MessageProperties().SetExchange(QueueName);
             props.Transports.Add(RabbitMqConstants.TransportName);
-            dbContext.OutboxMessages.Add(
+            dbContext.Outbox.Add(
                 new TestEvent { Id = "outbox-track-1", Data = "outbox tracked" },
                 props
             );

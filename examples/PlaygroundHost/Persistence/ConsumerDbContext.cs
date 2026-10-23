@@ -6,11 +6,9 @@ namespace PlaygroundHost.Persistence;
 /// <summary>Consumer-side durability: command inbox and outcome outbox.</summary>
 public class ConsumerDbContext(DbContextOptions<ConsumerDbContext> options)
     : DbContext(options),
-        IRatatoskrDbContext,
-        IOutboxDbContext,
-        IInboxDbContext
+        IRatatoskrDbContext
 {
-    public OutboxStagingCollection OutboxMessages { get; } = new();
+    public OutboxStagingCollection Outbox { get; } = new();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

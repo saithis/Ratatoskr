@@ -43,7 +43,7 @@ public class OutboxProcessingTests(
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                 }
             );
         });
@@ -54,7 +54,7 @@ public class OutboxProcessingTests(
         await InScopeAsync(async ctx =>
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            dbContext.OutboxMessages.Add(
+            dbContext.Outbox.Add(
                 new TestEvent { Id = "outbox-pipe-1", Data = "custom-body" }
             );
             await dbContext.SaveChangesAsync();
@@ -97,7 +97,7 @@ public class OutboxProcessingTests(
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                 }
             );
         });
@@ -109,9 +109,9 @@ public class OutboxProcessingTests(
         await InScopeAsync(async ctx =>
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            dbContext.OutboxMessages.Add(new TestEvent { Data = "message 1" });
-            dbContext.OutboxMessages.Add(new TestEvent { Data = "message 2" });
-            dbContext.OutboxMessages.Add(new TestEvent { Data = "message 3" });
+            dbContext.Outbox.Add(new TestEvent { Data = "message 1" });
+            dbContext.Outbox.Add(new TestEvent { Data = "message 2" });
+            dbContext.Outbox.Add(new TestEvent { Data = "message 3" });
             await dbContext.SaveChangesAsync();
         });
 
@@ -166,7 +166,7 @@ public class OutboxProcessingTests(
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                 }
             );
             // Override sender with failing sender - remove existing senders first
@@ -180,7 +180,7 @@ public class OutboxProcessingTests(
         await InScopeAsync(async ctx =>
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            dbContext.OutboxMessages.Add(new TestEvent { Data = "test" });
+            dbContext.Outbox.Add(new TestEvent { Data = "test" });
             await dbContext.SaveChangesAsync();
         });
 
@@ -270,7 +270,7 @@ public class OutboxProcessingTests(
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                 }
             );
             services.RemoveAll<IMessageSender>();
@@ -283,7 +283,7 @@ public class OutboxProcessingTests(
         await InScopeAsync(async ctx =>
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
-            dbContext.OutboxMessages.Add(new TestEvent { Data = "test" });
+            dbContext.Outbox.Add(new TestEvent { Data = "test" });
             await dbContext.SaveChangesAsync();
         });
 
@@ -343,7 +343,7 @@ public class OutboxProcessingTests(
                 (sp, options) =>
                 {
                     options.UseNpgsql(PostgresConnectionString);
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                 }
             );
         });
@@ -357,7 +357,7 @@ public class OutboxProcessingTests(
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             for (var i = 1; i <= 5; i++)
             {
-                dbContext.OutboxMessages.Add(
+                dbContext.Outbox.Add(
                     new TestEvent
                     {
                         Data =

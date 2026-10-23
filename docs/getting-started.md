@@ -89,7 +89,7 @@ using Ratatoskr.EfCore;
 public class OrderDbContext(DbContextOptions<OrderDbContext> options)
     : DbContext(options), IRatatoskrDbContext
 {
-    public OutboxStagingCollection OutboxMessages { get; } = new();
+    public OutboxStagingCollection Outbox { get; } = new();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -202,7 +202,7 @@ You should see the handler log message in the console output. The message was pu
 
 ## What Happened
 
-1. The `POST /orders` endpoint added an `OrderPlaced` message to `OutboxMessages` and called `SaveChangesAsync()`
+1. The `POST /orders` endpoint added an `OrderPlaced` message to `Outbox` and called `SaveChangesAsync()`
 2. The `OutboxTriggerInterceptor` serialized the message and persisted it as an `OutboxMessageEntity` in the same database transaction
 3. The `OutboxProcessor` background service picked up the message and published it to the `orders.events` RabbitMQ exchange
 4. The `RabbitMqConsumer` received the message from the `orders.events.handler` queue
@@ -236,7 +236,7 @@ The `OrderDbContext` implements `IRatatoskrDbContext`:
 public class OrderDbContext(DbContextOptions<OrderDbContext> options)
     : DbContext(options), IRatatoskrDbContext
 {
-    public OutboxStagingCollection OutboxMessages { get; } = new();
+    public OutboxStagingCollection Outbox { get; } = new();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

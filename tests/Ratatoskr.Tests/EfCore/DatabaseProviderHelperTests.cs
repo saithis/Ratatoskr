@@ -30,7 +30,7 @@ public class DatabaseProviderHelperTests
     }
 
     [Test]
-    public void AddRatatoskrEfCoreModel_PostgreSql_ModelIncludesProcessingIndexFilters()
+    public void AddRatatoskr_PostgreSql_ModelIncludesProcessingIndexFilters()
     {
         var options = new DbContextOptionsBuilder<TestDbContext>()
             .UseNpgsql("Host=localhost")

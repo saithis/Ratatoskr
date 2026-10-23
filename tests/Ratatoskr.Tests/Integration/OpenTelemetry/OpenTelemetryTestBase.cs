@@ -67,7 +67,7 @@ public abstract class OpenTelemetryTestBase(
                 options.UseNpgsql(PostgresConnectionString);
                 if (useOutbox)
                 {
-                    options.RegisterOutbox<TestDbContext>(sp);
+                    options.UseRatatoskr<TestDbContext>(sp);
                 }
             }
         );

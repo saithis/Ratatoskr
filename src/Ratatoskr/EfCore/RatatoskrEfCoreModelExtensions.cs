@@ -28,13 +28,4 @@ public static class RatatoskrEfCoreModelExtensions
         RatatoskrEntityModelConfiguration.ConfigureOutboxEntities(modelBuilder, database);
         RatatoskrEntityModelConfiguration.ConfigureInboxEntities(modelBuilder, database);
     }
-
-    /// <summary>
-    /// Adds all Entity Framework Core model configuration required for Ratatoskr durability.
-    /// Alias for <see cref="AddRatatoskr(ModelBuilder, DatabaseFacade)"/>.
-    /// </summary>
-    public static void AddRatatoskrEfCoreModel(
-        this ModelBuilder modelBuilder,
-        DatabaseFacade database
-    ) => modelBuilder.AddRatatoskr(database);
 }

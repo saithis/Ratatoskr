@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 namespace Ratatoskr.EfCore.Internal;
 
 /// <summary>
-/// EF Core entity mappings for Ratatoskr durability. Used by <see cref="RatatoskrEfCoreModelExtensions.AddRatatoskrEfCoreModel"/>.
+/// EF Core entity mappings for Ratatoskr durability. Used by <see cref="RatatoskrEfCoreModelExtensions.AddRatatoskr"/>.
 /// </summary>
 internal static class RatatoskrEntityModelConfiguration
 {
