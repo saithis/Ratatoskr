@@ -7,6 +7,7 @@
     <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.5.2" />
     <PackageVersion Include="Aspire.Hosting.RabbitMQ" Version="13.5.2" />
     <PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.5.2" />
+    <PackageVersion Include="MessagePack" Version="2.5.307" />
     <PackageVersion Include="AwesomeAssertions" Version="9.6.0" />
     <PackageVersion Include="DistributedLock.Core" Version="1.0.9" />
     <PackageVersion Include="DistributedLock.FileSystem" Version="1.0.3" />
