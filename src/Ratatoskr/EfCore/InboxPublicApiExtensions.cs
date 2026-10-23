@@ -32,22 +32,16 @@ public static class InboxPublicApiExtensions
     public static ConsumeChannelBuilder UseInbox(this ConsumeChannelBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
-        var defaultType = builder.RatatoskrBuilder.DefaultDbContextType;
-        if (defaultType != null)
+        // Resolved after configuration, because the default DbContext may be chosen later (AsDefault()).
+        builder.RatatoskrBuilder.AddDeferredServiceAction(_ =>
         {
+            var defaultType =
+                builder.RatatoskrBuilder.DefaultDbContextType
+                ?? throw new InvalidOperationException(
+                    $"Channel '{builder.Channel.ChannelName}' uses UseInbox() but no default DbContext has been registered."
+                );
             builder.Channel.SetExtension(new ChannelInboxConfig(defaultType));
-        }
-        else
-        {
-            builder.RatatoskrBuilder.AddDeferredServiceAction(_ =>
-            {
-                var dt = builder.RatatoskrBuilder.DefaultDbContextType
-                    ?? throw new InvalidOperationException(
-                        $"Channel '{builder.Channel.ChannelName}' uses UseInbox() but no default DbContext has been registered."
-                    );
-                builder.Channel.SetExtension(new ChannelInboxConfig(dt));
-            });
-        }
+        });
         return builder;
     }
 

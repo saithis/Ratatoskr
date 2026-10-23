@@ -221,6 +221,9 @@ services.AddRatatoskr(bus =>
     // ... channel configuration ...
 });
 
+// To disable every background service for the DbContext (inbox, outbox, cleanup, metrics):
+// bus.AddEfCoreDurability<OrderDbContext>(d => d.WithoutBackgroundProcessing().UseInbox().UseOutbox());
+
 // In the test body, trigger processing manually (use true to match production / recover stuck rows):
 var processor = Services.GetRequiredService<InboxMessageProcessor<OrderDbContext>>();
 await processor.ProcessBatchAsync(
