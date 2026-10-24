@@ -1,7 +1,8 @@
 # AI Agent Instructions
 
 This is the single source of instructions for AI coding agents working in this repository.
-`CLAUDE.md` and `GEMINI.md` only point here. Detailed testing guidance lives in
+`CLAUDE.md` and `GEMINI.md` are symlinks to this file (on Windows, git needs symlink support
+enabled to check them out as links). Detailed testing guidance lives in
 `tests/Ratatoskr.Tests/AGENTS.md`.
 
 ## Approach

@@ -93,7 +93,8 @@ internal class InboxHandlerStatusEntity : IClaimableEntity, IRequeueableEntity
         ProcessingStartedAt = null;
         Version++;
 
-        if (ErrorCount >= maxRetries)
+        // The first attempt is not a retry: with maxRetries = N, the row gets N + 1 attempts.
+        if (ErrorCount > maxRetries)
         {
             IsPoisoned = true;
             NextAttemptAt = null;

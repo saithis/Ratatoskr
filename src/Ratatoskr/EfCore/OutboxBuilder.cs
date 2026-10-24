@@ -12,17 +12,6 @@ public class OutboxBuilder<TDbContext>
     internal OutboxBuilder() { }
 
     /// <summary>
-    /// Sets the maximum number of retry attempts before marking a message as poisoned.
-    /// A value of 0 means the message is poisoned on the first failure.
-    /// </summary>
-    public OutboxBuilder<TDbContext> WithMaxRetries(int maxRetries)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(maxRetries);
-        Options.MaxRetries = maxRetries;
-        return this;
-    }
-
-    /// <summary>
     /// Sets the maximum time a send operation is allowed to run before being cancelled.
     /// Timeout cancellation is treated as a failure and increments the error count.
     /// </summary>

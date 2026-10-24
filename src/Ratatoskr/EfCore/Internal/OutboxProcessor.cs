@@ -31,12 +31,15 @@ internal partial class OutboxProcessor<TDbContext>(
             >();
 
             LogCheckingOutboxUnsent(logger);
-            var processedCount = await processor.ProcessBatchAsync(
+            var result = await processor.ProcessBatchAsync(
                 includeStuckMessageDetection: true,
                 cancellationToken
             );
 
-            if (processedCount == 0)
+            // Keep going while there is work, even if every message in the batch failed or was
+            // poisoned: failed messages are backed off and poisoned ones excluded, so the next
+            // batch picks up different messages.
+            if (result.Claimed == 0)
             {
                 return;
             }

@@ -242,20 +242,20 @@ public class InboxErrorHandlingTests(
 
         await WaitForInboxEntriesAsync(1);
 
-        // Process MaxRetries times with time advances between each attempt
-        for (var i = 0; i < 3; i++)
+        // Process the first attempt plus MaxRetries retries, with time advances in between
+        for (var i = 0; i < 4; i++)
         {
             await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
             fakeTime.Advance(TimeSpan.FromMinutes(10));
         }
 
-        // Assert: handler is poisoned after MaxRetries
+        // Assert: handler is poisoned once all retries are used up
         await InScopeAsync(async ctx =>
         {
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var status = await db.Set<InboxHandlerStatusEntity>().SingleAsync();
             status.IsPoisoned.Should().BeTrue();
-            status.ErrorCount.Should().Be(3);
+            status.ErrorCount.Should().Be(4);
             status.CompletedAt.Should().BeNull();
             status.NextAttemptAt.Should().BeNull("no more retries scheduled for poisoned handlers");
         });
@@ -417,7 +417,7 @@ public class InboxErrorHandlingTests(
     }
 
     [Test]
-    public async Task Inbox_MaxRetriesOne_PoisonedOnFirstFailure()
+    public async Task Inbox_MaxRetriesZero_PoisonedOnFirstFailure()
     {
         var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
 
@@ -439,7 +439,7 @@ public class InboxErrorHandlingTests(
                 bus.AddEfCoreDurability<TestDbContext>(d =>
                     d.UseInbox(inbox =>
                     {
-                        inbox.WithMaxRetries(1);
+                        inbox.WithMaxRetries(0);
                         inbox.WithoutBackgroundProcessing();
                     })
                 );
@@ -472,7 +472,7 @@ public class InboxErrorHandlingTests(
             status.ErrorCount.Should().Be(1);
             status
                 .IsPoisoned.Should()
-                .BeTrue("should be poisoned after a single failure with MaxRetries=1");
+                .BeTrue("should be poisoned after a single failure with MaxRetries=0");
         });
     }
 

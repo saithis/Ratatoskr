@@ -37,6 +37,17 @@ public abstract class DurableProcessingBuilder<TBuilder, TOptions>
     }
 
     /// <summary>
+    /// Sets the maximum number of retries after the first failed attempt before a row is marked
+    /// as poisoned. 0 poisons on the first failure.
+    /// </summary>
+    public TBuilder WithMaxRetries(int maxRetries)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(maxRetries);
+        Options.MaxRetries = maxRetries;
+        return Self;
+    }
+
+    /// <summary>
     /// Sets the maximum backoff delay between retry attempts.
     /// </summary>
     public TBuilder WithMaxRetryDelay(TimeSpan delay)

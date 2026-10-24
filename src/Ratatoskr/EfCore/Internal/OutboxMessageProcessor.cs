@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Ratatoskr.Core;
@@ -27,9 +28,9 @@ internal class OutboxMessageProcessor<TDbContext>(
 
     /// <summary>
     /// Processes a single batch of outbox messages.
-    /// Returns the number of messages successfully processed.
+    /// <see cref="OutboxBatchResult.Claimed"/> is 0 when no work was found.
     /// </summary>
-    public async Task<int> ProcessBatchAsync(
+    public async Task<OutboxBatchResult> ProcessBatchAsync(
         bool includeStuckMessageDetection,
         CancellationToken cancellationToken
     )
@@ -70,7 +71,7 @@ internal class OutboxMessageProcessor<TDbContext>(
 
         if (messages.Length == 0)
         {
-            return 0;
+            return default;
         }
 
         messages = await ProcessingConcurrency.ClaimAsync(
@@ -82,7 +83,7 @@ internal class OutboxMessageProcessor<TDbContext>(
         );
         if (messages.Length == 0)
         {
-            return 0;
+            return default;
         }
 
         var processedCount = 0;
@@ -98,7 +99,7 @@ internal class OutboxMessageProcessor<TDbContext>(
         }
 
         OutboxTelemetry.RecordBatchDuration(batchStartTimestamp);
-        return processedCount;
+        return new OutboxBatchResult(messages.Length, processedCount);
     }
 
     private async Task<ProcessOutcome> ProcessMessageAsync(
@@ -259,6 +260,12 @@ internal class OutboxMessageProcessor<TDbContext>(
         Conflict = 3,
     }
 }
+
+/// <summary>Outcome of one <see cref="OutboxMessageProcessor{TDbContext}.ProcessBatchAsync"/> call.</summary>
+/// <param name="Claimed">Messages picked up in this batch, whatever their outcome. 0 means no work was found.</param>
+/// <param name="Sent">Messages successfully sent to their transport.</param>
+[StructLayout(LayoutKind.Auto)]
+internal readonly record struct OutboxBatchResult(int Claimed, int Sent);
 
 internal static partial class OutboxMessageProcessorLog
 {

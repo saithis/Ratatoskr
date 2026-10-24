@@ -108,7 +108,8 @@ internal class OutboxMessageEntity : BaseMessageEntity, IClaimableEntity, IReque
         ProcessingStartedAt = null; // Clear processing flag on failure
         Version++;
 
-        if (ErrorCount >= maxRetries)
+        // The first attempt is not a retry: with maxRetries = N, the row gets N + 1 attempts.
+        if (ErrorCount > maxRetries)
         {
             IsPoisoned = true;
             NextAttemptAt = null;

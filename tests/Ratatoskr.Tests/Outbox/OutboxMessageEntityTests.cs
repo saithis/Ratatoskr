@@ -192,9 +192,10 @@ public class OutboxMessageEntityTests
         );
         var maxRetries = 3;
 
-        // Act - Fail maxRetries times
-        for (var i = 0; i < maxRetries; i++)
+        // Act - The first attempt plus maxRetries retries all fail
+        for (var i = 0; i <= maxRetries; i++)
         {
+            entity.IsPoisoned.Should().BeFalse("retries are left before this failure");
             entity.PublishFailed(
                 $"Error {i.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
                 fakeTime,
@@ -205,7 +206,7 @@ public class OutboxMessageEntityTests
         }
 
         // Assert
-        entity.ErrorCount.Should().Be((short)maxRetries);
+        entity.ErrorCount.Should().Be((short)(maxRetries + 1));
         entity.IsPoisoned.Should().BeTrue();
         entity.NextAttemptAt.Should().BeNull(); // No more retries
     }

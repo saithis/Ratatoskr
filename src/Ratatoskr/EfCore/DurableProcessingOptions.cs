@@ -42,7 +42,8 @@ public abstract class DurableProcessingOptions
     public int BatchSize { get; set; } = 100;
 
     /// <summary>
-    /// Maximum number of attempts before a row is marked as poisoned.
+    /// Maximum number of retries after the first failed attempt before a row is marked as
+    /// poisoned, so a row is attempted at most <c>MaxRetries + 1</c> times. 0 poisons on the first failure.
     /// Default: 5.
     /// </summary>
     public int MaxRetries { get; set; } = 5;

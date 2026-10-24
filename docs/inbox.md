@@ -121,7 +121,7 @@ sequenceDiagram
                 IP->>DB: MarkAsCompleted (CompletedAt = now)
             else Failure
                 IP->>DB: MarkAsFailed (ErrorCount++, NextAttemptAt = backoff)
-                Note over DB: If ErrorCount >= MaxRetries → IsPoisoned = true
+                Note over DB: If ErrorCount > MaxRetries → IsPoisoned = true
             end
             IP->>DB: SaveChangesAsync (per handler)
         end
@@ -133,7 +133,7 @@ sequenceDiagram
 3. The `InboxProcessor` polls for pending handler statuses and delivers them in batches
 4. On success: `CompletedAt` is set. Each handler's result is persisted immediately — completed handlers are not lost if a subsequent handler fails.
 5. On failure: `ErrorCount` is incremented, `NextAttemptAt` is set with exponential backoff
-6. After `MaxRetries` failures: the status is marked `IsPoisoned = true` and no longer retried
+6. Once the first attempt and all `MaxRetries` retries have failed: the status is marked `IsPoisoned = true` and no longer retried. With `MaxRetries = 3` a handler runs at most 4 times.
 7. On application shutdown (cancellation): the attempt is **not** counted as a failure. The status remains in "processing" state and is recovered by stuck message detection on next startup.
 
 ## Handler Isolation
@@ -194,7 +194,7 @@ bus.AddEfCoreDurability<OrderDbContext>(d => d.UseInbox(inbox =>
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `WithMaxRetries(int)` | `5` | Maximum failed attempts before marking as poisoned. 0 = poisoned on first failure. |
+| `WithMaxRetries(int)` | `5` | Retries after the first failed attempt before marking as poisoned. 0 = poisoned on the first failure. |
 | `WithMaxRetryDelay(TimeSpan)` | `5 minutes` | Maximum backoff delay. Jitter is applied to prevent thundering herd. |
 | `WithPollingInterval(TimeSpan)` | `30 seconds` | How often the processor polls the DB when idle |
 | `WithBatchSize(int)` | `100` | Handler statuses processed per batch |

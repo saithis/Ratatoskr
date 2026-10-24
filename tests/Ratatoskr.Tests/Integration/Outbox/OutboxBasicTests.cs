@@ -68,6 +68,90 @@ public class OutboxBasicTests(RabbitMqContainerFixture rabbitMq, PostgresContain
     }
 
     [Test]
+    public async Task Outbox_BatchWithOnlyPoisonedMessages_ProcessorContinuesWithNextBatch()
+    {
+        // Arrange: one message per batch and a polling interval far beyond the test timeout,
+        // so the second message is only sent if the processor keeps going after the first batch.
+        await StartTestAsync(services =>
+        {
+            services.AddRatatoskr(bus =>
+            {
+                bus.UseRabbitMq(o => o.ConnectionString = new Uri(RabbitMqConnectionString));
+                bus.AddEventPublishChannel(
+                    ExchangeName,
+                    c => c.WithRabbitMq(r => r.WithTopicExchange()).Produces<TestEvent>()
+                );
+                bus.AddEfCoreDurability<TestDbContext>(d =>
+                    d.UseOutbox(o => o.WithBatchSize(1).WithPollingInterval(TimeSpan.FromHours(1)))
+                );
+            });
+
+            services.AddDbContext<TestDbContext>(
+                (sp, options) =>
+                {
+                    options.UseNpgsql(PostgresConnectionString);
+                    options.UseRatatoskr<TestDbContext>(sp);
+                }
+            );
+        });
+
+        await EnsureQueueBoundAsync(QueueName, ExchangeName, DefaultRoutingKey);
+        await InitializeDatabase();
+
+        // Act: insert both rows in one transaction (bypassing outbox staging, so no processing
+        // run can see only one of them). The older row targets a transport without a sender and
+        // is poisoned in the first batch; the newer one is only sent if a second batch runs.
+        Guid poisonedId = default;
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
+            var preparer = ctx.ServiceProvider.GetRequiredService<OutgoingMessagePreparer>();
+
+            var unroutable = OutboxMessageEntity.Create(
+                Encoding.UTF8.GetBytes("{}"),
+                new MessageProperties
+                {
+                    Id = "unroutable",
+                    Type = "test.event",
+                    Source = "/test",
+                    Time = time.GetUtcNow(),
+                },
+                time,
+                "missing-transport"
+            );
+            poisonedId = unroutable.Id;
+            await dbContext.Set<OutboxMessageEntity>().AddAsync(unroutable);
+
+            var (props, body) = preparer.Prepare(
+                new TestEvent { Id = "after-poison", Data = "second batch" },
+                typeof(TestEvent),
+                new MessageProperties().SetRoutingKey(DefaultRoutingKey)
+            );
+            await dbContext
+                .Set<OutboxMessageEntity>()
+                .AddAsync(
+                    OutboxMessageEntity.Create(body, props, time, RabbitMqConstants.TransportName)
+                );
+
+            await dbContext.SaveChangesAsync();
+        });
+        await Services.GetRequiredService<OutboxProcessor<TestDbContext>>().TriggerAsync();
+
+        // Assert
+        var message = await WaitForMessageAsync(QueueName);
+        message.Should().NotBeNull("the processor must not stop after a batch that only poisoned");
+        Encoding.UTF8.GetString(message.Body.ToArray()).Should().Contain("after-poison");
+
+        await InScopeAsync(async ctx =>
+        {
+            var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var poisoned = await dbContext.Set<OutboxMessageEntity>().SingleAsync(x => x.Id == poisonedId);
+            poisoned.IsPoisoned.Should().BeTrue();
+        });
+    }
+
+    [Test]
     public async Task Outbox_ToConsumer_EndToEnd()
     {
         // Arrange

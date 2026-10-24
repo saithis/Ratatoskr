@@ -296,7 +296,7 @@ public class OutboxDurabilityTests(
                 includeStuckMessageDetection: true,
                 CancellationToken.None
             );
-            count.Should().Be(0, "message is stuck for only 1 minute — not yet considered stuck");
+            count.Claimed.Should().Be(0, "message is stuck for only 1 minute — not yet considered stuck");
         });
 
         // Advance to 6 minutes total — past the 5-minute threshold
@@ -313,7 +313,7 @@ public class OutboxDurabilityTests(
                 includeStuckMessageDetection: true,
                 CancellationToken.None
             );
-            count.Should().BeGreaterThan(0);
+            count.Sent.Should().BeGreaterThan(0);
         });
 
         await InScopeAsync(async ctx =>

@@ -265,7 +265,8 @@ public class InboxCancellationAndTimeoutTests(
 
         await WaitForInboxEntriesAsync(1);
 
-        for (var i = 0; i < 2; i++)
+        // The first attempt plus 2 retries (MaxRetries = 2) all time out
+        for (var i = 0; i < 3; i++)
         {
             await InScopeAsync(async ctx => await ProcessInboxAsync(ctx.ServiceProvider));
             fakeTime.Advance(TimeSpan.FromMinutes(10));
@@ -276,7 +277,7 @@ public class InboxCancellationAndTimeoutTests(
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var status = await db.Set<InboxHandlerStatusEntity>().SingleAsync();
             status.IsPoisoned.Should().BeTrue();
-            status.ErrorCount.Should().Be(2);
+            status.ErrorCount.Should().Be(3);
             status.CompletedAt.Should().BeNull();
         });
     }

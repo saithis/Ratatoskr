@@ -126,7 +126,7 @@ Example with MaxRetryDelay = 5 min:
 
 ### Poisoned Messages
 
-After exceeding `MaxRetries`, the message is marked `IsPoisoned = true` and no longer processed. Poisoned messages remain in the database for investigation. See [Operations](operations.md) for investigation and manual retry procedures.
+Once the first attempt and all `MaxRetries` retries have failed (`MaxRetries + 1` attempts), the message is marked `IsPoisoned = true` and no longer processed. Poisoned messages remain in the database for investigation. See [Operations](operations.md) for investigation and manual retry procedures.
 
 ### Message Size Validation
 
@@ -161,7 +161,7 @@ bus.AddEfCoreDurability<OrderDbContext>(d => d.UseOutbox(outbox =>
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `WithMaxRetries(int)` | `5` | Maximum failed attempts before marking as poisoned. 0 = poisoned on first failure. |
+| `WithMaxRetries(int)` | `5` | Retries after the first failed attempt before marking as poisoned. 0 = poisoned on the first failure. |
 | `WithMaxRetryDelay(TimeSpan)` | `5 minutes` | Maximum backoff delay between retries |
 | `WithPollingInterval(TimeSpan)` | `60 seconds` | How often the processor polls the DB when idle |
 | `WithBatchSize(int)` | `100` | Messages processed per batch |

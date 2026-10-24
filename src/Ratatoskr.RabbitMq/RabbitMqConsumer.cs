@@ -75,27 +75,14 @@ internal sealed partial class RabbitMqConsumer(
                 LogAutoAckPrefetchWarning(logger, reg.ChannelName, channelOptions.ConcurrencyLimit);
             }
 
-            // Publisher confirms are enabled even though this is primarily a consume channel:
-            // the managed dead-letter path republishes failed messages on this channel and then
-            // acks the original. Without confirms a publish that the broker never persisted would
-            // still be followed by the ack, losing the message. With confirms, BasicPublishAsync
-            // throws on an unconfirmed publish so the ack is skipped and the message is redelivered.
-            var channel = await connectionManager.CreateChannelAsync(
-                enablePublisherConfirms: true,
-                stoppingToken
-            );
-            await channel.BasicQosAsync(
-                prefetchSize: 0,
-                prefetchCount: channelOptions.PrefetchCount,
-                global: false,
-                cancellationToken: stoppingToken
-            );
-            var consumerChannel = new ConsumerChannel(
-                channel,
+            var consumerChannel = await ConsumerChannel.OpenAsync(
+                connectionManager,
                 channelOptions,
                 reg.ChannelName,
-                channelOptions.QueueName
+                channelOptions.QueueName,
+                stoppingToken
             );
+            var channel = consumerChannel.Channel;
 
             channel.ChannelShutdownAsync += (_, args) =>
             {
@@ -460,7 +447,7 @@ internal sealed partial class RabbitMqConsumer(
     /// </summary>
     private sealed class ConsumerChannel : IDisposable
     {
-        public ConsumerChannel(
+        private ConsumerChannel(
             IChannel channel,
             RabbitMqChannelOptions options,
             string channelName,
@@ -472,6 +459,42 @@ internal sealed partial class RabbitMqConsumer(
             ChannelName = channelName;
             QueueName = queueName;
             ConcurrencyGate = new SemaphoreSlim(options.ConcurrencyLimit, options.ConcurrencyLimit);
+        }
+
+        /// <summary>Opens a channel with the queue's prefetch settings. The instance owns the channel.</summary>
+        public static async Task<ConsumerChannel> OpenAsync(
+            RabbitMqConnectionManager connectionManager,
+            RabbitMqChannelOptions options,
+            string channelName,
+            string queueName,
+            CancellationToken cancellationToken
+        )
+        {
+            // Publisher confirms are enabled even though this is primarily a consume channel:
+            // the managed dead-letter path republishes failed messages on this channel and then
+            // acks the original. Without confirms a publish that the broker never persisted would
+            // still be followed by the ack, losing the message. With confirms, BasicPublishAsync
+            // throws on an unconfirmed publish so the ack is skipped and the message is redelivered.
+            var channel = await connectionManager.CreateChannelAsync(
+                enablePublisherConfirms: true,
+                cancellationToken
+            );
+            try
+            {
+                await channel.BasicQosAsync(
+                    prefetchSize: 0,
+                    prefetchCount: options.PrefetchCount,
+                    global: false,
+                    cancellationToken: cancellationToken
+                );
+            }
+            catch
+            {
+                channel.Dispose();
+                throw;
+            }
+
+            return new ConsumerChannel(channel, options, channelName, queueName);
         }
 
         public IChannel Channel { get; }
@@ -492,10 +515,7 @@ internal sealed partial class RabbitMqConsumer(
 
         public void Dispose()
         {
-            // The channel is created by the consumer solely for this instance, which owns it.
-#pragma warning disable IDISP007
             Channel.Dispose();
-#pragma warning restore IDISP007
             ConcurrencyGate.Dispose();
             AckLock.Dispose();
         }

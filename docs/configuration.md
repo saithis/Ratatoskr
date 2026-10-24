@@ -89,7 +89,7 @@ bus.UseRabbitMq(c =>
 
 | Option | Default | Description | Details |
 |--------|---------|-------------|---------|
-| `WithMaxRetries(int)` | `3` | Attempts before DLQ | [RabbitMQ](rabbitmq.md) |
+| `WithMaxRetries(int)` | `3` | Retries before DLQ (0 = no retry) | [RabbitMQ](rabbitmq.md) |
 | `WithDelay(TimeSpan)` | `30s` | TTL on retry queue | [RabbitMQ](rabbitmq.md) |
 | `WithManaged(bool)` | `true` | Auto-provision retry/DLQ topology | [RabbitMQ](rabbitmq.md) |
 | `WithDeadLetterSuffix(string)` | `".dlq"` | DLQ name suffix | [RabbitMQ](rabbitmq.md) |
@@ -133,7 +133,7 @@ The settings both the outbox and the inbox have (polling, batching, retries, loc
 
 | Option | Default | Description | Details |
 |--------|---------|-------------|---------|
-| `WithMaxRetries(int)` | `5` | Send attempts before poisoned | [Outbox](outbox.md) |
+| `WithMaxRetries(int)` | `5` | Retries before poisoned (0 = poisoned on the first failure) | [Outbox](outbox.md) |
 | `WithMaxRetryDelay(TimeSpan)` | `5 min` | Max backoff delay | [Outbox](outbox.md) |
 | `WithPollingInterval(TimeSpan)` | `60s` | Idle polling interval | [Outbox](outbox.md) |
 | `WithBatchSize(int)` | `100` | Messages per batch | [Outbox](outbox.md) |
@@ -153,7 +153,7 @@ The settings both the outbox and the inbox have (polling, batching, retries, loc
 
 | Option | Default | Description | Details |
 |--------|---------|-------------|---------|
-| `WithMaxRetries(int)` | `5` | Delivery attempts before poisoned | [Inbox](inbox.md) |
+| `WithMaxRetries(int)` | `5` | Retries before poisoned (0 = poisoned on the first failure) | [Inbox](inbox.md) |
 | `WithMaxRetryDelay(TimeSpan)` | `5 min` | Max backoff delay (with jitter) | [Inbox](inbox.md) |
 | `WithPollingInterval(TimeSpan)` | `30s` | Idle polling interval | [Inbox](inbox.md) |
 | `WithBatchSize(int)` | `100` | Handler statuses per batch | [Inbox](inbox.md) |

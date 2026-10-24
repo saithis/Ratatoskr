@@ -28,7 +28,7 @@ public class RequeuedCountTests(
             var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
             var time = ctx.ServiceProvider.GetRequiredService<TimeProvider>();
             var e = await db.Set<OutboxMessageEntity>().FindAsync(id);
-            e!.PublishFailed("error again", time, 1, TimeSpan.FromSeconds(1));
+            e!.PublishFailed("error again", time, 0, TimeSpan.FromSeconds(1));
             await db.SaveChangesAsync();
         });
 
