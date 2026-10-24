@@ -46,7 +46,14 @@ internal static class BulkRequeue
                 ))
         );
 
-        await RequeueBatchAsync(db, entities, response, ct);
+        if (await TryRequeueBatchAsync(db, entities, ct))
+        {
+            response.Succeeded.AddRange(entities.Select(e => e.Id));
+        }
+        else
+        {
+            response.Failed.AddRange(entities.Select(e => ConcurrencyFailure(e.Id)));
+        }
 
         return TypedResults.Ok(response);
     }
@@ -57,7 +64,12 @@ internal static class BulkRequeue
     )
         where TEntity : class, IRequeueableEntity
     {
-        var response = new BulkRequeueResponse([], []);
+        var succeeded = new List<Guid>();
+
+        // A conflicting batch is fetched again by the next iteration, so the same id can fail
+        // several times and then succeed. Track failures by id so each id is reported once,
+        // and never as both succeeded and failed.
+        var failed = new Dictionary<Guid, BulkRequeueFailure>();
 
         // Process in batches so "requeue all" with tens of thousands of poisoned rows
         // does not build a single massive transaction. Each batch reuses the domain
@@ -78,28 +90,43 @@ internal static class BulkRequeue
                 break;
             }
 
-            var succeededBefore = response.Succeeded.Count;
-            await RequeueBatchAsync(db, batch, response, ct);
+            var batchSucceeded = await TryRequeueBatchAsync(db, batch, ct);
             db.ChangeTracker.Clear();
 
-            // A batch that keeps conflicting would otherwise be fetched again forever.
-            if (response.Succeeded.Count > succeededBefore)
+            if (batchSucceeded)
             {
+                foreach (var entity in batch)
+                {
+                    succeeded.Add(entity.Id);
+                    failed.Remove(entity.Id);
+                }
+
                 consecutiveNoProgress = 0;
+                continue;
             }
-            else if (++consecutiveNoProgress >= MaxConsecutiveBatchesWithoutProgress)
+
+            foreach (var entity in batch)
+            {
+                failed[entity.Id] = ConcurrencyFailure(entity.Id);
+            }
+
+            // A batch that keeps conflicting would otherwise be fetched again forever.
+            if (++consecutiveNoProgress >= MaxConsecutiveBatchesWithoutProgress)
             {
                 break;
             }
         }
 
-        return TypedResults.Ok(response);
+        return TypedResults.Ok(new BulkRequeueResponse(succeeded, failed.Values.ToList()));
     }
 
-    private static async Task RequeueBatchAsync<TEntity>(
+    /// <summary>
+    /// Requeues and saves all <paramref name="entities"/> in one SaveChanges call.
+    /// Returns false if a concurrency conflict rolled back the whole batch.
+    /// </summary>
+    private static async Task<bool> TryRequeueBatchAsync<TEntity>(
         DbContext db,
         List<TEntity> entities,
-        BulkRequeueResponse response,
         CancellationToken ct
     )
         where TEntity : class, IRequeueableEntity
@@ -112,22 +139,20 @@ internal static class BulkRequeue
         try
         {
             await db.SaveChangesAsync(ct);
-            response.Succeeded.AddRange(entities.Select(e => e.Id));
+            return true;
         }
         catch (DbUpdateConcurrencyException)
         {
             // SaveChanges wraps the batch in a transaction that is rolled back on any
-            // concurrency conflict, so no row in this batch was persisted. Report all
-            // of them as failed rather than partially claiming success for rows that
+            // concurrency conflict, so no row in this batch was persisted. Callers report
+            // all of them as failed rather than partially claiming success for rows that
             // were actually rolled back.
-            response.Failed.AddRange(
-                entities.Select(e => new BulkRequeueFailure(
-                    e.Id,
-                    "Concurrent modification; no rows in this batch were persisted. Retry the failed ids."
-                ))
-            );
+            return false;
         }
     }
+
+    private static BulkRequeueFailure ConcurrencyFailure(Guid id) =>
+        new(id, "Concurrent modification; no rows in this batch were persisted. Retry the failed ids.");
 }
 
 internal record BulkRequeueRequest(List<Guid>? Ids);

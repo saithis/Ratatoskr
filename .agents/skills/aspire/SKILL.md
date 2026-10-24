@@ -18,7 +18,7 @@ This repository uses Aspire to orchestrate its distributed application. Resource
 | Stop the app | `aspire stop` |
 | List resources | `aspire describe` or `aspire resources` |
 | Run resource command | `aspire resource <resource> <command>` |
-| Start/stop/restart resource | `aspire resource <resource> start|stop|restart` |
+| Start/stop/restart resource | `aspire resource <resource> start\|stop\|restart` |
 | Rebuild a .NET project resource | `aspire resource <resource> rebuild` |
 | View console logs | `aspire logs [resource]` |
 | View structured logs | `aspire otel logs [resource]` |

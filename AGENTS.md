@@ -1,9 +1,10 @@
 # AI Agent Instructions
 
-This is the single source of instructions for AI coding agents working in this repository.
+These are the repository-wide instructions for AI coding agents working in this repository.
 `CLAUDE.md` and `GEMINI.md` are symlinks to this file (on Windows, git needs symlink support
-enabled to check them out as links). Detailed testing guidance lives in
-`tests/Ratatoskr.Tests/AGENTS.md`.
+enabled to check them out as links). Subdirectories (`src/Ratatoskr`, `src/Ratatoskr.RabbitMq`,
+`tests/Ratatoskr.Tests`, `docs`, `examples`) have their own `AGENTS.md` with scoped instructions,
+and `.agents/skills/` contains skills; the nearest applicable ones apply in addition to this file.
 
 ## Approach
 
@@ -81,7 +82,7 @@ dotnet run --project tests/Ratatoskr.Tests -- --list-tests
 The example application is orchestrated with Aspire; the resources are defined in the app host
 under `examples/`.
 
-- Before making changes to the example application, run it with `aspire run` and inspect the
+- Before making changes to the example application, start it with `aspire start` and inspect the
   state of the resources so you start from a known state. Changes to the app host require a restart.
 - Use the Aspire MCP tools (list resources, structured logs, console logs, traces) to debug
   issues before making changes.

@@ -69,7 +69,7 @@ internal partial class InboxCleanupService<TDbContext>(
 
         if (totalStatusesDeleted > 0 || totalMessagesDeleted > 0)
         {
-            LogInboxCleanupServiceDeleted(logger, totalStatusesDeleted, totalMessagesDeleted);
+            LogInboxCleanupServiceDeleted(Logger, totalStatusesDeleted, totalMessagesDeleted);
         }
 
         return (totalStatusesDeleted, totalMessagesDeleted);

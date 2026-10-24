@@ -50,7 +50,7 @@ internal partial class OutboxCleanupService<TDbContext>(
         );
         if (totalDeleted > 0)
         {
-            LogOutboxCleanupServiceDeleted(logger, totalDeleted);
+            LogOutboxCleanupServiceDeleted(Logger, totalDeleted);
         }
 
         return totalDeleted;

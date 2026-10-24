@@ -24,6 +24,8 @@ internal abstract partial class RetentionCleanupService<TDbContext>(
 {
     protected abstract string ServiceName { get; }
 
+    protected ILogger Logger => logger;
+
     /// <summary>
     /// Deletes all rows that have exceeded the retention period.
     /// </summary>

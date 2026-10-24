@@ -388,13 +388,45 @@ public class InboxManagementTests(
         var body = await response.Content.ReadFromJsonAsync<BulkRequeueResponse>();
         body!.Succeeded.Should().BeEmpty();
         body.Failed.Should()
-            .HaveCount(3, "the endpoint gives up after 3 batches in a row without progress")
-            .And.OnlyContain(f => f.Id == poisonedId);
+            .ContainSingle("each id is reported once even though 3 batches conflicted")
+            .Which.Id.Should()
+            .Be(poisonedId);
+        conflictInterceptor.Attempts.Should()
+            .Be(3, "the endpoint gives up after 3 batches in a row without progress");
+    }
+
+    [Test]
+    public async Task InboxManagement_BulkRequeue_All_ConflictThenSuccess_ReportsIdOnlyAsSucceeded()
+    {
+        var conflictInterceptor = new ConflictingSaveChangesInterceptor();
+        await StartManagementTestAsync(services =>
+            services.ConfigureDbContext<TestDbContext>(opts =>
+                opts.AddInterceptors(conflictInterceptor)
+            )
+        );
+        var (_, poisonedId) = await SeedPoisonedInboxAsync();
+        conflictInterceptor.Enabled = true;
+        conflictInterceptor.MaxConflicts = 1;
+
+        using var response = await HttpClient.PostAsync(
+            $"{BaseUrl}/poisoned/requeue/all",
+            content: null
+        );
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<BulkRequeueResponse>();
+        body!.Succeeded.Should().Equal(poisonedId);
+        body.Failed.Should().BeEmpty("the id was requeued by the retried batch");
     }
 
     private sealed class ConflictingSaveChangesInterceptor : SaveChangesInterceptor
     {
         public bool Enabled { get; set; }
+
+        /// <summary>Stop conflicting after this many conflicts. Null conflicts forever.</summary>
+        public int? MaxConflicts { get; set; }
+
+        public int Attempts { get; private set; }
 
         public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
             DbContextEventData eventData,
@@ -402,8 +434,9 @@ public class InboxManagementTests(
             CancellationToken cancellationToken = default
         )
         {
-            if (Enabled)
+            if (Enabled && (MaxConflicts is null || Attempts < MaxConflicts))
             {
+                Attempts++;
                 throw new DbUpdateConcurrencyException("Simulated concurrency conflict");
             }
 
