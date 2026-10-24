@@ -41,6 +41,7 @@ public class ChannelRegistryTests
         // Act
         var typeName = "test.event"; // Matches [RatatoskrMessage("test.event")] in TestMessages.cs
 
+        builder.ChannelRegistry.Freeze();
         var channel = builder.ChannelRegistry.FindPublishChannelForTypeName(typeName);
 
         // Assert
@@ -65,6 +66,7 @@ public class ChannelRegistryTests
         );
 
         // Act
+        builder.ChannelRegistry.Freeze();
         var results = builder.ChannelRegistry.FindConsumeChannelsForType("test.event").ToList();
 
         // Assert
@@ -114,6 +116,7 @@ public class ChannelRegistryTests
         var channel = new ChannelRegistration("test.exchange", ChannelType.EventPublish);
         channel.Messages.Add(new MessageRegistration(typeof(TestEvent), "test.event"));
         registry.Register(channel);
+        registry.Freeze();
 
         // Act
         var result = registry.FindPublishChannelForMessage(typeof(TestEvent));
@@ -131,6 +134,7 @@ public class ChannelRegistryTests
         var channel = new ChannelRegistration("test.exchange", ChannelType.EventPublish);
         channel.Messages.Add(new MessageRegistration(typeof(TestEvent), "test.event"));
         registry.Register(channel);
+        registry.Freeze();
 
         // Act
         var result = registry.GetPublishInformation(typeof(TestEvent));
@@ -177,12 +181,26 @@ public class ChannelRegistryTests
     {
         // Arrange
         var registry = new ChannelRegistry();
+        registry.Freeze();
 
         // Act
         var result = registry.GetPublishInformation(typeof(TestEvent));
 
         // Assert
         result.Should().BeNull();
+    }
+
+    [Test]
+    public void Lookups_BeforeFreeze_Throw()
+    {
+        // Arrange
+        var registry = new ChannelRegistry();
+
+        // Act
+        var act = () => registry.GetPublishInformation(typeof(TestEvent));
+
+        // Assert
+        act.Should().Throw<InvalidOperationException>().WithMessage("*must be frozen*");
     }
 
     [Test]

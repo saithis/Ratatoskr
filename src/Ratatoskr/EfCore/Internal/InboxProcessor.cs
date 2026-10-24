@@ -11,16 +11,15 @@ internal partial class InboxProcessor<TDbContext>(
     TimeProvider timeProvider,
     InboxOptionsHolder<TDbContext> optionsHolder,
     ILogger<InboxProcessor<TDbContext>> logger
-) : PollingBackgroundService(distributedLockProvider, timeProvider, logger), IProcessorTrigger
+) : PollingBackgroundService(
+        optionsHolder.Options,
+        distributedLockProvider,
+        timeProvider,
+        logger
+    ), IProcessorTrigger
     where TDbContext : DbContext, IRatatoskrDbContext
 {
-    private readonly InboxOptions _options = optionsHolder.Options;
-
     protected override string ProcessorName => "InboxProcessor";
-    protected override TimeSpan PollingInterval => _options.PollingInterval;
-    protected override TimeSpan RestartDelay => _options.RestartDelay;
-    protected override TimeSpan LockAcquireTimeout => _options.LockAcquireTimeout;
-    protected override string LockName => _options.LockName;
 
     protected override async Task ProcessBatchesAsync(CancellationToken cancellationToken)
     {

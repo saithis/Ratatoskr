@@ -86,6 +86,7 @@ The tracker captures messages at every stage:
 | `Dispatched` | After handler invocation completes (includes result and exception) |
 | `OutboxStaged` | When a message is serialized into an outbox entity during `SaveChanges` |
 | `OutboxSent` | When the outbox processor sends a message to the transport |
+| `OutboxPoisoned` | When an outbox message is poisoned (max retries exceeded, unreadable properties, or no sender for its transport) |
 | `InboxQueued` | When a message is accepted into the inbox |
 | `InboxDispatched` | When an inbox handler delivery is attempted (success or failure) |
 | `InboxPoisoned` | When an inbox handler status exceeds max retries |

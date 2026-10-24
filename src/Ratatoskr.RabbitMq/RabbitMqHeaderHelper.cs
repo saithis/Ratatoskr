@@ -17,6 +17,8 @@ internal static class RabbitMqHeaderHelper
             null => "",
             string str => str,
             byte[] bytes => Encoding.UTF8.GetString(bytes),
+            ReadOnlyMemory<byte> readOnlyMemory => Encoding.UTF8.GetString(readOnlyMemory.Span),
+            Memory<byte> memory => Encoding.UTF8.GetString(memory.Span),
             _ => value.ToString() ?? "",
         };
     }

@@ -9,8 +9,7 @@ namespace Ratatoskr.EfCore.Internal;
 
 internal partial class OutboxTriggerInterceptor<TDbContext>(
     OutboxProcessor<TDbContext> outboxProcessor,
-    IMessageSerializerResolver serializerResolver,
-    IMessagePropertiesEnricher enricher,
+    OutgoingMessagePreparer preparer,
     ChannelRegistry channelRegistry,
     ChannelHandlerRegistry channelHandlerRegistry,
     IEnumerable<IMessageActivityObserver> observers,
@@ -84,10 +83,11 @@ internal partial class OutboxTriggerInterceptor<TDbContext>(
         OutboxStagingCollection.Item item
     )
     {
-        var enrichedProperties = enricher.Enrich(item.Message.GetType(), item.Properties);
-        var serializer = serializerResolver.GetSerializer(item.Message.GetType());
-        var serializedMessage = serializer.Serialize(item.Message);
-        enrichedProperties.ContentType = serializer.ContentType;
+        var (enrichedProperties, serializedMessage) = preparer.Prepare(
+            item.Message,
+            item.Message.GetType(),
+            item.Properties
+        );
 
         if (
             _options.MaxMessageSize.HasValue
@@ -199,28 +199,18 @@ internal partial class OutboxTriggerInterceptor<TDbContext>(
 
         foreach (var (channel, _) in consumeChannels)
         {
-            var inboxConfig = channel.GetExtension<ChannelInboxConfig>();
-            if (inboxConfig == null)
-            {
-                continue;
-            }
-
             // Track cross-DbContext channels — they still need an outbox entry
-            if (inboxConfig.DbContextType != typeof(TDbContext))
+            var inboxConfig = channel.GetExtension<ChannelInboxConfig>();
+            if (inboxConfig != null && inboxConfig.DbContextType != typeof(TDbContext))
             {
                 hasCrossDbChannels = true;
                 continue;
             }
 
-            var msgReg = channel.GetMessage(enrichedProperties.Type!);
-            if (msgReg == null)
-            {
-                continue;
-            }
-
-            var inboxHandlers = channelHandlerRegistry.GetInboxHandlers(
-                channel.ChannelName,
-                msgReg.MessageType
+            var inboxHandlers = channelHandlerRegistry.GetInboxHandlersFor(
+                channel,
+                enrichedProperties.Type!,
+                typeof(TDbContext)
             );
             if (inboxHandlers.Count == 0)
             {

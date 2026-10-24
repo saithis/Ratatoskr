@@ -129,6 +129,8 @@ builder.Services.AddRatatoskr<OrderDbContext>(bus =>
 
 ### Outbox Options
 
+The settings both the outbox and the inbox have (polling, batching, retries, locking and retention) are defined once on `DurableProcessingOptions`, which `OutboxOptions` and `InboxOptions` derive from. The builder methods for them therefore behave the same on both builders.
+
 | Option | Default | Description | Details |
 |--------|---------|-------------|---------|
 | `WithMaxRetries(int)` | `5` | Send attempts before poisoned | [Outbox](outbox.md) |

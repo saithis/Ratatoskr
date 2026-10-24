@@ -14,24 +14,19 @@ internal static class EfCoreTelemetry
     /// </summary>
     public static Activity? StartSendActivity(MessageProperties props, int contentLength)
     {
-        var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
+        var activity = RatatoskrDiagnostics.StartMessagingActivity(
             "send efcore",
             ActivityKind.Client,
-            Activity.Current?.Context ?? default
+            "send",
+            MessagingSemanticConventions.OperationTypeSend,
+            props.Id,
+            system: "efcore"
         );
 
         if (activity != null)
         {
             props.TraceParent = activity.Id;
             props.TraceState = activity.TraceStateString;
-
-            activity.SetTag(MessagingSemanticConventions.OperationName, "send");
-            activity.SetTag(
-                MessagingSemanticConventions.OperationType,
-                MessagingSemanticConventions.OperationTypeSend
-            );
-            activity.SetTag(MessagingSemanticConventions.System, "efcore");
-            activity.SetTag(MessagingSemanticConventions.MessageId, props.Id);
             activity.SetTag(MessagingSemanticConventions.MessageBodySize, contentLength);
         }
 

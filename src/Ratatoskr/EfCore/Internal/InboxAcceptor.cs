@@ -33,34 +33,17 @@ internal partial class InboxAcceptor<TDbContext>(
         CancellationToken cancellationToken
     )
     {
-        // Check if this channel's inbox DbContext matches our TDbContext
         var channel = channelRegistry.GetConsumeChannel(channelName);
-        if (channel == null)
+        if (channel == null || properties.Type == null)
         {
             return InboxAcceptOutcome.NoHandlers;
         }
 
-        var inboxConfig = channel.GetExtension<ChannelInboxConfig>();
-        if (inboxConfig == null || inboxConfig.DbContextType != typeof(TDbContext))
-        {
-            return InboxAcceptOutcome.NoHandlers;
-        }
-
-        // Resolve message CLR type from wire type name
-        if (properties.Type == null)
-        {
-            return InboxAcceptOutcome.NoHandlers;
-        }
-
-        var msgReg = channel.GetMessage(properties.Type);
-        if (msgReg == null)
-        {
-            return InboxAcceptOutcome.NoHandlers;
-        }
-
-        var inboxHandlers = channelHandlerRegistry.GetInboxHandlers(
-            channelName,
-            msgReg.MessageType
+        // Only channels whose inbox is stored in TDbContext are handled by this acceptor
+        var inboxHandlers = channelHandlerRegistry.GetInboxHandlersFor(
+            channel,
+            properties.Type,
+            typeof(TDbContext)
         );
         if (inboxHandlers.Count == 0)
         {

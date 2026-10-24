@@ -18,24 +18,14 @@ internal static class OutboxTelemetry
         ActivityContext.TryParse(props.TraceParent, props.TraceState, out var parentContext);
 #pragma warning restore MA0060
 
-        var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
+        return RatatoskrDiagnostics.StartMessagingActivity(
             "create outbox",
             ActivityKind.Producer,
+            "create",
+            MessagingSemanticConventions.OperationTypeCreate,
+            props.Id,
             parentContext
         );
-
-        if (activity != null)
-        {
-            activity.SetTag(MessagingSemanticConventions.OperationName, "create");
-            activity.SetTag(
-                MessagingSemanticConventions.OperationType,
-                MessagingSemanticConventions.OperationTypeCreate
-            );
-            activity.SetTag(MessagingSemanticConventions.System, "ratatoskr");
-            activity.SetTag(MessagingSemanticConventions.MessageId, props.Id);
-        }
-
-        return activity;
     }
 
     public static void RecordBatchSize(int count)

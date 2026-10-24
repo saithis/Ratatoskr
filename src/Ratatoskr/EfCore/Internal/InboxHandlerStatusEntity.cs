@@ -7,7 +7,7 @@ namespace Ratatoskr.EfCore.Internal;
 /// One row per handler per received message.
 /// The combination (MessageId, HandlerKey) has a unique constraint — the deduplication key.
 /// </summary>
-internal class InboxHandlerStatusEntity
+internal class InboxHandlerStatusEntity : IClaimableEntity, IRequeueableEntity
 {
     public Guid Id { get; private set; }
 

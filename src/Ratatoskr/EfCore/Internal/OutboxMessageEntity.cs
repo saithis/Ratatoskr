@@ -4,7 +4,7 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr.EfCore.Internal;
 
-internal class OutboxMessageEntity : BaseMessageEntity
+internal class OutboxMessageEntity : BaseMessageEntity, IClaimableEntity, IRequeueableEntity
 {
     public Guid Id { get; private set; }
 

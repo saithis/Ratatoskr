@@ -16,6 +16,6 @@ This project contains the fundamental abstractions and core logic for the Ratato
 
 ## Development Guidelines
 
-- **Zero Dependencies**: This core project *must not* depend on RabbitMQ, Kafka, or EF Core. It should remain pure.
+- **Transport independence**: This project *must not* depend on RabbitMQ or other message brokers. EF Core is the one exception: the outbox, inbox and EF Core transport live in `EfCore/`.
 - **Attributes**: Use attributes like `[RatatoskrMessage]` to decorate message classes for auto-discovery or metadata.
 - **Extensible**: Provide extension points for custom implementations of transports, serializers, and middlewares. But provide as much of the logic in a generic way as possible.

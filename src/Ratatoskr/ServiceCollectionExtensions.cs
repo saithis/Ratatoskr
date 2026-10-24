@@ -60,6 +60,10 @@ public static class ServiceCollectionExtensions
         // Must run after the full configure callback.
         builder.ExecuteDeferredActions();
 
+        // No channels can be registered from here on. Freezing builds the lookup indexes
+        // that validators may use.
+        builder.ChannelRegistry.Freeze();
+
         // Run all registered validators (e.g. RabbitMQ configuration validation)
         builder.Validate();
 
@@ -70,9 +74,9 @@ public static class ServiceCollectionExtensions
 
         // Register message properties enricher
         _ = services.AddSingleton<IMessagePropertiesEnricher, MessagePropertiesEnricher>();
+        services.TryAddSingleton<OutgoingMessagePreparer>();
 
         // Register ChannelRegistry and ChannelHandlerRegistry
-        builder.ChannelRegistry.Freeze();
         _ = services.AddSingleton(builder.ChannelRegistry);
         var handlerRegistry = ChannelHandlerRegistry.Build(builder.ChannelRegistry);
         builder.ValidateHandlers(handlerRegistry);
