@@ -17,24 +17,15 @@ internal static class InboxTelemetry
         ActivityContext.TryParse(props.TraceParent, props.TraceState, out var parentContext);
 #pragma warning restore MA0060
 
-        var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
+        var activity = RatatoskrDiagnostics.StartMessagingActivity(
             "deliver inbox",
             ActivityKind.Consumer,
+            "deliver",
+            MessagingSemanticConventions.OperationTypeProcess,
+            props.Id,
             parentContext
         );
-
-        if (activity != null)
-        {
-            activity.SetTag(MessagingSemanticConventions.OperationName, "deliver");
-            activity.SetTag(
-                MessagingSemanticConventions.OperationType,
-                MessagingSemanticConventions.OperationTypeProcess
-            );
-            activity.SetTag(MessagingSemanticConventions.System, "ratatoskr");
-            activity.SetTag(MessagingSemanticConventions.MessageId, props.Id);
-            activity.SetTag("ratatoskr.inbox.handler.key", handlerKey);
-        }
-
+        activity?.SetTag("ratatoskr.inbox.handler.key", handlerKey);
         return activity;
     }
 

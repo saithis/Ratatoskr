@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.Core;
 using Ratatoskr.EfCore.Internal;
+using Ratatoskr.EfCore.Management;
 using Ratatoskr.EfCore.Management.Endpoints.Outbox;
 using Ratatoskr.Tests.Fixtures;
 
@@ -200,14 +201,14 @@ public class OutboxManagementTests(
         using var req = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/poisoned/requeue")
         {
             Content = JsonContent.Create(
-                new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest([id1, id2])
+                new BulkRequeueRequest([id1, id2])
             ),
         };
         using var response = await HttpClient.SendAsync(req);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body =
-            await response.Content.ReadFromJsonAsync<BulkRequeueOutboxEndpoint.BulkRequeueOutboxResponse>();
+            await response.Content.ReadFromJsonAsync<BulkRequeueResponse>();
         body!
             .Succeeded.Should()
             .BeEquivalentTo([id1, id2], "both ids must be reported as succeeded");
@@ -302,7 +303,7 @@ public class OutboxManagementTests(
         using var req = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/poisoned/requeue")
         {
             Content = JsonContent.Create(
-                new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest([id1, id2, id3])
+                new BulkRequeueRequest([id1, id2, id3])
             ),
         };
         using var response = await HttpClient.SendAsync(req);

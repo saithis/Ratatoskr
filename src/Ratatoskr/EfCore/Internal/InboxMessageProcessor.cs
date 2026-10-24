@@ -81,12 +81,17 @@ internal class InboxMessageProcessor<TDbContext>(
             .Where(m => messageIds.Contains(m.Id))
             .ToDictionaryAsync(m => m.Id, StringComparer.Ordinal, cancellationToken);
 
-        var claimed = await MarkStatusesAsProcessingAsync(statuses, cancellationToken);
-        if (claimed == null)
+        statuses = await ProcessingConcurrency.ClaimAsync(
+            dbContext,
+            statuses,
+            timeProvider,
+            count => InboxMessageProcessorLog.SkippedConflicts(logger, count),
+            cancellationToken
+        );
+        if (statuses.Length == 0)
         {
             return 0;
         }
-        statuses = claimed;
 
         InboxTelemetry.RecordBatchSize(statuses.Length);
         var batchStartTimestamp = Stopwatch.GetTimestamp();
@@ -103,53 +108,6 @@ internal class InboxMessageProcessor<TDbContext>(
         return statuses.Length;
     }
 
-    private async Task<InboxHandlerStatusEntity[]?> MarkStatusesAsProcessingAsync(
-        InboxHandlerStatusEntity[] statuses,
-        CancellationToken cancellationToken
-    )
-    {
-        foreach (var status in statuses)
-        {
-            status.MarkAsProcessing(timeProvider);
-        }
-
-        while (true)
-        {
-            try
-            {
-                await dbContext.SaveChangesAsync(cancellationToken);
-                return statuses;
-            }
-            catch (DbUpdateConcurrencyException ex)
-            {
-                var conflictIds = new HashSet<Guid>();
-                foreach (var entry in ex.Entries)
-                {
-                    conflictIds.Add(((InboxHandlerStatusEntity)entry.Entity).Id);
-                    await entry.ReloadAsync(cancellationToken);
-                }
-
-                InboxMessageProcessorLog.SkippedConflicts(logger, conflictIds.Count);
-
-                var remaining = statuses.Where(s => !conflictIds.Contains(s.Id)).ToArray();
-                if (remaining.Length == statuses.Length)
-                {
-                    // The conflict did not identify any status in the current claim set (for
-                    // example a DbUpdateConcurrencyException with an empty Entries collection).
-                    // Retrying the same unchanged set would spin forever, so rethrow and let the
-                    // batch be retried fresh on the next polling cycle.
-                    throw;
-                }
-
-                statuses = remaining;
-                if (statuses.Length == 0)
-                {
-                    return null;
-                }
-            }
-        }
-    }
-
     /// <summary>Returns false to signal the caller should stop the batch loop (cancellation).</summary>
     private async Task<bool> ProcessStatusAsync(
         InboxHandlerStatusEntity status,
@@ -160,9 +118,11 @@ internal class InboxMessageProcessor<TDbContext>(
         if (!messages.TryGetValue(status.MessageId, out var inboxMessage))
         {
             InboxMessageProcessorLog.MessageNotFound(logger, status.MessageId, status.Id);
-            status.MarkAsPoisoned("InboxMessage record not found -- likely deleted.");
-            InboxTelemetry.RecordPoisoned();
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await PoisonAsync(
+                status,
+                "InboxMessage record not found -- likely deleted.",
+                cancellationToken
+            );
             return true;
         }
 
@@ -174,9 +134,11 @@ internal class InboxMessageProcessor<TDbContext>(
         catch (Exception ex)
         {
             InboxMessageProcessorLog.DeserializationFailed(logger, status.MessageId, status.Id, ex);
-            status.MarkAsPoisoned($"Properties deserialization failed: {ex.Message}");
-            InboxTelemetry.RecordPoisoned();
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await PoisonAsync(
+                status,
+                $"Properties deserialization failed: {ex.Message}",
+                cancellationToken
+            );
             return true;
         }
 
@@ -184,11 +146,11 @@ internal class InboxMessageProcessor<TDbContext>(
         if (registration == null)
         {
             InboxMessageProcessorLog.HandlerKeyNotRegistered(logger, status.HandlerKey, status.Id);
-            status.MarkAsPoisoned(
-                $"Handler key '{status.HandlerKey}' is not registered. The handler may have been removed or renamed."
+            await PoisonAsync(
+                status,
+                $"Handler key '{status.HandlerKey}' is not registered. The handler may have been removed or renamed.",
+                cancellationToken
             );
-            InboxTelemetry.RecordPoisoned();
-            await dbContext.SaveChangesAsync(cancellationToken);
             await observers.NotifyAsync(
                 new MessageActivity
                 {
@@ -203,42 +165,32 @@ internal class InboxMessageProcessor<TDbContext>(
             return true;
         }
 
-        var (shouldContinue, handlerException, deliveredMessage) = await InvokeHandlerAsync(
+        var invocation = await InvokeHandlerAsync(
             status,
             inboxMessage,
             registration,
             props,
             cancellationToken
         );
-        if (!shouldContinue)
+        if (invocation.Outcome == HandlerOutcome.Interrupted)
+        {
             return false;
-
-        try
-        {
-            await dbContext.SaveChangesAsync(CancellationToken.None);
         }
-        catch (DbUpdateConcurrencyException ex)
+
+        // If this status was modified concurrently (for example a management requeue or
+        // delete), skip it and keep processing the rest of the claimed batch instead of
+        // abandoning the still-unprocessed statuses, which would leave them stuck until
+        // the stuck-message threshold elapses. The handler ran at least once; the inbox
+        // contract is at-least-once delivery, so a re-run via stuck detection is safe.
+        if (
+            !await ProcessingConcurrency.SaveSkippingConflictsAsync(
+                dbContext,
+                status,
+                count => InboxMessageProcessorLog.SkippedConflicts(logger, count)
+            )
+        )
         {
-            var conflictIds = new HashSet<Guid>();
-            foreach (var entry in ex.Entries)
-            {
-                conflictIds.Add(((InboxHandlerStatusEntity)entry.Entity).Id);
-                await entry.ReloadAsync(CancellationToken.None);
-            }
-
-            InboxMessageProcessorLog.SkippedConflicts(logger, conflictIds.Count);
-
-            if (conflictIds.Contains(status.Id))
-            {
-                // This status was modified concurrently (for example a management requeue or
-                // delete). Skip it and keep processing the rest of the claimed batch instead of
-                // abandoning the still-unprocessed statuses, which would leave them stuck until
-                // the stuck-message threshold elapses. The handler ran at least once; the inbox
-                // contract is at-least-once delivery, so a re-run via stuck detection is safe.
-                return true;
-            }
-
-            await dbContext.SaveChangesAsync(CancellationToken.None);
+            return true;
         }
 
         await observers.NotifyAsync(
@@ -247,11 +199,11 @@ internal class InboxMessageProcessor<TDbContext>(
                 Stage = MessageStage.InboxDispatched,
                 Properties = props,
                 SerializedBody = inboxMessage.Content,
-                Message = deliveredMessage,
+                Message = invocation.DeliveredMessage,
                 MessageType = registration.MessageType,
                 TransportName = inboxMessage.TransportName,
-                IsSuccess = handlerException == null,
-                Exception = handlerException,
+                IsSuccess = invocation.Outcome == HandlerOutcome.Completed,
+                Exception = invocation.Exception,
                 Timestamp = timeProvider.GetUtcNow(),
             },
             logger
@@ -267,7 +219,7 @@ internal class InboxMessageProcessor<TDbContext>(
                     Properties = props,
                     SerializedBody = inboxMessage.Content,
                     TransportName = inboxMessage.TransportName,
-                    Exception = handlerException,
+                    Exception = invocation.Exception,
                     Timestamp = timeProvider.GetUtcNow(),
                 },
                 logger
@@ -277,11 +229,7 @@ internal class InboxMessageProcessor<TDbContext>(
         return true;
     }
 
-    private async Task<(
-        bool ShouldContinue,
-        Exception? HandlerException,
-        object? DeliveredMessage
-    )> InvokeHandlerAsync(
+    private async Task<HandlerInvocation> InvokeHandlerAsync(
         InboxHandlerStatusEntity status,
         InboxMessageEntity inboxMessage,
         ChannelHandlerRegistration registration,
@@ -289,13 +237,10 @@ internal class InboxMessageProcessor<TDbContext>(
         CancellationToken cancellationToken
     )
     {
-        Activity? deliverActivity = null;
-        Exception? handlerException = null;
+        using var deliverActivity = InboxTelemetry.StartDeliverActivity(props, status.HandlerKey);
         object? deliveredMessage = null;
         try
         {
-            deliverActivity = InboxTelemetry.StartDeliverActivity(props, status.HandlerKey);
-
             var serializer = serializerResolver.GetSerializer(registration.MessageType);
             deliveredMessage =
                 serializer.Deserialize(inboxMessage.Content, registration.MessageType)
@@ -310,10 +255,6 @@ internal class InboxMessageProcessor<TDbContext>(
                 cancellationToken,
                 _options.HandlerTimeout
             );
-
-            status.MarkAsCompleted(timeProvider);
-            InboxTelemetry.RecordDelivered(success: true);
-            InboxMessageProcessorLog.HandlerCompleted(logger, status.HandlerKey, status.MessageId);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -322,12 +263,10 @@ internal class InboxMessageProcessor<TDbContext>(
                 status.HandlerKey,
                 status.MessageId
             );
-            deliverActivity?.Dispose();
-            return (false, null, null);
+            return new HandlerInvocation(HandlerOutcome.Interrupted);
         }
         catch (Exception ex)
         {
-            handlerException = ex;
             deliverActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             InboxTelemetry.RecordDelivered(success: false);
             InboxMessageProcessorLog.HandlerFailed(
@@ -354,14 +293,41 @@ internal class InboxMessageProcessor<TDbContext>(
                     ex.Message
                 );
             }
-        }
-        finally
-        {
-            deliverActivity?.Dispose();
+
+            return new HandlerInvocation(HandlerOutcome.Failed, deliveredMessage, ex);
         }
 
-        return (true, handlerException, deliveredMessage);
+        status.MarkAsCompleted(timeProvider);
+        InboxTelemetry.RecordDelivered(success: true);
+        InboxMessageProcessorLog.HandlerCompleted(logger, status.HandlerKey, status.MessageId);
+        return new HandlerInvocation(HandlerOutcome.Completed, deliveredMessage);
     }
+
+    private async Task PoisonAsync(
+        InboxHandlerStatusEntity status,
+        string reason,
+        CancellationToken cancellationToken
+    )
+    {
+        status.MarkAsPoisoned(reason);
+        InboxTelemetry.RecordPoisoned();
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private enum HandlerOutcome
+    {
+        Completed = 0,
+        Failed = 1,
+
+        /// <summary>Processing was cancelled; the status is left claimed and retried via stuck detection.</summary>
+        Interrupted = 2,
+    }
+
+    private readonly record struct HandlerInvocation(
+        HandlerOutcome Outcome,
+        object? DeliveredMessage = null,
+        Exception? Exception = null
+    );
 }
 
 internal static partial class InboxMessageProcessorLog

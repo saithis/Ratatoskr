@@ -11,16 +11,15 @@ internal partial class OutboxProcessor<TDbContext>(
     TimeProvider timeProvider,
     OutboxOptionsHolder<TDbContext> optionsHolder,
     ILogger<OutboxProcessor<TDbContext>> logger
-) : PollingBackgroundService(distributedLockProvider, timeProvider, logger)
+) : PollingBackgroundService(
+        optionsHolder.Options,
+        distributedLockProvider,
+        timeProvider,
+        logger
+    )
     where TDbContext : DbContext, IRatatoskrDbContext
 {
-    private readonly OutboxOptions _options = optionsHolder.Options;
-
     protected override string ProcessorName => "OutboxProcessor";
-    protected override TimeSpan PollingInterval => _options.PollingInterval;
-    protected override TimeSpan RestartDelay => _options.RestartDelay;
-    protected override TimeSpan LockAcquireTimeout => _options.LockAcquireTimeout;
-    protected override string LockName => _options.LockName;
 
     protected override async Task ProcessBatchesAsync(CancellationToken cancellationToken)
     {

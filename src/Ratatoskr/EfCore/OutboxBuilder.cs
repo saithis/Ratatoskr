@@ -6,32 +6,10 @@ namespace Ratatoskr.EfCore;
 /// Builder for configuring the outbox pattern.
 /// </summary>
 public class OutboxBuilder<TDbContext>
+    : DurableProcessingBuilder<OutboxBuilder<TDbContext>, OutboxOptions>
     where TDbContext : DbContext
 {
-    internal OutboxOptions Options { get; } = new();
-    internal bool RegisterBackgroundService { get; private set; } = true;
-
     internal OutboxBuilder() { }
-
-    /// <summary>
-    /// Sets the polling interval for checking the database for unsent messages.
-    /// </summary>
-    public OutboxBuilder<TDbContext> WithPollingInterval(TimeSpan interval)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(interval, TimeSpan.Zero);
-        Options.PollingInterval = interval;
-        return this;
-    }
-
-    /// <summary>
-    /// Sets the number of messages to process in each batch.
-    /// </summary>
-    public OutboxBuilder<TDbContext> WithBatchSize(int batchSize)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(batchSize, 0);
-        Options.BatchSize = batchSize;
-        return this;
-    }
 
     /// <summary>
     /// Sets the maximum number of retry attempts before marking a message as poisoned.
@@ -41,56 +19,6 @@ public class OutboxBuilder<TDbContext>
     {
         ArgumentOutOfRangeException.ThrowIfNegative(maxRetries);
         Options.MaxRetries = maxRetries;
-        return this;
-    }
-
-    /// <summary>
-    /// Sets the maximum backoff delay between retry attempts.
-    /// </summary>
-    public OutboxBuilder<TDbContext> WithMaxRetryDelay(TimeSpan delay)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(delay, TimeSpan.Zero);
-        Options.MaxRetryDelay = delay;
-        return this;
-    }
-
-    /// <summary>
-    /// Sets how long a message can remain in "processing" state before being considered stuck.
-    /// </summary>
-    public OutboxBuilder<TDbContext> WithStuckMessageThreshold(TimeSpan threshold)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(threshold, TimeSpan.Zero);
-        Options.StuckMessageThreshold = threshold;
-        return this;
-    }
-
-    /// <summary>
-    /// Sets the delay before restarting the outbox processor after a crash.
-    /// </summary>
-    public OutboxBuilder<TDbContext> WithRestartDelay(TimeSpan delay)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(delay, TimeSpan.Zero);
-        Options.RestartDelay = delay;
-        return this;
-    }
-
-    /// <summary>
-    /// Sets the maximum time to wait when acquiring the distributed lock.
-    /// </summary>
-    public OutboxBuilder<TDbContext> WithLockAcquireTimeout(TimeSpan timeout)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(timeout, TimeSpan.Zero);
-        Options.LockAcquireTimeout = timeout;
-        return this;
-    }
-
-    /// <summary>
-    /// Sets the distributed lock name. Change this if you have multiple outboxes or conflict with the inbox lock.
-    /// </summary>
-    public OutboxBuilder<TDbContext> WithLockName(string lockName)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(lockName);
-        Options.LockName = lockName;
         return this;
     }
 
@@ -113,73 +41,6 @@ public class OutboxBuilder<TDbContext>
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(maxBytes, 0);
         Options.MaxMessageSize = maxBytes;
-        return this;
-    }
-
-    /// <summary>
-    /// Prevents the <see cref="Internal.OutboxProcessor{TDbContext}"/> from being registered as a hosted service.
-    /// Use this in integration tests where you want deterministic control over when outbox processing runs
-    /// (e.g. by calling <c>OutboxMessageProcessor.ProcessBatchAsync</c> directly).
-    /// Note: this also prevents <see cref="Internal.OutboxCleanupService{TDbContext}"/> from running,
-    /// even when <see cref="WithRetention"/> is configured.
-    /// </summary>
-    public OutboxBuilder<TDbContext> WithoutBackgroundProcessing()
-    {
-        RegisterBackgroundService = false;
-        return this;
-    }
-
-    /// <summary>
-    /// Enables automatic cleanup of successfully processed messages older than the specified retention period.
-    /// Poisoned messages are never auto-deleted — they require manual investigation.
-    /// </summary>
-    public OutboxBuilder<TDbContext> WithRetention(TimeSpan period)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(period, TimeSpan.Zero);
-        Options.RetentionPeriod = period;
-        return this;
-    }
-
-    /// <summary>
-    /// Sets how often the cleanup service runs. Only applies when <see cref="WithRetention"/> is configured.
-    /// </summary>
-    public OutboxBuilder<TDbContext> WithCleanupInterval(TimeSpan interval)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(interval, TimeSpan.Zero);
-        Options.CleanupInterval = interval;
-        return this;
-    }
-
-    /// <summary>
-    /// Sets the maximum number of rows to delete per cleanup batch.
-    /// Only applies when <see cref="WithRetention"/> is configured.
-    /// </summary>
-    public OutboxBuilder<TDbContext> WithCleanupBatchSize(int batchSize)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(batchSize, 0);
-        Options.CleanupBatchSize = batchSize;
-        return this;
-    }
-
-    /// <summary>
-    /// Sets the distributed lock name for the cleanup service.
-    /// Only one instance acquires the lock per cleanup cycle; others skip the cycle.
-    /// </summary>
-    public OutboxBuilder<TDbContext> WithCleanupLockName(string lockName)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(lockName);
-        Options.CleanupLockName = lockName;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures all options via an action.
-    /// </summary>
-    public OutboxBuilder<TDbContext> Configure(Action<OutboxOptions> configure)
-    {
-        ArgumentNullException.ThrowIfNull(configure);
-
-        configure(Options);
         return this;
     }
 }

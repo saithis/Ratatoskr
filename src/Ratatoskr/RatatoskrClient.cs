@@ -11,9 +11,8 @@ namespace Ratatoskr;
 
 internal sealed partial class RatatoskrClient(
     IServiceProvider serviceProvider,
-    IMessageSerializerResolver serializerResolver,
+    OutgoingMessagePreparer preparer,
     IEnumerable<IMessageSender> senders,
-    IMessagePropertiesEnricher enricher,
     TimeProvider timeProvider,
     IEnumerable<IMessageActivityObserver> observers,
     ILogger<RatatoskrClient> logger
@@ -24,23 +23,13 @@ internal sealed partial class RatatoskrClient(
     private readonly IMessageActivityObserver[] _observers = [.. observers];
 
     /// <inheritdoc/>
-    /// <inheritdoc/>
     public Task PublishAsync<TMessage>(
         TMessage message,
         CancellationToken cancellationToken = default
     )
         where TMessage : notnull
     {
-        var dbContext = serviceProvider.GetService<IRatatoskrDbContext>();
-        if (dbContext == null)
-        {
-            throw new InvalidOperationException(
-                "Cannot stage message in outbox: No IRatatoskrDbContext is registered in the current scope. " +
-                "Configure a default DbContext via services.AddRatatoskr<TDbContext>() or use PublishDirectAsync for direct publishing."
-            );
-        }
-
-        dbContext.Outbox.Add(message);
+        GetDefaultDbContext().Outbox.Add(message);
         return Task.CompletedTask;
     }
 
@@ -53,16 +42,7 @@ internal sealed partial class RatatoskrClient(
         where TMessage : notnull
     {
         ArgumentNullException.ThrowIfNull(configure);
-        var dbContext = serviceProvider.GetService<IRatatoskrDbContext>();
-        if (dbContext == null)
-        {
-            throw new InvalidOperationException(
-                "Cannot stage message in outbox: No IRatatoskrDbContext is registered in the current scope. " +
-                "Configure a default DbContext via services.AddRatatoskr<TDbContext>() or use PublishDirectAsync for direct publishing."
-            );
-        }
-
-        dbContext.Outbox.Add(message, configure);
+        GetDefaultDbContext().Outbox.Add(message, configure);
         return Task.CompletedTask;
     }
 
@@ -75,16 +55,7 @@ internal sealed partial class RatatoskrClient(
         where TMessage : notnull
     {
         ArgumentNullException.ThrowIfNull(props);
-        var dbContext = serviceProvider.GetService<IRatatoskrDbContext>();
-        if (dbContext == null)
-        {
-            throw new InvalidOperationException(
-                "Cannot stage message in outbox: No IRatatoskrDbContext is registered in the current scope. " +
-                "Configure a default DbContext via services.AddRatatoskr<TDbContext>() or use PublishDirectAsync for direct publishing."
-            );
-        }
-
-        dbContext.Outbox.Add(message, props);
+        GetDefaultDbContext().Outbox.Add(message, props);
         return Task.CompletedTask;
     }
 
@@ -179,28 +150,17 @@ internal sealed partial class RatatoskrClient(
                 await Task.Delay(delay, timeProvider, cancellationToken);
             }
         }
-        // https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/
-        using var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
+        // Started before preparing the message so the enricher picks it up as the trace parent.
+        using var activity = RatatoskrDiagnostics.StartMessagingActivity(
             "publish",
-            ActivityKind.Producer
+            ActivityKind.Producer,
+            "publish",
+            MessagingSemanticConventions.OperationTypeCreate,
+            props?.Id
         );
 
-        props = enricher.Enrich<TMessage>(props);
-
-        if (activity != null)
-        {
-            _ = activity.SetTag(MessagingSemanticConventions.OperationName, "publish");
-            _ = activity.SetTag(
-                MessagingSemanticConventions.OperationType,
-                MessagingSemanticConventions.OperationTypeCreate
-            );
-            _ = activity.SetTag(MessagingSemanticConventions.System, "ratatoskr");
-            _ = activity.SetTag(MessagingSemanticConventions.MessageId, props.Id);
-        }
-
-        var serializer = serializerResolver.GetSerializer(typeof(TMessage));
-        var serializedMessage = serializer.Serialize(message);
-        props.ContentType = serializer.ContentType;
+        (props, var serializedMessage) = preparer.Prepare(message, typeof(TMessage), props);
+        _ = activity?.SetTag(MessagingSemanticConventions.MessageId, props.Id);
 
         if (props.Transports.Count == 0)
         {
@@ -270,6 +230,13 @@ internal sealed partial class RatatoskrClient(
             );
         }
     }
+
+    private IRatatoskrDbContext GetDefaultDbContext() =>
+        serviceProvider.GetService<IRatatoskrDbContext>()
+        ?? throw new InvalidOperationException(
+            "Cannot stage message in outbox: No IRatatoskrDbContext is registered in the current scope. "
+                + "Configure a default DbContext via services.AddRatatoskr<TDbContext>() or use PublishDirectAsync for direct publishing."
+        );
 
     [LoggerMessage(
         EventId = 1,

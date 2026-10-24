@@ -113,7 +113,7 @@ public class MyTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFixture
                 bus.AddEventPublishChannel("my-exchange", c => c
                     .WithRabbitMq(r => r.WithTopicExchange())
                     .Produces<TestEvent>());
-                bus.AddEfCoreOutbox<TestDbContext>();
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox());
             });
 
             services.AddDbContext<TestDbContext>((sp, options) =>
@@ -142,16 +142,15 @@ fakeTime.Advance(TimeSpan.FromSeconds(5));
 
 #### Testing Outbox with Manual Processing
 
-For tests that need fine-grained control (retry/poison scenarios), register `OutboxProcessor` without the hosted service:
+For tests that need fine-grained control (retry/poison scenarios), disable the background
+processor and process batches explicitly:
 
 ```csharp
-services.AddSingleton<OutboxProcessor<TestDbContext>>();
-services.AddSingleton(Options.Create(new OutboxOptions()));
-services.AddDbContext<TestDbContext>((sp, options) =>
-{
-    options.UseNpgsql(PostgresConnectionString);
-    options.UseRatatoskr<TestDbContext>(sp);
-});
+bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox(o => o.WithoutBackgroundProcessing()));
+
+// later, inside a scope:
+var processor = scope.ServiceProvider.GetRequiredService<OutboxMessageProcessor<TestDbContext>>();
+await processor.ProcessBatchAsync(includeStuckMessageDetection: false, CancellationToken.None);
 ```
 
 ## DO NOT
@@ -205,7 +204,7 @@ public class ExampleTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
                 bus.AddEventPublishChannel(exchangeName, c => c
                     .WithRabbitMq(r => r.WithTopicExchange())
                     .Produces<TestEvent>(m => m.WithRoutingKey("test.event")));
-                bus.AddEfCoreOutbox<TestDbContext>();
+                bus.AddEfCoreDurability<TestDbContext>(d => d.UseOutbox());
             });
 
             services.AddDbContext<TestDbContext>((sp, options) =>
@@ -242,16 +241,15 @@ public class ExampleTests(RabbitMqContainerFixture rabbitMq, PostgresContainerFi
 
 ## Running Tests
 
-```bash
-# Build tests
-dotnet build
+See "Running tests" in the root `AGENTS.md`. In short, from the repository root:
 
+```bash
 # Run all tests
-dotnet run
+dotnet run --project tests/Ratatoskr.Tests -- --maximum-parallel-tests 10
+
+# Run a specific test class (TUnit has no --filter; use --treenode-filter)
+dotnet run --project tests/Ratatoskr.Tests -- --treenode-filter "/*/*/ExampleTests/*"
 
 # Run with coverage
-dotnet run --coverage
-
-# Run specific test class
-dotnet run --filter "ClassName~ExampleTests"
+dotnet run --project tests/Ratatoskr.Tests -- --coverage
 ```

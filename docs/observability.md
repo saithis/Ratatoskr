@@ -110,7 +110,7 @@ All metrics are emitted on the `"Ratatoskr"` meter.
 | `Dispatched` | After handler invocation completes |
 | `OutboxStaged` | When a message is serialized into an outbox entity during `SaveChanges` |
 | `OutboxSent` | When the outbox processor sends a message to the transport |
-| `OutboxPoisoned` | When an outbox message exceeds max retries |
+| `OutboxPoisoned` | When an outbox message is poisoned: max retries exceeded, unreadable properties, or no sender registered for its transport. A poisoned message is never reported as `OutboxSent` |
 | `InboxQueued` | When a message is accepted into the inbox |
 | `InboxDispatched` | When an inbox handler delivery is attempted (success or failure) |
 | `InboxPoisoned` | When an inbox handler status exceeds max retries |

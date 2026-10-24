@@ -3,8 +3,10 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Ratatoskr.EfCore.Internal;
+using Ratatoskr.EfCore.Management;
 using Ratatoskr.EfCore.Management.Endpoints.Inbox;
 using Ratatoskr.Tests.Fixtures;
 
@@ -30,6 +32,30 @@ public class InboxManagementTests(
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("totalCount").GetInt64().Should().BeGreaterThanOrEqualTo(2);
         body.GetProperty("items").GetArrayLength().Should().BeGreaterThanOrEqualTo(2);
+    }
+
+    [Test]
+    public async Task InboxManagement_PoisonedList_FilterByDateRange()
+    {
+        await StartManagementTestAsync();
+        await SeedPoisonedInboxAsync();
+
+        var now = Services.GetRequiredService<TimeProvider>().GetUtcNow();
+        var past = Uri.EscapeDataString(now.AddDays(-1).ToString("O"));
+        var future = Uri.EscapeDataString(now.AddDays(1).ToString("O"));
+
+        using var inRange = await HttpClient.GetAsync(
+            $"{BaseUrl}/poisoned?from={past}&to={future}"
+        );
+        inRange.StatusCode.Should().Be(HttpStatusCode.OK);
+        var inRangeBody = await inRange.Content.ReadFromJsonAsync<JsonElement>();
+        inRangeBody.GetProperty("totalCount").GetInt64().Should().BeGreaterThan(0);
+
+        using var outOfRange = await HttpClient.GetAsync($"{BaseUrl}/poisoned?from={future}");
+        outOfRange.StatusCode.Should().Be(HttpStatusCode.OK);
+        var outOfRangeBody = await outOfRange.Content.ReadFromJsonAsync<JsonElement>();
+        outOfRangeBody.GetProperty("totalCount").GetInt64().Should().Be(0);
+        outOfRangeBody.GetProperty("items").GetArrayLength().Should().Be(0);
     }
 
     [Test]
@@ -285,5 +311,103 @@ public class InboxManagementTests(
 
         // TotalCount must reflect the filtered result
         body.GetProperty("totalCount").GetInt64().Should().Be(items.Count);
+    }
+
+    [Test]
+    public async Task InboxManagement_BulkRequeue_DuplicateIds_AreReportedOnce()
+    {
+        await StartManagementTestAsync();
+        var (_, poisonedId) = await SeedPoisonedInboxAsync();
+        var missingId = Guid.NewGuid();
+
+        using var req = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/poisoned/requeue")
+        {
+            Content = JsonContent.Create(
+                new BulkRequeueRequest([poisonedId, poisonedId, missingId, missingId])
+            ),
+        };
+        using var response = await HttpClient.SendAsync(req);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<BulkRequeueResponse>();
+        body!.Succeeded.Should().Equal([poisonedId]);
+        body.Failed.Select(f => f.Id).Should().Equal([missingId]);
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var requeued = await db.Set<InboxHandlerStatusEntity>().FindAsync(poisonedId);
+            requeued!.IsPoisoned.Should().BeFalse();
+        });
+    }
+
+    [Test]
+    public async Task InboxManagement_BulkRequeue_All_RequeuesAllPoisoned()
+    {
+        await StartManagementTestAsync();
+        await SeedPoisonedInboxAsync();
+        await SeedPoisonedInboxAsync();
+
+        using var response = await HttpClient.PostAsync(
+            $"{BaseUrl}/poisoned/requeue/all",
+            content: null
+        );
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<BulkRequeueResponse>();
+        body!.Succeeded.Should().HaveCount(2);
+        body.Failed.Should().BeEmpty();
+
+        await InScopeAsync(async ctx =>
+        {
+            var db = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
+            var poisonedCount = await db.Set<InboxHandlerStatusEntity>()
+                .CountAsync(x => x.IsPoisoned);
+            poisonedCount.Should().Be(0);
+        });
+    }
+
+    [Test]
+    public async Task InboxManagement_BulkRequeue_All_StopsWhenBatchesKeepConflicting()
+    {
+        var conflictInterceptor = new ConflictingSaveChangesInterceptor();
+        await StartManagementTestAsync(services =>
+            services.ConfigureDbContext<TestDbContext>(opts =>
+                opts.AddInterceptors(conflictInterceptor)
+            )
+        );
+        var (_, poisonedId) = await SeedPoisonedInboxAsync();
+        conflictInterceptor.Enabled = true;
+
+        using var response = await HttpClient.PostAsync(
+            $"{BaseUrl}/poisoned/requeue/all",
+            content: null
+        );
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<BulkRequeueResponse>();
+        body!.Succeeded.Should().BeEmpty();
+        body.Failed.Should()
+            .HaveCount(3, "the endpoint gives up after 3 batches in a row without progress")
+            .And.OnlyContain(f => f.Id == poisonedId);
+    }
+
+    private sealed class ConflictingSaveChangesInterceptor : SaveChangesInterceptor
+    {
+        public bool Enabled { get; set; }
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default
+        )
+        {
+            if (Enabled)
+            {
+                throw new DbUpdateConcurrencyException("Simulated concurrency conflict");
+            }
+
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
     }
 }

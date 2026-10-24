@@ -43,6 +43,34 @@ public static class RatatoskrDiagnostics
     public static readonly Meter Meter = new(MeterName);
 
     /// <summary>
+    /// Starts an activity following the OpenTelemetry messaging span conventions
+    /// (https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/) and sets the
+    /// operation name, operation type, messaging system and message id tags.
+    /// With a default <paramref name="parentContext"/> the current activity becomes the parent.
+    /// </summary>
+    internal static Activity? StartMessagingActivity(
+        string spanName,
+        ActivityKind kind,
+        string operationName,
+        string operationType,
+        string? messageId,
+        ActivityContext parentContext = default,
+        string system = "ratatoskr"
+    )
+    {
+        var activity = ActivitySource.StartActivity(spanName, kind, parentContext);
+        if (activity != null)
+        {
+            _ = activity.SetTag(MessagingSemanticConventions.OperationName, operationName);
+            _ = activity.SetTag(MessagingSemanticConventions.OperationType, operationType);
+            _ = activity.SetTag(MessagingSemanticConventions.System, system);
+            _ = activity.SetTag(MessagingSemanticConventions.MessageId, messageId);
+        }
+
+        return activity;
+    }
+
+    /// <summary>
     /// Standard OTEL Messaging Metrics
     /// </summary>
     public static readonly Histogram<double> ClientOperationDuration = Meter.CreateHistogram(

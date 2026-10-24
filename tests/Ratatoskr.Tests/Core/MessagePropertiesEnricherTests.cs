@@ -16,8 +16,12 @@ public class MessagePropertiesEnricherTests
     private readonly FakeTimeProvider _timeProvider = new();
     private readonly NoOpTransportEnricher _transportEnricher = new();
 
-    private MessagePropertiesEnricher CreateEnricher() =>
-        new(_registry, _cloudEventsOptions, _timeProvider, [_transportEnricher]);
+    /// <summary>Freezes the registry (as AddRatatoskr does), so register channels before calling this.</summary>
+    private MessagePropertiesEnricher CreateEnricher()
+    {
+        _registry.Freeze();
+        return new(_registry, _cloudEventsOptions, _timeProvider, [_transportEnricher]);
+    }
 
     [Test]
     public void Enrich_WithRegisteredMessage_SetsTypeFromRegistry()

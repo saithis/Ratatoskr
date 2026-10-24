@@ -1,80 +1,92 @@
 # AI Agent Instructions
 
+This is the single source of instructions for AI coding agents working in this repository.
+`CLAUDE.md` and `GEMINI.md` only point here. Detailed testing guidance lives in
+`tests/Ratatoskr.Tests/AGENTS.md`.
+
+## Approach
+
+- Read existing files before writing. Don't re-read unless changed.
+- Thorough in reasoning, concise in output.
+- Skip files over 100KB unless required.
+- No sycophantic openers or closing fluff.
+- No emojis or em-dashes.
+- Do not guess APIs, versions, flags, commit SHAs, or package names. Verify by reading code or docs before asserting.
+
+## General rules
+
+- For every code change, make sure it is covered by tests
+- Prefer integration tests over unit tests
+- Use AwesomeAssertions for assertions
+- Always make sure the documentation in `docs/` is in sync
+- Always use TimeProvider to create instances of DateTime/DateTimeOffset
+
+## Project structure
+
+- `src/Ratatoskr`: the core library, including the EF Core outbox/inbox (`EfCore/`) and its management API.
+- `src/Ratatoskr.RabbitMq`: the RabbitMQ transport.
+- `src/Ratatoskr.Testing`: helpers for testing applications that use Ratatoskr.
+- `src/Ratatoskr.Management.*` and `src/Ratatoskr.UI`: the management API abstractions and UI.
+- `examples/`: an Aspire-based example application.
+
+## Coding standards
+
+- Nullable reference types are enabled globally. Ensure null checks are appropriate.
+- Use asynchronous patterns for all I/O bound operations.
+- All services are designed for `Microsoft.Extensions.DependencyInjection`.
+- Use `[LoggerMessage]` partial methods for logging.
+
 ## Testing
 
 This project uses **TUnit** as the test framework and **AwesomeAssertions** for assertions.
-
-**IMPORTANT**: AwesomeAssertions is a fork of FluentAssertions with an open-source friendly license. The API is **identical** to FluentAssertions, so use FluentAssertions documentation/examples when writing assertions.
+AwesomeAssertions is a fork of FluentAssertions with an open-source friendly license. Except for
+the using statement, the API is identical, so FluentAssertions documentation applies.
 
 ```csharp
-// Use AwesomeAssertions (FluentAssertions API)
 result.Should().Be(expected);
 collection.Should().HaveCount(5);
 act.Should().Throw<InvalidOperationException>();
 ```
 
-See `tests/Ratatoskr.Tests/AGENTS.md` for detailed testing instructions.
+### Running tests
 
----
+Run tests with `dotnet run`, not `dotnet test`.
 
-# Copilot instructions
+```bash
+# Run all tests (use --maximum-parallel-tests 10 to avoid inotify limit issues)
+dotnet run --project tests/Ratatoskr.Tests -- --maximum-parallel-tests 10
 
-This repository is set up to use Aspire. Aspire is an orchestrator for the entire application and will take care of configuring dependencies, building, and running the application. The resources that make up the application are defined in `apphost.cs` including application code and external dependencies.
+# Run a single test by name (treenode-filter format: /*/*/ClassName/TestName)
+dotnet run --project tests/Ratatoskr.Tests -- --treenode-filter "/*/*/InboxTests/Inbox_MyTestName"
 
-## General recommendations for working with Aspire
-1. Before making any changes always run the apphost using `aspire run` and inspect the state of resources to make sure you are building from a known state.
-1. Changes to the _apphost.cs_ file will require a restart of the application to take effect.
-2. Make changes incrementally and run the aspire application using the `aspire run` command to validate changes.
-3. Use the Aspire MCP tools to check the status of resources and debug issues.
+# Run all tests in a class
+dotnet run --project tests/Ratatoskr.Tests -- --treenode-filter "/*/*/OutboxBasicTests/*" --maximum-parallel-tests 10
 
-## Running the application
-To run the application run the following command:
-
-```
-aspire run
+# List all tests
+dotnet run --project tests/Ratatoskr.Tests -- --list-tests
 ```
 
-If there is already an instance of the application running it will prompt to stop the existing instance. You only need to restart the application if code in `apphost.cs` is changed, but if you experience problems it can be useful to reset everything to the starting state.
+### TUnit filter tips
 
-## Checking resources
-To check the status of resources defined in the app model use the _list resources_ tool. This will show you the current state of each resource and if there are any issues. If a resource is not running as expected you can use the _execute resource command_ tool to restart it or perform other actions.
+- The `--treenode-filter` uses a path format: `/*/*/ClassName/TestName` (assembly/namespace/class/test).
+- Use `*` wildcards for segments you don't want to match exactly.
+- Wildcard patterns like `*OutboxTests*` do NOT work; use the full path format `/*/*/OutboxBasicTests/*`.
+- Use `|` with parentheses to match one of several values in a segment: `/*/*/(Class1)|(Class2)/*`.
+- To find the exact class name for a test, use `--list-tests` and look at the grouping.
+- Do NOT use `--filter` (MSTest/xUnit style); TUnit only supports `--treenode-filter`.
 
-## Listing integrations
-IMPORTANT! When a user asks you to add a resource to the app model you should first use the _list integrations_ tool to get a list of the current versions of all the available integrations. You should try to use the version of the integration which aligns with the version of the Aspire.AppHost.Sdk. Some integration versions may have a preview suffix. Once you have identified the correct integration you should always use the _get integration docs_ tool to fetch the latest documentation for the integration and follow the links to get additional guidance.
+## Aspire
 
-## Debugging issues
-IMPORTANT! Aspire is designed to capture rich logs and telemetry for all resources defined in the app model. Use the following diagnostic tools when debugging issues with the application before making changes to make sure you are focusing on the right things.
+The example application is orchestrated with Aspire; the resources are defined in the app host
+under `examples/`.
 
-1. _list structured logs_; use this tool to get details about structured logs.
-2. _list console logs_; use this tool to get details about console logs.
-3. _list traces_; use this tool to get details about traces.
-4. _list trace structured logs_; use this tool to get logs related to a trace
-
-## Other Aspire MCP tools
-
-1. _select apphost_; use this tool if working with multiple app hosts within a workspace.
-2. _list apphosts_; use this tool to get details about active app hosts.
-
-## Playwright MCP server
-
-The playwright MCP server has also been configured in this repository and you should use it to perform functional investigations of the resources defined in the app model as you work on the codebase. To get endpoints that can be used for navigation using the playwright MCP server use the list resources tool.
-
-## Updating the app host
-The user may request that you update the Aspire apphost. You can do this using the `aspire update` command. This will update the apphost to the latest version and some of the Aspire specific packages in referenced projects, however you may need to manually update other packages in the solution to ensure compatibility. You can consider using the `dotnet-outdated` with the users consent. To install the `dotnet-outdated` tool use the following command:
-
-```
-dotnet tool install --global dotnet-outdated-tool
-```
-
-## Persistent containers
-IMPORTANT! Consider avoiding persistent containers early during development to avoid creating state management issues when restarting the app.
-
-## Aspire workload
-IMPORTANT! The aspire workload is obsolete. You should never attempt to install or use the Aspire workload.
-
-## Official documentation
-IMPORTANT! Always prefer official documentation when available. The following sites contain the official documentation for Aspire and related components
-
-1. https://aspire.dev
-2. https://learn.microsoft.com/dotnet/aspire
-3. https://nuget.org (for specific integration package details)
+- Before making changes to the example application, run it with `aspire run` and inspect the
+  state of the resources so you start from a known state. Changes to the app host require a restart.
+- Use the Aspire MCP tools (list resources, structured logs, console logs, traces) to debug
+  issues before making changes.
+- When adding an integration, use the list integrations tool to pick the version that matches
+  the `Aspire.AppHost.Sdk`, and read its docs with the get integration docs tool.
+- Update the app host with `aspire update`. The Aspire workload is obsolete; never install or use it.
+- Avoid persistent containers during development to avoid state management issues on restart.
+- Prefer the official documentation: https://aspire.dev, https://learn.microsoft.com/dotnet/aspire
+  and https://nuget.org.

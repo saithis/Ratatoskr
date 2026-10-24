@@ -10,7 +10,7 @@ using Ratatoskr.Management;
 
 namespace Ratatoskr.EfCore.Management.Endpoints.Outbox;
 
-internal static partial class ListPoisonedOutboxEndpoint
+internal static class ListPoisonedOutboxEndpoint
 {
     internal static void Map(IEndpointRouteBuilder outboxGroup)
     {
@@ -18,7 +18,7 @@ internal static partial class ListPoisonedOutboxEndpoint
     }
 
     private static async Task<
-        Results<Ok<OutboxPoisonedListResponse>, ProblemHttpResult>
+        Results<Ok<PoisonedListResponse<OutboxPoisonedListItem>>, ProblemHttpResult>
     > HandleAsync(
         string contextName,
         EfCoreManagementDbContextLookup lookup,
@@ -40,89 +40,36 @@ internal static partial class ListPoisonedOutboxEndpoint
             return resolveError;
         }
 
-        pageSize = PaginationOptions.ClampPageSize(pageSize);
-
-        CursorHelper.Cursor? decodedCursor = null;
-        if (cursor is not null)
-        {
-            if (!CursorHelper.TryDecode(cursor, out var c))
-            {
-                // Info, not warning: likely a malformed/stale cursor copied from an older
-                // client. Surface it once so an operator can correlate 400s to their UI.
-                LogRejectingMalformedCursor(logger, contextName);
-                return ManagementResults.BadRequest("Invalid pagination cursor.");
-            }
-            decodedCursor = c;
-        }
-
-        var filtered = db.Set<OutboxMessageEntity>().AsNoTracking().Where(x => x.IsPoisoned);
-        if (from.HasValue)
-        {
-            filtered = filtered.Where(x => x.CreatedAt >= from.Value);
-        }
-
-        if (to.HasValue)
-        {
-            filtered = filtered.Where(x => x.CreatedAt <= to.Value);
-        }
-
-        if (search is not null)
-        {
-            var pattern = ManagementHelpers.BuildSearchPattern(search);
-            filtered = filtered.Where(x =>
-                EF.Functions.Like(x.SerializedProperties, pattern, @"\")
+        return await PoisonedListQuery
+            .For(
+                db.Set<OutboxMessageEntity>().AsNoTracking().Where(x => x.IsPoisoned),
+                x => x.CreatedAt,
+                x => x.Id,
+                x => x.SerializedProperties
+            )
+            .ExecuteAsync(
+                new PoisonedListRequest(contextName, pageSize, cursor, from, to, search),
+                x => new
+                {
+                    x.Id,
+                    x.SerializedProperties,
+                    x.CreatedAt,
+                    x.ErrorCount,
+                    x.RequeuedCount,
+                    x.Error,
+                },
+                x => new OutboxPoisonedListItem(
+                    x.Id,
+                    ManagementHelpers.ExtractType(x.SerializedProperties, logger),
+                    x.CreatedAt,
+                    x.ErrorCount,
+                    x.RequeuedCount,
+                    string.IsNullOrEmpty(x.Error) ? null : x.Error,
+                    contextName
+                ),
+                logger,
+                ct
             );
-        }
-
-        var paged = filtered;
-        if (decodedCursor is { } k)
-        {
-            // Tuple comparison: (CreatedAt, Id) > (cursor.Time, cursor.Id).
-            // Expressed as OR-form so EF translates cleanly on both Postgres and SQL Server.
-            paged = paged.Where(x =>
-                x.CreatedAt > k.Time || (x.CreatedAt == k.Time && x.Id > k.Id)
-            );
-        }
-
-        // Deliberately fetch pageSize + 1 so we can determine whether another page exists
-        // without a separate round-trip.
-        var items = await paged
-            .OrderBy(x => x.CreatedAt)
-            .ThenBy(x => x.Id)
-            .Take(pageSize + 1)
-            .Select(x => new
-            {
-                x.Id,
-                x.SerializedProperties,
-                x.CreatedAt,
-                x.ErrorCount,
-                x.RequeuedCount,
-                x.Error,
-            })
-            .ToListAsync(ct);
-
-        var hasNext = items.Count > pageSize;
-        if (hasNext)
-        {
-            items.RemoveAt(items.Count - 1);
-        }
-
-        var dtos = items.ConvertAll(x => new OutboxPoisonedListItem(
-            x.Id,
-            ManagementHelpers.ExtractType(x.SerializedProperties, logger),
-            x.CreatedAt,
-            x.ErrorCount,
-            x.RequeuedCount,
-            string.IsNullOrEmpty(x.Error) ? null : x.Error,
-            contextName
-        ));
-
-        var nextCursor = hasNext ? CursorHelper.Encode(items[^1].CreatedAt, items[^1].Id) : null;
-
-        // Total reflects the full filtered set, not the remainder-after-cursor, so the UI can
-        // display progress consistently across pages.
-        var totalCount = await filtered.LongCountAsync(ct);
-        return TypedResults.Ok(new OutboxPoisonedListResponse(dtos, totalCount, nextCursor));
     }
 
     [SuppressMessage("ReSharper", "NotAccessedPositionalProperty.Global", Justification = "DTO")]
@@ -135,18 +82,4 @@ internal static partial class ListPoisonedOutboxEndpoint
         string? LastError,
         string DbContext
     );
-
-    [SuppressMessage("ReSharper", "NotAccessedPositionalProperty.Global", Justification = "DTO")]
-    internal record OutboxPoisonedListResponse(
-        List<OutboxPoisonedListItem> Items,
-        long TotalCount,
-        string? NextCursor
-    );
-
-    [LoggerMessage(
-        EventId = 1,
-        Level = LogLevel.Information,
-        Message = "Rejecting management list request with malformed cursor (context {ContextName})."
-    )]
-    private static partial void LogRejectingMalformedCursor(ILogger logger, string contextName);
 }
