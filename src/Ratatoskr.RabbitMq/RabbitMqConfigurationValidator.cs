@@ -82,6 +82,16 @@ internal static class RabbitMqConfigurationValidator
             }
         }
 
+        // More concurrent handlers than prefetched messages can never be used
+        if (isConsume && opts.PrefetchCount != 0 && opts.ConcurrencyLimit > opts.PrefetchCount)
+        {
+            throw new InvalidOperationException(
+                $"Invalid RabbitMQ channel configuration for '{channel.ChannelName}': "
+                    + $"ConcurrencyLimit ({opts.ConcurrencyLimit}) must be less than or equal to "
+                    + $"PrefetchCount ({opts.PrefetchCount})."
+            );
+        }
+
         // AutoAck with managed retry is contradictory
         if (isConsume && opts.AutoAck && opts.Retry.UseManaged)
         {

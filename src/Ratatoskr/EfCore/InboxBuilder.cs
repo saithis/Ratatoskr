@@ -1,17 +1,13 @@
 using Microsoft.EntityFrameworkCore;
-using Ratatoskr.EfCore.Internal;
 
 namespace Ratatoskr.EfCore;
 
 /// <summary>
 /// Builder for configuring the inbox pattern.
 /// </summary>
-public class InboxBuilder<TDbContext>
+public class InboxBuilder<TDbContext> : DurableProcessingBuilder<InboxBuilder<TDbContext>, InboxOptions>
     where TDbContext : DbContext
 {
-    internal InboxOptions Options { get; } = new();
-    internal bool RegisterBackgroundService { get; private set; } = true;
-
     internal InboxBuilder() { }
 
     /// <summary>
@@ -26,87 +22,6 @@ public class InboxBuilder<TDbContext>
     }
 
     /// <summary>
-    /// Sets the polling interval for checking the database for pending handler deliveries.
-    /// </summary>
-    public InboxBuilder<TDbContext> WithPollingInterval(TimeSpan interval)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(interval, TimeSpan.Zero);
-        Options.PollingInterval = interval;
-        return this;
-    }
-
-    /// <summary>
-    /// Sets the number of handler statuses to process in each batch.
-    /// </summary>
-    public InboxBuilder<TDbContext> WithBatchSize(int batchSize)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(batchSize, 0);
-        Options.BatchSize = batchSize;
-        return this;
-    }
-
-    /// <summary>
-    /// Sets the maximum number of delivery attempts before marking a handler as poisoned.
-    /// A value of 1 means the handler runs once and is poisoned on the first failure.
-    /// </summary>
-    public InboxBuilder<TDbContext> WithMaxRetries(int maxRetries)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(maxRetries, 0);
-        Options.MaxRetries = maxRetries;
-        return this;
-    }
-
-    /// <summary>
-    /// Sets the maximum backoff delay between retry attempts.
-    /// </summary>
-    public InboxBuilder<TDbContext> WithMaxRetryDelay(TimeSpan delay)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(delay, TimeSpan.Zero);
-        Options.MaxRetryDelay = delay;
-        return this;
-    }
-
-    /// <summary>
-    /// Sets how long a handler status can remain in "processing" state before being considered stuck.
-    /// </summary>
-    public InboxBuilder<TDbContext> WithStuckMessageThreshold(TimeSpan threshold)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(threshold, TimeSpan.Zero);
-        Options.StuckMessageThreshold = threshold;
-        return this;
-    }
-
-    /// <summary>
-    /// Sets the delay before restarting the inbox processor after a crash.
-    /// </summary>
-    public InboxBuilder<TDbContext> WithRestartDelay(TimeSpan delay)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(delay, TimeSpan.Zero);
-        Options.RestartDelay = delay;
-        return this;
-    }
-
-    /// <summary>
-    /// Sets the maximum time to wait when acquiring the distributed lock.
-    /// </summary>
-    public InboxBuilder<TDbContext> WithLockAcquireTimeout(TimeSpan timeout)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(timeout, TimeSpan.Zero);
-        Options.LockAcquireTimeout = timeout;
-        return this;
-    }
-
-    /// <summary>
-    /// Sets the distributed lock name. Change this if you have multiple inboxes or conflict with the outbox lock.
-    /// </summary>
-    public InboxBuilder<TDbContext> WithLockName(string lockName)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(lockName);
-        Options.LockName = lockName;
-        return this;
-    }
-
-    /// <summary>
     /// Sets the maximum time a handler is allowed to run before being cancelled.
     /// Timeout cancellation is treated as a handler failure and increments the error count.
     /// </summary>
@@ -114,73 +29,6 @@ public class InboxBuilder<TDbContext>
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(timeout, TimeSpan.Zero);
         Options.HandlerTimeout = timeout;
-        return this;
-    }
-
-    /// <summary>
-    /// Enables automatic cleanup of completed handler statuses older than the specified retention period.
-    /// Poisoned statuses are never auto-deleted — they require manual investigation.
-    /// Orphaned inbox messages (with no remaining handler statuses) are also deleted.
-    /// </summary>
-    public InboxBuilder<TDbContext> WithRetention(TimeSpan period)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(period, TimeSpan.Zero);
-        Options.RetentionPeriod = period;
-        return this;
-    }
-
-    /// <summary>
-    /// Sets how often the cleanup service runs. Only applies when <see cref="WithRetention"/> is configured.
-    /// </summary>
-    public InboxBuilder<TDbContext> WithCleanupInterval(TimeSpan interval)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(interval, TimeSpan.Zero);
-        Options.CleanupInterval = interval;
-        return this;
-    }
-
-    /// <summary>
-    /// Sets the maximum number of rows to delete per cleanup batch.
-    /// Only applies when <see cref="WithRetention"/> is configured.
-    /// </summary>
-    public InboxBuilder<TDbContext> WithCleanupBatchSize(int batchSize)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(batchSize, 0);
-        Options.CleanupBatchSize = batchSize;
-        return this;
-    }
-
-    /// <summary>
-    /// Sets the distributed lock name for the cleanup service.
-    /// Only one instance acquires the lock per cleanup cycle; others skip the cycle.
-    /// </summary>
-    public InboxBuilder<TDbContext> WithCleanupLockName(string lockName)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(lockName);
-        Options.CleanupLockName = lockName;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures all options via an action.
-    /// </summary>
-    public InboxBuilder<TDbContext> Configure(Action<InboxOptions> configure)
-    {
-        ArgumentNullException.ThrowIfNull(configure);
-        configure(Options);
-        return this;
-    }
-
-    /// <summary>
-    /// Prevents the <see cref="InboxProcessor{TDbContext}"/> from being registered as a hosted service.
-    /// Use this in integration tests where you want deterministic control over when inbox processing runs
-    /// (e.g. by calling <c>InboxMessageProcessor.ProcessBatchAsync</c> directly).
-    /// Note: this also prevents <see cref="InboxCleanupService{TDbContext}"/> from running,
-    /// even when <see cref="WithRetention"/> is configured.
-    /// </summary>
-    public InboxBuilder<TDbContext> WithoutBackgroundProcessing()
-    {
-        RegisterBackgroundService = false;
         return this;
     }
 }

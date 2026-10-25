@@ -711,12 +711,12 @@ public class MultiDbContextTests(
             var processor = scope.ServiceProvider.GetRequiredService<
                 OutboxMessageProcessor<TDbContext>
             >();
-            var count = await processor.ProcessBatchAsync(
+            var batch = await processor.ProcessBatchAsync(
                 includeStuckMessageDetection: true,
                 CancellationToken.None
             );
-            total += count;
-            if (count == 0)
+            total += batch.Sent;
+            if (batch.Claimed == 0)
             {
                 break;
             }

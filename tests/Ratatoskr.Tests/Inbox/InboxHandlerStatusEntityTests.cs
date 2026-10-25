@@ -83,7 +83,7 @@ public class InboxHandlerStatusEntityTests
         var fakeTime = new FakeTimeProvider();
         var status = InboxHandlerStatusEntity.Create("msg-1", "handler-a", fakeTime);
 
-        // Act - Fail maxRetries times
+        // Act - The first attempt plus maxRetries retries all fail
         for (var i = 0; i < 3; i++)
         {
             status.MarkAsFailed(
@@ -95,8 +95,13 @@ public class InboxHandlerStatusEntityTests
             fakeTime.Advance(TimeSpan.FromSeconds(1));
         }
 
+        status.IsPoisoned.Should().BeFalse("one retry is still left after 3 failures");
+        status.NextAttemptAt.Should().NotBeNull();
+
+        status.MarkAsFailed("Error 3", fakeTime, maxRetries: 3, TimeSpan.FromMinutes(5));
+
         // Assert
-        status.ErrorCount.Should().Be(3);
+        status.ErrorCount.Should().Be(4);
         status.IsPoisoned.Should().BeTrue();
         status.NextAttemptAt.Should().BeNull();
     }
@@ -133,5 +138,22 @@ public class InboxHandlerStatusEntityTests
                     $"run {run.ToString(System.Globalization.CultureInfo.InvariantCulture)}: jitter maximum is base = 2s"
                 );
         }
+    }
+
+    [Test]
+    public void MarkAsFailed_MaxRetriesZero_PoisonsOnFirstFailure()
+    {
+        // Arrange
+        var fakeTime = new FakeTimeProvider(
+            new DateTimeOffset(2025, 1, 24, 12, 0, 0, TimeSpan.Zero)
+        );
+        var status = InboxHandlerStatusEntity.Create("msg-1", "handler-a", fakeTime);
+
+        // Act
+        status.MarkAsFailed("Error 1", fakeTime, maxRetries: 0, TimeSpan.FromMinutes(5));
+
+        // Assert
+        status.IsPoisoned.Should().BeTrue();
+        status.NextAttemptAt.Should().BeNull();
     }
 }

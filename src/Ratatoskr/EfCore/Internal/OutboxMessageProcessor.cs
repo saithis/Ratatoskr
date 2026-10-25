@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
+using System.Runtime.InteropServices;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Ratatoskr.Core;
@@ -28,14 +28,9 @@ internal class OutboxMessageProcessor<TDbContext>(
 
     /// <summary>
     /// Processes a single batch of outbox messages.
-    /// Returns the number of messages successfully processed.
+    /// <see cref="OutboxBatchResult.Claimed"/> is 0 when no work was found.
     /// </summary>
-    [SuppressMessage(
-        "Maintainability",
-        "CA1502:AvoidExcessiveComplexity",
-        Justification = "Orchestrator class coordinating many components"
-    )]
-    public async Task<int> ProcessBatchAsync(
+    public async Task<OutboxBatchResult> ProcessBatchAsync(
         bool includeStuckMessageDetection,
         CancellationToken cancellationToken
     )
@@ -76,205 +71,145 @@ internal class OutboxMessageProcessor<TDbContext>(
 
         if (messages.Length == 0)
         {
-            return 0;
+            return default;
         }
 
-        var claimed = await MarkMessagesAsProcessingAsync(messages, cancellationToken);
-        if (claimed == null)
+        messages = await ProcessingConcurrency.ClaimAsync(
+            dbContext,
+            messages,
+            timeProvider,
+            count => OutboxMessageProcessorLog.SkippedConflicts(logger, count),
+            cancellationToken
+        );
+        if (messages.Length == 0)
         {
-            return 0;
+            return default;
         }
-        messages = claimed;
 
         var processedCount = 0;
         var batchStartTimestamp = Stopwatch.GetTimestamp();
 
         foreach (var message in messages)
         {
-            var result = await ProcessMessageAsync(message, cancellationToken);
-            if (result == true)
+            var outcome = await ProcessMessageAsync(message, cancellationToken);
+            if (outcome == ProcessOutcome.Sent)
             {
                 processedCount++;
             }
         }
 
         OutboxTelemetry.RecordBatchDuration(batchStartTimestamp);
-        return processedCount;
+        return new OutboxBatchResult(messages.Length, processedCount);
     }
 
-    private async Task<OutboxMessageEntity[]?> MarkMessagesAsProcessingAsync(
-        OutboxMessageEntity[] messages,
-        CancellationToken cancellationToken
-    )
-    {
-        foreach (var message in messages)
-        {
-            message.MarkAsProcessing(timeProvider);
-        }
-
-        while (true)
-        {
-            try
-            {
-                await dbContext.SaveChangesAsync(cancellationToken);
-                return messages;
-            }
-            catch (DbUpdateConcurrencyException ex)
-            {
-                var conflictIds = new HashSet<Guid>();
-                foreach (var entry in ex.Entries)
-                {
-                    conflictIds.Add(((OutboxMessageEntity)entry.Entity).Id);
-                    await entry.ReloadAsync(cancellationToken);
-                }
-
-                OutboxMessageProcessorLog.SkippedConflicts(logger, conflictIds.Count);
-
-                var remaining = messages.Where(m => !conflictIds.Contains(m.Id)).ToArray();
-                if (remaining.Length == messages.Length)
-                {
-                    // The conflict did not identify any message in the current claim set (for
-                    // example a DbUpdateConcurrencyException with an empty Entries collection).
-                    // Retrying the same unchanged set would spin forever, so rethrow and let the
-                    // batch be retried fresh on the next polling cycle.
-                    throw;
-                }
-
-                messages = remaining;
-                if (messages.Length == 0)
-                {
-                    return null;
-                }
-            }
-        }
-    }
-
-    /// <summary>Returns true=success, false=error, null=concurrency conflict (skip).</summary>
-    private async Task<bool?> ProcessMessageAsync(
+    private async Task<ProcessOutcome> ProcessMessageAsync(
         OutboxMessageEntity message,
         CancellationToken cancellationToken
     )
     {
-        MessageProperties? props = null;
-        Exception? sendException = null;
+        var (props, sendException) = await TrySendAsync(message, cancellationToken);
 
+        if (
+            !await ProcessingConcurrency.SaveSkippingConflictsAsync(
+                dbContext,
+                message,
+                count => OutboxMessageProcessorLog.SkippedConflictsDuringSave(logger, count)
+            )
+        )
+        {
+            return ProcessOutcome.Conflict;
+        }
+
+        var outcome = ProcessOutcome.Failed;
+        if (message.ProcessedAt != null)
+        {
+            outcome = ProcessOutcome.Sent;
+        }
+        else if (message.IsPoisoned)
+        {
+            outcome = ProcessOutcome.Poisoned;
+        }
+
+        await RecordAndNotifyAsync(message, outcome, props, sendException);
+        return outcome;
+    }
+
+    /// <summary>
+    /// Sends the message and updates its state in memory (processed, failed or poisoned).
+    /// Returns the deserialized properties (null if they could not be read) and the exception
+    /// that caused the failure, if any.
+    /// </summary>
+    private async Task<(MessageProperties? Properties, Exception? Exception)> TrySendAsync(
+        OutboxMessageEntity message,
+        CancellationToken cancellationToken
+    )
+    {
+        MessageProperties props;
         try
         {
             props = message.GetProperties();
         }
         catch (Exception ex)
         {
-            sendException = ex;
             OutboxMessageProcessorLog.DeserializationFailed(logger, message.Id, ex);
             message.MarkAsPoisoned(ex.Message, timeProvider);
+            return (null, ex);
         }
 
-        if (sendException == null && props != null)
+        if (!_senderMap.TryGetValue(message.TransportName, out var targetSender))
         {
-            if (!_senderMap.TryGetValue(message.TransportName, out var targetSender))
-            {
-                OutboxMessageProcessorLog.NoSenderFound(logger, message.TransportName, message.Id);
-                message.MarkAsPoisoned(
-                    $"No sender found for transport '{message.TransportName}'",
-                    timeProvider
-                );
-            }
-            else
-            {
-                try
-                {
-                    using var activity = OutboxTelemetry.StartCreateActivity(props);
-                    OutboxMessageProcessorLog.ProcessingMessage(
-                        logger,
-                        message.Id,
-                        message.TransportName
-                    );
-
-                    if (_options.SendTimeout.HasValue)
-                    {
-                        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(
-                            cancellationToken
-                        );
-                        timeoutCts.CancelAfter(_options.SendTimeout.Value);
-                        await targetSender.SendAsync(message.Content, props, timeoutCts.Token);
-                    }
-                    else
-                    {
-                        await targetSender.SendAsync(message.Content, props, cancellationToken);
-                    }
-                    message.MarkAsProcessed(timeProvider);
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch (Exception e)
-                {
-                    sendException = e;
-                    OutboxMessageProcessorLog.SendFailed(
-                        logger,
-                        message.Id,
-                        message.ErrorCount + 1,
-                        e
-                    );
-                    message.PublishFailed(
-                        e.Message,
-                        timeProvider,
-                        _options.MaxRetries,
-                        _options.MaxRetryDelay
-                    );
-                }
-            }
+            OutboxMessageProcessorLog.NoSenderFound(logger, message.TransportName, message.Id);
+            message.MarkAsPoisoned(
+                $"No sender found for transport '{message.TransportName}'",
+                timeProvider
+            );
+            return (props, null);
         }
 
         try
         {
-            await dbContext.SaveChangesAsync(CancellationToken.None);
+            using var activity = OutboxTelemetry.StartCreateActivity(props);
+            OutboxMessageProcessorLog.ProcessingMessage(logger, message.Id, message.TransportName);
+
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken
+            );
+            if (_options.SendTimeout.HasValue)
+            {
+                timeoutCts.CancelAfter(_options.SendTimeout.Value);
+            }
+
+            await targetSender.SendAsync(message.Content, props, timeoutCts.Token);
+            message.MarkAsProcessed(timeProvider);
+            return (props, null);
         }
-        catch (DbUpdateConcurrencyException ex)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            var conflictIds = new HashSet<Guid>();
-            foreach (var entry in ex.Entries)
-            {
-                conflictIds.Add(((OutboxMessageEntity)entry.Entity).Id);
-                await entry.ReloadAsync(CancellationToken.None);
-            }
-
-            OutboxMessageProcessorLog.SkippedConflictsDuringSave(logger, conflictIds.Count);
-
-            if (conflictIds.Contains(message.Id))
-            {
-                return null;
-            }
-
-            await dbContext.SaveChangesAsync(CancellationToken.None);
+            throw;
         }
-
-        return await RecordAndNotifyAsync(message, props, sendException);
+        catch (Exception e)
+        {
+            OutboxMessageProcessorLog.SendFailed(logger, message.Id, message.ErrorCount + 1, e);
+            message.PublishFailed(
+                e.Message,
+                timeProvider,
+                _options.MaxRetries,
+                _options.MaxRetryDelay
+            );
+            return (props, e);
+        }
     }
 
-    private async Task<bool> RecordAndNotifyAsync(
+    private async Task RecordAndNotifyAsync(
         OutboxMessageEntity message,
+        ProcessOutcome outcome,
         MessageProperties? props,
         Exception? sendException
     )
     {
-        var success = sendException == null && props != null;
-        OutboxTelemetry.RecordProcessed(success: success);
+        OutboxTelemetry.RecordProcessed(success: outcome == ProcessOutcome.Sent);
 
-        if (!success && message.IsPoisoned)
-        {
-            OutboxTelemetry.RecordPoisoned();
-            OutboxMessageProcessorLog.MessagePoisoned(
-                logger,
-                message.Id,
-                message.TransportName,
-                message.ErrorCount,
-                sendException?.Message ?? string.Empty
-            );
-        }
-
-        if (success)
+        if (outcome == ProcessOutcome.Sent)
         {
             await observers.NotifyAsync(
                 new MessageActivity
@@ -288,9 +223,16 @@ internal class OutboxMessageProcessor<TDbContext>(
                 logger
             );
         }
-
-        if (message.IsPoisoned)
+        else if (outcome == ProcessOutcome.Poisoned)
         {
+            OutboxTelemetry.RecordPoisoned();
+            OutboxMessageProcessorLog.MessagePoisoned(
+                logger,
+                message.Id,
+                message.TransportName,
+                message.ErrorCount,
+                message.Error
+            );
             await observers.NotifyAsync(
                 new MessageActivity
                 {
@@ -304,10 +246,26 @@ internal class OutboxMessageProcessor<TDbContext>(
                 logger
             );
         }
+    }
 
-        return success;
+    private enum ProcessOutcome
+    {
+        Sent = 0,
+
+        /// <summary>The send failed and will be retried after a backoff.</summary>
+        Failed = 1,
+        Poisoned = 2,
+
+        /// <summary>The message was modified concurrently (for example by the management API) and was skipped.</summary>
+        Conflict = 3,
     }
 }
+
+/// <summary>Outcome of one <see cref="OutboxMessageProcessor{TDbContext}.ProcessBatchAsync"/> call.</summary>
+/// <param name="Claimed">Messages picked up in this batch, whatever their outcome. 0 means no work was found.</param>
+/// <param name="Sent">Messages successfully sent to their transport.</param>
+[StructLayout(LayoutKind.Auto)]
+internal readonly record struct OutboxBatchResult(int Claimed, int Sent);
 
 internal static partial class OutboxMessageProcessorLog
 {

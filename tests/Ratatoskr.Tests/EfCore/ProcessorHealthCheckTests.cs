@@ -95,13 +95,14 @@ public class ProcessorHealthCheckTests
     }
 
     private sealed class TestProcessor(TimeProvider timeProvider)
-        : PollingBackgroundService(null!, timeProvider, NullLogger.Instance)
+        : PollingBackgroundService(
+            new OutboxOptions(),
+            null!,
+            timeProvider,
+            NullLogger.Instance
+        )
     {
         protected override string ProcessorName => "Test";
-        protected override TimeSpan PollingInterval => TimeSpan.FromSeconds(1);
-        protected override TimeSpan RestartDelay => TimeSpan.FromSeconds(1);
-        protected override TimeSpan LockAcquireTimeout => TimeSpan.FromSeconds(1);
-        protected override string LockName => "TestLock";
 
         protected override Task ProcessBatchesAsync(CancellationToken cancellationToken) =>
             Task.CompletedTask;

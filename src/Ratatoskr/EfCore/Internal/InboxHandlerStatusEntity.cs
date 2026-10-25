@@ -7,7 +7,7 @@ namespace Ratatoskr.EfCore.Internal;
 /// One row per handler per received message.
 /// The combination (MessageId, HandlerKey) has a unique constraint — the deduplication key.
 /// </summary>
-internal class InboxHandlerStatusEntity
+internal class InboxHandlerStatusEntity : IClaimableEntity, IRequeueableEntity
 {
     public Guid Id { get; private set; }
 
@@ -93,7 +93,8 @@ internal class InboxHandlerStatusEntity
         ProcessingStartedAt = null;
         Version++;
 
-        if (ErrorCount >= maxRetries)
+        // The first attempt is not a retry: with maxRetries = N, the row gets N + 1 attempts.
+        if (ErrorCount > maxRetries)
         {
             IsPoisoned = true;
             NextAttemptAt = null;

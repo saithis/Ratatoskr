@@ -45,12 +45,12 @@ public abstract class OutboxTestBase(
             var processor = scope.ServiceProvider.GetRequiredService<
                 OutboxMessageProcessor<TDbContext>
             >();
-            var batchProcessed = await processor.ProcessBatchAsync(
+            var batch = await processor.ProcessBatchAsync(
                 includeStuckMessageDetection: true,
                 CancellationToken.None
             );
-            totalProcessed += batchProcessed;
-            if (batchProcessed == 0)
+            totalProcessed += batch.Sent;
+            if (batch.Claimed == 0)
             {
                 break;
             }

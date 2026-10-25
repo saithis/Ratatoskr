@@ -257,7 +257,7 @@ sequenceDiagram
                 IP->>DB: MarkAsCompleted (CompletedAt = now)
             else Failure
                 IP->>DB: MarkAsFailed (ErrorCount++, NextAttemptAt = backoff)
-                Note over DB: If ErrorCount >= MaxRetries → IsPoisoned = true
+                Note over DB: If ErrorCount > MaxRetries → IsPoisoned = true
             end
             IP->>DB: SaveChangesAsync (per handler)
         end

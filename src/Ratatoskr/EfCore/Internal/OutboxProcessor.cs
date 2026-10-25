@@ -11,16 +11,15 @@ internal partial class OutboxProcessor<TDbContext>(
     TimeProvider timeProvider,
     OutboxOptionsHolder<TDbContext> optionsHolder,
     ILogger<OutboxProcessor<TDbContext>> logger
-) : PollingBackgroundService(distributedLockProvider, timeProvider, logger)
+) : PollingBackgroundService(
+        optionsHolder.Options,
+        distributedLockProvider,
+        timeProvider,
+        logger
+    )
     where TDbContext : DbContext, IRatatoskrDbContext
 {
-    private readonly OutboxOptions _options = optionsHolder.Options;
-
     protected override string ProcessorName => "OutboxProcessor";
-    protected override TimeSpan PollingInterval => _options.PollingInterval;
-    protected override TimeSpan RestartDelay => _options.RestartDelay;
-    protected override TimeSpan LockAcquireTimeout => _options.LockAcquireTimeout;
-    protected override string LockName => _options.LockName;
 
     protected override async Task ProcessBatchesAsync(CancellationToken cancellationToken)
     {
@@ -32,12 +31,15 @@ internal partial class OutboxProcessor<TDbContext>(
             >();
 
             LogCheckingOutboxUnsent(logger);
-            var processedCount = await processor.ProcessBatchAsync(
+            var result = await processor.ProcessBatchAsync(
                 includeStuckMessageDetection: true,
                 cancellationToken
             );
 
-            if (processedCount == 0)
+            // Keep going while there is work, even if every message in the batch failed or was
+            // poisoned: failed messages are backed off and poisoned ones excluded, so the next
+            // batch picks up different messages.
+            if (result.Claimed == 0)
             {
                 return;
             }

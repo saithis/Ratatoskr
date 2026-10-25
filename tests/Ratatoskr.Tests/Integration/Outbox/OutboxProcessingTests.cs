@@ -287,8 +287,8 @@ public class OutboxProcessingTests(
             await dbContext.SaveChangesAsync();
         });
 
-        // Act - Try processing 3 times (max retries)
-        for (var i = 0; i < 3; i++)
+        // Act - The first attempt plus 3 retries (MaxRetries = 3) all fail
+        for (var i = 0; i < 4; i++)
         {
             await InScopeAsync(async ctx =>
             {
@@ -307,7 +307,7 @@ public class OutboxProcessingTests(
 
             entity.IsPoisoned.Should().BeTrue();
             entity.ProcessedAt.Should().BeNull();
-            entity.ErrorCount.Should().Be(3);
+            entity.ErrorCount.Should().Be(4);
             entity.NextAttemptAt.Should().BeNull(); // No more retries
         });
 

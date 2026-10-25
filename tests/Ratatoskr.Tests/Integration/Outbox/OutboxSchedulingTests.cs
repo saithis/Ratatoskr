@@ -77,7 +77,7 @@ public class OutboxSchedulingTests(
         {
             var processor = ctx.ServiceProvider.GetRequiredService<OutboxMessageProcessor<TestDbContext>>();
             var processed = await processor.ProcessBatchAsync(includeStuckMessageDetection: false, CancellationToken.None);
-            processed.Should().Be(0);
+            processed.Claimed.Should().Be(0, "the message is not due yet");
         });
 
         // Verify entity is still unprocessed
@@ -96,7 +96,7 @@ public class OutboxSchedulingTests(
         {
             var processor = ctx.ServiceProvider.GetRequiredService<OutboxMessageProcessor<TestDbContext>>();
             var processed = await processor.ProcessBatchAsync(includeStuckMessageDetection: false, CancellationToken.None);
-            processed.Should().Be(1);
+            processed.Sent.Should().Be(1);
         });
 
         // Verify entity is now processed

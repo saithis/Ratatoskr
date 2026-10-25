@@ -29,7 +29,9 @@ public class ManagementCoverageTests(
     private const string InboxBaseUrl = "/ratatoskr/api/v1/efcore/contexts/TestDbContext/inbox";
 
     [Test]
-    public async Task Pagination_WalksEveryRowExactlyOnce_AcrossCursors()
+    [Arguments("outbox")]
+    [Arguments("inbox")]
+    public async Task Pagination_WalksEveryRowExactlyOnce_AcrossCursors(string store)
     {
         await StartManagementTestAsync();
 
@@ -37,8 +39,15 @@ public class ManagementCoverageTests(
         var seeded = new HashSet<Guid>();
         for (var i = 0; i < total; i++)
         {
-            seeded.Add(await SeedPoisonedOutboxAsync());
+            seeded.Add(
+                store == "inbox"
+                    ? (await SeedPoisonedInboxAsync()).HandlerStatusId
+                    : await SeedPoisonedOutboxAsync()
+            );
         }
+
+        var baseUrl = store == "inbox" ? InboxBaseUrl : OutboxBaseUrl;
+        var idProperty = store == "inbox" ? "handlerStatusId" : "id";
 
         var collected = new List<Guid>();
         string? cursor = null;
@@ -48,14 +57,14 @@ public class ManagementCoverageTests(
         do
         {
             var url =
-                $"{OutboxBaseUrl}/poisoned?pageSize=2"
+                $"{baseUrl}/poisoned?pageSize=2"
                 + (cursor is null ? string.Empty : $"&cursor={Uri.EscapeDataString(cursor)}");
             using var response = await HttpClient.GetAsync(url);
             response.StatusCode.Should().Be(HttpStatusCode.OK);
             var body = await response.Content.ReadFromJsonAsync<JsonElement>();
 
             var items = body.GetProperty("items").ToElementList();
-            collected.AddRange(items.Select(i => i.GetProperty("id").GetGuid()));
+            collected.AddRange(items.Select(i => i.GetProperty(idProperty).GetGuid()));
 
             firstTotalCount ??= body.GetProperty("totalCount").GetInt64();
             body.GetProperty("totalCount")
@@ -102,13 +111,14 @@ public class ManagementCoverageTests(
     }
 
     [Test]
-    public async Task Pagination_InvalidCursor_ReturnsProblemDetails()
+    [Arguments("outbox")]
+    [Arguments("inbox")]
+    public async Task Pagination_InvalidCursor_ReturnsProblemDetails(string store)
     {
         await StartManagementTestAsync();
 
-        using var response = await HttpClient.GetAsync(
-            $"{OutboxBaseUrl}/poisoned?cursor=not-a-cursor"
-        );
+        var baseUrl = store == "inbox" ? InboxBaseUrl : OutboxBaseUrl;
+        using var response = await HttpClient.GetAsync($"{baseUrl}/poisoned?cursor=not-a-cursor");
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
@@ -168,7 +178,7 @@ public class ManagementCoverageTests(
         using var req = new HttpRequestMessage(HttpMethod.Post, $"{OutboxBaseUrl}/poisoned/requeue")
         {
             Content = JsonContent.Create(
-                new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest([])
+                new BulkRequeueRequest([])
             ),
         };
         using var response = await HttpClient.SendAsync(req);
@@ -188,7 +198,7 @@ public class ManagementCoverageTests(
         using var req = new HttpRequestMessage(HttpMethod.Post, $"{OutboxBaseUrl}/poisoned/requeue")
         {
             Content = JsonContent.Create(
-                new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest([Guid.Empty])
+                new BulkRequeueRequest([Guid.Empty])
             ),
         };
         using var response = await HttpClient.SendAsync(req);
@@ -210,7 +220,7 @@ public class ManagementCoverageTests(
         using var req = new HttpRequestMessage(HttpMethod.Post, $"{OutboxBaseUrl}/poisoned/requeue")
         {
             Content = JsonContent.Create(
-                new BulkRequeueOutboxEndpoint.BulkRequeueOutboxRequest(ids)
+                new BulkRequeueRequest(ids)
             ),
         };
         using var response = await HttpClient.SendAsync(req);

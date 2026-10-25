@@ -13,6 +13,7 @@ namespace Ratatoskr.EfCore.Internal;
 /// and lock-based concurrency control.
 /// </summary>
 internal abstract partial class PollingBackgroundService(
+    DurableProcessingOptions options,
     IDistributedLockProvider distributedLockProvider,
     TimeProvider timeProvider,
     ILogger logger
@@ -31,10 +32,6 @@ internal abstract partial class PollingBackgroundService(
     );
 
     protected abstract string ProcessorName { get; }
-    protected abstract TimeSpan PollingInterval { get; }
-    protected abstract TimeSpan RestartDelay { get; }
-    protected abstract TimeSpan LockAcquireTimeout { get; }
-    protected abstract string LockName { get; }
 
     /// <summary>
     /// Signals the processor to check for pending work immediately.
@@ -66,8 +63,8 @@ internal abstract partial class PollingBackgroundService(
                     break;
                 }
 
-                LogProcessorCrashed(logger, e, ProcessorName, RestartDelay);
-                await Task.Delay(RestartDelay, timeProvider, stoppingToken);
+                LogProcessorCrashed(logger, e, ProcessorName, options.RestartDelay);
+                await Task.Delay(options.RestartDelay, timeProvider, stoppingToken);
                 if (stoppingToken.IsCancellationRequested)
                 {
                     break;
@@ -80,10 +77,10 @@ internal abstract partial class PollingBackgroundService(
 
     private async Task ProcessWithLockAsync(CancellationToken stoppingToken)
     {
-        LogTryingToAcquireDistributedLock(logger, LockName);
+        LogTryingToAcquireDistributedLock(logger, options.LockName);
         await using var dLock = await distributedLockProvider.TryAcquireLockAsync(
-            LockName,
-            LockAcquireTimeout,
+            options.LockName,
+            options.LockAcquireTimeout,
             stoppingToken
         );
 
@@ -142,10 +139,10 @@ internal abstract partial class PollingBackgroundService(
 
     private async Task WaitForTriggerOrTimeoutAsync(CancellationToken stoppingToken)
     {
-        LogWaitingForTriggerOrTimeout(logger, ProcessorName, PollingInterval);
+        LogWaitingForTriggerOrTimeout(logger, ProcessorName, options.PollingInterval);
 
         var channelTask = _triggerChannel.Reader.WaitToReadAsync(stoppingToken).AsTask();
-        var delayTask = Task.Delay(PollingInterval, timeProvider, stoppingToken);
+        var delayTask = Task.Delay(options.PollingInterval, timeProvider, stoppingToken);
 
         var completedTask = await Task.WhenAny(channelTask, delayTask);
 

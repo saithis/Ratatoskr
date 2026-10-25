@@ -18,6 +18,7 @@ public class RatatoskrBuilderTests
         builder.AddEventConsumeChannel("test-channel", _ => { });
 
         // Assert
+        builder.ChannelRegistry.Freeze();
         var channel = builder.ChannelRegistry.GetConsumeChannel("test-channel");
         channel.Should().NotBeNull();
         channel.Intent.Should().Be(ChannelType.EventConsume);
@@ -34,6 +35,7 @@ public class RatatoskrBuilderTests
         builder.AddEventPublishChannel("pub-channel", _ => { });
 
         // Assert
+        builder.ChannelRegistry.Freeze();
         var channel = builder.ChannelRegistry.GetPublishChannel("pub-channel");
         channel.Should().NotBeNull();
         channel.Intent.Should().Be(ChannelType.EventPublish);
@@ -53,6 +55,7 @@ public class RatatoskrBuilderTests
         );
 
         // Assert
+        builder.ChannelRegistry.Freeze();
         var channel = builder.ChannelRegistry.GetConsumeChannel("test-channel");
         channel.Should().NotBeNull();
         var msg = channel.GetMessage(typeof(TestEvent));
@@ -71,6 +74,7 @@ public class RatatoskrBuilderTests
         builder.AddEventPublishChannel("pub-channel", c => c.Produces<TestEvent>());
 
         // Assert
+        builder.ChannelRegistry.Freeze();
         var channel = builder.ChannelRegistry.GetPublishChannel("pub-channel");
         channel.Should().NotBeNull();
         var msg = channel.GetMessage(typeof(TestEvent));
@@ -116,6 +120,7 @@ public class RatatoskrBuilderTests
         );
 
         // Assert
+        builder.ChannelRegistry.Freeze();
         var channel = builder.ChannelRegistry.GetPublishChannel("pub-channel");
         var msg = channel!.GetMessage(typeof(TestEvent));
         msg!.DataSchema.Should().Be("https://schemas.example.com/test-event/v1.json");
@@ -132,6 +137,7 @@ public class RatatoskrBuilderTests
         builder.AddEventPublishChannel("pub-channel", c => c.Produces<EventWithSchema>());
 
         // Assert
+        builder.ChannelRegistry.Freeze();
         var channel = builder.ChannelRegistry.GetPublishChannel("pub-channel");
         var msg = channel!.GetMessage(typeof(EventWithSchema));
         msg!.DataSchema.Should().Be("https://schemas.example.com/event-with-schema/v1.json");
@@ -154,6 +160,7 @@ public class RatatoskrBuilderTests
         );
 
         // Assert
+        builder.ChannelRegistry.Freeze();
         var channel = builder.ChannelRegistry.GetPublishChannel("pub-channel");
         var msg = channel!.GetMessage(typeof(EventWithSchema));
         msg!.DataSchema.Should().Be("https://override.example.com/v2.json");
@@ -173,6 +180,7 @@ public class RatatoskrBuilderTests
         );
 
         // Assert
+        builder.ChannelRegistry.Freeze();
         var channel = builder.ChannelRegistry.GetPublishChannel("pub-channel");
         var msg = channel!.GetMessage(typeof(TestEvent));
         msg!.SerializerType.Should().Be<TestEventPipeMessageSerializer>();

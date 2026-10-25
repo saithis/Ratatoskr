@@ -140,7 +140,7 @@ Set `WithManaged(false)` if you manage retry topology externally (e.g., via Terr
     .WithDurableQueue())
 ```
 
-`ConcurrencyLimit` must be less than or equal to `PrefetchCount` (unless `PrefetchCount` is `0`, which means unlimited prefetch in RabbitMQ).
+`ConcurrencyLimit` must be less than or equal to `PrefetchCount` (unless `PrefetchCount` is `0`, which means unlimited prefetch in RabbitMQ). This is validated when `AddRatatoskr` runs, together with the other channel configuration rules, so a misconfigured channel fails at startup.
 
 ## Health Checks
 

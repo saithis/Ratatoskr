@@ -4,7 +4,7 @@ using Ratatoskr.Core;
 
 namespace Ratatoskr.EfCore.Internal;
 
-internal class OutboxMessageEntity : BaseMessageEntity
+internal class OutboxMessageEntity : BaseMessageEntity, IClaimableEntity, IRequeueableEntity
 {
     public Guid Id { get; private set; }
 
@@ -108,7 +108,8 @@ internal class OutboxMessageEntity : BaseMessageEntity
         ProcessingStartedAt = null; // Clear processing flag on failure
         Version++;
 
-        if (ErrorCount >= maxRetries)
+        // The first attempt is not a retry: with maxRetries = N, the row gets N + 1 attempts.
+        if (ErrorCount > maxRetries)
         {
             IsPoisoned = true;
             NextAttemptAt = null;

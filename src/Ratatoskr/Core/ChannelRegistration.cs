@@ -30,40 +30,41 @@ public sealed class ChannelRegistration(string channelName, ChannelType intent)
     public IList<MessageRegistration> Messages { get; } = new Collection<MessageRegistration>();
 
     /// <summary>
-    /// O(1) lookup indexes — populated by ChannelRegistry.Freeze()
+    /// O(1) lookup indexes, built by <see cref="ChannelRegistry.Freeze"/>. Null until then.
     /// </summary>
-    internal Dictionary<Type, MessageRegistration> MessagesByType { get; } = new();
-    internal Dictionary<string, MessageRegistration> MessagesByTypeName { get; } =
-        new(StringComparer.Ordinal);
+    private Dictionary<Type, MessageRegistration>? _messagesByType;
+    private Dictionary<string, MessageRegistration>? _messagesByTypeName;
 
     internal void BuildLookups()
     {
-        MessagesByType.Clear();
-        MessagesByTypeName.Clear();
+        var byType = new Dictionary<Type, MessageRegistration>();
+        var byTypeName = new Dictionary<string, MessageRegistration>(StringComparer.Ordinal);
         foreach (var msg in Messages)
         {
-            MessagesByType[msg.MessageType] = msg;
-            MessagesByTypeName[msg.MessageTypeName] = msg;
+            byType[msg.MessageType] = msg;
+            byTypeName[msg.MessageTypeName] = msg;
         }
+
+        _messagesByType = byType;
+        _messagesByTypeName = byTypeName;
     }
 
-    /// <summary>Finds the message registration for the given CLR type, or null if not registered.</summary>
-    public MessageRegistration? GetMessage(Type messageType)
-    {
-        if (MessagesByType.Count > 0)
-        {
-            return MessagesByType.GetValueOrDefault(messageType);
-        }
-        return Messages.FirstOrDefault(m => m.MessageType == messageType);
-    }
+    /// <summary>
+    /// Finds the message registration for the given CLR type, or null if not registered.
+    /// Only available once the owning <see cref="ChannelRegistry"/> is frozen.
+    /// </summary>
+    public MessageRegistration? GetMessage(Type messageType) =>
+        (_messagesByType ?? throw NotFrozen()).GetValueOrDefault(messageType);
 
-    /// <summary>Finds the message registration for the given message type name, or null if not registered.</summary>
-    public MessageRegistration? GetMessage(string messageTypeName)
-    {
-        if (MessagesByTypeName.Count > 0)
-        {
-            return MessagesByTypeName.GetValueOrDefault(messageTypeName);
-        }
-        return Messages.FirstOrDefault(m => m.MessageTypeName == messageTypeName);
-    }
+    /// <summary>
+    /// Finds the message registration for the given message type name, or null if not registered.
+    /// Only available once the owning <see cref="ChannelRegistry"/> is frozen.
+    /// </summary>
+    public MessageRegistration? GetMessage(string messageTypeName) =>
+        (_messagesByTypeName ?? throw NotFrozen()).GetValueOrDefault(messageTypeName);
+
+    private InvalidOperationException NotFrozen() =>
+        new(
+            $"Messages of channel '{ChannelName}' can only be looked up once the channel registry is frozen. Call ChannelRegistry.Freeze() first."
+        );
 }

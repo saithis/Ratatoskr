@@ -18,6 +18,53 @@ public class CloudEventsAmqpMapperIncomingTests
     );
 
     [Test]
+    public void MapBinaryModeIncoming_ExtensionsFromBothHeaderPrefixes_ExcludeMappedAttributes()
+    {
+        // Arrange
+        var headers = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            { "cloudEvents_id", "123" },
+            { "cloudEvents:source", "/unit-test" },
+            { "cloudEvents_type", "test.event" },
+            { "cloudEvents_TraceParent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" },
+            { "cloudEvents_tenant", "acme" },
+            { "cloudEvents:region", Encoding.UTF8.GetBytes("eu") },
+            { "x-custom", "not-a-cloud-event-attribute" },
+        };
+
+        var basicProperties = new BasicProperties
+        {
+            Headers = headers,
+            ContentType = "application/json",
+        };
+        var incoming = new BasicDeliverEventArgs(
+            "tag",
+            1,
+            redelivered: false,
+            "ex",
+            "rk",
+            basicProperties,
+            Encoding.UTF8.GetBytes("{}")
+        );
+
+        // Act
+        var result = _mapper.MapIncoming(incoming);
+
+        // Assert
+        result.props.Source.Should().Be("/unit-test");
+        result
+            .props.CloudEventExtensions.Should()
+            .BeEquivalentTo(
+                new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    ["tenant"] = "acme",
+                    ["region"] = "eu",
+                },
+                "attributes mapped to MessageProperties (matched case-insensitively) are not extensions"
+            );
+    }
+
+    [Test]
     public void MapBinaryModeIncoming_ShouldMapTraceContext()
     {
         // Arrange

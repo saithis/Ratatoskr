@@ -84,3 +84,6 @@ compound-engineering.local.md
 # DocFX
 docs/_site/
 docs/api/
+# Local build output and scratch prompts
+build.log
+prompt.md

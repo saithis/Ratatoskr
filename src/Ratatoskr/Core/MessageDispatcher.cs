@@ -38,21 +38,14 @@ public sealed partial class MessageDispatcher(
     {
         ArgumentNullException.ThrowIfNull(properties);
 
-        using var activity = RatatoskrDiagnostics.ActivitySource.StartActivity(
+        using var activity = RatatoskrDiagnostics.StartMessagingActivity(
             "dispatch",
-            ActivityKind.Consumer
+            ActivityKind.Consumer,
+            "dispatch",
+            MessagingSemanticConventions.OperationTypeProcess,
+            properties.Id
         );
-        if (activity != null)
-        {
-            _ = activity.SetTag(MessagingSemanticConventions.OperationName, "dispatch");
-            _ = activity.SetTag(
-                MessagingSemanticConventions.OperationType,
-                MessagingSemanticConventions.OperationTypeProcess
-            );
-            _ = activity.SetTag(MessagingSemanticConventions.System, "ratatoskr");
-            _ = activity.SetTag(MessagingSemanticConventions.DestinationName, channelName);
-            _ = activity.SetTag(MessagingSemanticConventions.MessageId, properties.Id);
-        }
+        _ = activity?.SetTag(MessagingSemanticConventions.DestinationName, channelName);
 
         if (properties.Type == null)
         {

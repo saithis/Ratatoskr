@@ -1,7 +1,6 @@
-using System.ComponentModel;
+using System.Collections.Frozen;
 using System.Diagnostics;
 using System.Globalization;
-using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
@@ -20,6 +19,34 @@ public partial class CloudEventsAmqpMapper(
     ILogger<CloudEventsAmqpMapper> logger
 ) : IRabbitMqEnvelopeMapper
 {
+    /// <summary>Content type assumed for message data when none is set.</summary>
+    private const string DefaultDataContentType = "application/json";
+
+    /// <summary>The header prefixes that mark a CloudEvents attribute, preferred one first.</summary>
+    private static readonly string[] _cloudEventHeaderPrefixes =
+    [
+        CloudEventsAmqpConstants.HeaderPrefix,
+        CloudEventsAmqpConstants.AlternativeHeaderPrefix,
+    ];
+
+    /// <summary>
+    /// CloudEvents attributes that <see cref="MapBinaryModeIncoming"/> maps to dedicated
+    /// <see cref="MessageProperties"/> fields rather than to extensions.
+    /// </summary>
+    private static readonly FrozenSet<string> _attributesMappedToMessageProperties = new[]
+    {
+        CloudEventsAmqpConstants.SpecVersionHeader,
+        CloudEventsAmqpConstants.IdHeader,
+        CloudEventsAmqpConstants.TypeHeader,
+        CloudEventsAmqpConstants.SourceHeader,
+        CloudEventsAmqpConstants.TimeHeader,
+        CloudEventsAmqpConstants.SubjectHeader,
+        CloudEventsAmqpConstants.DataContentTypeHeader,
+        CloudEventsAmqpConstants.DataSchemaHeader,
+        CloudEventsAmqpConstants.TraceParentHeader,
+        CloudEventsAmqpConstants.TraceStateHeader,
+    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     /// Maps outgoing message data and properties onto AMQP basic properties using the configured CloudEvents content mode.
     /// </summary>
@@ -94,17 +121,8 @@ public partial class CloudEventsAmqpMapper(
         BasicProperties outgoing
     )
     {
-        // Set standard RabbitMQ properties (for Wolverine compatibility)
-        outgoing.ContentType = props.ContentType ?? "application/json";
-        outgoing.DeliveryMode = DeliveryModes.Persistent;
-        outgoing.MessageId = props.Id;
-        outgoing.Timestamp = new AmqpTimestamp(props.Time!.Value.ToUnixTimeSeconds());
-        outgoing.Type = props.Type;
-
-        if (!string.IsNullOrEmpty(props.Source))
-        {
-            outgoing.AppId = props.Source;
-        }
+        var dataContentType = props.ContentType ?? DefaultDataContentType;
+        SetStandardAmqpProperties(outgoing, props, dataContentType);
 
         // Initialize headers if needed
         outgoing.Headers ??= new Dictionary<string, object?>(StringComparer.Ordinal);
@@ -119,11 +137,7 @@ public partial class CloudEventsAmqpMapper(
             "time",
             props.Time!.Value.ToString("O", CultureInfo.InvariantCulture)
         );
-        SetCloudEventHeader(
-            outgoing.Headers,
-            "datacontenttype",
-            props.ContentType ?? "application/json"
-        );
+        SetCloudEventHeader(outgoing.Headers, "datacontenttype", dataContentType);
 
         if (!string.IsNullOrEmpty(props.Subject))
         {
@@ -163,16 +177,7 @@ public partial class CloudEventsAmqpMapper(
         // Add custom headers (non-CloudEvents)
         foreach (var header in props.Headers)
         {
-            if (
-                !header.Key.StartsWith(
-                    CloudEventsAmqpConstants.HeaderPrefix,
-                    StringComparison.Ordinal
-                )
-                && !header.Key.StartsWith(
-                    CloudEventsAmqpConstants.AlternativeHeaderPrefix,
-                    StringComparison.Ordinal
-                )
-            )
+            if (!TryGetCloudEventAttributeName(header.Key, out _))
             {
                 outgoing.Headers[header.Key] = header.Value;
             }
@@ -235,18 +240,7 @@ public partial class CloudEventsAmqpMapper(
 
         var envelopeBytes = JsonSerializer.SerializeToUtf8Bytes(cloudEvent);
 
-        // Set properties
-        outgoing.ContentType = CloudEventsAmqpConstants.JsonContentType;
-        outgoing.DeliveryMode = DeliveryModes.Persistent;
-        outgoing.MessageId = props.Id;
-        outgoing.Timestamp = new AmqpTimestamp(props.Time!.Value.ToUnixTimeSeconds());
-
-        // Optionally set standard RabbitMQ properties too (for compatibility)
-        outgoing.Type = props.Type;
-        if (!string.IsNullOrEmpty(props.Source))
-        {
-            outgoing.AppId = props.Source;
-        }
+        SetStandardAmqpProperties(outgoing, props, CloudEventsAmqpConstants.JsonContentType);
 
         // Copy custom headers
         if (props.Headers.Count > 0)
@@ -324,7 +318,7 @@ public partial class CloudEventsAmqpMapper(
         var headers = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var header in incomingHeaders)
         {
-            headers[header.Key] = ConvertToString(header.Value);
+            headers[header.Key] = RabbitMqHeaderHelper.ConvertHeaderToString(header.Value);
         }
 
         var props = new MessageProperties
@@ -358,79 +352,17 @@ public partial class CloudEventsAmqpMapper(
     {
         foreach (var kv in incomingHeaders)
         {
-            string? attrName = null;
-            if (kv.Key.StartsWith(CloudEventsAmqpConstants.HeaderPrefix, StringComparison.Ordinal))
-            {
-                attrName = kv.Key[CloudEventsAmqpConstants.HeaderPrefix.Length..];
-            }
-            else if (
-                kv.Key.StartsWith(
-                    CloudEventsAmqpConstants.AlternativeHeaderPrefix,
-                    StringComparison.Ordinal
-                )
+            if (
+                TryGetCloudEventAttributeName(kv.Key, out var attrName)
+                && !_attributesMappedToMessageProperties.Contains(attrName)
             )
             {
-                attrName = kv.Key[CloudEventsAmqpConstants.AlternativeHeaderPrefix.Length..];
+                props.CloudEventExtensions[attrName] = RabbitMqHeaderHelper.ConvertHeaderToString(
+                    kv.Value
+                );
             }
-
-            if (attrName is null)
-            {
-                continue;
-            }
-
-            if (IsBinaryModeCloudEventsAttributeMappedToMessageProperties(attrName))
-            {
-                continue;
-            }
-
-            props.CloudEventExtensions[attrName] = ConvertToString(kv.Value);
         }
     }
-
-    /// <summary>Attribute names that <see cref="MapBinaryModeIncoming"/> maps to <see cref="MessageProperties"/>, not to extensions.</summary>
-    private static bool IsBinaryModeCloudEventsAttributeMappedToMessageProperties(
-        string attributeName
-    ) =>
-        attributeName.Equals(
-            CloudEventsAmqpConstants.SpecVersionHeader,
-            StringComparison.OrdinalIgnoreCase
-        )
-        || attributeName.Equals(
-            CloudEventsAmqpConstants.IdHeader,
-            StringComparison.OrdinalIgnoreCase
-        )
-        || attributeName.Equals(
-            CloudEventsAmqpConstants.TypeHeader,
-            StringComparison.OrdinalIgnoreCase
-        )
-        || attributeName.Equals(
-            CloudEventsAmqpConstants.SourceHeader,
-            StringComparison.OrdinalIgnoreCase
-        )
-        || attributeName.Equals(
-            CloudEventsAmqpConstants.TimeHeader,
-            StringComparison.OrdinalIgnoreCase
-        )
-        || attributeName.Equals(
-            CloudEventsAmqpConstants.SubjectHeader,
-            StringComparison.OrdinalIgnoreCase
-        )
-        || attributeName.Equals(
-            CloudEventsAmqpConstants.DataContentTypeHeader,
-            StringComparison.OrdinalIgnoreCase
-        )
-        || attributeName.Equals(
-            CloudEventsAmqpConstants.DataSchemaHeader,
-            StringComparison.OrdinalIgnoreCase
-        )
-        || attributeName.Equals(
-            CloudEventsAmqpConstants.TraceParentHeader,
-            StringComparison.OrdinalIgnoreCase
-        )
-        || attributeName.Equals(
-            CloudEventsAmqpConstants.TraceStateHeader,
-            StringComparison.OrdinalIgnoreCase
-        );
 
     private static (byte[] body, MessageProperties props) MapStructuredModeIncoming(
         BasicDeliverEventArgs incoming
@@ -463,13 +395,10 @@ public partial class CloudEventsAmqpMapper(
             CloudEventsAmqpConstants.TraceStateHeader,
             out var envelopeTraceState
         );
-        var (traceParent, traceState) = ResolveTraceContextWithFallback(
-            envelopeTraceParent,
-            envelopeTraceState,
-            GetHeaderValue(incomingHeaders, CloudEventsAmqpConstants.TraceParentHeader),
-            GetHeaderValue(incomingHeaders, CloudEventsAmqpConstants.TraceStateHeader),
-            GetCloudEventHeader(incomingHeaders, CloudEventsAmqpConstants.TraceParentHeader),
-            GetCloudEventHeader(incomingHeaders, CloudEventsAmqpConstants.TraceStateHeader)
+        var (traceParent, traceState) = ResolveTraceContext(
+            (envelopeTraceParent, envelopeTraceState),
+            GetBareTraceContextHeaders(incomingHeaders),
+            GetCloudEventTraceContextHeaders(incomingHeaders)
         );
 
         var props = new MessageProperties
@@ -478,7 +407,7 @@ public partial class CloudEventsAmqpMapper(
             Type = cloudEvent.Type,
             Source = cloudEvent.Source,
             Time = cloudEvent.Time,
-            ContentType = cloudEvent.DataContentType ?? "application/json",
+            ContentType = cloudEvent.DataContentType ?? DefaultDataContentType,
             DataSchema = cloudEvent.DataSchema,
             Subject = cloudEvent.Subject,
             TraceParent = traceParent,
@@ -499,7 +428,7 @@ public partial class CloudEventsAmqpMapper(
         {
             foreach (var header in incoming.BasicProperties.Headers)
             {
-                props.Headers[header.Key] = ConvertToString(header.Value);
+                props.Headers[header.Key] = RabbitMqHeaderHelper.ConvertHeaderToString(header.Value);
             }
         }
 
@@ -525,6 +454,46 @@ public partial class CloudEventsAmqpMapper(
     }
 
     /// <summary>
+    /// Sets the standard AMQP properties, which non-CloudEvents consumers (e.g. Wolverine) rely on.
+    /// </summary>
+    private static void SetStandardAmqpProperties(
+        BasicProperties outgoing,
+        MessageProperties props,
+        string contentType
+    )
+    {
+        outgoing.ContentType = contentType;
+        outgoing.DeliveryMode = DeliveryModes.Persistent;
+        outgoing.MessageId = props.Id;
+        outgoing.Timestamp = new AmqpTimestamp(props.Time!.Value.ToUnixTimeSeconds());
+        outgoing.Type = props.Type;
+
+        if (!string.IsNullOrEmpty(props.Source))
+        {
+            outgoing.AppId = props.Source;
+        }
+    }
+
+    /// <summary>
+    /// Returns true if <paramref name="headerKey"/> carries a CloudEvents attribute (either
+    /// prefix convention) and outputs the attribute name without the prefix.
+    /// </summary>
+    private static bool TryGetCloudEventAttributeName(string headerKey, out string attributeName)
+    {
+        foreach (var prefix in _cloudEventHeaderPrefixes)
+        {
+            if (headerKey.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                attributeName = headerKey[prefix.Length..];
+                return true;
+            }
+        }
+
+        attributeName = string.Empty;
+        return false;
+    }
+
+    /// <summary>
     /// Gets a CloudEvents header, trying both naming conventions (underscore first, then colon).
     /// </summary>
     private static string? GetCloudEventHeader(
@@ -532,71 +501,67 @@ public partial class CloudEventsAmqpMapper(
         string attributeName
     )
     {
-        // Try underscore format first (cloudEvents_*)
-        if (
-            headers.TryGetValue(
-                $"{CloudEventsAmqpConstants.HeaderPrefix}{attributeName}",
-                out var value
-            )
-        )
+        foreach (var prefix in _cloudEventHeaderPrefixes)
         {
-            return ConvertToString(value);
-        }
-
-        // Try colon format (cloudEvents:*)
-        if (
-            headers.TryGetValue(
-                $"{CloudEventsAmqpConstants.AlternativeHeaderPrefix}{attributeName}",
-                out value
-            )
-        )
-        {
-            return ConvertToString(value);
+            if (headers.TryGetValue(prefix + attributeName, out var value))
+            {
+                return RabbitMqHeaderHelper.ConvertHeaderToString(value);
+            }
         }
 
         return null;
     }
 
-    private static (string? traceParent, string? traceState) ResolveTraceContextFromBinaryHeaders(
+    private static (string? TraceParent, string? TraceState) GetCloudEventTraceContextHeaders(
         IDictionary<string, object?> headers
-    )
-    {
-        return ResolveTraceContextWithFallback(
+    ) =>
+        (
             GetCloudEventHeader(headers, CloudEventsAmqpConstants.TraceParentHeader),
-            GetCloudEventHeader(headers, CloudEventsAmqpConstants.TraceStateHeader),
+            GetCloudEventHeader(headers, CloudEventsAmqpConstants.TraceStateHeader)
+        );
+
+    /// <summary>The W3C trace context headers set by RabbitMQ.Client for the transport span.</summary>
+    private static (string? TraceParent, string? TraceState) GetBareTraceContextHeaders(
+        IDictionary<string, object?> headers
+    ) =>
+        (
             GetHeaderValue(headers, CloudEventsAmqpConstants.TraceParentHeader),
             GetHeaderValue(headers, CloudEventsAmqpConstants.TraceStateHeader)
         );
-    }
 
-    private static (string? traceParent, string? traceState) ResolveTraceContextWithFallback(
-        string? preferredTraceParent,
-        string? preferredTraceState,
-        string? fallbackTraceParent,
-        string? fallbackTraceState,
-        string? additionalTraceParent = null,
-        string? additionalTraceState = null
+    private static (string? traceParent, string? traceState) ResolveTraceContextFromBinaryHeaders(
+        IDictionary<string, object?> headers
+    ) =>
+        ResolveTraceContext(
+            GetCloudEventTraceContextHeaders(headers),
+            GetBareTraceContextHeaders(headers)
+        );
+
+    /// <summary>
+    /// Returns the first candidate with a valid trace context, in order of preference. If none is
+    /// valid, falls back to the first non-null trace parent and trace state.
+    /// </summary>
+    private static (string? traceParent, string? traceState) ResolveTraceContext(
+        params ReadOnlySpan<(string? TraceParent, string? TraceState)> candidates
     )
     {
-        if (TryParseTraceContext(preferredTraceParent, preferredTraceState))
+        foreach (var candidate in candidates)
         {
-            return (preferredTraceParent, preferredTraceState);
+            if (TryParseTraceContext(candidate.TraceParent, candidate.TraceState))
+            {
+                return candidate;
+            }
         }
 
-        if (TryParseTraceContext(fallbackTraceParent, fallbackTraceState))
+        string? traceParent = null;
+        string? traceState = null;
+        foreach (var candidate in candidates)
         {
-            return (fallbackTraceParent, fallbackTraceState);
+            traceParent ??= candidate.TraceParent;
+            traceState ??= candidate.TraceState;
         }
 
-        if (TryParseTraceContext(additionalTraceParent, additionalTraceState))
-        {
-            return (additionalTraceParent, additionalTraceState);
-        }
-
-        return (
-            preferredTraceParent ?? fallbackTraceParent ?? additionalTraceParent,
-            preferredTraceState ?? fallbackTraceState ?? additionalTraceState
-        );
+        return (traceParent, traceState);
     }
 
     private static bool TryParseTraceContext(string? traceParent, string? traceState)
@@ -607,23 +572,9 @@ public partial class CloudEventsAmqpMapper(
 
     private static string? GetHeaderValue(IDictionary<string, object?> headers, string key)
     {
-        return headers.TryGetValue(key, out var value) ? ConvertToString(value) : null;
-    }
-
-    /// <summary>
-    /// Converts header values to strings (handles byte arrays from RabbitMQ).
-    /// </summary>
-    private static string ConvertToString(object? value)
-    {
-        return value switch
-        {
-            null => "",
-            string str => str,
-            byte[] bytes => Encoding.UTF8.GetString(bytes),
-            ReadOnlyMemory<byte> readOnlyMemory => Encoding.UTF8.GetString(readOnlyMemory.Span),
-            Memory<byte> memory => Encoding.UTF8.GetString(memory.Span),
-            _ => value.ToString() ?? "",
-        };
+        return headers.TryGetValue(key, out var value)
+            ? RabbitMqHeaderHelper.ConvertHeaderToString(value)
+            : null;
     }
 
     [LoggerMessage(

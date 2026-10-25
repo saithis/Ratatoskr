@@ -296,7 +296,7 @@ public class OutboxDurabilityTests(
                 includeStuckMessageDetection: true,
                 CancellationToken.None
             );
-            count.Should().Be(0, "message is stuck for only 1 minute — not yet considered stuck");
+            count.Claimed.Should().Be(0, "message is stuck for only 1 minute — not yet considered stuck");
         });
 
         // Advance to 6 minutes total — past the 5-minute threshold
@@ -313,7 +313,7 @@ public class OutboxDurabilityTests(
                 includeStuckMessageDetection: true,
                 CancellationToken.None
             );
-            count.Should().BeGreaterThan(0);
+            count.Sent.Should().BeGreaterThan(0);
         });
 
         await InScopeAsync(async ctx =>
@@ -482,6 +482,7 @@ public class OutboxDurabilityTests(
         // Verifies that a message targeting an unregistered transport is immediately poisoned
         // without consuming any retry budget.
         var fakeTime = new FakeTimeProvider(new DateTimeOffset(2023, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        var observer = new RecordingActivityObserver();
 
         await StartTestAsync(services =>
         {
@@ -509,6 +510,7 @@ public class OutboxDurabilityTests(
             );
             // Remove all senders so no sender exists for the staged message's transport
             services.RemoveAll<IMessageSender>();
+            services.AddSingleton<IMessageActivityObserver>(observer);
         });
 
         await InitializeDatabase();
@@ -522,12 +524,20 @@ public class OutboxDurabilityTests(
         });
 
         // Act
+        var processed = 0;
         await InScopeAsync(async ctx =>
         {
-            await ProcessOutboxAsync<TestDbContext>(ctx.ServiceProvider);
+            processed = await ProcessOutboxAsync<TestDbContext>(ctx.ServiceProvider);
         });
 
         // Assert — must be poisoned immediately, with no retry budget consumed
+        processed.Should().Be(0, "a poisoned message is not counted as sent");
+        observer
+            .Stages.Should()
+            .Equal(
+                [MessageStage.OutboxStaged, MessageStage.OutboxPoisoned],
+                "a poisoned message must not be reported as sent"
+            );
         await InScopeAsync(async ctx =>
         {
             var dbContext = ctx.ServiceProvider.GetRequiredService<TestDbContext>();
@@ -972,6 +982,20 @@ public class OutboxDurabilityTests(
         {
             SendStarted.Dispose();
             _gate.Dispose();
+        }
+    }
+
+    private sealed class RecordingActivityObserver : IMessageActivityObserver
+    {
+        private readonly System.Collections.Concurrent.ConcurrentQueue<MessageStage> _stages =
+            new();
+
+        public IReadOnlyList<MessageStage> Stages => [.. _stages];
+
+        public ValueTask OnMessageActivityAsync(MessageActivity activity)
+        {
+            _stages.Enqueue(activity.Stage);
+            return ValueTask.CompletedTask;
         }
     }
 }
