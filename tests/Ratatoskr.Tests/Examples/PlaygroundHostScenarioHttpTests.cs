@@ -3,8 +3,10 @@ using System.Net;
 using System.Net.Http.Json;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using PlaygroundHost;
+using Ratatoskr.RabbitMq;
 using Ratatoskr.Tests.Fixtures;
 
 namespace Ratatoskr.Tests.Examples;
@@ -116,7 +118,7 @@ public sealed class PlaygroundHostScenarioHttpTests : IAsyncDisposable
 
             // WebApplicationFactory.EnsureServer is not safe against concurrent first access; parallel tests can
             // otherwise both start the deferred host and race EnsureCreated on the same databases (42P07).
-            _ = factory.Server;
+            await StartHostAsync(factory);
 
             Volatile.Write(ref _sharedFactory, factory);
             return factory;
@@ -125,6 +127,21 @@ public sealed class PlaygroundHostScenarioHttpTests : IAsyncDisposable
         {
             _factoryLock.Release();
         }
+    }
+
+    /// <summary>
+    /// Starts the host and waits until its RabbitMQ topology is provisioned. Every PlaygroundHost
+    /// declares the same queues on the shared broker, and concurrent declares of one classic queue
+    /// can fail with 404 "home node ... is down or inaccessible", which stops the host. Callers
+    /// must hold <see cref="_factoryLock"/> so hosts provision one at a time.
+    /// </summary>
+    private static async Task StartHostAsync(WebApplicationFactory<PlaygroundHostAppMarker> factory)
+    {
+        _ = factory.Server;
+        await factory
+            .Services.GetRequiredService<RabbitMqTopologyManager>()
+            .WaitForProvisioningAsync()
+            .WaitAsync(TimeSpan.FromSeconds(30));
     }
 
     private async Task<HttpClient> GetClientAsync() =>
@@ -366,7 +383,18 @@ public sealed class PlaygroundHostScenarioHttpTests : IAsyncDisposable
                 builder.UseSetting("Playground:RunTimeoutSeconds", "8");
                 builder.UseSetting("ASPNETCORE_ENVIRONMENT", "Development");
             });
-        _ = factory.Server;
+
+        // The shared host may be provisioning the same topology; start only after it is done.
+        await GetOrCreateSharedFactoryAsync();
+        await _factoryLock.WaitAsync();
+        try
+        {
+            await StartHostAsync(factory);
+        }
+        finally
+        {
+            _factoryLock.Release();
+        }
 
         using var client = factory.CreateClient();
         var runId = await StartScenarioAsync(client, "blocking-hold", confirmDanger: true);
